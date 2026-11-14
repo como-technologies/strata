@@ -22,9 +22,9 @@ func rulesFile(t *testing.T, w *testkit.Receiver) string {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "alerts.json")
-	rules := `{"channels": {"oncall": {"urlFile": "` + address + `"}}, "rules": [
+	rules := testkit.OncallRules(address, `
   {"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
-  {"level": "cluster", "news": "lost", "send": "now", "to": "oncall"}]}`
+  {"level": "cluster", "news": "lost", "send": "now", "to": "oncall"}`)
 	if err := os.WriteFile(path, []byte(rules), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -73,11 +73,7 @@ func TestOnceAndServeStopAtTheStartWithAFileOfRulesThatCannotBeUsed(t *testing.T
 }
 
 func TestAFileOfRulesThatIsAbsentStopsTheStart(t *testing.T) {
-	var out, errs bytes.Buffer
-	args := append(onceArgs(t, "strata"), "--alerts", filepath.Join(t.TempDir(), "absent.json"))
-	if code := run(args, &out, &errs); code != 2 || !strings.Contains(errs.String(), "cannot be read") {
-		t.Errorf("exit %d, stderr %q", code, errs.String())
-	}
+	exitsTwoSaying(t, append(onceArgs(t, "strata"), "--alerts", filepath.Join(t.TempDir(), "absent.json")), "cannot be read")
 }
 
 func TestServeStopsAtTheStartWhenTheAddressOfAChannelCannotBeUsedAndNamesNoAddress(t *testing.T) {
@@ -86,21 +82,16 @@ func TestServeStopsAtTheStartWhenTheAddressOfAChannelCannotBeUsedAndNamesNoAddre
 		t.Fatal(err)
 	}
 	rules := filepath.Join(dir, "alerts.json")
-	if err := os.WriteFile(rules, []byte(`{"channels": {"oncall": {"urlFile": "`+filepath.Join(dir, "oncall")+`"}}, "rules": []}`), 0o600); err != nil {
+	if err := os.WriteFile(rules, []byte(testkit.OncallRules(filepath.Join(dir, "oncall"), "")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var out, errs bytes.Buffer
-	args := serveArgs(t, "strata")
-	if code := run(append(args, "--alerts", rules), &out, &errs); code != 2 || !strings.Contains(errs.String(), `channel "oncall"`) || !strings.Contains(errs.String(), "https") || strings.Contains(errs.String(), "TOKEN-SECRET") {
-		t.Errorf("exit %d, stderr %q", code, errs.String())
+	if stderr := exitsTwoSaying(t, append(serveArgs(t, "strata"), "--alerts", rules), `channel "oncall"`, "https"); strings.Contains(stderr, "TOKEN-SECRET") {
+		t.Errorf("the error names the address: %s", stderr)
 	}
 }
 
 func TestADigestPeriodThatIsNotPositiveStopsTheStart(t *testing.T) {
-	var out, errs bytes.Buffer
-	if code := run(append(onceArgs(t, "strata"), "--digest-every", "0s"), &out, &errs); code != 2 || !strings.Contains(errs.String(), "more than zero") {
-		t.Errorf("exit %d, stderr %q", code, errs.String())
-	}
+	exitsTwoSaying(t, append(onceArgs(t, "strata"), "--digest-every", "0s"), "more than zero")
 }
 
 func TestServeWithAlertsSendsOneMessageForAFindingAndShowsItsRuleAsFiring(t *testing.T) {

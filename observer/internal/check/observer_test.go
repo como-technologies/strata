@@ -126,21 +126,13 @@ func TestTheStateHoldsTheFirstSightAndNoValue(t *testing.T) {
 	if _, err := o.Once(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, banned := range []string{sentinel, "charts.a.b", "Betty", "John", "csi-aws-ebs"} {
-		if strings.Contains(string(raw), banned) {
-			t.Errorf("the state holds %q: %s", banned, raw)
-		}
-	}
+	stateHoldsNone(t, r, sentinel, "charts.a.b", "Betty", "John", "csi-aws-ebs")
 	id := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
 	state, err := loadState(r.state)
 	if err != nil || state.Findings[id].FirstSeen != t0 || state.StartedAt != t0 {
 		t.Errorf("state %+v, error %v", state, err)
 	}
-	if entries := entries(t, r.state); len(entries) != 1 || entries[0] != "state.json" {
+	if entries := entries(t, r.state); len(entries) != 1 || entries[0] != stateFile {
 		t.Errorf("the state directory holds %v", entries)
 	}
 }
@@ -185,11 +177,11 @@ func TestTwoRunsWithOneStateDirectoryReachLost(t *testing.T) {
 	w.behindErr = &runner.RunError{Kind: docs.KindTransport}
 	first, err := r.observer(w).Once(context.Background())
 	if err == nil || first.Page != model.PageFirstLoad || first.Content.FailedRuns != 1 {
-		t.Fatalf("first: page %q, content %+v, error %v", first.Page, first.Content, err)
+		t.Fatalf("first: "+pageAndContent+", error %v", first.Page, first.Content, err)
 	}
 	second, err := r.restart(w).Once(context.Background())
 	if err == nil || second.Page != model.PageLost || second.Content.LastError.Kind != docs.KindTransport || second.Versions.LastError.Kind != docs.KindTransport {
-		t.Fatalf("second: page %q, content %+v, error %v", second.Page, second.Content, err)
+		t.Fatalf("second: "+pageAndContent+", error %v", second.Page, second.Content, err)
 	}
 }
 
@@ -198,7 +190,7 @@ func TestAStateThatCannotBeReadIsALogLineAndAnEmptyState(t *testing.T) {
 	if err := os.MkdirAll(r.state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(r.state, "state.json"), []byte("{"+sentinel), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(r.state, stateFile), []byte("{"+sentinel), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	o := r.observer(&world{})
@@ -264,7 +256,7 @@ func TestTheFirstCycleOfEachTimerRunsAtTheStartAndThePoolBoundsTheProcesses(t *t
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { o.Run(ctx); close(done) }()
-	testkit.WaitFor(t, "the first cycle of each timer", func() bool {
+	testkit.WaitFor(t, testkit.FirstCycles, func() bool {
 		return w.count(runner.CmdVerify) >= 1 && w.count(runner.CmdBehind) >= 1 && w.countMoves() >= 4
 	})
 	cancel()

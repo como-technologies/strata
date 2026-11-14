@@ -19,7 +19,7 @@ import (
 func drift(t *testing.T) docs.VerifyRow {
 	t.Helper()
 	var s docs.VerifySummary
-	testkit.ReadDoc(t, "verify-summary-drift.json", &s)
+	testkit.ReadDoc(t, testkit.DriftSummary, &s)
 	return s.Records[0]
 }
 
@@ -28,7 +28,7 @@ func oneRecord(t *testing.T, row docs.VerifyRow) (*rig, *world) {
 	t.Helper()
 	r := newRig(t)
 	r.record("aws-stack", "1.1.0", "csi/csi-aws-ebs", "os/ubuntu")
-	r.meta(`{"baseline":"approved","revision":"4e1c7a2"}`)
+	r.meta(testkit.ApprovedMeta)
 	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: testkit.Cluster("payments", "aws-stack@1.1.0")}
 }
 
@@ -38,7 +38,7 @@ func addPlatformAddons(t *testing.T, r *rig, w *world) {
 	t.Helper()
 	r.record("platform-addons", "1.0.0", "addon/cert-manager")
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", testkit.AddonsProfile)
 }
 
 // twoRecords makes a world with the two records aws-stack@1.1.0 and platform-addons@1.0.0.
@@ -48,6 +48,12 @@ func twoRecords(t *testing.T) (*rig, *world) {
 	addPlatformAddons(t, r, w)
 	return r, w
 }
+
+// publishedCSI is the finding of a drift of the published version of csi-aws-ebs, as TestContentCases writes it.
+const publishedCSI = "published-changed csi/csi-aws-ebs"
+
+// pageAndContent is the failure of a check of the page and of the content cycle.
+const pageAndContent = "page %q, content %+v"
 
 func changedPack(key string) docs.Pack {
 	// The pack holds the marker in a changed value, and in the unified text of the values and of a manifest.
@@ -67,11 +73,11 @@ func TestContentCases(t *testing.T) {
 	}{
 		{name: "no change", setup: func(t *testing.T, w *world) {}, copy: model.CopySame},
 		{name: "published changed with who", setup: func(t *testing.T, w *world) { w.rows[0] = drift(t) }, copy: model.CopySame,
-			want: []string{"published-changed csi/csi-aws-ebs"}, who: 1},
+			want: []string{publishedCSI}, who: 1},
 		{name: "published changed and the same on the cluster", setup: func(t *testing.T, w *world) {
 			w.rows[0] = drift(t)
 			w.compares = map[int]docs.Diff{0: {RootB: w.rows[0].RootLive, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
-		}, copy: model.CopyDiffers, want: []string{"published-changed csi/csi-aws-ebs"}, also: true, who: 1},
+		}, copy: model.CopyDiffers, want: []string{publishedCSI}, also: true, who: 1},
 		{name: "cluster differs only", setup: func(t *testing.T, w *world) {
 			w.compares = map[int]docs.Diff{0: {RootB: "e06b", Summary: docs.DiffSummary{MaxImpact: "cluster-wide"}, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
 		}, copy: model.CopyDiffers, want: []string{"cluster-differs csi/csi-aws-ebs"}},
@@ -100,7 +106,7 @@ func TestContentCases(t *testing.T) {
 				got = append(got, string(f.Kind)+" "+strings.Join(f.Packs, ","))
 			}
 			if !slices.Equal(got, c.want) {
-				t.Fatalf("findings %v, want %v", got, c.want)
+				t.Fatalf(testkit.FindingsWant, got, c.want)
 			}
 			if s.Profiles[0].ClusterCopy.Status != c.copy {
 				t.Errorf("clusterCopy %+v", s.Profiles[0].ClusterCopy)
@@ -131,7 +137,7 @@ func TestARecordForAVersionThatTheClusterDoesNotRunHasNoSide(t *testing.T) {
 
 func TestAProfileWithNoRecordIsACauseAndAddsNoPack(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", testkit.AddonsProfile)
 	s, _ := r.observer(w).Once(context.Background())
 	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.NoRecord || s.Profiles[1].Status != model.StatusNoRecord || s.Counts.Packs != 2 {
 		t.Errorf("notChecked %+v, profiles %+v, counts %+v", s.NotChecked, s.Profiles, s.Counts)
@@ -166,7 +172,7 @@ func TestARowWithAnErrorBesideGoodRowsIsACauseAndNotAFailedCycle(t *testing.T) {
 	r, w := twoRecords(t)
 	w.rows[1] = docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 404}}
 	s, _ := r.observer(w).Once(context.Background())
-	if s.Content.FailedRuns != 0 || len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.ReadError || s.NotChecked[0].Profiles[0] != "platform-addons@1.0.0" {
+	if s.Content.FailedRuns != 0 || len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.ReadError || s.NotChecked[0].Profiles[0] != testkit.AddonsProfile {
 		t.Errorf("content %+v, notChecked %+v", s.Content, s.NotChecked)
 	}
 }
@@ -235,12 +241,12 @@ func TestACycleThatFailsTwiceWithStatus401IsLost(t *testing.T) {
 	w.verifyErr = &runner.RunError{Kind: docs.KindAPI, Status: 401}
 	_ = o.RunContent(context.Background())
 	if s := o.Summary(); s.Page != model.PageOK || s.Content.FailedRuns != 1 || s.Profiles[0].Name != "aws-stack" {
-		t.Errorf("after one failure: page %q, content %+v", s.Page, s.Content)
+		t.Errorf("after one failure: "+pageAndContent, s.Page, s.Content)
 	}
 	_ = o.RunContent(context.Background())
 	s := o.Summary()
 	if s.Page != model.PageLost || s.Content.FailedRuns != 2 || len(s.Profiles) != 1 || s.Content.CheckedAt == nil || !s.Content.CheckedAt.Equal(*good.Content.CheckedAt) {
-		t.Errorf("page %q, content %+v", s.Page, s.Content)
+		t.Errorf(pageAndContent, s.Page, s.Content)
 	}
 	// A good cycle sets the failed runs to 0.
 	w.verifyErr = nil
@@ -248,7 +254,7 @@ func TestACycleThatFailsTwiceWithStatus401IsLost(t *testing.T) {
 		t.Fatal(err)
 	}
 	if s := o.Summary(); s.Page != model.PageOK || s.Content.FailedRuns != 0 || s.Content.LastError != nil {
-		t.Errorf("page %q, content %+v", s.Page, s.Content)
+		t.Errorf(pageAndContent, s.Page, s.Content)
 	}
 }
 
@@ -299,7 +305,7 @@ func TestAWrongClusterUIDIsStaleWithTheLastError(t *testing.T) {
 	_ = o.RunContent(context.Background())
 	s := o.Summary()
 	if s.Page != model.PageStale || s.Content.LastError == nil || s.Content.LastError.Kind != docs.KindUnknown || s.Content.FailedRuns != 2 {
-		t.Errorf("page %q, content %+v", s.Page, s.Content)
+		t.Errorf(pageAndContent, s.Page, s.Content)
 	}
 }
 

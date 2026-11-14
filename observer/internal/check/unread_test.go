@@ -54,6 +54,68 @@ func firstSeenInState(t *testing.T, r *rig, id string) (time.Time, bool) {
 	return f.FirstSeen, ok
 }
 
+// keepsFirstSight fails when the state does not hold t0 as the first sight of the finding id.
+func keepsFirstSight(t *testing.T, r *rig, id string) {
+	t.Helper()
+	if got, ok := firstSeenInState(t, r, id); !ok || !got.Equal(t0) {
+		t.Errorf("the state holds the first sight %v, %v", got, ok)
+	}
+}
+
+// dropsFirstSight fails when the state keeps a first sight of the finding id that a read cleared.
+func dropsFirstSight(t *testing.T, r *rig, id string) {
+	t.Helper()
+	if _, ok := firstSeenInState(t, r, id); ok {
+		t.Errorf("the state keeps the first sight of %s, which a read cleared", id)
+	}
+}
+
+// readErrorNames fails when the cause read-error does not name exactly the names.
+func readErrorNames(t *testing.T, s model.Summary, names ...string) {
+	t.Helper()
+	if got := causeOf(s, model.ReadError); !slices.Equal(got, names) {
+		t.Errorf("the cause read-error names %v, want %v", got, names)
+	}
+}
+
+// driftAgain fails when a read that shows the drift again does not keep its first sight, or keeps the cause read-error.
+func driftAgain(t *testing.T, s model.Summary) {
+	t.Helper()
+	if len(s.Findings) != 1 || !s.Findings[0].FirstSeen.Equal(t0) || len(causeOf(s, model.ReadError)) != 0 {
+		t.Fatalf(testkit.FindingsNotChecked, s.Findings, s.NotChecked)
+	}
+}
+
+// noChangeClears fails when a read of no change does not clear the drift.
+func noChangeClears(t *testing.T, s model.Summary) {
+	t.Helper()
+	if len(s.Findings) != 0 || s.Counts.Drift != 0 {
+		t.Errorf("a read of no change did not clear the drift: %+v", s.Findings)
+	}
+}
+
+// inventsNoFinding fails when a new process that read no drift shows a finding.
+func inventsNoFinding(t *testing.T, s model.Summary) {
+	t.Helper()
+	if len(s.Findings) != 0 {
+		t.Fatalf("the process invented a finding: %+v", s.Findings)
+	}
+}
+
+// countsAllButKubernetes fails when the newer row of kubernetes, whose move failed, has an impact and images, or when
+// another newer row has none.
+func countsAllButKubernetes(t *testing.T, s model.Summary) {
+	t.Helper()
+	for _, n := range s.Newer {
+		if hasCounts := n.Impact != "" && n.Images > 0; (n.Name == "kubernetes") == hasCounts {
+			t.Errorf("%s: impact %q, images %d", n.Name, n.Impact, n.Images)
+		}
+	}
+}
+
+// findingsAndMessages is the failure of a check of the findings and of the messages that the observer sent.
+const findingsAndMessages = "findings %+v, messages %q"
+
 func TestAVerifyRowThatFailsKeepsTheDriftAndItsFirstSight(t *testing.T) {
 	r, w := twoRecords(t)
 	w.rows[0] = drift(t)
@@ -68,27 +130,17 @@ func TestAVerifyRowThatFailsKeepsTheDriftAndItsFirstSight(t *testing.T) {
 	if len(s.Findings) != 1 || s.Findings[0].ID != id || !s.Findings[0].FirstSeen.Equal(t0) || s.Counts.Drift != 1 || s.Profiles[0].Status != model.StatusDrift {
 		t.Fatalf("a failed read cleared the drift: findings %+v, counts %+v", s.Findings, s.Counts)
 	}
-	if got := causeOf(s, model.ReadError); len(got) != 1 || got[0] != "aws-stack@1.1.0" {
-		t.Errorf("the cause read-error names %v", got)
-	}
-	if got, ok := firstSeenInState(t, r, id); !ok || !got.Equal(t0) {
-		t.Errorf("the state holds the first sight %v, %v", got, ok)
-	}
+	readErrorNames(t, s, "aws-stack@1.1.0")
+	keepsFirstSight(t, r, id)
 	// A later read that shows the drift keeps the first sight, and the cause goes.
 	w.rows[0] = drift(t)
 	s = at(t, o, t0.Add(2*time.Hour))
-	if len(s.Findings) != 1 || !s.Findings[0].FirstSeen.Equal(t0) || len(causeOf(s, model.ReadError)) != 0 {
-		t.Fatalf("findings %+v, notChecked %+v", s.Findings, s.NotChecked)
-	}
+	driftAgain(t, s)
 	// A later read of no change clears it.
 	w.rows[0] = unchanged()
 	s = at(t, o, t0.Add(3*time.Hour))
-	if len(s.Findings) != 0 || s.Counts.Drift != 0 {
-		t.Errorf("a read of no change did not clear the drift: %+v", s.Findings)
-	}
-	if _, ok := firstSeenInState(t, r, id); ok {
-		t.Error("the state keeps the first sight of a drift that a read cleared")
-	}
+	noChangeClears(t, s)
+	dropsFirstSight(t, r, id)
 }
 
 func TestASideThatFailsKeepsTheClusterDifferenceAndItsFirstSight(t *testing.T) {
@@ -106,25 +158,15 @@ func TestASideThatFailsKeepsTheClusterDifferenceAndItsFirstSight(t *testing.T) {
 	if len(s.Findings) != 1 || s.Findings[0].ID != id || !s.Findings[0].FirstSeen.Equal(t0) || s.Profiles[0].Status != model.StatusDrift {
 		t.Fatalf("a failed side cleared the drift: findings %+v", s.Findings)
 	}
-	if got := causeOf(s, model.ReadError); len(got) != 1 || got[0] != "aws-stack@1.1.0" {
-		t.Errorf("the cause read-error names %v", got)
-	}
-	if got, ok := firstSeenInState(t, r, id); !ok || !got.Equal(t0) {
-		t.Errorf("the state holds the first sight %v, %v", got, ok)
-	}
+	readErrorNames(t, s, "aws-stack@1.1.0")
+	keepsFirstSight(t, r, id)
 	fails.name = ""
 	s = at(t, o, t0.Add(2*time.Hour))
-	if len(s.Findings) != 1 || !s.Findings[0].FirstSeen.Equal(t0) || len(causeOf(s, model.ReadError)) != 0 {
-		t.Fatalf("findings %+v, notChecked %+v", s.Findings, s.NotChecked)
-	}
+	driftAgain(t, s)
 	w.compares = nil
 	s = at(t, o, t0.Add(3*time.Hour))
-	if len(s.Findings) != 0 {
-		t.Errorf("a read of no change did not clear the drift: %+v", s.Findings)
-	}
-	if _, ok := firstSeenInState(t, r, id); ok {
-		t.Error("the state keeps the first sight of a drift that a read cleared")
-	}
+	noChangeClears(t, s)
+	dropsFirstSight(t, r, id)
 }
 
 func TestAFailedReadAfterARestartKeepsTheFirstSightInTheState(t *testing.T) {
@@ -136,15 +178,12 @@ func TestAFailedReadAfterARestartKeepsTheFirstSightInTheState(t *testing.T) {
 	o := r.restart(w)
 	w.rows[0] = notRead()
 	s := at(t, o, t0.Add(time.Hour))
-	if len(s.Findings) != 0 {
-		t.Fatalf("the process invented a finding: %+v", s.Findings)
+	inventsNoFinding(t, s)
+	readErrorNames(t, s, "aws-stack@1.1.0")
+	if s.Profiles[0].Status != model.StatusNotChecked {
+		t.Errorf("profile %q", s.Profiles[0].Status)
 	}
-	if got := causeOf(s, model.ReadError); len(got) != 1 || got[0] != "aws-stack@1.1.0" || s.Profiles[0].Status != model.StatusNotChecked {
-		t.Errorf("notChecked %+v, profile %q", s.NotChecked, s.Profiles[0].Status)
-	}
-	if got, ok := firstSeenInState(t, r, id); !ok || !got.Equal(t0) {
-		t.Fatalf("the state holds the first sight %v, %v", got, ok)
-	}
+	keepsFirstSight(t, r, id)
 	w.rows[0] = drift(t)
 	s = at(t, o, t0.Add(2*time.Hour))
 	if len(s.Findings) != 1 || !s.Findings[0].FirstSeen.Equal(t0) {
@@ -163,12 +202,8 @@ func TestAFailedReadKeepsTheFirstSightOfThePartThatFailedOnly(t *testing.T) {
 	o := r.restart(w)
 	w.rows[0], w.compares = notRead(), nil
 	at(t, o, t0.Add(time.Hour))
-	if _, ok := firstSeenInState(t, r, published); !ok {
-		t.Error("the first sight of the row that failed is gone")
-	}
-	if _, ok := firstSeenInState(t, r, cluster); ok {
-		t.Error("the first sight of the side that a read cleared stays")
-	}
+	keepsFirstSight(t, r, published)
+	dropsFirstSight(t, r, cluster)
 }
 
 func TestASideThatFailsIsNotCheckedForTheProfileAndItsPacks(t *testing.T) {
@@ -177,7 +212,7 @@ func TestASideThatFailsIsNotCheckedForTheProfileAndItsPacks(t *testing.T) {
 	s := at(t, o, t0)
 	p := s.Profiles[0]
 	if p.Status != model.StatusNotChecked || p.ClusterCopy.Status != model.CopyNotRead {
-		t.Errorf("profile %q, clusterCopy %+v", p.Status, p.ClusterCopy)
+		t.Errorf(testkit.ProfileCopy, p.Status, p.ClusterCopy)
 	}
 	for _, k := range p.Packs {
 		if k.Status != model.StatusNotChecked {
@@ -185,7 +220,7 @@ func TestASideThatFailsIsNotCheckedForTheProfileAndItsPacks(t *testing.T) {
 		}
 	}
 	if s.Profiles[1].Status != model.StatusOK || s.Counts.Packs != 3 || s.Counts.PacksInFull != 1 {
-		t.Errorf("profile %q, counts %+v", s.Profiles[1].Status, s.Counts)
+		t.Errorf(testkit.ProfileCounts, s.Profiles[1].Status, s.Counts)
 	}
 }
 
@@ -201,13 +236,8 @@ func TestOneMoveThatFailsLeavesTheOtherPinsComparedAndTheListNew(t *testing.T) {
 	if s.Versions.ReadAt == nil || s.Versions.FailedRuns != 0 || s.Versions.LastError != nil || len(s.Newer) != 4 || w.countMoves() != 4 {
 		t.Fatalf("versions %+v, newer %d, compares %d", s.Versions, len(s.Newer), w.countMoves())
 	}
-	for _, n := range s.Newer {
-		hasCounts := n.Impact != "" && n.Images > 0
-		if (n.Name == "kubernetes") == hasCounts {
-			t.Errorf("%s: impact %q, images %d", n.Name, n.Impact, n.Images)
-		}
-	}
-	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "k8s/kubernetes" || s.NotChecked[0].Profiles[0] != "aws-stack@1.0.0" {
+	countsAllButKubernetes(t, s)
+	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "k8s/kubernetes" || s.NotChecked[0].Profiles[0] != moveSubject {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 	// The cache holds the three moves that worked. The next cycle asks for the one that failed.
@@ -310,14 +340,13 @@ func asMap(t *testing.T, v any) map[string]any {
 // breakRecord overwrites the file of a record with a file that the observer cannot read.
 func breakRecord(t *testing.T, r *rig, how string) {
 	t.Helper()
-	const file = "aws-stack@1.1.0.json.gz"
 	switch how {
 	case "a bad gzip":
-		if err := os.WriteFile(filepath.Join(r.records, file), []byte("not gzip"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(r.records, testkit.RecordFile), []byte("not gzip"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	default:
-		testkit.WriteGzip(t, r.records, file, `{"schema":"strata-snapshot/2","source":{"name":"aws-stack","version":"1.1.0"}}`)
+		testkit.WriteGzip(t, r.records, testkit.RecordFile, `{"schema":"strata-snapshot/2","source":{"name":"aws-stack","version":"1.1.0"}}`)
 	}
 }
 
@@ -345,12 +374,8 @@ func TestAnUnreadableRecordKeepsItsFindingAndItsFirstSightAndSendsNoClear(t *tes
 			if len(s.Findings) != 1 || s.Findings[0].ID != id || !s.Findings[0].FirstSeen.Equal(t0) || s.Profiles[0].Status != model.StatusDrift {
 				t.Fatalf("an unreadable record cleared the finding: findings %+v", s.Findings)
 			}
-			if got := causeOf(s, model.ReadError); !slices.Contains(got, "aws-stack@1.1.0") || !slices.Contains(got, "aws-stack@1.1.0.json.gz") {
-				t.Errorf("the cause read-error names %v", got)
-			}
-			if got, ok := firstSeenInState(t, r, id); !ok || !got.Equal(t0) {
-				t.Errorf("the state holds the first sight %v, %v", got, ok)
-			}
+			readErrorNames(t, s, "aws-stack@1.1.0", testkit.RecordFile)
+			keepsFirstSight(t, r, id)
 			if len(sender.texts) != 1 {
 				t.Fatalf("an unreadable record sent %q", sender.texts[1:])
 			}
@@ -359,11 +384,9 @@ func TestAnUnreadableRecordKeepsItsFindingAndItsFirstSightAndSendsNoClear(t *tes
 			w.rows = []docs.VerifyRow{unchanged(), unchanged()}
 			s = at(t, o, t0.Add(2*time.Hour))
 			if len(s.Findings) != 0 || len(sender.texts) != 2 || !strings.Contains(sender.texts[1], "Drift cleared") {
-				t.Errorf("findings %+v, messages %q", s.Findings, sender.texts)
+				t.Errorf(findingsAndMessages, s.Findings, sender.texts)
 			}
-			if _, ok := firstSeenInState(t, r, id); ok {
-				t.Error("the state keeps the first sight of a drift that a read cleared")
-			}
+			dropsFirstSight(t, r, id)
 		})
 	}
 }
@@ -374,7 +397,7 @@ func TestAnUnreadableRecordWithNoLastRecordKeepsTheFirstSightsAndSendsNoClear(t 
 	sender := &capture{}
 	at(t, alerting(t, r, w, sender), t0)
 	broken := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
-	readable := model.FindingID(model.PublishedChanged, "platform-addons@1.0.0")
+	readable := model.FindingID(model.PublishedChanged, testkit.AddonsProfile)
 	if len(sender.texts) != 2 {
 		t.Fatalf("the open messages %q", sender.texts)
 	}
@@ -383,17 +406,11 @@ func TestAnUnreadableRecordWithNoLastRecordKeepsTheFirstSightsAndSendsNoClear(t 
 	w.rows = []docs.VerifyRow{unchanged()}
 	o := alerting(t, r, w, sender)
 	s := at(t, o, t0.Add(time.Hour))
-	if len(s.Findings) != 0 {
-		t.Fatalf("the process invented a finding: %+v", s.Findings)
-	}
-	if got, ok := firstSeenInState(t, r, broken); !ok || !got.Equal(t0) {
-		t.Errorf("the state holds the first sight %v, %v", got, ok)
-	}
+	inventsNoFinding(t, s)
+	keepsFirstSight(t, r, broken)
 	// The record that was read decides for its own profile, so its clear goes. The unreadable file decides for none.
-	if _, ok := firstSeenInState(t, r, readable); ok {
-		t.Error("the state keeps the first sight of a profile that a record clears")
-	}
-	if len(sender.texts) != 3 || !strings.Contains(sender.texts[2], "Drift cleared\nplatform-addons@1.0.0") {
+	dropsFirstSight(t, r, readable)
+	if len(sender.texts) != 3 || !strings.Contains(sender.texts[2], "Drift cleared\n"+testkit.AddonsProfile) {
 		t.Fatalf("messages %q", sender.texts)
 	}
 	// The record is read again and the drift is still there: the first sight is the first one, and nothing goes again.
@@ -401,7 +418,7 @@ func TestAnUnreadableRecordWithNoLastRecordKeepsTheFirstSightsAndSendsNoClear(t 
 	w.rows = []docs.VerifyRow{drift(t), unchanged()}
 	s = at(t, o, t0.Add(2*time.Hour))
 	if len(s.Findings) != 1 || !s.Findings[0].FirstSeen.Equal(t0) || len(sender.texts) != 3 {
-		t.Errorf("findings %+v, messages %q", s.Findings, sender.texts)
+		t.Errorf(findingsAndMessages, s.Findings, sender.texts)
 	}
 	// A read of no change decides.
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
@@ -412,9 +429,9 @@ func TestAnUnreadableRecordWithNoLastRecordKeepsTheFirstSightsAndSendsNoClear(t 
 }
 
 func TestAFailedReadOfMetaJSONKeepsEachFirstDigestAndARealNewRevisionResetsThem(t *testing.T) {
-	r, _, o, pods := podRig(t, runs("web-1", digest1))
+	r, _, o, pods := podRig(t, runs("web-1", testkit.Digest1))
 	cycle(t, o)
-	pods.set([]kube.Container{runs("web-1", digest2)}, nil)
+	pods.set([]kube.Container{runs("web-1", testkit.Digest2)}, nil)
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
 		t.Fatalf("findings %v", got)
@@ -428,20 +445,20 @@ func TestAFailedReadOfMetaJSONKeepsEachFirstDigestAndARealNewRevisionResetsThem(
 		t.Errorf("a failed read of meta.json leaves the findings %v", got)
 	}
 	st := readState(t, r)
-	if st.Images.Revision != "4e1c7a2" || st.Images.First[model.ImageKey(imageRef)] != digest1 {
+	if st.Images.Revision != "4e1c7a2" || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest1 {
 		t.Errorf("a failed read of meta.json reset the state: %+v", st.Images)
 	}
 	// The file comes back with the same revision, and the finding holds.
-	r.meta(`{"baseline":"approved","revision":"4e1c7a2"}`)
+	r.meta(testkit.ApprovedMeta)
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
 		t.Errorf("findings %v", got)
 	}
 	// A real new revision resets the first digests.
-	r.meta(`{"baseline":"approved","revision":"5f2d8b1"}`)
+	r.meta(revisedMeta)
 	cycle(t, o)
 	st = readState(t, r)
-	if got := imageKindsOf(o.Summary()); len(got) != 0 || st.Images.Revision != "5f2d8b1" || st.Images.First[model.ImageKey(imageRef)] != digest2 {
+	if got := imageKindsOf(o.Summary()); len(got) != 0 || st.Images.Revision != "5f2d8b1" || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest2 {
 		t.Errorf("findings %v, state %+v", got, st.Images)
 	}
 }

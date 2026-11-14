@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 /* The tests below hold the splash: the mark, the five tones with their animations, the rule for a person who asks for less
@@ -62,6 +64,9 @@ func without(css, head string) string {
 // reducedMotion is the head of the block that stops each animation.
 const reducedMotion = "@media (prefers-reduced-motion:reduce)"
 
+// lostTop is the top slab of a lost mark, which is red and moves from its place.
+const lostTop = ".slabs.tone-lost .s0"
+
 // motionProblems lists what is wrong in the way that a style stops its animations for a person who asks for less motion. Each
 // rule outside that block that runs an animation belongs to a mark (a selector that starts with .slabs), and the block turns off
 // the animation of each slab with !important, so that no tone keeps one. A mark holds its state: the slabs that build stay in place,
@@ -92,18 +97,16 @@ func motionProblems(css string) []string {
 	if !strings.Contains(ruleOf(still, ".slabs.tone-build .s"), "opacity:") {
 		out = append(out, "a mark that builds does not hold its state for less motion")
 	}
-	if !strings.Contains(ruleOf(still, ".slabs.tone-lost .s0"), "transform:") {
+	if !strings.Contains(ruleOf(still, lostTop), "transform:") {
 		out = append(out, "a lost mark does not hold its state for less motion")
 	}
 	return out
 }
 
 func TestTheStyleStopsEachAnimationForAPersonWhoAsksForLessMotion(t *testing.T) {
-	if got := motionProblems(string(readPage(t, "app.css"))); len(got) != 0 {
-		t.Errorf("%s", strings.Join(got, "\n"))
-	}
-	// The slabs are the one thing that moves.
 	css := string(readPage(t, "app.css"))
+	noProblems(t, "app.css", motionProblems(css))
+	// The slabs are the one thing that moves.
 	if n := strings.Count(cssComment.ReplaceAllString(css, ""), "@keyframes"); n != 5 {
 		t.Errorf("the style has %d sets of keyframes, want the 5 of the tones", n)
 	}
@@ -117,24 +120,18 @@ func TestTheCheckOfMotionFindsEachProblem(t *testing.T) {
 @keyframes march{to{stroke-dashoffset:-70}}
 @keyframes pulse{0%{opacity:.5}}
 @keyframes slip{0%{transform:none}}
-@media (prefers-reduced-motion:reduce){.slabs .s{animation:none!important}.slabs.tone-build .s{opacity:.7}.slabs.tone-lost .s0{transform:translate(9px,-8px)}}`
-	if got := motionProblems(good); len(got) != 0 {
-		t.Errorf("a good style has problems: %q", got)
-	}
+` + reducedMotion + `{.slabs .s{animation:none!important}.slabs.tone-build .s{opacity:.7}` + lostTop + `{transform:translate(9px,-8px)}}`
+	noProblems(t, "a good style", motionProblems(good))
 	cases := []struct{ name, css, want string }{
 		{"no rule for less motion", strings.Replace(good, reducedMotion, "@media (min-width:1px)", 1), "no rule for prefers-reduced-motion"},
 		{"an animation on a card", good + ".card{animation:breathe 1s infinite}", "the rule of .card runs an animation"},
 		{"a spinner in a list of selectors", good + ".slabs.tone-calm .s,.spin{animation:rise 1s infinite}", "the rule of .spin runs an animation"},
 		{"no important", strings.Replace(good, "animation:none!important", "animation:none", 1), "want animation:none!important;"},
 		{"the build slabs vanish", strings.Replace(good, ".slabs.tone-build .s{opacity:.7}", "", 1), "a mark that builds does not hold its state"},
-		{"the lost slab comes back", strings.Replace(good, ".slabs.tone-lost .s0{transform:translate(9px,-8px)}", "", 1), "a lost mark does not hold its state"},
+		{"the lost slab comes back", strings.Replace(good, lostTop+"{transform:translate(9px,-8px)}", "", 1), "a lost mark does not hold its state"},
 	}
 	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := strings.Join(motionProblems(c.css), "\n"); !strings.Contains(got, c.want) {
-				t.Errorf("problems %q, want one with %q", got, c.want)
-			}
-		})
+		t.Run(c.name, func(t *testing.T) { findsProblem(t, c.name, motionProblems(c.css), c.want) })
 	}
 }
 
@@ -157,34 +154,30 @@ func TestEachToneHasItsLookAndItsAnimationInTheStyle(t *testing.T) {
 		}
 	}
 	// The look: an outline for off, an amber mark for warn, and a red top slab for lost. Calm and build keep the colors of the logo.
-	for selector, want := range map[string]string{
-		".slabs.tone-off .s":       "fill:none;",
-		".slabs.tone-warn .s":      "stroke:var(--amb);",
-		".slabs.tone-lost .s0":     "fill:var(--red);",
-		".splash.tone-lost":        "var(--red)",
-		".splash.tone-warn":        "var(--amb)",
-		".splash.md":               "padding:",
-		".splash.sm":               "padding:",
-		".inl":                     "display:flex;",
-		".cmd":                     "display:flex;",
-		".facts":                   "display:flex;",
-		".slabs.tone-lost .s":      "fill:color-mix(",
-		".slabs.tone-warn .s0":     "fill:none;",
-		".slabs.tone-build .s0":    "animation-delay:",
-		".slabs.tone-calm .s1":     "animation-delay:",
-		".splash.tone-off":         "background:none;",
-		".splash.tone-lost>.slabs": "drop-shadow(",
-	} {
-		if got := ruleOf(css, selector); !strings.Contains(got, want) {
-			t.Errorf("the rule of %s is %q, and it lacks %s", selector, got, want)
-		}
-	}
+	rulesHold(t, css, map[string][]string{
+		".slabs.tone-off .s":       {"fill:none;"},
+		".slabs.tone-warn .s":      {"stroke:var(--amb);"},
+		lostTop:                    {"fill:var(--red);"},
+		".splash.tone-lost":        {"var(--red)"},
+		".splash.tone-warn":        {"var(--amb)"},
+		".splash.md":               {"padding:"},
+		".splash.sm":               {"padding:"},
+		".inl":                     {"display:flex;"},
+		".cmd":                     {"display:flex;"},
+		".facts":                   {"display:flex;"},
+		".slabs.tone-lost .s":      {"fill:color-mix("},
+		".slabs.tone-warn .s0":     {"fill:none;"},
+		".slabs.tone-build .s0":    {"animation-delay:"},
+		".slabs.tone-calm .s1":     {"animation-delay:"},
+		".splash.tone-off":         {"background:none;"},
+		".splash.tone-lost>.slabs": {"drop-shadow("},
+	})
 }
 
 // The mark of the splash is the geometry of the logo in assets/logo/: the four paths in the script are the four paths of the
 // dark mark, in the same order, and the style gives each slab the color of its path.
 func TestTheMarkOfTheSplashIsTheGeometryOfTheLogo(t *testing.T) {
-	logo := readFile(t, logoDir+"strata-mark-dark.svg")
+	logo := readFile(t, logoDir+markDark)
 	want := regexp.MustCompile(`<path fill="(#[0-9a-fA-F]+)" d="([^"]+)"`).FindAllStringSubmatch(string(logo), -1)
 	script := readScripts(t)
 	_, rest, ok := strings.Cut(script, "const SLABS = [")
@@ -201,27 +194,23 @@ func TestTheMarkOfTheSplashIsTheGeometryOfTheLogo(t *testing.T) {
 		if got[i][1] != want[i][2] {
 			t.Errorf("slab %d of the script is not the path of the logo", i)
 		}
-		if rule, color := ruleOf(css, ".slabs .s"+string(rune('0'+i))), strings.ToLower(want[i][1]); rule != "fill:"+color+";" {
-			t.Errorf("the rule of slab %d is %q, want fill:%s;", i, rule, color)
-		}
+		ruleIs(t, css, ".slabs .s"+string(rune('0'+i)), "fill:"+strings.ToLower(want[i][1])+";")
 	}
 }
 
 // The policy of the page does not change: it stops an inline style, so the color of a slab is a rule of app.css. The files of
 // assets/ keep the rules of the page, and the splash adds no font, no library, and no image.
 func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testing.T) {
-	policy := serve(t, "/").Header().Get("Content-Security-Policy")
+	policy := serve(t, "/").Header().Get(testkit.HeaderPolicy)
 	for _, want := range []string{"default-src 'none'", "script-src 'self'", "style-src 'self'", "font-src 'self'", "img-src 'self'"} {
 		if !strings.Contains(policy, want) {
 			t.Errorf("the policy %q lacks %s", policy, want)
 		}
 	}
 	if strings.Contains(policy, "unsafe-inline") || strings.Contains(policy, "data:") {
-		t.Errorf("the policy %q allows an inline style or a data address", policy)
+		t.Errorf("the policy %q allows "+problemStyle+" or a data address", policy)
 	}
-	if got := problems(files(t)); len(got) != 0 {
-		t.Errorf("%s", strings.Join(got, "\n"))
-	}
+	noProblems(t, "assets/", problems(files(t)))
 	var names []string
 	entries, err := os.ReadDir("assets")
 	if err != nil {
@@ -230,7 +219,7 @@ func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testin
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	want := []string{"LICENSES.md", "app.css", "app.js", "favicon-dark.svg", "favicon-light.svg", "fonts", "frame.js", "index.html", "pack.js", "routes.js", "screens.js", "theme.js"}
+	want := []string{"LICENSES.md", "app.css", "app.js", "favicon-dark.svg", "favicon-light.svg", "fonts", "frame.js", "index.html", "pack.js", "routes.js", "screens.js", themeScript}
 	if !slices.Equal(names, want) {
 		t.Errorf("assets/ holds %v, want %v", names, want)
 	}

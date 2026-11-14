@@ -45,6 +45,15 @@ func snapshotsOf(w *world, ref string) int {
 	return n
 }
 
+// snapshotsAndTokens fails when the world took another count of snapshots of fred-edge@1.0.0 than want, or the content
+// cycle holds another count of tokens.
+func snapshotsAndTokens(t *testing.T, w *world, o *Observer, want int) {
+	t.Helper()
+	if got, tokens := snapshotsOf(w, "fred-edge@1.0.0"), len(o.kicks[cycleContent]); got != want || tokens != want {
+		t.Errorf("snapshots %d, tokens %d, want %d", got, tokens, want)
+	}
+}
+
 // While the records are first-seen, a content cycle records a profile version that the cluster runs and
 // that no record holds, and starts the next cycle at once. That cycle checks it as a record, so no
 // cause no-record stays. A later cycle takes no second snapshot of it.
@@ -57,9 +66,7 @@ func TestFirstSeenRecordsGetARecordOfAProfileThatTheClusterRunsAfterTheSeed(t *t
 	if s := o.Summary(); profileStatus(s, "fred-edge@1.0.0") != model.StatusNoRecord {
 		t.Fatalf("the first cycle: %q", profileStatus(s, "fred-edge@1.0.0"))
 	}
-	if snapshotsOf(w, "fred-edge@1.0.0") != 1 || len(o.kicks[cycleContent]) != 1 {
-		t.Fatalf("snapshots %d, tokens %d", snapshotsOf(w, "fred-edge@1.0.0"), len(o.kicks[cycleContent]))
-	}
+	snapshotsAndTokens(t, w, o, 1)
 	if !strings.Contains(r.log.String(), "verdict=taken records=1") {
 		t.Errorf("the log:\n%s", r.log.String())
 	}
@@ -85,16 +92,14 @@ func TestFirstSeenRecordsGetARecordOfAProfileThatTheClusterRunsAfterTheSeed(t *t
 // stays no-record until the pipeline publishes its record.
 func TestApprovedRecordsGetNoRecordFromTheObserver(t *testing.T) {
 	r, w := firstSeenWithANewProfile(t)
-	r.meta(`{"baseline":"approved","revision":"4e1c7a2"}`)
+	r.meta(testkit.ApprovedMeta)
 	o := r.observer(w)
 	for range 2 {
 		if err := o.RunContent(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if snapshotsOf(w, "fred-edge@1.0.0") != 0 || len(o.kicks[cycleContent]) != 0 {
-		t.Errorf("snapshots %d, tokens %d", snapshotsOf(w, "fred-edge@1.0.0"), len(o.kicks[cycleContent]))
-	}
+	snapshotsAndTokens(t, w, o, 0)
 	if st := profileStatus(o.Summary(), "fred-edge@1.0.0"); st != model.StatusNoRecord {
 		t.Errorf("status %q", st)
 	}

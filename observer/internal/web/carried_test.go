@@ -9,9 +9,11 @@ import (
 )
 
 const (
-	barneyHash = "#p-barney-base@1.5.0"
-	ubuntuHash = "#k-barney-base@1.5.0/os/ubuntu-aws"
-	ubuntuSide = "side-barney-base@1.5.0-os/ubuntu-aws"
+	barneyHash = "#p-" + k8sSubject
+	ubuntuHash = "#k-" + k8sSubject + "/os/ubuntu-aws"
+	ubuntuSide = "side-" + k8sSubject + "-os/ubuntu-aws"
+	// unchangedWords say that the published version of a profile is the same as its record.
+	unchangedWords = "Unchanged since the record"
 )
 
 // carriedSet is the set read-error, where the last read of barney-base@1.5.0 failed in part and the cause
@@ -36,7 +38,7 @@ func TestACarriedAnswerOnAPackWithANewerVersionIsNotIdenticalUndisturbedOrSame(t
 	for _, side := range []string{"published", "cluster"} {
 		t.Run(side, func(t *testing.T) {
 			page := pageWith(t, dir, "scratch", ubuntuHash, `S.side["`+ubuntuSide+`"] = "`+side+`"`)
-			mustHold(t, side, page, `<option value="`+side+`" selected>`, "Part of this layer is hidden", "Strata could not read the record.")
+			mustHold(t, side, page, `<option value="`+side+`" selected>`, hiddenTitle, "Strata could not read the record.")
 			mustNotHold(t, side, page, "Identical", "Undisturbed", `<b class="ok">Same</b>`, "tone-calm")
 		})
 	}
@@ -46,11 +48,11 @@ func TestACarriedAnswerOnAPackWithANewerVersionIsNotIdenticalUndisturbedOrSame(t
 func TestACarriedAnswerIsNoOKOnTheProfilePageAndInCheckThisYourself(t *testing.T) {
 	dir := carriedSet(t)
 	for _, page := range pagesOf(t, dir, barneyHash, ubuntuHash) {
-		mustNotHold(t, "the page", page, "Unchanged since the record", "Same content")
-		for _, question := range []string{"Does Palette still have this version?", "Does this cluster still run the record?", "What changed?"} {
+		mustNotHold(t, "the page", page, unchangedWords, "Same content")
+		for _, question := range []string{qPaletteHas, qClusterRuns, "What changed?"} {
 			row := rowWith(t, page, question)
-			mustNotHold(t, question, row, `<span class="badge g">`)
-			mustHold(t, question, row, `<span class="badge y">`)
+			mustNotHold(t, question, row, badgeOf("g"))
+			mustHold(t, question, row, badgeOf("y"))
 		}
 	}
 }
@@ -59,6 +61,6 @@ func TestACarriedAnswerIsNoOKOnTheProfilePageAndInCheckThisYourself(t *testing.T
 func TestAProfileWithNoCauseKeepsTheWordsOfItsSides(t *testing.T) {
 	dir := carriedSet(t)
 	page := pagesOf(t, dir, "#p-bambam-secrets@2.0.1")[0]
-	mustHold(t, "the profile", page, "Unchanged since the record")
-	mustHold(t, "the row", rowWith(t, page, "Does Palette still have this version?"), `<span class="badge g">OK</span>`)
+	mustHold(t, "the profile", page, unchangedWords)
+	mustHold(t, "the row", rowWith(t, page, qPaletteHas), badge("g", "OK"))
 }

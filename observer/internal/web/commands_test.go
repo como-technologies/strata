@@ -127,7 +127,7 @@ func checkWork(t *testing.T, strata string) (bin, dir string) {
 // the stand-in for kubectl reads. It gives the directory of the files.
 func secretsOf(t *testing.T, record string) string {
 	t.Helper()
-	yaml, err := exec.Command("../../../scripts/ci/observer-records.sh", "--revision", "test", record).Output()
+	yaml, err := exec.Command(testkit.RecordsScript, "--revision", "test", record).Output()
 	if err != nil {
 		t.Fatalf("the records script: %v", err)
 	}
@@ -180,11 +180,14 @@ func TestTheCommandOfTheFirstRowReadsARecordOutOfTheSecretsOfTheRecordsScript(t 
 	}
 }
 
+// commandExited is the failure of a command of the page that exited with a code that says it failed.
+const commandExited = "the command %q exited with %d:\n%s"
+
 // An exit code of a command of the card: 0 says no change, and 1 says that the command found one. A code above 1 is a failure.
 func mustAnswer(t *testing.T, command string, code int, out string) {
 	t.Helper()
 	if code > 1 {
-		t.Errorf("the command %q exited with %d:\n%s", command, code, out)
+		t.Errorf(commandExited, command, code, out)
 	}
 	if strings.TrimSpace(out) == "" {
 		t.Errorf("the command %q printed nothing", command)
@@ -235,10 +238,7 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 					hashes = append(hashes, packPage(subject, k.Layer, k.Name))
 				}
 			}
-			var pages []string
-			if err := json.Unmarshal(runNodeIn(t, filepath.Dir(apiDir), devdata.State(filepath.Base(apiDir)), append([]string{"show"}, hashes...)...), &pages); err != nil {
-				t.Fatal(err)
-			}
+			pages := showIn(t, filepath.Dir(apiDir), devdata.State(filepath.Base(apiDir)), hashes...)
 			var commands []string
 			for i, page := range pages {
 				for _, r := range termRows(t, page) {
@@ -251,7 +251,7 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 				}
 			}
 			// The commands of the card for a profile with a finding: the record, the verdict, who, the changes, and the cluster.
-			for _, prefix := range []string{"for i in 0 1 2 3;", "strata verify record.json", "strata verify record.json --who", "strata compare record.json ", "strata compare record.json cluster:"} {
+			for _, prefix := range []string{"for i in 0 1 2 3;", verifyRecord, verifyWho, compareRecord, compareCluster} {
 				if !slices.ContainsFunc(commands, func(c string) bool { return strings.HasPrefix(c, prefix) }) {
 					t.Errorf("no page gives a command that starts with %q", prefix)
 				}

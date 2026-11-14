@@ -101,6 +101,17 @@ func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
 	}
 }
 
+// contractDir gives the directory of the documents of the real binary that the contract script sets in STRATA_DOCS.
+// With no directory, the test skips.
+func contractDir(t *testing.T) string {
+	t.Helper()
+	dir := os.Getenv("STRATA_DOCS")
+	if dir == "" {
+		t.Skip("STRATA_DOCS is not set: run scripts/observer-contract.sh")
+	}
+	return dir
+}
+
 // decodeFile reads the JSON file name of dir into v. It does the job of testkit.DecodeFile for the tests of docs, because
 // testkit imports docs.
 func decodeFile(t *testing.T, dir, name string, v any) {
@@ -117,10 +128,7 @@ func decodeFile(t *testing.T, dir, name string, v any) {
 // A cluster side holds the value of a variable in clear. This test fails with no such value, so it
 // cannot pass by an empty document.
 func TestAClearValueDoesNotPassTheAllowList(t *testing.T) {
-	dir := os.Getenv("STRATA_DOCS")
-	if dir == "" {
-		t.Skip("STRATA_DOCS is not set: run scripts/observer-contract.sh")
-	}
+	dir := contractDir(t)
 	const value = "team-payments"
 	raw, err := os.ReadFile(dir + "/compare-values.json")
 	if err != nil {
@@ -140,10 +148,7 @@ func TestAClearValueDoesNotPassTheAllowList(t *testing.T) {
 }
 
 func TestTheKindOfAFailedCheckIsInTheRow(t *testing.T) {
-	dir := os.Getenv("STRATA_DOCS")
-	if dir == "" {
-		t.Skip("STRATA_DOCS is not set: run scripts/observer-contract.sh")
-	}
+	dir := contractDir(t)
 	var down VerifySummary
 	decodeFile(t, dir, "verify-summary-down.json", &down)
 	if len(down.Records) != 1 || down.Records[0].Status != VerifyError || down.Records[0].Error == nil || down.Records[0].Error.Kind != KindTransport {
@@ -152,12 +157,9 @@ func TestTheKindOfAFailedCheckIsInTheRow(t *testing.T) {
 }
 
 func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
-	dir := os.Getenv("STRATA_DOCS")
-	if dir == "" {
-		t.Skip("STRATA_DOCS is not set: run scripts/observer-contract.sh")
-	}
+	dir := contractDir(t)
 	var drift VerifySummary
-	decodeFile(t, dir, "verify-summary-drift.json", &drift)
+	decodeFile(t, dir, driftSummary, &drift)
 	if drift.Schema != VerifySummarySchema {
 		t.Errorf("verify states %q", drift.Schema)
 	}

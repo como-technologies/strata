@@ -12,7 +12,7 @@ func TestAReceiverKeepsEachRequestInOrderAndAnswersWithTheStatusThatWasSet(t *te
 		r := start(t)
 		send := func(body string) int {
 			t.Helper()
-			resp, err := r.Client().Post(r.URL, "application/json", strings.NewReader(body))
+			resp, err := r.Client().Post(r.URL, JSONType, strings.NewReader(body))
 			if err != nil {
 				t.Fatalf("%s: %v", name, err)
 			}
@@ -22,7 +22,7 @@ func TestAReceiverKeepsEachRequestInOrderAndAnswersWithTheStatusThatWasSet(t *te
 		first := send("barney")
 		r.SetStatus(http.StatusServiceUnavailable)
 		second := send("fred")
-		want := []Received{{http.MethodPost, "application/json", "barney"}, {http.MethodPost, "application/json", "fred"}}
+		want := []Received{{http.MethodPost, JSONType, "barney"}, {http.MethodPost, JSONType, "fred"}}
 		if first != http.StatusOK || second != http.StatusServiceUnavailable || r.Count() != 2 || !slices.Equal(r.Got(), want) || !slices.Equal(r.Bodies(), []string{"barney", "fred"}) {
 			t.Errorf("%s: statuses %d %d, got %q", name, first, second, r.Got())
 		}

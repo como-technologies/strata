@@ -15,8 +15,8 @@ func pinWith(bump *docs.Bump, err *docs.Error) docs.Pin {
 
 // The checks of the update that strata gives for the move from the pin of pinWith to kubernetes 1.37.0.
 var (
-	skipped    = &docs.MinorSkip{Code: "K8sUpgradeNotSupported", Pack: "kubernetes", From: "1.35.3", To: "1.37.0", NextMinor: "1.36", NextStep: "1.36.2"}
-	required   = &docs.RequiredVariables{Code: "InvalidVariable", Names: []string{"cost_center", "owner"}}
+	skipped    = &docs.MinorSkip{Code: testkit.CodeMinorSkip, Pack: "kubernetes", From: "1.35.3", To: "1.37.0", NextMinor: "1.36", NextStep: "1.36.2"}
+	required   = &docs.RequiredVariables{Code: testkit.CodeVariable, Names: []string{"cost_center", "owner"}}
 	bothChecks = &docs.UpdateChecks{RequiredVariables: required, SkippedMinor: skipped}
 )
 
@@ -25,7 +25,7 @@ var (
 // with no default value that the move adds. The answer keeps each check of the bump beside the verdict of Palette, also
 // beside a request that failed. A pin with an error, or with no bump, has no check.
 func TestAnswerOfReadsEachVerdictFromThePinThatBehindGives(t *testing.T) {
-	refusal := docs.Refusal{Code: "DependencyPackUpgradeNotSupported", Message: "SENTINEL", Clusters: []string{"payments"}}
+	refusal := docs.Refusal{Code: testkit.CodeDependency, Message: "SENTINEL", Clusters: []string{"payments"}}
 	for _, c := range []struct {
 		name    string
 		pin     docs.Pin
@@ -64,13 +64,13 @@ func TestAnAnswerSendsTheChecksAsStrataGivesThem(t *testing.T) {
 	// The skip of bothChecks with no next step: no version of the next minor version is in the registry.
 	noStep := *skipped
 	noStep.NextStep = ""
-	const skipJSON = `{"code":"K8sUpgradeNotSupported","pack":"kubernetes","from":"1.35.3","to":"1.37.0","nextMinor":"1.36"`
+	const skipJSON = `{"code":"` + testkit.CodeMinorSkip + `","pack":"kubernetes","from":"1.35.3","to":"1.37.0","nextMinor":"1.36"`
 	for _, c := range []struct {
 		checks *docs.UpdateChecks
 		want   string
 	}{
 		{nil, `"status":0}`},
-		{bothChecks, `"status":0,"updateChecks":{"requiredVariables":{"code":"InvalidVariable","names":["cost_center","owner"]},"skippedMinor":` + skipJSON + `,"nextStep":"1.36.2"}}}`},
+		{bothChecks, `"status":0,"updateChecks":{"requiredVariables":{"code":"` + testkit.CodeVariable + `","names":["cost_center","owner"]},"skippedMinor":` + skipJSON + `,"nextStep":"1.36.2"}}}`},
 		{&docs.UpdateChecks{SkippedMinor: &noStep}, `"status":0,"updateChecks":{"skippedMinor":` + skipJSON + `}}}`},
 	} {
 		raw := testkit.MustJSON(t, Answer{Refusals: []docs.Refusal{}, UpdateChecks: c.checks})

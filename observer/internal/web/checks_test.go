@@ -18,17 +18,17 @@ each check that strata gives beside the answer of Palette. */
 // The words of the column "Palette" and of the card "Move to" for the checks of the set update-checks.
 const (
 	skipLine        = "Skips a minor version"
-	variableLine    = "Adds a required variable"
-	variablesLine   = "Adds 2 required variables"
+	variableLine    = "Adds a " + variableWords
+	variablesLine   = "Adds 2 " + variableWords + "s"
 	skipNote        = "The move skips a minor version:"
 	skipHead        = skipNote + " kubernetes@1.35.3 → kubernetes@1.37.0"
-	skipRefuses     = "Palette refuses the update with K8sUpgradeNotSupported."
+	skipRefuses     = paletteRefuses + " the update with " + testkit.CodeMinorSkip + "."
 	skipStep        = skipRefuses + " Move to kubernetes@1.36.2 first."
-	variableNote    = "The move adds a required variable:"
+	variableNote    = "The move adds a " + variableWords + ":"
 	oneVariable     = variableNote + " gateway_owner"
-	variableRefuses = "Palette refuses the update with InvalidVariable."
+	variableRefuses = paletteRefuses + " the update with " + testkit.CodeVariable + "."
 	oneValue        = "It has no default value. Give it a value at the update, or " + variableRefuses
-	variablesNote   = "The move adds 2 required variables:"
+	variablesNote   = "The move adds 2 " + variableWords + "s:"
 	twoVariables    = variablesNote + " identity_owner, issuer_url"
 	twoValues       = "They have no default value. Give each one a value at the update, or " + variableRefuses
 	oneRule         = "Strata checks this rule, because the question to Palette does not check it."
@@ -87,7 +87,7 @@ func TestTheCardAndTheColumnShowEachCheckOfStrataWithTheAnswerOfPalette(t *testi
 	words := textOf(cardOf(t, dex, gaveNoAnswer))
 	mustHoldInOrder(t, "the variables", words, gave403, twoVariables, twoValues, oneRule, askAgain)
 	// The checks are a note of their own, in the tone of a refusal. The answer that failed stays neutral.
-	mustHold(t, "the variables", dex, `<div class="note small"><b>`+gave403+`</b> This is not a finding.</div><div class="note a small"><div class="mt3"><b>`+variablesNote+`</b>`)
+	mustHold(t, "the variables", dex, neutralNote+gave403+`</b> This is not a finding.</div><div class="note a small"><div class="mt3"><b>`+variablesNote+`</b>`)
 }
 
 // A move with no check shows no word of a check, on any screen of the sets ok and asks.
@@ -160,11 +160,11 @@ func TestACheckWithMarkupShowsAsText(t *testing.T) {
 		checkMarkup(t, s)
 		if strings.Contains(s.HTML, variablesNote) {
 			reached++
-			mustHold(t, where, s.HTML, `<span class="m">issuer_url`+injection, `<span class="m">InvalidVariable`+injection)
+			mustHold(t, where, s.HTML, `<span class="m">issuer_url`+injection, `<span class="m">`+testkit.CodeVariable+injection)
 		}
 		if strings.Contains(s.HTML, skipNote) {
 			reached++
-			mustHold(t, where, s.HTML, `<span class="m">K8sUpgradeNotSupported`+injection, `@1.36.2`+injection)
+			mustHold(t, where, s.HTML, `<span class="m">`+testkit.CodeMinorSkip+injection, `@1.36.2`+injection)
 		}
 		mustNotHold(t, where, s.HTML, "<img")
 	}
@@ -186,7 +186,7 @@ func TestTheBookQuotesTheWordsOfEachCheck(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("the table of the checks has %d rows", len(rows))
 	}
-	useCase := strings.Join(strings.Fields(sectionOf(t, useCasePage, "## 5. Ask Palette about a move")), " ")
+	useCase := strings.Join(strings.Fields(sectionOf(t, useCasePage, "## 5. "+askMove)), " ")
 	for _, row := range rows {
 		mustHold(t, "the scripts", script, words(row[0]), words(row[1]))
 		mustHold(t, "the use case", useCase, `"`+row[0]+`"`)

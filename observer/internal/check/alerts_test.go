@@ -130,12 +130,8 @@ func TestAMessageHoldsNoValueAndTheStateAndTheLogHoldNone(t *testing.T) {
 	if len(sender.texts) != 2 {
 		t.Fatalf("messages %q", sender.texts)
 	}
-	state, err := os.ReadFile(filepath.Join(r.state, stateFile))
-	if err != nil {
-		t.Fatal(err)
-	}
 	view := testkit.MustJSON(t, o.Alerts())
-	places := []string{strings.Join(sender.texts, "\n"), string(state), r.log.String(), string(view)}
+	places := []string{strings.Join(sender.texts, "\n"), stateText(t, r), r.log.String(), string(view)}
 	for _, banned := range []string{sentinel, "charts.a.b", "Betty", "John", "OLD", "SENTINEL"} {
 		for i, place := range places {
 			if strings.Contains(place, banned) {
@@ -190,11 +186,8 @@ func TestAnObserverWithoutAlertsSendsNothingAndItsViewIsUnset(t *testing.T) {
 	if v := o.Alerts(); v.Set || len(v.Rules) != 0 {
 		t.Errorf("view %+v", v)
 	}
-	state, err := os.ReadFile(filepath.Join(r.state, stateFile))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(state), `"alerts":{"items":{},"outbox":[]}`) {
+	state := stateText(t, r)
+	if !strings.Contains(state, `"alerts":{"items":{},"outbox":[]}`) {
 		t.Errorf("state %s", state)
 	}
 }
@@ -226,11 +219,11 @@ func withRules(t *testing.T, r *rig, o *Observer, sender alert.Sender, rules str
 }
 
 func TestAnImageFindingClearsOnlyAfterACycleThatReadThePods(t *testing.T) {
-	r, w, o, pods := podRig(t, runs("web-1", digest1))
+	r, w, o, pods := podRig(t, runs("web-1", testkit.Digest1))
 	sender := &capture{}
 	o = withRules(t, r, o, sender, imageRules)
 	cycle(t, o)
-	pods.set([]kube.Container{runs("web-1", digest2)}, nil)
+	pods.set([]kube.Container{runs("web-1", testkit.Digest2)}, nil)
 	cycle(t, o)
 	if len(sender.texts) != 1 || !strings.HasPrefix(sender.texts[0], "strata · payments · Image moved\naws-stack@1.1.0: ") {
 		t.Fatalf("messages %q", sender.texts)
@@ -241,7 +234,7 @@ func TestAnImageFindingClearsOnlyAfterACycleThatReadThePods(t *testing.T) {
 		t.Fatalf("a cycle that read no pod sent a clear: %q", sender.texts)
 	}
 	// a restart that reads the pods and sees the first digest clears the finding
-	pods.set([]kube.Container{runs("web-1", digest1)}, nil)
+	pods.set([]kube.Container{runs("web-1", testkit.Digest1)}, nil)
 	cycle(t, withRules(t, r, r.observer(w).WithPods(pods), sender, imageRules))
 	if len(sender.texts) != 2 || !strings.Contains(sender.texts[1], "Image moved cleared") {
 		t.Errorf("messages %q", sender.texts)

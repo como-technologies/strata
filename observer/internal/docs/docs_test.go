@@ -10,6 +10,10 @@ import (
 
 const sentinel = "SENTINEL-MUST-NOT-LEAVE"
 
+// driftSummary is the document of `verify` for a drift, in testdata/. testkit.DriftSummary names the same file for the
+// tests of other packages, and the tests of docs cannot read it, because testkit imports docs.
+const driftSummary = "verify-summary-drift.json"
+
 func read(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := os.ReadFile("testdata/" + name)
@@ -63,7 +67,7 @@ func plant(t *testing.T, node any, path []string, v any) int {
 
 func TestFieldsOutsideTheAllowListDoNotSurvive(t *testing.T) {
 	var doc map[string]any
-	if err := json.Unmarshal(read(t, "verify-summary-drift.json"), &doc); err != nil {
+	if err := json.Unmarshal(read(t, driftSummary), &doc); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range []string{
@@ -96,7 +100,7 @@ func TestFieldsOutsideTheAllowListDoNotSurvive(t *testing.T) {
 
 func TestTheDriftDocumentDecodes(t *testing.T) {
 	var got VerifySummary
-	if err := json.Unmarshal(read(t, "verify-summary-drift.json"), &got); err != nil {
+	if err := json.Unmarshal(read(t, driftSummary), &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.Schema != VerifySummarySchema || len(got.Records) != 1 {
@@ -128,7 +132,7 @@ func TestTheSchemaIdsAreThoseOfTheDocumentsOfTheBinary(t *testing.T) {
 		doc  Document
 		want string
 	}{
-		{"verify-summary-drift.json", &VerifySummary{}, VerifySummarySchema},
+		{driftSummary, &VerifySummary{}, VerifySummarySchema},
 		{"behind.json", &Behind{}, BehindSchema},
 		{"move-kubernetes.json", &Diff{}, DiffSchema},
 	} {

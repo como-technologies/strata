@@ -2,8 +2,6 @@ package check
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -28,13 +26,13 @@ func withBehind(t *testing.T) (*rig, *world) {
 	t.Helper()
 	r := newRig(t)
 	r.record("aws-stack", "1.0.0", "k8s/kubernetes", "cni/cni-cilium-oss", "csi/csi-aws-ebs", "os/ubuntu-aws", "addon/cert-manager")
-	r.meta(`{"baseline":"approved","revision":"4e1c7a2"}`)
+	r.meta(testkit.ApprovedMeta)
 	w := &world{moves: map[string]docs.Diff{}, behindExit: 1}
 	testkit.ReadDoc(t, "behind.json", &w.behind)
 	var kubernetes, cilium, other docs.Diff
-	testkit.ReadDoc(t, "move-kubernetes.json", &kubernetes)
-	testkit.ReadDoc(t, "move-cni-cilium-oss.json", &cilium)
-	testkit.ReadDoc(t, "move-cert-manager.json", &other)
+	testkit.ReadDoc(t, testkit.MoveKubernetes, &kubernetes)
+	testkit.ReadDoc(t, testkit.MoveCilium, &cilium)
+	testkit.ReadDoc(t, testkit.MoveCertManager, &other)
 	w.moves[move("kubernetes", "1.35.3", "1.36.2")] = kubernetes
 	w.moves[move("cni-cilium-oss", "1.19.6", "1.20.1")] = cilium
 	w.moves[move("csi-aws-ebs", "1.63.1", "1.65.0")] = other
@@ -59,7 +57,7 @@ func TestTheVersionsCycleComparesEachMoveAndFillsTheRows(t *testing.T) {
 	}
 	k := byName["kubernetes"]
 	if k.Newest != "1.36.2" || k.Impact != "repave" || k.Images != 8 || !slices.Equal(k.Flags, []string{docs.FlagIdentity, docs.FlagUpstream, docs.FlagAuthored, docs.FlagImages}) ||
-		k.Fold.Settings+k.Fold.Follows+k.Fold.Repeats != 11 || !slices.Equal(k.Drops, []string{"arm64"}) || !slices.Equal(k.Profiles, []string{"aws-stack@1.0.0"}) {
+		k.Fold.Settings+k.Fold.Follows+k.Fold.Repeats != 11 || !slices.Equal(k.Drops, []string{"arm64"}) || !slices.Equal(k.Profiles, []string{moveSubject}) {
 		t.Errorf("kubernetes %+v", k)
 	}
 	if u := byName["ubuntu-aws"]; !u.Floating || u.Version != "20.04" || u.Newest != "24.04" {
@@ -97,17 +95,9 @@ func TestTheCacheOfTheMovesSurvivesARestartAndHoldsNoValue(t *testing.T) {
 	if got := w.countMoves(); got != 4 {
 		t.Errorf("%d compares of two packs after a restart", got)
 	}
-	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	// The real compare of the Kubernetes pack changes the value v1.13.1 of dns.imageTag.
-	for _, banned := range []string{"v1.13.1", "v1.14.2", "imageTag", "apiserver"} {
-		if strings.Contains(string(raw), banned) {
-			t.Errorf("the state holds %q", banned)
-		}
-	}
-	if !strings.Contains(string(raw), w.behind.Tool.Version+" "+registryUID+"/kubernetes@1.35.3->1.36.2") {
+	stateHoldsNone(t, r, "v1.13.1", "v1.14.2", "imageTag", "apiserver")
+	if raw := stateText(t, r); !strings.Contains(raw, w.behind.Tool.Version+" "+registryUID+"/kubernetes@1.35.3->1.36.2") {
 		t.Errorf("the key holds no version of the binary: %s", raw)
 	}
 }
@@ -170,7 +160,7 @@ func TestAPinWithAnErrorBesideGoodPinsIsACause(t *testing.T) {
 
 func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 	r, w := withBehind(t)
-	w.behind.Pins[0].RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
+	w.behind.Pins[0].RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 	o := r.observer(w)
 	if err := o.RunVersions(context.Background()); err != nil {
 		t.Fatal(err)
@@ -189,7 +179,7 @@ func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 // profile.
 func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *testing.T) {
 	r, w := withBehind(t)
-	r.record("barney-addons", "1.3.1", "addon/fred-compositions")
+	r.record("barney-addons", "1.3.1", testkit.FredCompositions)
 	r.record("barney-base", "1.5.0", "csi/csi-aws-ebs")
 	r.record("wilma-gateway", "3.1.2", "addon/cert-manager")
 	held := func(name, version, newest, uid string) docs.ProfilePin {
@@ -200,7 +190,7 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 		return p
 	}
 	w.behind.Profiles = []docs.ProfilePin{held("barney-addons", "1.3.1", "1.4.0", "u-140"), held("barney-base", "1.5.0", "1.6.0", "u-160"), held("wilma-gateway", "3.1.2", "", "")}
-	fred := docs.Pack{Key: "addon/fred-compositions", Status: docs.PackChanged, Identity: true, A: &docs.PackSide{Version: "0.1.0"}, B: &docs.PackSide{Version: "0.2.0"},
+	fred := docs.Pack{Key: testkit.FredCompositions, Status: docs.PackChanged, Identity: true, A: &docs.PackSide{Version: "0.1.0"}, B: &docs.PackSide{Version: "0.2.0"},
 		Values: docs.Values{Changed: true, Diff: []docs.Leaf{{Op: "changed", Path: "compositions", Old: sentinel, New: "x"}}}}
 	w.profileMoves = map[string]docs.Diff{"barney-addons@1.3.1 u-140": {Summary: docs.DiffSummary{MaxImpact: "in-place"}, Packs: []docs.Pack{fred}}}
 	w.profileMoveErrs = map[string]error{"barney-base@1.5.0 u-160": failure(docs.KindAPI)}
@@ -220,7 +210,7 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 		byName[p.Name] = p
 	}
 	addons, base, gateway := byName["barney-addons"].NewerVersion, byName["barney-base"].NewerVersion, byName["wilma-gateway"].NewerVersion
-	want := model.MovePack{Key: "addon/fred-compositions", Status: docs.PackChanged, From: "0.1.0", To: "0.2.0", Flags: []string{docs.FlagIdentity}, ValuesChanged: true}
+	want := model.MovePack{Key: testkit.FredCompositions, Status: docs.PackChanged, From: "0.1.0", To: "0.2.0", Flags: []string{docs.FlagIdentity}, ValuesChanged: true}
 	if addons == nil || addons.Move == nil || addons.Move.Impact != "in-place" || len(addons.Move.Packs) != 1 || !reflect.DeepEqual(addons.Move.Packs[0], want) {
 		t.Fatalf("barney-addons: %+v", addons)
 	}
@@ -230,7 +220,7 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 	if got := w.countProfileMoves(); got != 2 {
 		t.Errorf("%d compares of a record with a profile version", got)
 	}
-	pack, ok, err := o.PackDiff(ctx, "barney-addons@1.3.1", "addon/fred-compositions", model.SideNewest)
+	pack, ok, err := o.PackDiff(ctx, "barney-addons@1.3.1", testkit.FredCompositions, model.SideNewest)
 	if err != nil || !ok || pack.Values.Diff[0].Old != sentinel {
 		t.Errorf("the newest side: %+v %v %v", pack, ok, err)
 	}
@@ -249,13 +239,5 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 	if got := w.countProfileMoves(); got != 4 {
 		t.Errorf("%d compares after two cycles", got)
 	}
-	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, banned := range []string{sentinel, "u-140", "fred-compositions"} {
-		if strings.Contains(string(raw), banned) {
-			t.Errorf("the state holds %q", banned)
-		}
-	}
+	stateHoldsNone(t, r, sentinel, "u-140", "fred-compositions")
 }

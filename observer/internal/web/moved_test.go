@@ -14,6 +14,28 @@ import (
 // with no finding, and the set moved-drift holds it with a finding.
 const moved = "wilma-gateway@3.0.4"
 
+// The words of a version that the cluster no longer runs, and the fold of the table of the profiles that lists it.
+const (
+	movedHash    = "#p-" + moved
+	notOnCluster = "Not on this cluster"
+	notRunFact   = "This cluster does not run this version."
+	movedFold    = `data-open="not-on-cluster"`
+	foldWords    = "1 record of a profile version that this cluster does not run"
+)
+
+// versionPageOfMoved checks the page of the version moved. It must hold the badge of the status and the fact of a version
+// that the cluster no longer runs. It names no move and no newer version. Each of its 3 packs says only what images it lists.
+func versionPageOfMoved(t *testing.T, screens []screen, badgeOfStatus string) {
+	t.Helper()
+	const where = "the page of the version"
+	page := pageOf(t, screens, movedHash, "")
+	mustHold(t, where, page, badgeOfStatus, notRunFact)
+	mustNotHold(t, where, page, "Move to", newerProfile, "current")
+	if n := strings.Count(page, `<span class="sub">1 image listed</span>`); n != 3 {
+		t.Errorf("%d of the 3 packs say only what images they list", n)
+	}
+}
+
 // Issue #834. The filters All and Newer do not count the record, and the table of the profiles does not list it. A fold under the
 // table lists it, with the status "Not on this cluster" and no newer version. The fold shows with the filter All only. The tile
 // Profiles counts the profiles of the cluster. The page of the version names no move, and no pack of it says "current": strata
@@ -22,26 +44,21 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 	screens := crawl(t, devdata.StateOK)
 	profiles := pageOf(t, screens, "#profiles", "")
 	mustHold(t, "the filters", profiles, `<button data-filter="all" class="on">All 12</button>`, `<button data-filter="newer" class="">Newer 6</button>`)
-	table, fold, found := strings.Cut(profiles, `<details data-open="not-on-cluster"`)
+	table, fold, found := strings.Cut(profiles, `<details `+movedFold)
 	if !found {
 		t.Fatal("the screen has no fold of the versions that the cluster does not run")
 	}
-	mustNotHold(t, "the table", table, `data-go="#p-`+moved+`"`)
-	mustHold(t, "the fold", fold, "<summary>1 record of a profile version that this cluster does not run</summary>")
-	row := rowTo(t, fold, "#p-"+moved)
-	mustHold(t, "the row", row, `<span class="badge y">Not on this cluster</span>`, `<span class="mut">This cluster does not run this version.</span>`)
+	mustNotHold(t, "the table", table, `data-go="`+movedHash+`"`)
+	mustHold(t, "the fold", fold, "<summary>"+foldWords+"</summary>")
+	row := rowTo(t, fold, movedHash)
+	mustHold(t, "the row", row, badge("y", notOnCluster), `<span class="mut">`+notRunFact+`</span>`)
 	mustNotHold(t, "the row", row, "Newer", "newer")
 	for _, variant := range []string{"filter newer", "filter ok", "filter drift", "filter not-checked"} {
-		mustNotHold(t, "the profiles with the "+variant, pageOf(t, screens, "#profiles", variant), moved, `data-open="not-on-cluster"`)
+		mustNotHold(t, "the profiles with the "+variant, pageOf(t, screens, "#profiles", variant), moved, movedFold)
 	}
 	overview := pageOf(t, screens, "#overview", "")
-	mustHold(t, "the overview", overview, `<div class="l">Profiles</div><div class="v">12</div>`)
-	page := pageOf(t, screens, "#p-"+moved, "")
-	mustHold(t, "the page of the version", page, `<span class="badge y">Not on this cluster</span>`, "This cluster does not run this version.")
-	mustNotHold(t, "the page of the version", page, "Move to", "Newer profile version", "current")
-	if n := strings.Count(page, `<span class="sub">1 image listed</span>`); n != 3 {
-		t.Errorf("%d of the 3 packs say only what images they list", n)
-	}
+	mustHold(t, "the overview", overview, tileLabel("Profiles")+tileValue("12"))
+	versionPageOfMoved(t, screens, badge("y", notOnCluster))
 }
 
 // Issue #834. A finding wins: in the set moved-drift, a person edited the published version that the cluster no longer runs. Its row
@@ -53,16 +70,11 @@ func TestAVersionThatTheClusterNoLongerRunsWithAFindingIsADriftWithNoNewerVersio
 	profiles := pageOf(t, screens, "#profiles", "")
 	mustHold(t, "the filters", profiles, `<button data-filter="all" class="on">All 2</button>`, `<button data-filter="drift" class="">Drift 1</button>`,
 		`<button data-filter="newer" class="">Newer 1</button>`)
-	mustNotHold(t, "the profiles", profiles, `data-open="not-on-cluster"`)
-	mustHold(t, "the row", rowTo(t, profiles, "#p-"+moved), `<span class="badge r">Drift</span>`, "traefik changed in the published version.")
+	mustNotHold(t, "the profiles", profiles, movedFold)
+	mustHold(t, "the row", rowTo(t, profiles, movedHash), badge("r", "Drift"), "traefik changed in the published version.")
 	overview := pageOf(t, screens, "#overview", "")
-	mustHold(t, "the overview", overview, `<div class="l">Profiles</div><div class="v">2</div>`)
-	page := pageOf(t, screens, "#p-"+moved, "")
-	mustHold(t, "the page of the version", page, `<span class="badge r">Drift</span>`, "This cluster does not run this version.")
-	mustNotHold(t, "the page of the version", page, "Move to", "Newer profile version", "current")
-	if n := strings.Count(page, `<span class="sub">1 image listed</span>`); n != 3 {
-		t.Errorf("%d of the 3 packs say only what images they list", n)
-	}
+	mustHold(t, "the overview", overview, tileLabel("Profiles")+tileValue("2"))
+	versionPageOfMoved(t, screens, badge("r", "Drift"))
 }
 
 // The page of each pack of the version shows no fact of a newer version. Strata does not look for a newer version of a version that the
@@ -75,12 +87,12 @@ func TestThePageOfAPackOfAVersionThatTheClusterNoLongerRunsHasNoFactOfANewerVers
 		changed string
 	}{{devdata.StateOK, ""}, {devdata.StateMovedDrift, "traefik"}} {
 		screens := crawl(t, c.state)
-		for _, name := range []string{"traefik", "aws-application-loadbalancer", "vendor-product"} {
+		for _, name := range []string{"traefik", albPack, "vendor-product"} {
 			hash, where := packPage(moved, "addon", name), fmt.Sprintf("%s: the page of %s", c.state, name)
 			if name == c.changed {
-				mustHold(t, where, pageOf(t, screens, hash, ""), `<span class="badge r">Changed</span>`, "charts.traefik.deployment.replicas")
+				mustHold(t, where, pageOf(t, screens, hash, ""), badge("r", "Changed"), "charts.traefik.deployment.replicas")
 			} else {
-				mustHold(t, where, pageOf(t, screens, hash, ""), `<b class="ok">Same</b><span>Published now</span>`, `<b class="">Not here</b><span>This cluster&#39;s copy</span>`)
+				mustHold(t, where, pageOf(t, screens, hash, ""), samePublished, `<b class="">Not here</b><span>This cluster&#39;s copy</span>`)
 			}
 			for _, s := range screens {
 				if s.Hash == hash {
@@ -118,9 +130,9 @@ func TestTheBookQuotesTheWordsOfAVersionThatTheClusterNoLongerRuns(t *testing.T)
 	var shown string
 	for _, state := range []devdata.State{devdata.StateOK, devdata.StateMovedDrift} {
 		screens := crawl(t, state)
-		shown += pageOf(t, screens, "#profiles", "") + pageOf(t, screens, "#p-"+moved, "")
+		shown += pageOf(t, screens, "#profiles", "") + pageOf(t, screens, movedHash, "")
 	}
-	for _, words := range []string{"1 record of a profile version that this cluster does not run", "Not on this cluster", "This cluster does not run this version.", "Drift"} {
+	for _, words := range []string{foldWords, notOnCluster, notRunFact, "Drift"} {
 		mustHold(t, "the book", section, `"`+words+`"`)
 		mustHold(t, "the page", shown, words)
 	}

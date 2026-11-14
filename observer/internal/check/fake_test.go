@@ -92,7 +92,7 @@ func (w *world) Run(ctx context.Context, dir string, args ...string) (runner.Res
 	case runner.CmdBehind:
 		return w.runBehind()
 	}
-	return runner.Result{}, fmt.Errorf("the fake does not know %q", args[0])
+	return runner.Result{}, testkit.Unknown(args)
 }
 
 // doc makes the result of a command that prints v and exits with the code exit.
@@ -297,7 +297,7 @@ func (r *rig) record(name, version string, keys ...string) {
 	packs := []map[string]any{}
 	for _, k := range keys {
 		layer, pack, _ := strings.Cut(k, "/")
-		packs = append(packs, map[string]any{"key": k, "layer": layer, "name": pack, "version": "1.0.0", "registryUid": "reg1", "images": []string{"a/b:1"}})
+		packs = append(packs, map[string]any{"key": k, "layer": layer, "name": pack, "version": "1.0.0", "registryUid": "reg1", "images": []string{imageRef}})
 	}
 	body := testkit.MustJSON(r.t, map[string]any{
 		"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r1",

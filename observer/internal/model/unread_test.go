@@ -5,7 +5,16 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
+
+// carries fails when the record does not carry its row and its side as row and side say.
+func carries(t *testing.T, r Record, row, side bool) {
+	t.Helper()
+	if r.RowCarried != row || r.SideCarried != side {
+		t.Errorf("carried: row %v, side %v", r.RowCarried, r.SideCarried)
+	}
+}
 
 // notRead makes a `verify` row that strata could not read.
 func notRead(r Record) Record {
@@ -21,7 +30,7 @@ func TestASideThatWasNotReadIsNotCheckedForTheProfileAndItsPacks(t *testing.T) {
 	s := build(ptr(content(t, r, other)), nil)
 	p := s.Profiles[0]
 	if p.Status != StatusNotChecked || p.ClusterCopy.Status != CopyNotRead {
-		t.Errorf("profile %q, clusterCopy %+v", p.Status, p.ClusterCopy)
+		t.Errorf(testkit.ProfileCopy, p.Status, p.ClusterCopy)
 	}
 	for _, k := range p.Packs {
 		if k.Status != StatusNotChecked {
@@ -64,7 +73,7 @@ func TestAPackWithChangesUnderAFindingWithNoPackKeyDoesNotReadOK(t *testing.T) {
 				t.Errorf("the pack with no change is %q", got)
 			}
 			if s.Profiles[0].Status != StatusDrift || s.Counts.Findings != 1 || s.Counts.Drift != 1 {
-				t.Errorf("profile %q, counts %+v", s.Profiles[0].Status, s.Counts)
+				t.Errorf(testkit.ProfileCounts, s.Profiles[0].Status, s.Counts)
 			}
 		})
 	}
@@ -95,7 +104,7 @@ func TestAMoveThatWasNotReadIsACauseAndKeepsItsRow(t *testing.T) {
 
 func TestAMoveThatWasNotReadKeepsTheCauseOfAnOlderRegistryCopy(t *testing.T) {
 	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", "aws-stack@1.1.0")
-	unread.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
+	unread.RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{unread}, Moves: map[string]Move{}, Unread: map[string]bool{MoveKey(unread): true}}
 	var causes []Cause
 	for _, row := range build(nil, v).NotChecked {
@@ -134,15 +143,13 @@ func TestCarryPutsTheLastGoodAnswerInPlaceOfAReadThatFailed(t *testing.T) {
 			now := content(t, c.now)
 			now.Carry(&last)
 			r := now.Records[0]
-			if r.RowCarried != c.rowCarried || r.SideCarried != c.sideCarried {
-				t.Errorf("carried: row %v, side %v", r.RowCarried, r.SideCarried)
-			}
+			carries(t, r, c.rowCarried, c.sideCarried)
 			var kinds []Kind
 			for _, f := range FindingsOf(now, nil) {
 				kinds = append(kinds, f.Kind)
 			}
 			if !slices.Equal(kinds, c.wantFindings) {
-				t.Errorf("findings %v, want %v", kinds, c.wantFindings)
+				t.Errorf(testkit.FindingsWant, kinds, c.wantFindings)
 			}
 		})
 	}
@@ -196,7 +203,7 @@ func TestAReadThatFailedIsACauseAlsoWhenItsAnswerIsCarried(t *testing.T) {
 	s := build(&now, nil)
 	want := NotChecked{Cause: ReadError, Profiles: []string{"fred-identity@2.3.0"}, Packs: []string{"addon/dex"}}
 	if len(s.Findings) != 1 || len(s.NotChecked) != 1 || !equalRow(s.NotChecked[0], want) {
-		t.Fatalf("findings %+v, notChecked %+v", s.Findings, s.NotChecked)
+		t.Fatalf(testkit.FindingsNotChecked, s.Findings, s.NotChecked)
 	}
 	if s.Profiles[0].Status != StatusDrift || s.Profiles[0].Packs[0].Status != StatusDrift || s.Counts.PacksInFull != 0 {
 		t.Errorf("profile %+v, counts %+v", s.Profiles[0], s.Counts)
@@ -282,8 +289,9 @@ func TestCarryPutsTheLastRecordOfAFileThatCannotBeReadInPlaceOfTheFile(t *testin
 		t.Fatalf("the records are %v: the carried record keeps the order of the files", files)
 	}
 	r := now.Records[1]
-	if !r.RowCarried || !r.SideCarried || !r.readError() {
-		t.Errorf("carried: row %v, side %v", r.RowCarried, r.SideCarried)
+	carries(t, r, true, true)
+	if !r.readError() {
+		t.Error("the carried record is no read error")
 	}
 	if got := FindingsOf(now, nil); len(got) != 1 || got[0].Kind != PublishedChanged || got[0].Profile != "fred-identity@2.3.0" {
 		t.Errorf("findings %+v", got)

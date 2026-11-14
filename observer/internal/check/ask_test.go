@@ -3,8 +3,6 @@ package check
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -22,16 +20,31 @@ import (
 func askable(t *testing.T, bump docs.Bump) (*rig, *world, *Observer) {
 	t.Helper()
 	r, w := withBehind(t)
-	i := slices.IndexFunc(w.behind.Pins, func(p docs.Pin) bool { return p.Name == "kubernetes" })
-	if i < 0 {
-		t.Fatal("the fixture has no kubernetes pin")
-	}
-	w.behind.Pins[i].Bump = &bump
+	w.behind.Pins[kubernetesPin(t, w)].Bump = &bump
 	o := r.observer(w)
 	if err := o.RunVersions(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	return r, w, o
+}
+
+// kubernetesPin gives the index of the pin of kubernetes in the answer of `behind` of the world.
+func kubernetesPin(t *testing.T, w *world) int {
+	t.Helper()
+	i := slices.IndexFunc(w.behind.Pins, func(p docs.Pin) bool { return p.Name == "kubernetes" })
+	if i < 0 {
+		t.Fatal("the fixture has no kubernetes pin")
+	}
+	return i
+}
+
+// asksOnce fails when a second ask for the move of kubernetes gives another answer than got. It also fails when the
+// world then holds another count of runs of `behind` than runs.
+func asksOnce(t *testing.T, o *Observer, w *world, got model.Answer, runs int) {
+	t.Helper()
+	if again, _, _ := o.Ask(context.Background(), moveSubject, "k8s/kubernetes"); !reflect.DeepEqual(again, got) || len(w.behindCalls()) != runs {
+		t.Errorf("a second ask ran again: %+v", again)
+	}
 }
 
 // pinned gives the arguments of each `behind` that the world got.
@@ -94,9 +107,7 @@ func TestAskRunsBehindForOnePackOnTheRecordOfTheProfileAndKeepsTheAnswer(t *test
 	if last := calls[len(calls)-1]; !slices.Equal(last, want) {
 		t.Errorf("the ask ran %v, want %v", last, want)
 	}
-	if again, _, _ := o.Ask(context.Background(), moveSubject, "k8s/kubernetes"); !reflect.DeepEqual(again, got) || len(w.behindCalls()) != before+1 {
-		t.Errorf("a second ask ran again: %+v", again)
-	}
+	asksOnce(t, o, w, got, before+1)
 	if names := entries(t, r.work); len(names) != 0 {
 		t.Errorf("work holds %v", names)
 	}
@@ -106,7 +117,7 @@ func TestAskRunsBehindForOnePackOnTheRecordOfTheProfileAndKeepsTheAnswer(t *test
 }
 
 func TestAskReadsARefusalAndAFailedRequestAsTheirVerdicts(t *testing.T) {
-	refusal := docs.Refusal{Pack: "kubernetes", Code: "DependencyPackUpgradeNotSupported", Message: "SENTINEL-MESSAGE", Clusters: []string{"payments"}}
+	refusal := docs.Refusal{Pack: "kubernetes", Code: testkit.CodeDependency, Message: "SENTINEL-MESSAGE", Clusters: []string{"payments"}}
 	for _, c := range []struct {
 		name    string
 		bump    docs.Bump
@@ -194,11 +205,8 @@ func TestAnAnswerStaysInMemoryAndTheStateHoldsNone(t *testing.T) {
 	if len(answers) != 1 || answers[0].Key != "k8s/kubernetes" {
 		t.Fatalf("answers %+v", answers)
 	}
-	raw, err := os.ReadFile(filepath.Join(r.state, stateFile))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(o.state.Moves) == 0 || strings.Contains(string(raw), "RefusalCode") || strings.Contains(string(raw), "refuses") {
+	raw := stateText(t, r)
+	if len(o.state.Moves) == 0 || strings.Contains(raw, "RefusalCode") || strings.Contains(raw, "refuses") {
 		t.Errorf("the state of %d moves:\n%s", len(o.state.Moves), raw)
 	}
 	if left := r.restart(&world{}).Answers(); len(left) != 0 {
@@ -274,11 +282,7 @@ func askedShape(t *testing.T, w *world, change func(p *docs.Pin)) {
 	t.Helper()
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	i := slices.IndexFunc(w.behind.Pins, func(p docs.Pin) bool { return p.Name == "kubernetes" })
-	if i < 0 {
-		t.Fatal("the fixture has no kubernetes pin")
-	}
-	change(&w.behind.Pins[i])
+	change(&w.behind.Pins[kubernetesPin(t, w)])
 }
 
 // A pin that failed has the shape that `behind` prints: the error, no newer version, and no bump. The
@@ -324,9 +328,7 @@ func TestAskKeepsTheAnswerForANewerVersionUnderTheMoveOfTheCycle(t *testing.T) {
 		t.Fatalf("%+v %v %v", got, ok, err)
 	}
 	before := len(w.behindCalls())
-	if again, _, _ := o.Ask(context.Background(), moveSubject, "k8s/kubernetes"); !reflect.DeepEqual(again, got) || len(w.behindCalls()) != before {
-		t.Errorf("a second ask ran again: %+v", again)
-	}
+	asksOnce(t, o, w, got, before)
 	if list := o.Answers(); len(list) != 1 || list[0].Newest != "1.37.0" {
 		t.Errorf("answers %+v", list)
 	}
@@ -347,8 +349,7 @@ func pinCalls(w *world) int {
 // still the answer. The next cycle must not drop it, or the next click sends a second POST.
 func TestAClickAfterAFailedCompareSendsNoSecondPost(t *testing.T) {
 	r, w := withBehind(t)
-	i := slices.IndexFunc(w.behind.Pins, func(p docs.Pin) bool { return p.Name == "kubernetes" })
-	w.behind.Pins[i].Bump = &docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}}
+	w.behind.Pins[kubernetesPin(t, w)].Bump = &docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}}
 	w.moveErrs[move("kubernetes", "1.35.3", "1.36.2")] = &runner.RunError{Kind: docs.KindCrash}
 	o := r.observer(w)
 	if err := o.RunVersions(context.Background()); err != nil {
@@ -387,7 +388,7 @@ func (c *waitedCtx) Done() <-chan struct{} {
 // the move of a newer version, and the answer belongs under that move, or the next cycle cannot drop it.
 func TestAClickThatWaitedForAVersionsCycleAsksAboutTheMoveOfThatCycle(t *testing.T) {
 	r, w := withBehind(t)
-	i := slices.IndexFunc(w.behind.Pins, func(p docs.Pin) bool { return p.Name == "kubernetes" })
+	i := kubernetesPin(t, w)
 	w.behind.Pins[i].Bump = &docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}}
 	o := r.observer(w)
 	if err := o.RunVersions(context.Background()); err != nil {

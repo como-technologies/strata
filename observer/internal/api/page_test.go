@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"testing"
 	"testing/fstest"
+
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func TestPageServesEachFileWithTheTypeOfItsKind(t *testing.T) {
@@ -21,27 +23,27 @@ func TestPageServesEachFileWithTheTypeOfItsKind(t *testing.T) {
 		path, typ string
 		status    int
 	}{
-		{"/", "text/html; charset=utf-8", 200},
-		{"/index.html", "text/html; charset=utf-8", 200},
-		{"/app.js", "text/javascript; charset=utf-8", 200},
-		{"/app.css", "text/css; charset=utf-8", 200},
-		{"/fonts/a.woff2", "font/woff2", 200},
-		{"/LICENSES.md", "text/markdown; charset=utf-8", 200},
-		{"/favicon-dark.svg", "image/svg+xml", 200},
+		{"/", testkit.PageTypes[".html"], 200},
+		{"/index.html", testkit.PageTypes[".html"], 200},
+		{"/app.js", testkit.PageTypes[".js"], 200},
+		{"/app.css", testkit.PageTypes[".css"], 200},
+		{"/fonts/a.woff2", testkit.PageTypes[".woff2"], 200},
+		{"/LICENSES.md", testkit.PageTypes[".md"], 200},
+		{"/favicon-dark.svg", testkit.PageTypes[".svg"], 200},
 		// A kind that has no type is not served, and nor is a file that does not exist.
-		{"/secret.json", "application/json", 404},
-		{"/fonts/readme.txt", "application/json", 404},
-		{"/missing.js", "application/json", 404},
-		{"/fonts", "application/json", 404},
-		{"/fonts/", "application/json", 404},
-		{"/index.html/", "application/json", 404},
+		{"/secret.json", testkit.JSONType, 404},
+		{"/fonts/readme.txt", testkit.JSONType, 404},
+		{"/missing.js", testkit.JSONType, 404},
+		{"/fonts", testkit.JSONType, 404},
+		{"/fonts/", testkit.JSONType, 404},
+		{"/index.html/", testkit.JSONType, 404},
 	} {
 		rec := get(h, c.path)
 		if rec.Code != c.status || rec.Header().Get("Content-Type") != c.typ {
 			t.Errorf("%s: status %d, type %q, want %d and %q", c.path, rec.Code, rec.Header().Get("Content-Type"), c.status, c.typ)
 		}
-		if rec.Header().Get("Content-Security-Policy") == "" || rec.Header().Get("Cache-Control") != "no-store" {
-			t.Errorf("%s: the headers of the server are missing", c.path)
+		if rec.Header().Get(testkit.HeaderPolicy) == "" || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf(testkit.HeadersMissing, c.path)
 		}
 	}
 }

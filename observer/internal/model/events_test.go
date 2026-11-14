@@ -28,6 +28,9 @@ func reasons(events []Event) []string {
 	return out
 }
 
+// dexDrift is the reason of the event of the drift of fred-identity@2.3.0, as reasons gives it.
+const dexDrift = "drift DriftFound fred-identity@2.3.0"
+
 func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-6 * time.Hour), Actor: "Betty Rubble", ActorType: "user", Action: "update"}}}
 	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
@@ -35,11 +38,11 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	kubernetes.Newer[0].Listed = at(-48 * time.Hour)
 	bitnami := pin("coredns", "addon", "1.0.0", "", "rubble-dns@1.0.0", "hoppy-autoscale@1.0.0")
 	bitnami.Registry = "Bitnami"
-	bitnami.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
+	bitnami.RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{kubernetes, bitnami}, Moves: map[string]Move{}}
 	events := eventsAt(&c, v, map[string]time.Time{FindingID(PublishedChanged, "fred-identity@2.3.0"): t0.Add(-5 * time.Hour)})
 	want := []string{
-		"drift DriftFound fred-identity@2.3.0",
+		dexDrift,
 		"info ProfileUpdated fred-identity@2.3.0",
 		"newer NewVersion wilma-gateway@3.1.2",
 		"not-checked OldCopy hoppy-autoscale@1.0.0, rubble-dns@1.0.0",
@@ -121,7 +124,7 @@ func TestParseSideKnowsThreeSides(t *testing.T) {
 }
 
 func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t *testing.T) {
-	const reason = "HTTP 403: AUDIT-REASON-SENTINEL"
+	const reason = "HTTP 403: " + testkit.AuditSentinel
 	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), &docs.Verify{WhoError: reason}, "addon/dex")
 	c := content(t, r)
 	s := build(&c, nil)
@@ -137,16 +140,16 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t 
 		t.Errorf("counts %+v", s.Counts)
 	}
 	// the notice is as new as the last sight, and the drift is as old as the first
-	want := []string{"info AuditUnread fred-identity@2.3.0", "drift DriftFound fred-identity@2.3.0"}
+	want := []string{"info AuditUnread fred-identity@2.3.0", dexDrift}
 	if got := reasons(s.Events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
 	}
-	if got := s.Events[0].Message; got != "The audit log could not be read, so this does not say who made the change." {
+	if got := s.Events[0].Message; got != testkit.AuditUnread {
 		t.Errorf("message %q", got)
 	}
 	// the summary carries the flag, and never the text of the error
 	raw := testkit.MustJSON(t, s)
-	if strings.Contains(string(raw), "AUDIT-REASON-SENTINEL") || !strings.Contains(string(raw), `"whoUnread":true`) {
+	if strings.Contains(string(raw), testkit.AuditSentinel) || !strings.Contains(string(raw), `"whoUnread":true`) {
 		t.Errorf("the summary %s", raw)
 	}
 }

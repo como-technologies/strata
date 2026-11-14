@@ -33,12 +33,13 @@ func hook(t *testing.T, addr string, allowHTTP bool, srv *httptest.Server) (*Web
 func TestAMessageIsAPostOfJSONWithTheTextToAnHttpsAddress(t *testing.T) {
 	r := testkit.NewTLSReceiver(t)
 	w, _ := hook(t, r.URL+"/services/T0/B0/TOKEN", false, r.Server)
-	if err := w.Send(context.Background(), "platform-oncall", "strata · quarry-1 · Drift"); err != nil {
+	const text = "strata · quarry-1 · Drift"
+	if err := w.Send(context.Background(), "platform-oncall", text); err != nil {
 		t.Fatal(err)
 	}
 	var sent struct{ Text string }
 	got := r.Got()
-	if len(got) != 1 || got[0].Method != http.MethodPost || json.Unmarshal([]byte(got[0].Body), &sent) != nil || sent.Text != "strata · quarry-1 · Drift" || got[0].ContentType != "application/json" {
+	if len(got) != 1 || got[0].Method != http.MethodPost || json.Unmarshal([]byte(got[0].Body), &sent) != nil || sent.Text != text || got[0].ContentType != testkit.JSONType {
 		t.Errorf("requests %q", got)
 	}
 }
@@ -66,16 +67,19 @@ func TestAnAddressThatIsNotHttpsGetsNoRequestUnlessTheTestsAllowIt(t *testing.T)
 	err := w.Send(context.Background(), "platform-oncall", "x")
 	var se *SendError
 	if !errors.As(err, &se) || se.Kind != KindAddress || r.Count() != 0 {
-		t.Fatalf("error %v, %d requests", err, r.Count())
+		t.Fatalf(errorAndRequests, err, r.Count())
 	}
 	if checked := w.Check(); checked == nil || !strings.Contains(checked.Error(), "https") {
 		t.Errorf("check %v", checked)
 	}
 	allowed, _ := hook(t, r.URL, true, nil)
 	if err := allowed.Send(context.Background(), "platform-oncall", "x"); err != nil || r.Count() != 1 {
-		t.Errorf("error %v, %d requests", err, r.Count())
+		t.Errorf(errorAndRequests, err, r.Count())
 	}
 }
+
+// errorAndRequests is the failure of a check of the error of a send and of the requests that the receiver got.
+const errorAndRequests = "error %v, %d requests"
 
 func TestARedirectIsNotFollowedAndIsAFailure(t *testing.T) {
 	target := testkit.NewTLSReceiver(t)
@@ -87,7 +91,7 @@ func TestARedirectIsNotFollowedAndIsAFailure(t *testing.T) {
 	err := w.Send(context.Background(), "platform-oncall", "x")
 	var se *SendError
 	if !errors.As(err, &se) || se.Kind != KindStatus || se.Status != http.StatusFound || target.Count() != 0 {
-		t.Errorf("error %v, %d requests to the target", err, target.Count())
+		t.Errorf(errorAndRequests+" to the target", err, target.Count())
 	}
 }
 
@@ -118,6 +122,7 @@ func TestAFailedSendNamesNoAddress(t *testing.T) {
 }
 
 func TestACheckGivesTheFirstChannelWhoseAddressCannotBeUsedAndNamesNoAddress(t *testing.T) {
+	const noAddress = "does not hold an address"
 	dir := t.TempDir()
 	write := func(name, text string) string {
 		path := filepath.Join(dir, name)
@@ -132,8 +137,8 @@ func TestACheckGivesTheFirstChannelWhoseAddressCannotBeUsedAndNamesNoAddress(t *
 		want string
 	}{
 		{"a file that is absent", filepath.Join(dir, "absent"), "cannot be read"},
-		{"a file that holds no address", write("empty", "  \n"), "does not hold an address"},
-		{"a file that holds a plain word", write("word", "SECRET-WORD"), "does not hold an address"},
+		{"a file that holds no address", write("empty", "  \n"), noAddress},
+		{"a file that holds a plain word", write("word", "SECRET-WORD"), noAddress},
 		{"an address that is not https", write("plain", "http://hooks.example/SECRET-PATH"), "must use https"},
 	}
 	for _, c := range cases {

@@ -24,7 +24,7 @@ const aws = `{"schema":"` + docs.SnapshotSchema + `","tool":{"version":"0.28.0"}
 func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 	dir := t.TempDir()
 	testkit.WriteGzip(t, dir, "aws-stack.json.gz", aws)
-	write(t, dir, "meta.json", `{"baseline":"approved","revision":"4e1c7a2"}`)
+	write(t, dir, "meta.json", testkit.ApprovedMeta)
 	set, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)

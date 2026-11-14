@@ -16,10 +16,26 @@ import (
 
 // The four headers, as the issue states them.
 var wantHeaders = map[string]string{
-	"Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-	"X-Content-Type-Options":  "nosniff",
-	"Referrer-Policy":         "no-referrer",
-	"Cache-Control":           "no-store",
+	testkit.HeaderPolicy:  "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+	testkit.HeaderNoSniff: "nosniff",
+	"Referrer-Policy":     "no-referrer",
+	"Cache-Control":       "no-store",
+}
+
+// refusedWithAllow fails when the answer to the request is not a 405 whose header Allow names the method allow.
+func refusedWithAllow(t *testing.T, rec *httptest.ResponseRecorder, request, allow string) {
+	t.Helper()
+	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != allow {
+		t.Errorf("%s gave %d, Allow %q", request, rec.Code, rec.Header().Get("Allow"))
+	}
+}
+
+// healthFails fails when the health check of the address passes.
+func healthFails(t *testing.T, addr string) {
+	t.Helper()
+	if err := Health(context.Background(), addr); err == nil {
+		t.Errorf("the health check of %s passed", addr)
+	}
 }
 
 func TestEachAnswerHasTheFourHeaders(t *testing.T) {
@@ -94,9 +110,7 @@ func TestOnlyGetIsServed(t *testing.T) {
 	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT"} {
 		for _, path := range []string{summaryRoutes[patternCluster], pathHealth, pathPublished, "/nowhere"} {
 			rec := do(h, method, path, "127.0.0.1:8080")
-			if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != "GET" {
-				t.Errorf("%s %s gave %d, Allow %q", method, path, rec.Code, rec.Header().Get("Allow"))
-			}
+			refusedWithAllow(t, rec, method+" "+path, http.MethodGet)
 		}
 	}
 }
@@ -170,9 +184,7 @@ func TestHealthSucceedsWithTheServerUpAndFailsWithNone(t *testing.T) {
 		t.Errorf("a stop that ctx asked for gave %v", err)
 	}
 	// The check asks testkit.PortZero, because another process can take the port of the stopped server.
-	if err := Health(context.Background(), testkit.PortZero); err == nil {
-		t.Error("no server runs, and the health check passed")
-	}
+	healthFails(t, testkit.PortZero)
 }
 
 func TestHealthFailsOnAnotherStatusAndDoesNotFollowARedirect(t *testing.T) {
@@ -187,9 +199,7 @@ func TestHealthFailsOnAnotherStatusAndDoesNotFollowARedirect(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			srv := httptest.NewServer(c.handler)
 			defer srv.Close()
-			if err := Health(context.Background(), strings.TrimPrefix(srv.URL, "http://")); err == nil {
-				t.Error("the health check passed")
-			}
+			healthFails(t, strings.TrimPrefix(srv.URL, "http://"))
 		})
 	}
 }
@@ -200,9 +210,7 @@ func TestHealthStopsAfterThreeSeconds(t *testing.T) {
 	defer srv.Close()
 	defer close(release)
 	start := time.Now()
-	if err := Health(context.Background(), strings.TrimPrefix(srv.URL, "http://")); err == nil {
-		t.Error("the health check passed")
-	}
+	healthFails(t, strings.TrimPrefix(srv.URL, "http://"))
 	if took := time.Since(start); took < healthTimeout || took > healthTimeout+2*time.Second {
 		t.Errorf("the check took %v", took)
 	}

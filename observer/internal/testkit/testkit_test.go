@@ -1,6 +1,7 @@
 package testkit
 
 import (
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func TestOutFileGivesTheArgumentAfterTheFlagAndAnErrorWhenThereIsNone(t *testing
 }
 
 func TestClusterRunsTheProfilesThatTheCallGives(t *testing.T) {
-	c := Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	c := Cluster("payments", "aws-stack@1.1.0", AddonsProfile)
 	got := c.Source.Cluster
 	if got.UID != "c1" || got.Name != "payments" || !got.UpdatesPending || len(got.Profiles) != 2 {
 		t.Fatalf("cluster %+v", got)
@@ -51,7 +52,7 @@ func TestListenAddrReadsTheAddressOfTheLineListeningOfTheLog(t *testing.T) {
 
 func TestReadDocReadsADocumentOfTheRealBinaryFromTheTestDataOfDocs(t *testing.T) {
 	var s docs.VerifySummary
-	ReadDoc(t, "verify-summary-drift.json", &s)
+	ReadDoc(t, DriftSummary, &s)
 	if s.Schema != docs.VerifySummarySchema || len(s.Records) == 0 {
 		t.Errorf("the document gives the schema %q and %d records", s.Schema, len(s.Records))
 	}
@@ -60,5 +61,21 @@ func TestReadDocReadsADocumentOfTheRealBinaryFromTheTestDataOfDocs(t *testing.T)
 func TestMustJSONEncodesAValue(t *testing.T) {
 	if got := string(MustJSON(t, map[string]int{"a": 1})); got != `{"a":1}` {
 		t.Errorf("got %s", got)
+	}
+}
+
+func TestUnknownNamesTheCommandThatTheFakeDoesNotKnow(t *testing.T) {
+	if err := Unknown([]string{"compare", "a"}); err == nil || err.Error() != `the fake does not know "compare"` {
+		t.Errorf("got %v", err)
+	}
+}
+
+func TestOncallRulesIsAFileOfRulesInJSON(t *testing.T) {
+	var got struct {
+		Channels map[string]struct{ URLFile string }
+		Rules    []map[string]string
+	}
+	if err := json.Unmarshal([]byte(OncallRules("/a/oncall", `{"level": "cluster"}`)), &got); err != nil || got.Channels["oncall"].URLFile != "/a/oncall" || len(got.Rules) != 1 {
+		t.Errorf("got %+v, %v", got, err)
 	}
 }

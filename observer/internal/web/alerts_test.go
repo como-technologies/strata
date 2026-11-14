@@ -14,10 +14,10 @@ var navOfAlerts = regexp.MustCompile(`<a href="#alerts" class="[^"]*"><span>Aler
 
 // The badge of each state of a rule, as the page draws it.
 var alertBadges = map[alert.State]string{
-	alert.StateFiring:   `<span class="badge r">Firing</span>`,
-	alert.StatePending:  `<span class="badge a">Pending</span>`,
-	alert.StateInactive: `<span class="badge g">Inactive</span>`,
-	alert.StateMuted:    `<span class="badge y">Muted</span>`,
+	alert.StateFiring:   badge("r", "Firing"),
+	alert.StatePending:  badge("a", "Pending"),
+	alert.StateInactive: badge("g", "Inactive"),
+	alert.StateMuted:    badge("y", "Muted"),
 }
 
 // The nav item Alerts is the last item. It says "Not set" when the observer sends no alert, and else it
@@ -81,9 +81,9 @@ func TestWithNoAlertsFlagTheScreenSaysTheSendIsOptIn(t *testing.T) {
 	for _, state := range []devdata.State{devdata.StateOK, devdata.StateAlertsUnset} {
 		t.Run(string(state), func(t *testing.T) {
 			screen := pageOf(t, render(t, state, false), "#alerts", "")
-			mustHold(t, "the screen", screen, `<h2>Alert rules <span class="sub">Not set</span></h2>`, "Nobody gets paged yet", "This install has no alert rules.",
+			mustHold(t, "the screen", screen, `<h2>Alert rules <span class="sub">`+notSet+`</span></h2>`, alertsOffTitle, alertsOffFact,
 				"The rules are a file in Git, so a mute always has a name and an end date.",
-				`<b>Next</b> Turn on the alerts when you install the observer.`, `class="splash md tone-off"`)
+				alertsNext, splashClass("md", "off"))
 			mustNotHold(t, "the screen", screen, "<table>", "Sample message", "Firing")
 		})
 	}

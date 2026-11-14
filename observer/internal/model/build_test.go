@@ -136,12 +136,12 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 
 func TestAProfileThatTheClusterRunsWithNoRecordIsNoRecord(t *testing.T) {
 	c := content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))
-	c.Cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	c.Cluster = testkit.Cluster("payments", "aws-stack@1.1.0", testkit.AddonsProfile)
 	s := build(&c, nil)
 	if len(s.Profiles) != 2 || s.Profiles[1].Name != "platform-addons" || s.Profiles[1].Status != StatusNoRecord || s.Profiles[1].Published != nil || s.Profiles[1].ClusterCopy != nil {
 		t.Fatalf("profiles %+v", s.Profiles)
 	}
-	want := NotChecked{Cause: NoRecord, Profiles: []string{"platform-addons@1.0.0"}, Packs: []string{}}
+	want := NotChecked{Cause: NoRecord, Profiles: []string{testkit.AddonsProfile}, Packs: []string{}}
 	if len(s.NotChecked) != 1 || !equalRow(s.NotChecked[0], want) {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
@@ -152,6 +152,14 @@ func TestAProfileThatTheClusterRunsWithNoRecordIsNoRecord(t *testing.T) {
 
 func equalRow(a, b NotChecked) bool {
 	return a.Cause == b.Cause && slices.Equal(a.Profiles, b.Profiles) && slices.Equal(a.Packs, b.Packs) && a.Registry == b.Registry
+}
+
+// sameCounts fails when the counts of a summary are not want.
+func sameCounts(t *testing.T, got, want Counts) {
+	t.Helper()
+	if got != want {
+		t.Errorf("counts %+v, want %+v", got, want)
+	}
 }
 
 func TestNotCheckedGroupsEachCause(t *testing.T) {
@@ -168,7 +176,7 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 	versions := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{
 		func() docs.Pin {
 			p := pin("kubernetes", "k8s", "1.35.3", "", "broken@1.0.0")
-			p.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
+			p.RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 			return p
 		}(),
 		func() docs.Pin {
@@ -224,9 +232,7 @@ func TestACountIsTheNumberOfRowsOfItsList(t *testing.T) {
 	}}
 	s := build(ptr(content(t, r, other)), versions)
 	want := Counts{Findings: 1, Drift: 1, Newer: 2, NewerProfiles: 2, NotChecked: 0, Packs: 3, PacksInFull: 3, Profiles: 2}
-	if s.Counts != want {
-		t.Errorf("counts %+v, want %+v", s.Counts, want)
-	}
+	sameCounts(t, s.Counts, want)
 }
 
 func TestTheNewerRowsJoinThePinAndTheMove(t *testing.T) {
@@ -279,7 +285,7 @@ func TestThePackRowJoinsTheRecordAndThePins(t *testing.T) {
 	dex.Type = docs.PackHelm
 	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
 	r.Doc.Source.ProjectUID = "p1"
-	r.Row.Diff.Packs[0].Values.Diff = append(r.Row.Diff.Packs[0].Values.Diff, docs.Leaf{Path: "pack.content.images[0]"}, docs.Leaf{Path: "charts.dex.image.tag"})
+	r.Row.Diff.Packs[0].Values.Diff = append(r.Row.Diff.Packs[0].Values.Diff, docs.Leaf{Path: testkit.ImageItem}, docs.Leaf{Path: dexTag})
 	v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "2.44.0", "fred-identity@2.3.0")}}
 	s := build(ptr(content(t, r)), v)
 	p := s.Profiles[0]
@@ -407,7 +413,7 @@ func TestTheClocksShowThePeriodAndTheLastError(t *testing.T) {
 
 func TestAMoveReadsTheCountsOfTheCompare(t *testing.T) {
 	d := docs.Diff{Summary: docs.DiffSummary{MaxImpact: "repave", ImagesChanged: 8, ChartsChanged: 1}, Packs: []docs.Pack{{Identity: true, Authored: true, Images: true,
-		Values: docs.Values{Diff: []docs.Leaf{{Path: "pack.content.images[0]"}, {Path: "charts.x.image.tag"}, {Path: "charts.x.replicas"}}}}}}
+		Values: docs.Values{Diff: []docs.Leaf{{Path: testkit.ImageItem}, {Path: "charts.x.image.tag"}, {Path: "charts.x.replicas"}}}}}}
 	want := Move{Impact: "repave", Flags: []string{docs.FlagIdentity, docs.FlagAuthored, docs.FlagImages}, Fold: Fold{Settings: 1, Follows: 1, Repeats: 1}, Images: 8, Charts: 1}
 	got := MoveOf(d)
 	if got.Impact != want.Impact || !slices.Equal(got.Flags, want.Flags) || got.Fold != want.Fold || got.Images != 8 || got.Charts != 1 {
@@ -507,7 +513,7 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *testing.T) {
 	c := content(t, rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0"), pk("addon", "wilma-values", "1.0.0"), pk("addon", "dino-logs", "2.0.0")))
 	side := func(version string) *docs.PackSide { return &docs.PackSide{Version: version} }
-	fred := docs.Pack{Key: "addon/fred-compositions", Status: docs.PackChanged, Identity: true, Upstream: true, A: side("0.1.0"), B: side("0.2.0")}
+	fred := docs.Pack{Key: testkit.FredCompositions, Status: docs.PackChanged, Identity: true, Upstream: true, A: side("0.1.0"), B: side("0.2.0")}
 	wilma := changed("addon/wilma-values", "replicas")
 	wilma.Values.Changed, wilma.A, wilma.B = true, side("1.0.0"), side("1.0.0")
 	diff := docs.Diff{Summary: docs.DiffSummary{MaxImpact: "in-place"}, Packs: []docs.Pack{
@@ -525,7 +531,7 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 	}
 	want := ProfileMove{Impact: "in-place", Flags: []string{docs.FlagIdentity, docs.FlagUpstream, docs.FlagAuthored}, Packs: []MovePack{
 		{Key: "addon/dino-logs", Status: docs.PackRemoved, From: "2.0.0", Flags: []string{}},
-		{Key: "addon/fred-compositions", Status: docs.PackChanged, From: "0.1.0", To: "0.2.0", Flags: []string{docs.FlagIdentity, docs.FlagUpstream}},
+		{Key: testkit.FredCompositions, Status: docs.PackChanged, From: "0.1.0", To: "0.2.0", Flags: []string{docs.FlagIdentity, docs.FlagUpstream}},
 		{Key: "addon/pebbles-dns", Status: docs.PackAdded, To: "1.0.0", Flags: []string{}},
 		{Key: "addon/wilma-values", Status: docs.PackChanged, From: "1.0.0", To: "1.0.0", Flags: []string{docs.FlagAuthored}, ValuesChanged: true},
 	}}
@@ -559,7 +565,7 @@ func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 	fred.Carriers = []docs.PinCarrier{
 		{Profile: "barney-addons", Version: "1.3.1", Carrier: &docs.Carrier{Version: "1.4.0", PackVersion: "0.1.5"}},
 		{Profile: "barney-addons", Version: "1.3.0"},
-		{Profile: "other", Version: "1.0.0", Error: &docs.Error{Kind: "api", Status: 500}},
+		{Profile: "other", Version: "1.0.0", Error: &docs.Error{Kind: docs.KindAPI, Status: 500}},
 	}
 	records := []Record{
 		rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
@@ -596,12 +602,13 @@ func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 // has the status not-on-this-cluster and no newer version. No count of the page and no newer row
 // holds it. A pin that the two versions share stays for 2.0.0. The answers of the cycle stay as they are.
 func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t *testing.T) {
+	const oldSubject, newSubject = "fred-crossplane@1.3.1", "fred-crossplane@2.0.0"
 	ubuntu := pk("os", "ubuntu", "22.04")
 	old := notOnCluster(rec("fred-crossplane", "1.3.1", docs.VerifyUnchanged, pk("addon", "crossplane", "1.17.0"), ubuntu))
 	moved := rec("fred-crossplane", "2.0.0", docs.VerifyUnchanged, pk("addon", "crossplane", "2.0.2"), ubuntu)
-	crossplane := pin("crossplane", "addon", "1.17.0", "2.0.2", "fred-crossplane@1.3.1")
+	crossplane := pin("crossplane", "addon", "1.17.0", "2.0.2", oldSubject)
 	crossplane.Carriers = []docs.PinCarrier{{Profile: "fred-crossplane", Version: "1.3.1", Carrier: &docs.Carrier{Version: "2.0.0", PackVersion: "2.0.2"}}}
-	shared := pin("ubuntu", "os", "22.04", "24.04", "fred-crossplane@1.3.1", "fred-crossplane@2.0.0")
+	shared := pin("ubuntu", "os", "22.04", "24.04", oldSubject, newSubject)
 	shared.Carriers = []docs.PinCarrier{{Profile: "fred-crossplane", Version: "1.3.1"}, {Profile: "fred-crossplane", Version: "2.0.0"}}
 	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{}, Pins: []docs.Pin{crossplane, shared},
 		Profiles: []docs.ProfilePin{profilePin("fred-crossplane", "1.3.1", "2.0.0", at(-2*time.Hour)), profilePin("fred-crossplane", "2.0.0", "", "")}}
@@ -619,15 +626,13 @@ func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t
 		t.Errorf("2.0.0: status %q, packs %+v", newRow.Status, newRow.Packs)
 	}
 	want := Counts{Newer: 1, NewerProfiles: 1, Packs: 2, PacksInFull: 2, Profiles: 1}
-	if s.Counts != want {
-		t.Errorf("counts %+v, want %+v", s.Counts, want)
-	}
-	carriers := []Carried{{Profile: "fred-crossplane@2.0.0"}}
-	if len(s.Newer) != 1 || s.Newer[0].Name != "ubuntu" || !slices.Equal(s.Newer[0].Profiles, []string{"fred-crossplane@2.0.0"}) || !slices.Equal(s.Newer[0].Carriers, carriers) {
+	sameCounts(t, s.Counts, want)
+	carriers := []Carried{{Profile: newSubject}}
+	if len(s.Newer) != 1 || s.Newer[0].Name != "ubuntu" || !slices.Equal(s.Newer[0].Profiles, []string{newSubject}) || !slices.Equal(s.Newer[0].Carriers, carriers) {
 		t.Errorf("newer rows %+v", s.Newer)
 	}
 	for _, e := range s.Events {
-		if strings.Contains(e.Object, "fred-crossplane@1.3.1") {
+		if strings.Contains(e.Object, oldSubject) {
 			t.Errorf("an event names 1.3.1: %+v", e)
 		}
 	}
@@ -635,7 +640,7 @@ func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t
 		t.Errorf("the answers of the cycle changed: %+v", v)
 	}
 	// before the first good content cycle, the observer does not know what the cluster runs
-	if rows := build(nil, v).Newer; len(rows) != 2 || !slices.Equal(rows[1].Profiles, []string{"fred-crossplane@1.3.1", "fred-crossplane@2.0.0"}) {
+	if rows := build(nil, v).Newer; len(rows) != 2 || !slices.Equal(rows[1].Profiles, []string{oldSubject, newSubject}) {
 		t.Errorf("newer rows with no content cycle %+v", rows)
 	}
 }
@@ -661,9 +666,7 @@ func TestAVersionThatTheClusterDoesNotRunWithAFindingIsADriftWithNoNewerVersion(
 		}
 	}
 	want := Counts{Findings: 1, Drift: 1, Packs: 1, PacksInFull: 1, Profiles: 2}
-	if s.Counts != want {
-		t.Errorf("counts %+v, want %+v", s.Counts, want)
-	}
+	sameCounts(t, s.Counts, want)
 	if len(s.Newer) != 0 {
 		t.Errorf("newer rows %+v", s.Newer)
 	}

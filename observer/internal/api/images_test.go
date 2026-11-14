@@ -21,7 +21,7 @@ func TestTheImagesRouteServesTheDocumentOfThePods(t *testing.T) {
 	var got model.Observed
 	decode(t, rec, &got)
 	if rec.Code != http.StatusOK || got.Schema != model.ObservedSchema || got.Pods != model.PodsRead || got.ReadAt == nil || len(got.Images) != 1 ||
-		got.Images[0].Ref != "a/b:1" || got.Images[0].Match != model.MatchExact || got.Images[0].Digests[0].Digest != imageDigest || got.Counts.Images != 1 {
+		got.Images[0].Ref != "a/b:1" || got.Images[0].Match != model.MatchExact || got.Images[0].Digests[0].Digest != testkit.Digest1 || got.Counts.Images != 1 {
 		t.Errorf("status %d, document %+v", rec.Code, got)
 	}
 }
@@ -93,7 +93,7 @@ func TestAReadThatFailsShowsTheKindAndTheStatusAndNothingElse(t *testing.T) {
 func TestNoRouteCarriesAValueOfAPodThatTheAPIServerSends(t *testing.T) {
 	r := newRig(t)
 	kubeAPI := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(testkit.PodList("", testkit.PodJSON("NS-MARKER", "POD-MARKER", "a/b:1", "a/b@"+imageDigest))))
+		_, _ = w.Write([]byte(testkit.PodList("", testkit.PodJSON("NS-MARKER", "POD-MARKER", "a/b:1", "a/b@"+testkit.Digest1))))
 	})
 	r.pods = kube.New(kube.Config{Host: kubeAPI.Host, TokenFile: kubeAPI.TokenFile, CAFile: kubeAPI.CAFile})
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))

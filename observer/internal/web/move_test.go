@@ -1,13 +1,13 @@
 package web
 
 import (
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -17,8 +17,10 @@ aws-application-loadbalancer, and adds aws-load-balancer-controller. They need n
 
 const (
 	wilmaSubject = "wilma-gateway@3.1.2"
-	wilmaHash    = "#p-wilma-gateway@3.1.2"
+	wilmaHash    = "#p-" + wilmaSubject
 	moveQuestion = "What does the move to the newest version change?"
+	// albPack is the pack that the move of wilma-gateway removes.
+	albPack = "aws-application-loadbalancer"
 )
 
 // The page of a profile with a newer version has the card "Move to". It names the impact level and the flags of the move. It lists
@@ -28,16 +30,16 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	page := shown(t, devdata.StateOK, wilmaHash)[0]
 	card := cardOf(t, page, "<h2>Move to ")
 	mustHold(t, "the head of the card", card, `<h2>Move to wilma-gateway<span class="ver">@3.2.0</span> <span class="sub">Created `,
-		`</h2><span class="badge y">In place</span>`)
+		"</h2>"+badge("y", "In place"))
 	for _, flag := range []string{"IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"} {
-		mustHold(t, "the flags", card, `<span class="badge b" tabindex="0">`+flag+`</span>`)
+		mustHold(t, "the flags", card, plainFlag("b", flag))
 	}
 	mustHold(t, "the version change", rowWith(t, card, "addon/traefik"),
-		`<a href="#k-wilma-gateway@3.1.2/addon/traefik">addon/traefik</a>`, `<td>Changed</td>`, `38.0.1 &rarr; 38.1.0`, `<td>Change</td>`)
-	mustHold(t, "the values change", rowWith(t, card, "addon/vendor-product"),
+		`<a href="`+traefikHash+`">addon/traefik</a>`, `<td>Changed</td>`, `38.0.1 &rarr; 38.1.0`, `<td>Change</td>`)
+	mustHold(t, "the values change", rowWith(t, card, testkit.VendorPack),
 		`<td>Changed</td>`, `2026.2.0 <span class="mut">same version</span>`, `<td>Change</td>`)
-	mustHold(t, "the removed pack", rowWith(t, card, "addon/aws-application-loadbalancer"),
-		`data-go="#k-wilma-gateway@3.1.2/addon/aws-application-loadbalancer"`, `<td>Removed</td>`, `>2.13.4</td>`)
+	mustHold(t, "the removed pack", rowWith(t, card, "addon/"+albPack),
+		`data-go="`+packPage(wilmaSubject, "addon", albPack)+`"`, `<td>Removed</td>`, `>2.13.4</td>`)
 	// a pack that the move adds is in no record, so it has no page
 	added := rowWith(t, card, "addon/aws-load-balancer-controller")
 	mustHold(t, "the added pack", added, `<td>Added</td>`, `>2.14.0</td>`)
@@ -47,7 +49,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	for _, r := range termRows(t, page) {
 		if r.question == moveQuestion {
 			found = true
-			if r.command != "strata compare record.json wilma-gateway@3.2.0 --full" || r.answer != `<span class="badge y">In place</span>` {
+			if r.command != compareRecord+"wilma-gateway@3.2.0 --full" || r.answer != badge("y", "In place") {
 				t.Errorf("the row of the move: %+v", r)
 			}
 		}
@@ -56,7 +58,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 		t.Error("the card Check this yourself has no row for the move")
 	}
 	// a profile with no newer version shows no move
-	other := shown(t, devdata.StateOK, "#p-fred-identity@2.3.0")[0]
+	other := shown(t, devdata.StateOK, fredHash)[0]
 	mustNotHold(t, "a profile with no newer version", other, "<h2>Move to ", moveQuestion)
 }
 
@@ -66,10 +68,10 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *testing.T) {
 	vendor := packPage(wilmaSubject, "addon", "vendor-product")
 	page := pageOf(t, crawl(t, devdata.StateOK), vendor, "")
-	mustHold(t, "the pack page of vendor-product", page, `<option value="newest" selected>Record → Newest version</option>`,
-		`<span class="badge b">Newer</span>`, "product.replicas")
+	where := "the pack page of vendor-product"
+	mustHold(t, where, page, `<option value="newest" selected>Record → Newest version</option>`, badge("b", "Newer"), "product.replicas")
 	// a newer version is no drift: the side keeps the neutral badge of a newer version (#709)
-	mustNotHold(t, "the pack page of vendor-product", page, `<span class="badge r">Changed</span>`)
+	mustNotHold(t, where, page, badge("r", "Changed"))
 
 	// the move changes no pack but traefik: vendor-product is the same on that side
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
@@ -79,8 +81,8 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 			}
 		}
 	})})
-	same := pageWith(t, dir, "scratch", vendor, `S.side["side-`+wilmaSubject+`-addon/vendor-product"] = "newest"`)
-	mustHold(t, "a pack that the move does not change", same, `<span class="badge g">Identical</span>`,
+	same := pageWith(t, dir, "scratch", vendor, `S.side["side-`+wilmaSubject+`-`+testkit.VendorPack+`"] = "newest"`)
+	mustHold(t, "a pack that the move does not change", same, badge("g", "Identical"),
 		"The newest version of the profile holds what the record holds for this pack.")
 
 	// a compare that failed
@@ -93,15 +95,13 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 	})})
 	pages := pagesOf(t, dir, wilmaHash, vendor)
 	mustHold(t, "the card of a move that strata could not compare", cardOf(t, pages[0], "<h2>Move to "),
-		`<span class="badge y">Not read</span>`, "Strata could not compare the record with this version now.")
+		badge("y", "Not read"), "Strata could not compare the record with this version now.")
 	mustNotHold(t, "the pack page of a move that strata could not compare", pages[1], `<option value="newest"`)
 }
 
 // The command of the move of a profile pastes as the arguments it means, also for a name that a shell reads as code.
 func TestTheCommandOfTheMoveOfAProfilePastesAsTheArgumentsItMeans(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("bash is not on the PATH")
-	}
+	needBash(t)
 	for _, c := range shellNames {
 		t.Run(c.kind, func(t *testing.T) {
 			bin, dir := checkWork(t, "")
@@ -121,9 +121,7 @@ func TestTheCommandOfTheMoveOfAProfilePastesAsTheArgumentsItMeans(t *testing.T) 
 			if got := argumentsOf(t, bin, dir, rows[0].command); got != nil && !slices.Equal(got, want) {
 				t.Errorf("the command %q gave the arguments %q, want %q", rows[0].command, got, want)
 			}
-			if made := markersIn(t, dir); len(made) != 0 {
-				t.Errorf("a name ran as code and wrote %q", made)
-			}
+			noMarkers(t, dir)
 		})
 	}
 }

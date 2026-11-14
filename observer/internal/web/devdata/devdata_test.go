@@ -78,6 +78,14 @@ func encoded(t *testing.T, v any) any {
 	return normal(t, raw)
 }
 
+// sameAsFile fails when the type v encodes to another document than the file raw holds.
+func sameAsFile(t *testing.T, v any, raw []byte) {
+	t.Helper()
+	if got, want := encoded(t, v), normal(t, raw); !reflect.DeepEqual(got, want) {
+		t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
+	}
+}
+
 // Each file of each set decodes into the type of its route, and the decode refuses a field that the
 // type lacks. It encodes to the same document. So a field that the API adds or drops makes this test
 // fail.
@@ -94,17 +102,13 @@ func TestEachFileOfEachSetMatchesTheTypeOfItsRoute(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if got, want := encoded(t, f.v), normal(t, raw); !reflect.DeepEqual(got, want) {
-					t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
-				}
+				sameAsFile(t, f.v, raw)
 			})
 		}
 		// The file of the replies is optional, and it has the shape of asks.json.
 		if raw, err := Read(sets(), state, fileReplies); err == nil {
 			t.Run(string(state)+"/"+fileReplies, func(t *testing.T) {
-				if got, want := encoded(t, s.Replies), normal(t, raw); !reflect.DeepEqual(got, want) {
-					t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
-				}
+				sameAsFile(t, s.Replies, raw)
 			})
 		} else if !errors.Is(err, fs.ErrNotExist) || len(s.Replies.Asks) != 0 {
 			t.Errorf("%s: the read of the replies gave %v and %d replies", state, err, len(s.Replies.Asks))
@@ -112,9 +116,7 @@ func TestEachFileOfEachSetMatchesTheTypeOfItsRoute(t *testing.T) {
 		// The file of the alerts is optional too, and it has the shape of the answer of /v1/alerts.
 		if raw, err := Read(sets(), state, fileAlerts); err == nil {
 			t.Run(string(state)+"/"+fileAlerts, func(t *testing.T) {
-				if got, want := encoded(t, s.AlertRules), normal(t, raw); !reflect.DeepEqual(got, want) {
-					t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
-				}
+				sameAsFile(t, s.AlertRules, raw)
 			})
 		} else if !errors.Is(err, fs.ErrNotExist) || s.AlertRules.Set {
 			t.Errorf("%s: the read of the alerts gave %v and the view %+v", state, err, s.AlertRules)
@@ -147,15 +149,20 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 			_ = json.Unmarshal(rec.Body.Bytes(), &v)
 			return rec.Code, v
 		}
+		// serves fails when the route of path does not give the document want.
+		serves := func(path string, want any) {
+			t.Helper()
+			if code, got := get(path); code != http.StatusOK || !reflect.DeepEqual(got, want) {
+				t.Errorf("%s: %s gave %d and\n%v\nthe file holds\n%v", state, path, code, got, want)
+			}
+		}
 		for route, file := range map[string]string{"/v1/cluster": fileCluster, "/v1/findings": fileFindings, "/v1/profiles": fileProfiles,
-			"/v1/newer": fileNewer, "/v1/notchecked": fileNotChecked, "/v1/events": fileEvents, "/v1/images": fileImages, "/v1/asks": fileAsks} {
+			"/v1/newer": fileNewer, "/v1/notchecked": fileNotChecked, "/v1/events": fileEvents, "/v1/images": fileImages, testkit.AsksRoute: fileAsks} {
 			raw, err := Read(sets(), state, file)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if code, got := get(route); code != http.StatusOK || !reflect.DeepEqual(got, normal(t, raw)) {
-				t.Errorf("%s: %s gave %d and\n%v\nthe file holds\n%v", state, route, code, got, normal(t, raw))
-			}
+			serves(route, normal(t, raw))
 		}
 		if code, got := get("/v1/alerts"); code != http.StatusOK || !reflect.DeepEqual(got, encoded(t, s.AlertRules)) {
 			t.Errorf("%s: /v1/alerts gave %d and\n%v\nthe set holds\n%v", state, code, got, encoded(t, s.AlertRules))
@@ -163,18 +170,14 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 		for _, img := range s.Images.Images {
 			view, _ := s.Images.ImageOf(img.Ref)
 			path := "/v1/images/" + url.PathEscape(img.Ref)
-			if code, got := get(path); code != http.StatusOK || !reflect.DeepEqual(got, encoded(t, view)) {
-				t.Errorf("%s: %s gave %d and\n%v\nthe file holds\n%v", state, path, code, got, encoded(t, view))
-			}
+			serves(path, encoded(t, view))
 		}
-		if code, _ := get("/v1/images/" + url.PathEscape("nobody.example/none:0")); code != http.StatusNotFound {
+		if code, _ := get("/v1/images/" + url.PathEscape(testkit.NoImage)); code != http.StatusNotFound {
 			t.Errorf("%s: an image that no pod runs gave %d", state, code)
 		}
 		for _, d := range s.Diffs {
 			path := "/v1/packs/" + d.Profile + "/" + d.Key + "/diff?side=" + string(d.Side)
-			if code, got := get(path); code != http.StatusOK || !reflect.DeepEqual(got, encoded(t, d)) {
-				t.Errorf("%s: %s gave %d and\n%v\nthe file holds\n%v", state, path, code, got, encoded(t, d))
-			}
+			serves(path, encoded(t, d))
 		}
 		if _, found, _ := s.PackDiff(context.Background(), "nobody@1.0.0", "addon/none", model.SideNewer); found {
 			t.Errorf("%s: a pack that no entry names has a diff", state)
@@ -569,8 +572,8 @@ func TestTheSetsOfThePodsHoldTheirStates(t *testing.T) {
 	for state, want := range map[State]model.ImageStatus{StateImages: model.ImageStatusMoved, StateImagesSplit: model.ImageStatusSplit} {
 		s := load(t, state)
 		img := s.Images.Images[0]
-		if img.Ref != "vendor.example/product:2026.2" || img.Status != want || len(s.Findings.Findings) != 2 || s.Cluster.Counts.Findings != 2 ||
-			s.Cluster.Counts.Drift != 1 || s.Images.Counts.Changed != 1 || img.Packs[0].Profile != "wilma-gateway@3.1.2" || img.Packs[0].Key != "addon/vendor-product" {
+		if img.Ref != testkit.VendorRef || img.Status != want || len(s.Findings.Findings) != 2 || s.Cluster.Counts.Findings != 2 ||
+			s.Cluster.Counts.Drift != 1 || s.Images.Counts.Changed != 1 || img.Packs[0].Profile != "wilma-gateway@3.1.2" || img.Packs[0].Key != testkit.VendorPack {
 			t.Errorf("%s: first image %+v, %d findings, counts %+v", state, img, len(s.Findings.Findings), s.Cluster.Counts)
 		}
 	}
@@ -685,7 +688,7 @@ func TestTheOKSetHoldsTheTextOfTheViewer(t *testing.T) {
 				return d
 			}
 		}
-		t.Fatalf("no diff for %s %s %s", profile, key, side)
+		t.Fatalf(testkit.NoDiff, profile, key, side)
 		return api.PackDiff{}
 	}
 	dex := find("fred-identity@2.3.0", "addon/dex", model.SidePublished)
@@ -789,7 +792,7 @@ func TestTheSetAsksHoldsOneAnswerOfEachVerdict(t *testing.T) {
 		t.Fatalf("the verdicts are %v on %d moves, want 3 and 3", got, len(seen))
 	}
 	refuses := got[model.VerdictRefuses]
-	if len(refuses.Refusals) != 1 || refuses.Refusals[0].Code != "DependencyPackUpgradeNotSupported" || refuses.Refusals[0].Message == "" ||
+	if len(refuses.Refusals) != 1 || refuses.Refusals[0].Code != testkit.CodeDependency || refuses.Refusals[0].Message == "" ||
 		len(refuses.Refusals[0].Clusters) == 0 || refuses.Status != 0 {
 		t.Errorf("the refusal %+v", refuses)
 	}
@@ -834,7 +837,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 		}
 		if s := a.UpdateChecks.SkippedMinor; s != nil {
 			skips++
-			if a.Key != "k8s/kubernetes" || s.Code != "K8sUpgradeNotSupported" || s.To != a.Newest || s.NextStep != moves[row].Newest || a.Newest == moves[row].Newest {
+			if a.Key != "k8s/kubernetes" || s.Code != testkit.CodeMinorSkip || s.To != a.Newest || s.NextStep != moves[row].Newest || a.Newest == moves[row].Newest {
 				t.Errorf("the skip %+v of %s %s, the row gives %s", s, a.Profile, a.Key, moves[row].Newest)
 			}
 		} else if a.Newest != moves[row].Newest {
@@ -842,7 +845,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 		}
 		if v := a.UpdateChecks.RequiredVariables; v != nil {
 			variables += len(v.Names)
-			if v.Code != "InvalidVariable" || len(v.Names) == 0 || !slices.IsSorted(v.Names) {
+			if v.Code != testkit.CodeVariable || len(v.Names) == 0 || !slices.IsSorted(v.Names) {
 				t.Errorf("the variables %+v of %s %s", v, a.Profile, a.Key)
 			}
 		}
@@ -922,42 +925,23 @@ func TestClicksThatComeTogetherLeaveOneAnswerForEachMove(t *testing.T) {
 	}
 }
 
-// The routes: a POST with the header of the page gives the reply, and /v1/asks lists it after.
+// The routes: a POST with the header of the page gives the reply, and /v1/asks lists it after, as testkit.AskFlow
+// checks.
 func TestThePostOfTheAskRouteGivesTheReplyAndTheListShowsIt(t *testing.T) {
 	s := load(t, StateOK)
 	h := (&api.Server{Source: s}).Handler()
-	do := func(method, path string, same bool) (int, []byte) {
+	do := func(method, path string, page bool) (int, string) {
 		req := httptest.NewRequest(method, path, nil)
 		req.Host = "127.0.0.1:8080"
-		if same {
+		if page {
 			req.Header.Set("Sec-Fetch-Site", "same-origin")
 		}
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
-		return rec.Code, rec.Body.Bytes()
+		return rec.Code, rec.Body.String()
 	}
-	const ask = "/v1/packs/fred-identity@2.3.0/addon/dex/ask"
-	if code, _ := do(http.MethodPost, ask, false); code != http.StatusForbidden {
-		t.Errorf("a POST with no header gave %d", code)
-	}
-	if code, body := do(http.MethodGet, "/v1/asks", true); code != http.StatusOK || string(body) != "{\"asks\":[]}\n" {
-		t.Errorf("the list before the click: %d %s", code, body)
-	}
-	code, body := do(http.MethodPost, ask, true)
-	var a model.Answer
-	if err := json.Unmarshal(body, &a); err != nil || code != http.StatusOK || a.Verdict != model.VerdictNoError {
-		t.Fatalf("the click gave %d %s", code, body)
-	}
-	var list api.AsksView
-	_, body = do(http.MethodGet, "/v1/asks", true)
-	if err := json.Unmarshal(body, &list); err != nil || len(list.Asks) != 1 || !reflect.DeepEqual(list.Asks[0], a) {
-		t.Errorf("the list after the click: %s", body)
-	}
-	for _, path := range []string{"/v1/packs/dino-storage@1.1.0/addon/longhorn/ask", "/v1/packs/nobody@1.0.0/addon/dex/ask"} {
-		if code, _ := do(http.MethodPost, path, true); code != http.StatusNotFound {
-			t.Errorf("%s gave %d", path, code)
-		}
-	}
+	testkit.AskFlow(t, func(path string) (int, string) { return do(http.MethodGet, path, false) },
+		func(path string, page bool) (int, string) { return do(http.MethodPost, path, page) })
 }
 
 // The set alerts holds rules in each state. Their states are those that the engine gives for the findings

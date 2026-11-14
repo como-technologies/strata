@@ -17,15 +17,14 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
-
-const clusterUID = "7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35"
 
 // profiles are the profiles that the fake cluster runs, in its order.
 var profiles = [][2]string{{"aws-stack", "1.0.0"}, {"platform-addons", "2.3.0"}}
 
 func clusterJSON() string {
-	return `{"schema":"strata-snapshot/1","source":{"cluster":{"uid":"` + clusterUID + `","name":"fred","profiles":[` +
+	return `{"schema":"strata-snapshot/1","source":{"cluster":{"uid":"` + testkit.ClusterUID + `","name":"fred","profiles":[` +
 		`{"name":"aws-stack","version":"1.0.0","type":"cluster"},{"name":"platform-addons","version":"2.3.0","type":"add-on"}]}}}`
 }
 
@@ -88,12 +87,12 @@ func gunzip(t *testing.T, b []byte) string {
 // cluster, in the first Secret. A second run keeps them, and writes nothing.
 func TestARunWritesTheFirstSeenRecordsOnceAndThenKeepsThem(t *testing.T) {
 	strata, store := &fakeStrata{}, newStore()
-	res, err := Run(context.Background(), strata, store, "strata-observer", clusterUID, t.TempDir())
+	res, err := Run(context.Background(), strata, store, "strata-observer", testkit.ClusterUID, t.TempDir())
 	if err != nil || res.Kept || res.Records != 2 {
-		t.Fatalf("result %+v, error %v", res, err)
+		t.Fatalf(testkit.ResultAndError, res, err)
 	}
 	first := store.data[Name(0)]
-	if got := string(first[MetaKey]); got != `{"baseline":"first-seen","firstSeenFrom":"`+clusterUID+`"}` {
+	if got := string(first[MetaKey]); got != `{"baseline":"first-seen","firstSeenFrom":"`+testkit.ClusterUID+`"}` {
 		t.Errorf("meta.json is %s", got)
 	}
 	for _, p := range profiles {
@@ -103,7 +102,7 @@ func TestARunWritesTheFirstSeenRecordsOnceAndThenKeepsThem(t *testing.T) {
 		}
 	}
 	calls := len(strata.calls)
-	res, err = Run(context.Background(), strata, store, "strata-observer", clusterUID, t.TempDir())
+	res, err = Run(context.Background(), strata, store, "strata-observer", testkit.ClusterUID, t.TempDir())
 	if err != nil || !res.Kept || len(strata.calls) != calls {
 		t.Errorf("the second run: %+v, error %v, %d new calls of strata", res, err, len(strata.calls)-calls)
 	}
@@ -113,8 +112,8 @@ func TestARunWritesTheFirstSeenRecordsOnceAndThenKeepsThem(t *testing.T) {
 func TestASecretWithMetaAloneIsNoRecord(t *testing.T) {
 	store := newStore()
 	store.data[Name(0)][MetaKey] = []byte(`{"baseline":"first-seen"}`)
-	if res, err := Run(context.Background(), &fakeStrata{}, store, "ns", clusterUID, t.TempDir()); err != nil || res.Kept {
-		t.Errorf("result %+v, error %v", res, err)
+	if res, err := Run(context.Background(), &fakeStrata{}, store, "ns", testkit.ClusterUID, t.TempDir()); err != nil || res.Kept {
+		t.Errorf(testkit.ResultAndError, res, err)
 	}
 }
 
@@ -172,7 +171,7 @@ func TestTheSeedWritesWhatTheScriptOfThePipelineWrites(t *testing.T) {
 	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("bash", "../../../scripts/ci/observer-records.sh", "--first-seen", clusterUID)
+	cmd := exec.Command("bash", testkit.RecordsScript, "--first-seen", testkit.ClusterUID)
 	cmd.Env = append(os.Environ(), "STRATA_BIN="+fake)
 	out, err := cmd.Output()
 	if err != nil {
@@ -180,7 +179,7 @@ func TestTheSeedWritesWhatTheScriptOfThePipelineWrites(t *testing.T) {
 	}
 	fromScript := secretsOfYAML(t, string(out))
 	store := newStore()
-	if _, err := Run(context.Background(), &fakeStrata{}, store, "strata-observer", clusterUID, t.TempDir()); err != nil {
+	if _, err := Run(context.Background(), &fakeStrata{}, store, "strata-observer", testkit.ClusterUID, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	for i := range Secrets {
@@ -243,7 +242,7 @@ func jsonEqual(a, b map[string]any) bool {
 }
 
 func metaFirstSeen() baseline.Meta {
-	return baseline.Meta{Baseline: baseline.FirstSeen, FirstSeenFrom: clusterUID}
+	return baseline.Meta{Baseline: baseline.FirstSeen, FirstSeenFrom: testkit.ClusterUID}
 }
 
 // randomish gives n bytes that gzip cannot shrink much, from a fixed seed, so a test can fill a Secret.

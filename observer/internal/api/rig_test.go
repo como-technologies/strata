@@ -5,7 +5,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -43,6 +42,8 @@ const (
 	pathCluster   = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=cluster"
 	pathNewer     = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=newer"
 	pathAsk       = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/ask"
+	// pathProfileByName names the profile with no version.
+	pathProfileByName = "/v1/profiles/aws-stack"
 )
 
 // fixtures copies testdata/ to a directory of the test. The times of the documents are relative to
@@ -141,7 +142,7 @@ func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.
 		}
 		return f.answer(1, "behind.json")
 	}
-	return runner.Result{}, fmt.Errorf("the fake does not know %q", args[0])
+	return runner.Result{}, testkit.Unknown(args)
 }
 
 // questions gives the arguments of each question about a move that the fake got.
@@ -192,8 +193,8 @@ func newRig(t *testing.T) *rig {
 		},
 		"variables": []map[string]any{{"name": "team", "value": sentinelVariable}},
 	})
-	testkit.WriteGzip(t, r.records, "aws-stack@1.1.0.json.gz", string(record))
-	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(`{"baseline":"approved","revision":"4e1c7a2"}`), 0o600); err != nil {
+	testkit.WriteGzip(t, r.records, testkit.RecordFile, string(record))
+	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(testkit.ApprovedMeta), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return r
@@ -223,12 +224,9 @@ func (r *rig) observer(s check.Strata) *check.Observer {
 	return o
 }
 
-// imageDigest is the digest that the pod of oneImage runs.
-const imageDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-
-// oneImage is a read of the pods with one pod that runs a/b:1, the image that the record names.
+// oneImage is a read of the pods with one pod that runs a/b:1, the image that the record names, with testkit.Digest1.
 var oneImage = check.PodsFunc(func(context.Context) ([]kube.Container, error) {
-	return []kube.Container{{Pod: "ns/web-1", Image: "a/b:1", ImageID: "a/b@" + imageDigest}}, nil
+	return []kube.Container{{Pod: "ns/web-1", Image: "a/b:1", ImageID: "a/b@" + testkit.Digest1}}, nil
 })
 
 // cycled makes an observer that ran one content cycle and one versions cycle.

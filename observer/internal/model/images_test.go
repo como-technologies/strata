@@ -10,12 +10,15 @@ import (
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
-const (
-	d1 = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-	d2 = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-	d3 = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+// d3 is a third digest of an image, after testkit.Digest1 and testkit.Digest2.
+const d3 = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
 
-	vendorRef = "vendor.example/product:2026.2"
+// nginxFull and nginxHub are the same image of nginx, with its full name and with the short name of Docker Hub. vendorAt
+// starts the image id of the image testkit.VendorRef.
+const (
+	nginxFull = "docker.io/library/nginx:1.27"
+	nginxHub  = "docker.io/nginx:1.27"
+	vendorAt  = "vendor.example/product@"
 )
 
 // ran makes a container of the given pod that runs the image with the image id repo@digest.
@@ -29,10 +32,10 @@ func naming(p docs.RecordPack, images ...string) docs.RecordPack {
 	return p
 }
 
-// podsOf makes a content with one record whose pack names vendorRef, and the given containers.
+// podsOf makes a content with one record whose pack names testkit.VendorRef, and the given containers.
 func podsOf(t *testing.T, containers ...kube.Container) Content {
 	t.Helper()
-	r := rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "2026.2.0"), vendorRef))
+	r := rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "2026.2.0"), testkit.VendorRef))
 	c := content(t, r)
 	c.Pods = PodRead{Containers: containers, At: t0}
 	return c
@@ -53,10 +56,10 @@ func kindsOf(findings []Finding) []Kind {
 
 func TestTheDigestOfAnImageIDIsItsRepositoryDigest(t *testing.T) {
 	for _, c := range []struct{ id, want string }{
-		{"registry.k8s.io/pause@" + d1, d1},
-		{"docker-pullable://vendor.example/product@" + d2, d2},
+		{"registry.k8s.io/pause@" + testkit.Digest1, testkit.Digest1},
+		{"docker-pullable://" + vendorAt + testkit.Digest2, testkit.Digest2},
 		{"sha256:" + strings.Repeat("a", 64), ""},
-		{"vendor.example/product@md5:abc", ""},
+		{vendorAt + "md5:abc", ""},
 		{"", ""},
 	} {
 		if got := digestOf(c.id); got != c.want {
@@ -66,44 +69,44 @@ func TestTheDigestOfAnImageIDIsItsRepositoryDigest(t *testing.T) {
 }
 
 func TestOnePodOnOneDigestIsSteadyAndMakesNoFinding(t *testing.T) {
-	c := podsOf(t, ran("a", vendorRef, d1), ran("b", vendorRef, d1))
-	rows := imageRows(c, firstOf(vendorRef, d1))
+	c := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest1), ran("b", testkit.VendorRef, testkit.Digest1))
+	rows := imageRows(c, firstOf(testkit.VendorRef, testkit.Digest1))
 	if len(rows) != 1 || rows[0].Status != ImageStatusSteady || rows[0].Digests[0].Status != FirstDigest || rows[0].Digests[0].Pods != 2 {
 		t.Fatalf("rows %+v", rows)
 	}
-	if got := FindingsOf(c, firstOf(vendorRef, d1)); len(got) != 0 {
+	if got := FindingsOf(c, firstOf(testkit.VendorRef, testkit.Digest1)); len(got) != 0 {
 		t.Errorf("findings %+v", got)
 	}
 }
 
 func TestTheDigestOfTheFirstSightIsTheFirstDigestAlsoBeforeTheStateHoldsIt(t *testing.T) {
-	rows := imageRows(podsOf(t, ran("a", vendorRef, d1)), nil)
+	rows := imageRows(podsOf(t, ran("a", testkit.VendorRef, testkit.Digest1)), nil)
 	if rows[0].Status != ImageStatusSteady || rows[0].Digests[0].Status != FirstDigest {
 		t.Errorf("row %+v", rows[0])
 	}
 }
 
 func TestADigestThatIsNotTheFirstOneIsImageMovedUntilItComesBack(t *testing.T) {
-	first := firstOf(vendorRef, d1)
-	moved := podsOf(t, ran("a", vendorRef, d2), ran("b", vendorRef, d2))
+	first := firstOf(testkit.VendorRef, testkit.Digest1)
+	moved := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest2), ran("b", testkit.VendorRef, testkit.Digest2))
 	got := FindingsOf(moved, first)
 	if len(got) != 1 || got[0].Kind != ImageMoved || got[0].Profile != "wilma-gateway@3.1.2" ||
-		!slices.Equal(got[0].Packs, []string{"addon/vendor-product"}) || !slices.Equal(got[0].Images, []string{vendorRef}) || got[0].ReBaselineNeeded {
+		!slices.Equal(got[0].Packs, []string{testkit.VendorPack}) || !slices.Equal(got[0].Images, []string{testkit.VendorRef}) || got[0].ReBaselineNeeded {
 		t.Fatalf("findings %+v", got)
 	}
 	row := imageRows(moved, first)[0]
 	if row.Status != ImageStatusMoved || row.Digests[0].Status != AnotherDigest {
 		t.Errorf("row %+v", row)
 	}
-	back := podsOf(t, ran("a", vendorRef, d1))
+	back := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest1))
 	if got := FindingsOf(back, first); len(got) != 0 {
 		t.Errorf("the digest came back and the finding stays: %+v", got)
 	}
 }
 
 func TestTwoDigestsAtOneTimeAreImageSplitAndNotAlsoImageMoved(t *testing.T) {
-	first := firstOf(vendorRef, d1)
-	split := podsOf(t, ran("a", vendorRef, d1), ran("b", vendorRef, d1), ran("c", vendorRef, d2))
+	first := firstOf(testkit.VendorRef, testkit.Digest1)
+	split := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest1), ran("b", testkit.VendorRef, testkit.Digest1), ran("c", testkit.VendorRef, testkit.Digest2))
 	got := FindingsOf(split, first)
 	if len(got) != 1 || got[0].Kind != ImageSplit {
 		t.Fatalf("findings %+v", got)
@@ -113,17 +116,17 @@ func TestTwoDigestsAtOneTimeAreImageSplitAndNotAlsoImageMoved(t *testing.T) {
 		row.Digests[1].Status != AnotherDigest || row.Digests[1].Pods != 1 {
 		t.Errorf("row %+v", row)
 	}
-	neither := podsOf(t, ran("a", vendorRef, d2), ran("b", vendorRef, d3))
+	neither := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest2), ran("b", testkit.VendorRef, d3))
 	if got := kindsOf(FindingsOf(neither, first)); !slices.Equal(got, []Kind{ImageSplit}) {
 		t.Errorf("two digests, and none is the first one: %v", got)
 	}
 }
 
 func TestAContainerThatNeverStartedOrRunsALocalImageReadsNotCheckedAndMakesNoFinding(t *testing.T) {
-	never := kube.Container{Pod: "ns/a", Image: vendorRef}
-	local := kube.Container{Pod: "ns/b", Image: vendorRef, ImageID: "sha256:" + strings.Repeat("e", 64)}
+	never := kube.Container{Pod: "ns/a", Image: testkit.VendorRef}
+	local := kube.Container{Pod: "ns/b", Image: testkit.VendorRef, ImageID: "sha256:" + strings.Repeat("e", 64)}
 	c := podsOf(t, never, local)
-	row := imageRows(c, firstOf(vendorRef, d1))[0]
+	row := imageRows(c, firstOf(testkit.VendorRef, testkit.Digest1))[0]
 	if row.Status != ImageStatusNotChecked || len(row.Digests) != 2 || row.Digests[0].Status != NoRepoDigest || row.Digests[1].Status != NotStarted {
 		t.Errorf("row %+v", row)
 	}
@@ -132,59 +135,59 @@ func TestAContainerThatNeverStartedOrRunsALocalImageReadsNotCheckedAndMakesNoFin
 			t.Errorf("a digest %q with status %s", d.Digest, d.Status)
 		}
 	}
-	if got := FindingsOf(c, firstOf(vendorRef, d1)); len(got) != 0 {
+	if got := FindingsOf(c, firstOf(testkit.VendorRef, testkit.Digest1)); len(got) != 0 {
 		t.Errorf("findings %+v", got)
 	}
 	// A pod that never started beside a pod that runs the first digest does not make the image split.
-	both := podsOf(t, never, ran("c", vendorRef, d1))
-	if row := imageRows(both, firstOf(vendorRef, d1))[0]; row.Status != ImageStatusSteady {
+	both := podsOf(t, never, ran("c", testkit.VendorRef, testkit.Digest1))
+	if row := imageRows(both, firstOf(testkit.VendorRef, testkit.Digest1))[0]; row.Status != ImageStatusSteady {
 		t.Errorf("status %s", row.Status)
 	}
 }
 
 func TestAnImageThatMatchesNoPackIsListedWithNoPackAndMakesNoFinding(t *testing.T) {
 	agent := "gcr.io/spectro-images-public/cluster-api/cluster-api-controller:v1.11.1"
-	c := podsOf(t, ran("a", agent, d2))
-	row := imageRows(c, firstOf(agent, d1))[0]
+	c := podsOf(t, ran("a", agent, testkit.Digest2))
+	row := imageRows(c, firstOf(agent, testkit.Digest1))[0]
 	if row.Match != MatchNone || len(row.Packs) != 0 || row.Status != ImageStatusMoved {
 		t.Errorf("row %+v", row)
 	}
-	if got := FindingsOf(c, firstOf(agent, d1)); len(got) != 0 {
+	if got := FindingsOf(c, firstOf(agent, testkit.Digest1)); len(got) != 0 {
 		t.Errorf("findings %+v", got)
 	}
-	if o := ObservedOf(Input{ReadPods: true, Content: &c, FirstDigests: firstOf(agent, d1)}); o.Counts.Images != 1 || o.Counts.Matched != 0 || o.Counts.Changed != 0 {
+	if o := ObservedOf(Input{ReadPods: true, Content: &c, FirstDigests: firstOf(agent, testkit.Digest1)}); o.Counts.Images != 1 || o.Counts.Matched != 0 || o.Counts.Changed != 0 {
 		t.Errorf("counts %+v", o.Counts)
 	}
 }
 
 func TestAnImageNamedByADigestCannotMoveAndMakesNoFinding(t *testing.T) {
-	ref := "vendor.example/product@" + d1
+	ref := vendorAt + testkit.Digest1
 	r := rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "2026.2.0"), ref))
 	c := content(t, r)
-	c.Pods = PodRead{Containers: []kube.Container{{Pod: "ns/a", Image: ref, ImageID: "vendor.example/product@" + d2}}, At: t0}
-	row := imageRows(c, firstOf(ref, d1))[0]
+	c.Pods = PodRead{Containers: []kube.Container{{Pod: "ns/a", Image: ref, ImageID: vendorAt + testkit.Digest2}}, At: t0}
+	row := imageRows(c, firstOf(ref, testkit.Digest1))[0]
 	if !row.ByDigest || row.Match != MatchExact {
 		t.Errorf("row %+v", row)
 	}
-	if got := FindingsOf(c, firstOf(ref, d1)); len(got) != 0 {
+	if got := FindingsOf(c, firstOf(ref, testkit.Digest1)); len(got) != 0 {
 		t.Errorf("findings %+v", got)
 	}
 }
 
 func TestAnImageMatchesByTheExactTextFirstAndThenByNameAndTag(t *testing.T) {
-	exact := rec("aws-stack", "1.0.0", docs.VerifyUnchanged, naming(pk("addon", "nginx", "1.0"), "docker.io/library/nginx:1.27"))
+	exact := rec("aws-stack", "1.0.0", docs.VerifyUnchanged, naming(pk("addon", "nginx", "1.0"), nginxFull))
 	byName := rec("other", "1.0.0", docs.VerifyUnchanged, naming(pk("addon", "web", "1.0"), "nginx:1.27"))
 	c := content(t, exact, byName)
 	c.Pods = PodRead{At: t0, Containers: []kube.Container{
-		ran("a", "docker.io/library/nginx:1.27", d1), ran("b", "docker.io/nginx:1.27", d1), ran("c", "nginx:1.27", d1), ran("d", "nginx:1.28", d1)}}
+		ran("a", nginxFull, testkit.Digest1), ran("b", nginxHub, testkit.Digest1), ran("c", "nginx:1.27", testkit.Digest1), ran("d", "nginx:1.28", testkit.Digest1)}}
 	got := map[string]Image{}
 	for _, img := range imageRows(c, nil) {
 		got[img.Ref] = img
 	}
-	if g := got["docker.io/library/nginx:1.27"]; g.Match != MatchExact || !slices.Equal(g.Packs, []ImagePack{{"aws-stack@1.0.0", "addon/nginx"}}) {
+	if g := got[nginxFull]; g.Match != MatchExact || !slices.Equal(g.Packs, []ImagePack{{"aws-stack@1.0.0", "addon/nginx"}}) {
 		t.Errorf("exact: %+v", g)
 	}
-	if g := got["docker.io/nginx:1.27"]; g.Match != MatchNameAndTag || len(g.Packs) != 2 {
+	if g := got[nginxHub]; g.Match != MatchNameAndTag || len(g.Packs) != 2 {
 		t.Errorf("name and tag: %+v", g)
 	}
 	if g := got["nginx:1.27"]; g.Match != MatchExact || !slices.Equal(g.Packs, []ImagePack{{"other@1.0.0", "addon/web"}}) {
@@ -196,16 +199,16 @@ func TestAnImageMatchesByTheExactTextFirstAndThenByNameAndTag(t *testing.T) {
 }
 
 func TestOnlyARecordThatTheClusterRunsMatches(t *testing.T) {
-	r := notOnCluster(rec("elsewhere", "1.0.0", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "1"), vendorRef)))
+	r := notOnCluster(rec("elsewhere", "1.0.0", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "1"), testkit.VendorRef)))
 	c := content(t, r)
-	c.Pods = PodRead{Containers: []kube.Container{ran("a", vendorRef, d2)}, At: t0}
-	if row := imageRows(c, firstOf(vendorRef, d1))[0]; row.Match != MatchNone {
+	c.Pods = PodRead{Containers: []kube.Container{ran("a", testkit.VendorRef, testkit.Digest2)}, At: t0}
+	if row := imageRows(c, firstOf(testkit.VendorRef, testkit.Digest1))[0]; row.Match != MatchNone {
 		t.Errorf("row %+v", row)
 	}
 }
 
 func TestAPodWithTwoContainersOnOneImageCountsOnce(t *testing.T) {
-	c := podsOf(t, ran("a", vendorRef, d1), ran("a", vendorRef, d1), ran("b", vendorRef, d1))
+	c := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest1), ran("a", testkit.VendorRef, testkit.Digest1), ran("b", testkit.VendorRef, testkit.Digest1))
 	if row := imageRows(c, nil)[0]; row.Digests[0].Pods != 2 {
 		t.Errorf("row %+v", row)
 	}
@@ -214,42 +217,42 @@ func TestAPodWithTwoContainersOnOneImageCountsOnce(t *testing.T) {
 func TestOneFindingNamesEachPackAndEachImageOfAProfile(t *testing.T) {
 	second := "vendor.example/sidecar:2026.2"
 	r := rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged,
-		naming(pk("addon", "vendor-product", "2026.2.0"), vendorRef), naming(pk("addon", "vendor-sidecar", "2026.2.0"), second))
+		naming(pk("addon", "vendor-product", "2026.2.0"), testkit.VendorRef), naming(pk("addon", "vendor-sidecar", "2026.2.0"), second))
 	c := content(t, r)
-	c.Pods = PodRead{At: t0, Containers: []kube.Container{ran("a", vendorRef, d2), ran("b", second, d2)}}
-	first := map[string]string{ImageKey(vendorRef): d1, ImageKey(second): d1}
+	c.Pods = PodRead{At: t0, Containers: []kube.Container{ran("a", testkit.VendorRef, testkit.Digest2), ran("b", second, testkit.Digest2)}}
+	first := map[string]string{ImageKey(testkit.VendorRef): testkit.Digest1, ImageKey(second): testkit.Digest1}
 	got := FindingsOf(c, first)
-	if len(got) != 1 || got[0].Kind != ImageMoved || !slices.Equal(got[0].Packs, []string{"addon/vendor-product", "addon/vendor-sidecar"}) ||
-		!slices.Equal(got[0].Images, []string{vendorRef, second}) {
+	if len(got) != 1 || got[0].Kind != ImageMoved || !slices.Equal(got[0].Packs, []string{testkit.VendorPack, "addon/vendor-sidecar"}) ||
+		!slices.Equal(got[0].Images, []string{testkit.VendorRef, second}) {
 		t.Errorf("findings %+v", got)
 	}
 }
 
 func TestTheFirstDigestIsTheOneOfMostPodsAndTheSmallerTextWinsATie(t *testing.T) {
-	one := FirstDigests([]kube.Container{ran("a", vendorRef, d2), ran("b", vendorRef, d1), ran("c", vendorRef, d1)}, nil)
-	if one[ImageKey(vendorRef)] != d1 {
+	one := FirstDigests([]kube.Container{ran("a", testkit.VendorRef, testkit.Digest2), ran("b", testkit.VendorRef, testkit.Digest1), ran("c", testkit.VendorRef, testkit.Digest1)}, nil)
+	if one[ImageKey(testkit.VendorRef)] != testkit.Digest1 {
 		t.Errorf("most pods: %v", one)
 	}
-	tie := FirstDigests([]kube.Container{ran("a", vendorRef, d2), ran("b", vendorRef, d1)}, nil)
-	if tie[ImageKey(vendorRef)] != d1 {
+	tie := FirstDigests([]kube.Container{ran("a", testkit.VendorRef, testkit.Digest2), ran("b", testkit.VendorRef, testkit.Digest1)}, nil)
+	if tie[ImageKey(testkit.VendorRef)] != testkit.Digest1 {
 		t.Errorf("tie: %v", tie)
 	}
-	known := FirstDigests([]kube.Container{ran("a", vendorRef, d2)}, firstOf(vendorRef, d1))
+	known := FirstDigests([]kube.Container{ran("a", testkit.VendorRef, testkit.Digest2)}, firstOf(testkit.VendorRef, testkit.Digest1))
 	if len(known) != 0 {
 		t.Errorf("an image that the state holds gets no new first digest: %v", known)
 	}
-	none := FirstDigests([]kube.Container{{Pod: "ns/a", Image: vendorRef}}, nil)
+	none := FirstDigests([]kube.Container{{Pod: "ns/a", Image: testkit.VendorRef}}, nil)
 	if len(none) != 0 {
 		t.Errorf("a container that never started is no first digest: %v", none)
 	}
 }
 
 func TestTheStateKeepsAnIdOfTheImageAndNeverItsReference(t *testing.T) {
-	id := ImageKey(vendorRef)
-	if len(id) != 16 || strings.Contains(id, "vendor") || id != ImageKey(vendorRef) || id == ImageKey(vendorRef+"x") {
+	id := ImageKey(testkit.VendorRef)
+	if len(id) != 16 || strings.Contains(id, "vendor") || id != ImageKey(testkit.VendorRef) || id == ImageKey(testkit.VendorRef+"x") {
 		t.Errorf("id %q", id)
 	}
-	if id == FindingID(ImageMoved, vendorRef) {
+	if id == FindingID(ImageMoved, testkit.VendorRef) {
 		t.Error("an image id and a finding id of one subject are the same")
 	}
 }
@@ -267,7 +270,7 @@ func TestTheDocumentSaysOffNotReadOrRead(t *testing.T) {
 	if o := ObservedOf(Input{ReadPods: true, Content: &failed}); o.Pods != PodsUnread || o.Error == nil || o.Error.Status != 403 {
 		t.Errorf("failed: %+v", o)
 	}
-	c := podsOf(t, ran("a", vendorRef, d1))
+	c := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest1))
 	o := ObservedOf(Input{ReadPods: true, Content: &c})
 	if o.Pods != PodsRead || o.ReadAt == nil || !o.ReadAt.Equal(t0) || o.Counts.Images != 1 || o.Counts.Matched != 1 || o.Counts.Changed != 0 {
 		t.Errorf("read: %+v", o)
@@ -275,8 +278,8 @@ func TestTheDocumentSaysOffNotReadOrRead(t *testing.T) {
 }
 
 func TestAFailedReadKeepsTheLastGoodContainersAndHoldsTheFindings(t *testing.T) {
-	first := firstOf(vendorRef, d1)
-	last := podsOf(t, ran("a", vendorRef, d2))
+	first := firstOf(testkit.VendorRef, testkit.Digest1)
+	last := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest2))
 	now := podsOf(t)
 	now.Pods = PodRead{Err: &ErrorRef{Kind: docs.KindKubeTransport}}
 	now.Carry(&last)
@@ -312,18 +315,18 @@ func TestTheCausePodsNotReadNamesNoProfileAndChangesNoStatus(t *testing.T) {
 		t.Fatalf("notChecked %+v", s.NotChecked)
 	}
 	if s.Profiles[0].Status != StatusOK || s.Counts.NotChecked != 1 || s.Counts.PacksInFull != s.Counts.Packs {
-		t.Errorf("profile %q, counts %+v", s.Profiles[0].Status, s.Counts)
+		t.Errorf(testkit.ProfileCounts, s.Profiles[0].Status, s.Counts)
 	}
-	ok := podsOf(t, ran("a", vendorRef, d1))
+	ok := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest1))
 	if got := build(&ok, nil).NotChecked; len(got) != 0 {
 		t.Errorf("a read that worked: %+v", got)
 	}
 }
 
 func TestAnImageFindingIsNotADriftOfTheContent(t *testing.T) {
-	c := podsOf(t, ran("a", vendorRef, d2))
+	c := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest2))
 	in := Input{Now: t0, ClusterUID: "c1", StartedAt: t0, Files: 1, FilesKnown: true, Content: &c, ContentClock: goodClock(15*60e9, t0),
-		ReadPods: true, FirstDigests: firstOf(vendorRef, d1)}
+		ReadPods: true, FirstDigests: firstOf(testkit.VendorRef, testkit.Digest1)}
 	s := Build(in)
 	if len(s.Findings) != 1 || s.Findings[0].Kind != ImageMoved || s.Counts.Findings != 1 {
 		t.Fatalf("findings %+v, counts %+v", s.Findings, s.Counts)
@@ -337,10 +340,10 @@ func TestAnImageFindingIsNotADriftOfTheContent(t *testing.T) {
 }
 
 func TestNoAnswerOfThePodsCarriesAPodNameOrANamespace(t *testing.T) {
-	marker := kube.Container{Pod: "POD-NAMESPACE-MARKER/POD-NAME-MARKER", Image: vendorRef, ImageID: vendorRef + "@" + d2}
+	marker := kube.Container{Pod: "POD-NAMESPACE-MARKER/POD-NAME-MARKER", Image: testkit.VendorRef, ImageID: testkit.VendorRef + "@" + testkit.Digest2}
 	c := podsOf(t, marker)
 	in := Input{Now: t0, ClusterUID: "c1", StartedAt: t0, Files: 1, FilesKnown: true, Content: &c, ContentClock: goodClock(15*60e9, t0),
-		ReadPods: true, FirstDigests: firstOf(vendorRef, d1)}
+		ReadPods: true, FirstDigests: firstOf(testkit.VendorRef, testkit.Digest1)}
 	for name, v := range map[string]any{"summary": Build(in), "observed": ObservedOf(in)} {
 		raw := testkit.MustJSON(t, v)
 		if strings.Contains(string(raw), "MARKER") {
@@ -348,8 +351,8 @@ func TestNoAnswerOfThePodsCarriesAPodNameOrANamespace(t *testing.T) {
 		}
 	}
 	o := ObservedOf(in)
-	view, ok := o.ImageOf(vendorRef)
-	if !ok || view.Image.Ref != vendorRef || view.Schema != ObservedSchema {
+	view, ok := o.ImageOf(testkit.VendorRef)
+	if !ok || view.Image.Ref != testkit.VendorRef || view.Schema != ObservedSchema {
 		t.Errorf("view %+v", view)
 	}
 	if _, ok := o.ImageOf("nope"); ok {
@@ -359,8 +362,8 @@ func TestNoAnswerOfThePodsCarriesAPodNameOrANamespace(t *testing.T) {
 
 func TestTheRowsAreSortedByStatusAndThenByReference(t *testing.T) {
 	steady, moved, split := "a/steady:1", "z/moved:1", "m/split:1"
-	c := podsOf(t, ran("a", steady, d1), ran("b", moved, d2), ran("c", split, d1), ran("d", split, d2), kube.Container{Pod: "ns/e", Image: "b/never:1"})
-	first := map[string]string{ImageKey(steady): d1, ImageKey(moved): d1, ImageKey(split): d1}
+	c := podsOf(t, ran("a", steady, testkit.Digest1), ran("b", moved, testkit.Digest2), ran("c", split, testkit.Digest1), ran("d", split, testkit.Digest2), kube.Container{Pod: "ns/e", Image: "b/never:1"})
+	first := map[string]string{ImageKey(steady): testkit.Digest1, ImageKey(moved): testkit.Digest1, ImageKey(split): testkit.Digest1}
 	var refs []string
 	for _, img := range imageRows(c, first) {
 		refs = append(refs, img.Ref)

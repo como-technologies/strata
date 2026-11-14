@@ -57,7 +57,7 @@ func TestACompareWithAnotherSchemaBesideGoodSidesIsAProfileThatTheCycleDidNotRea
 	r, w := oneRecord(t, unchanged())
 	r.record("platform-addons", "1.0.0", "addon/cert-manager")
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", testkit.AddonsProfile)
 	// The compare would make a finding, if the cycle read it.
 	w.compares = map[int]docs.Diff{0: {Schema: otherSchema, RootB: "e06b", Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
 	o := r.observer(w)
@@ -100,11 +100,7 @@ func TestAMoveWithAnotherSchemaIsAMoveThatWasNotRead(t *testing.T) {
 	if s.Versions.ReadAt == nil || s.Versions.FailedRuns != 0 || s.Versions.LastError != nil || len(s.Newer) != 4 {
 		t.Fatalf("versions %+v, newer %d", s.Versions, len(s.Newer))
 	}
-	for _, n := range s.Newer {
-		if hasCounts := n.Impact != "" && n.Images > 0; (n.Name == "kubernetes") == hasCounts {
-			t.Errorf("%s: impact %q, images %d", n.Name, n.Impact, n.Images)
-		}
-	}
+	countsAllButKubernetes(t, s)
 	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "k8s/kubernetes" {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}

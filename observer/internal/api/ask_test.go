@@ -38,9 +38,6 @@ func clickWith(h http.Handler, path, host, site string) *httptest.ResponseRecord
 	return rec
 }
 
-// noAnswers is the list of answers of an observer that holds none. The list is empty, and not null.
-const noAnswers = `"asks":[]`
-
 // answersOf gives the list of answers that the server holds.
 func answersOf(t *testing.T, h http.Handler) AsksView {
 	t.Helper()
@@ -48,6 +45,13 @@ func answersOf(t *testing.T, h http.Handler) AsksView {
 	decode(t, get(h, askRoutes[patternAsks]), &list)
 	return list
 }
+
+// The failures of the checks of an answer, of an answer after the next click, and of the list of answers.
+const (
+	statusAndAnswer = "status %d, answer %+v"
+	answerAfter     = "answer %+v after %d questions"
+	listOfAnswers   = "the list of answers %+v"
+)
 
 // asked makes an observer that ran its cycles, and the fake that answers it.
 func asked(t *testing.T, fixture string) (*rig, *check.Observer, *fakeStrata) {
@@ -60,14 +64,14 @@ func asked(t *testing.T, fixture string) (*rig, *check.Observer, *fakeStrata) {
 func TestTheClickAsksPaletteOnceForOneMoveAndASecondClickSendsNothing(t *testing.T) {
 	_, o, fake := asked(t, askNoError)
 	h := handlerOf(o)
-	if body := get(h, askRoutes[patternAsks]).Body.String(); !strings.Contains(body, noAnswers) {
+	if body := get(h, askRoutes[patternAsks]).Body.String(); !strings.Contains(body, testkit.NoAnswers) {
 		t.Fatalf("a move that nobody asked about must read not asked: %s", body)
 	}
 	var first model.Answer
 	rec := click(h, pathAsk)
 	decode(t, rec, &first)
 	if rec.Code != http.StatusOK || first.Verdict != model.VerdictNoError || first.Profile != "aws-stack@1.1.0" || first.Key != "k8s/kubernetes" || first.Newest != "1.36.2" || first.Refusals == nil {
-		t.Fatalf("status %d, answer %+v", rec.Code, first)
+		t.Fatalf(statusAndAnswer, rec.Code, first)
 	}
 	// One question: the behind run of one record, for one pack, which asks about no other pin.
 	q := fake.questions()
@@ -84,7 +88,7 @@ func TestTheClickAsksPaletteOnceForOneMoveAndASecondClickSendsNothing(t *testing
 	}
 	list := answersOf(t, h)
 	if len(list.Asks) != 1 || list.Asks[0].Verdict != model.VerdictNoError {
-		t.Errorf("the list of answers %+v", list)
+		t.Errorf(listOfAnswers, list)
 	}
 }
 
@@ -97,7 +101,7 @@ func TestARefusalHoldsTheCodeTheMessageAndTheClustersOnTheDetailTierAndOnNoOther
 		t.Fatalf("answer %+v", got)
 	}
 	f := got.Refusals[0]
-	if f.Code != "DependencyPackUpgradeNotSupported" || !strings.Contains(f.Message, sentinelValue) || !slices.Equal(f.Clusters, []string{"payments"}) {
+	if f.Code != testkit.CodeDependency || !strings.Contains(f.Message, sentinelValue) || !slices.Equal(f.Clusters, []string{"payments"}) {
 		t.Fatalf("refusal %+v", f)
 	}
 	noSummaryRouteStateOrLogHolds(t, r, h, f.Code, "SENTINEL")
@@ -137,15 +141,15 @@ func TestTheChecksOfStrataReachTheDetailTierBesideTheAnswerAndNoOtherRoute(t *te
 	if got.Verdict != model.VerdictNoError || got.Newest != "1.37.0" || skip == nil || variables == nil {
 		t.Fatalf("answer %+v", got)
 	}
-	if skip.Code != "K8sUpgradeNotSupported" || skip.From != "1.35.3" || skip.To != "1.37.0" || skip.NextMinor != "1.36" || skip.NextStep != "1.36.2" {
+	if skip.Code != testkit.CodeMinorSkip || skip.From != "1.35.3" || skip.To != "1.37.0" || skip.NextMinor != "1.36" || skip.NextStep != "1.36.2" {
 		t.Fatalf("the skip %+v", skip)
 	}
-	if variables.Code != "InvalidVariable" || !slices.Equal(variables.Names, []string{"platform_owner"}) {
+	if variables.Code != testkit.CodeVariable || !slices.Equal(variables.Names, []string{"platform_owner"}) {
 		t.Fatalf("the variables %+v", variables)
 	}
 	list := answersOf(t, h)
 	if len(list.Asks) != 1 || !reflect.DeepEqual(list.Asks[0].UpdateChecks, got.UpdateChecks) {
-		t.Errorf("the list of answers %+v", list)
+		t.Errorf(listOfAnswers, list)
 	}
 	noSummaryRouteStateOrLogHolds(t, r, h, skip.Code, variables.Code, variables.Names[0], "nextStep")
 }
@@ -158,7 +162,7 @@ func TestA403FromPaletteReadsNoAnswerWithItsStatusAndMakesNoFinding(t *testing.T
 	var got model.Answer
 	decode(t, rec, &got)
 	if rec.Code != http.StatusOK || got.Verdict != model.VerdictNoAnswer || got.Status != 403 || len(got.Refusals) != 0 {
-		t.Fatalf("status %d, answer %+v", rec.Code, got)
+		t.Fatalf(statusAndAnswer, rec.Code, got)
 	}
 	if strings.Contains(rec.Body.String(), "SENTINEL") || strings.Contains(r.log.String(), "SENTINEL") {
 		t.Errorf("the body of the answer of Palette left the observer: %s\n%s", rec.Body.String(), r.log.String())
@@ -170,7 +174,7 @@ func TestA403FromPaletteReadsNoAnswerWithItsStatusAndMakesNoFinding(t *testing.T
 	fake.setAsk(askNoError, nil)
 	decode(t, click(h, pathAsk), &got)
 	if got.Verdict != model.VerdictNoError || len(fake.questions()) != 2 {
-		t.Errorf("answer %+v after %d questions", got, len(fake.questions()))
+		t.Errorf(answerAfter, got, len(fake.questions()))
 	}
 }
 
@@ -182,7 +186,7 @@ func TestARunThatFailsGivesNoAnswerWithTheStatusOfTheRun(t *testing.T) {
 	rec := click(h, pathAsk)
 	decode(t, rec, &got)
 	if rec.Code != http.StatusOK || got.Verdict != model.VerdictNoAnswer || got.Status != 500 {
-		t.Errorf("status %d, answer %+v", rec.Code, got)
+		t.Errorf(statusAndAnswer, rec.Code, got)
 	}
 	fake.setAsk("", &runner.RunError{Kind: docs.KindTransport})
 	decode(t, click(h, pathAsk), &got)
@@ -233,9 +237,7 @@ func TestEachMethodButTheOneOfARouteGets405WithItsAllowHeader(t *testing.T) {
 		req.Header.Set(headerFetchSite, sameOrigin)
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
-		if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != route.Method {
-			t.Errorf("%s %s gave %d, Allow %q", other, path, rec.Code, rec.Header().Get("Allow"))
-		}
+		refusedWithAllow(t, rec, other+" "+path, route.Method)
 	}
 	// The POSTs of the server are the two clicks: a POST with the header to a route that takes GET is refused.
 	if rec := clickWith(h, summaryRoutes[patternCluster], "127.0.0.1:8080", sameOrigin); rec.Code != http.StatusMethodNotAllowed {
@@ -294,7 +296,7 @@ func TestAnAnswerIsForgottenAtARestart(t *testing.T) {
 	}
 	// A restart: the state is on disk and the answer is not.
 	restarted := handlerOf(r.cycled(fake))
-	if body := get(restarted, askRoutes[patternAsks]).Body.String(); !strings.Contains(body, noAnswers) {
+	if body := get(restarted, askRoutes[patternAsks]).Body.String(); !strings.Contains(body, testkit.NoAnswers) {
 		t.Errorf("a restart kept the answer: %s", body)
 	}
 }
@@ -331,7 +333,7 @@ func TestAnAnswerIsDroppedWhenThePinMovesAndTheNextClickAsksAgain(t *testing.T) 
 	var got model.Answer
 	decode(t, click(h, pathAsk), &got)
 	if got.Newest != "1.37.0" || len(fake.questions()) != 2 {
-		t.Errorf("answer %+v after %d questions", got, len(fake.questions()))
+		t.Errorf(answerAfter, got, len(fake.questions()))
 	}
 }
 
@@ -406,7 +408,7 @@ func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.
 	if behind != 1 {
 		t.Errorf("the versions cycle ran %d behind", behind)
 	}
-	if rec := click(handlerOf(o), pathAsk); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"verdict":"refuses"`) {
+	if rec := click(handlerOf(o), pathAsk); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), testkit.RefusesVerdict) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	after := lines()[len(cycles):]

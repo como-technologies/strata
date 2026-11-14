@@ -95,7 +95,7 @@ func argumentsOf(t *testing.T, bin, dir, command string) []string {
 	file := filepath.Join(t.TempDir(), "arguments")
 	t.Setenv("ARGUMENTS_FILE", file)
 	if code, out := runBash(t, dir, bin, command); code != 0 {
-		t.Errorf("the command %q exited with %d:\n%s", command, code, out)
+		t.Errorf(commandExited, command, code, out)
 		return nil
 	}
 	raw, err := os.ReadFile(file)
@@ -117,32 +117,39 @@ func writeTool(t *testing.T, path, body string) {
 	}
 }
 
-// markersIn lists the files that a command substitution of a name wrote in dir.
-func markersIn(t *testing.T, dir string) []string {
+// needBash skips the test when bash is not on the PATH.
+func needBash(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash is not on the PATH")
+	}
+}
+
+// noMarkers fails when a command substitution of a name wrote a file in dir: the name ran as code.
+func noMarkers(t *testing.T, dir string) {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out []string
+	var made []string
 	for _, e := range entries {
 		if regexp.MustCompile(`^[MNO]-`).MatchString(e.Name()) {
-			out = append(out, e.Name())
+			made = append(made, e.Name())
 		}
 	}
-	return out
+	if len(made) != 0 {
+		t.Errorf("a name ran as code and wrote %q", made)
+	}
 }
 
 // Each command of the card "Check this yourself", of the splash for a text above the cap, and of the splash for a page with no
 // records pastes as one argument for each name. A name with a quote, a space, a command substitution, or a backtick never runs and
 // never splits. A name that needs no quote stays as it is.
 func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("bash is not on the PATH")
-	}
+	needBash(t)
 	dex := registryUidOf(t, loadSet(t, devdata.StateOK), "dex")
 	k8s := registryUidOf(t, loadSet(t, devdata.StateTextTooLarge), "kubernetes")
-	const baseline = "7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35"
 	for _, c := range shellNames {
 		t.Run(c.kind, func(t *testing.T) {
 			bin, dir := checkWork(t, "")
@@ -173,11 +180,11 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 			ok := renamedSet(t, devdata.StateOK, [][2]string{{"fred-identity", profile}, {"quarry-1", cluster}, {`"dex"`, pack}, {`"addon/dex"`, "addon/" + pack}})
 			pages := pagesOf(t, ok, "#p-"+encodeURIComponent(subject), packPage(subject, "addon", pack))
 			want := map[string][]string{
-				"Does Palette still have this version?":   {"verify", "record.json"},
-				"Who changed it?":                         {"verify", "record.json", "--who"},
-				"What changed?":                           {"compare", "record.json", subject, "--full"},
-				"Does this cluster still run the record?": {"compare", "record.json", "cluster:" + cluster + "/" + profile},
-				"What does the move change?":              {"compare", "pack:" + dex + "/" + pack + "@2.42.0", "pack:" + dex + "/" + pack + "@2.44.0", "--full"},
+				qPaletteHas:                  {"verify", "record.json"},
+				"Who changed it?":            {"verify", "record.json", "--who"},
+				"What changed?":              {"compare", "record.json", subject, "--full"},
+				qClusterRuns:                 {"compare", "record.json", "cluster:" + cluster + "/" + profile},
+				"What does the move change?": {"compare", "pack:" + dex + "/" + pack + "@2.42.0", "pack:" + dex + "/" + pack + "@2.44.0", "--full"},
 				"Which newer versions does Palette list?": {"behind", "record.json", "--pin", "addon/" + pack},
 			}
 			seen := map[string]bool{}
@@ -206,19 +213,16 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 
 			// The splash of a text above the cap: the published side of dex, and the move of kubernetes.
 			large := renamedSet(t, devdata.StateTextTooLarge, [][2]string{{"fred-identity", profile}, {`"dex"`, pack}, {`"addon/dex"`, "addon/" + pack}, {`"kubernetes"`, kubernetes}, {`"k8s/kubernetes"`, "k8s/" + kubernetes}})
-			splashes := pagesOf(t, large, packPage(subject, "addon", pack), packPage("barney-base@1.5.0", "k8s", kubernetes))
-			const title = "Too much rock to carry"
-			check("the splash of dex", commandAfter(t, splashes[0], title), []string{"compare", "record.json", subject, "--full"})
-			check("the splash of kubernetes", commandAfter(t, splashes[1], title),
+			splashes := pagesOf(t, large, packPage(subject, "addon", pack), packPage(k8sSubject, "k8s", kubernetes))
+			check("the splash of dex", commandAfter(t, splashes[0], tooLargeTitle), []string{"compare", "record.json", subject, "--full"})
+			check("the splash of kubernetes", commandAfter(t, splashes[1], tooLargeTitle),
 				[]string{"compare", "pack:" + k8s + "/" + kubernetes + "@1.35.3", "pack:" + k8s + "/" + kubernetes + "@1.36.2", "--full"})
 
 			// The splash of a page with no records names the cluster by its uid.
-			first := renamedSet(t, devdata.StateNoRecords, [][2]string{{baseline, uid}})
-			check("the splash with no records", commandAfter(t, pagesOf(t, first, "#overview")[0], "No pipeline approved that content."), []string{"--first-seen", uid})
+			first := renamedSet(t, devdata.StateNoRecords, [][2]string{{testkit.ClusterUID, uid}})
+			check("the splash with no records", commandAfter(t, pagesOf(t, first, "#overview")[0], noApproval), []string{"--first-seen", uid})
 
-			if made := markersIn(t, dir); len(made) != 0 {
-				t.Errorf("a name ran as code and wrote %q", made)
-			}
+			noMarkers(t, dir)
 		})
 	}
 }

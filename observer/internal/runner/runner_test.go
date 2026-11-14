@@ -25,14 +25,14 @@ func fake(t *testing.T, body string) Runner {
 func TestExitOneIsAnAnswer(t *testing.T) {
 	r, err := fake(t, `echo '{"same":false}'; exit 1`).Run(context.Background(), CmdCompare, "a.json", "b.json", "--json", "-q")
 	if err != nil || r.Exit != 1 || !strings.Contains(string(r.Stdout), "same") {
-		t.Fatalf("result %+v, error %v", r, err)
+		t.Fatalf(testkit.ResultAndError, r, err)
 	}
 }
 
 func TestExitTwoWithADocumentIsAnAnswer(t *testing.T) {
 	r, err := fake(t, `echo '{"pins":[]}'; exit 2`).Run(context.Background(), CmdBehind, "a.json", FlagNoImpact, "--json", "-q")
 	if err != nil || r.Exit != 2 {
-		t.Fatalf("result %+v, error %v", r, err)
+		t.Fatalf(testkit.ResultAndError, r, err)
 	}
 }
 

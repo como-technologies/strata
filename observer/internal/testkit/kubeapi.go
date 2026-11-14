@@ -79,7 +79,7 @@ func (a *KubeAPI) Requests() []KubeRequest {
 // token and the CA is the directory of the two files.
 func (a *KubeAPI) Env() map[string]string {
 	host, port, _ := strings.Cut(a.Host, ":")
-	return map[string]string{"KUBERNETES_SERVICE_HOST": host, "KUBERNETES_SERVICE_PORT": port}
+	return map[string]string{KubeHost: host, KubePort: port}
 }
 
 // Dir is the directory that holds the token and the CA.

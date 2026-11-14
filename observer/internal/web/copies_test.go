@@ -119,7 +119,7 @@ func TestNoTextOfThePageSaysBehindForANewerVersion(t *testing.T) {
 // The check of a copy of this cluster writes the badge of "same-content" in the words of the book, "Same content", in the card of the
 // versions and in the card "Check this yourself". It is not a drift, and it does not read OK.
 func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
-	book := strings.Join(strings.Fields(string(readFile(t, "../../../docs/src/development/observer-api.md"))), " ")
+	book := strings.Join(strings.Fields(string(readFile(t, serverPage))), " ")
 	mustHold(t, "observer-api.md", book, "`same-content` reads \"Same content\" on the row of the cluster copy.")
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i := range v.Profiles {
@@ -128,12 +128,12 @@ func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
 			}
 		}
 	})})
-	const same = `<span class="badge g">Same content</span>`
-	page := pagesOf(t, dir, "#p-"+dexSubject)[0]
+	same := badge("g", "Same content")
+	page := pagesOf(t, dir, fredHash)[0]
 	mustHold(t, "the card of the versions", page, `<div class="h">This cluster's copy in Palette `+same+`</div>`)
 	var answer string
 	for _, r := range termRows(t, page) {
-		if r.question == "Does this cluster still run the record?" {
+		if r.question == qClusterRuns {
 			answer = r.answer
 		}
 	}
@@ -147,18 +147,19 @@ func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
 func TestTheNoteOfAFindingAgreesWithTheUseCaseOfTheEditInPlace(t *testing.T) {
 	useCase := strings.Join(strings.Fields(string(readFile(t, "../../../docs/src/use-cases/edited-in-place.md"))), " ")
 	script := readScripts(t)
-	for _, sentence := range []string{
-		"Do not repair the edited version in place: that is a second edit.",
-		"Publish a new version with the change through review, and move the clusters to it.",
-	} {
+	const (
+		noRepair   = "Do not repair the edited version in place: that is a second edit."
+		publishNew = "Publish a new version with the change through review, and move the clusters to it."
+		restore    = "Restore the version"
+	)
+	for _, sentence := range []string{noRepair, publishNew} {
 		mustHold(t, "the use case", useCase, sentence)
 		mustHold(t, "the scripts", script, sentence)
 	}
-	mustNotHold(t, "the scripts", script, "Restore the version first")
-	mustNotHold(t, "the use case", useCase, "Restore the version first")
-	page := shown(t, devdata.StateOK, "#p-"+dexSubject)[0]
-	mustHold(t, "the profile", page, `<div class="note r small"><b>What to do.</b> Do not repair the edited version in place: that is a second edit. `+
-		`Publish a new version with the change through review, and move the clusters to it. A new cluster gets this edit at once. `+
+	mustNotHold(t, "the scripts", script, restore)
+	mustNotHold(t, "the use case", useCase, restore)
+	page := shown(t, devdata.StateOK, fredHash)[0]
+	mustHold(t, "the profile", page, `<div class="note r small"><b>What to do.</b> `+noRepair+` `+publishNew+` A new cluster gets this edit at once. `+
 		`The finding clears when the version goes back to its record.`)
-	mustNotHold(t, "the profile", page, "Restore the version")
+	mustNotHold(t, "the profile", page, restore)
 }

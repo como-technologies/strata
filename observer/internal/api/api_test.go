@@ -25,7 +25,7 @@ var summaryRoutes = map[string]string{
 	patternCluster:    "/v1/cluster",
 	patternFindings:   "/v1/findings",
 	patternProfiles:   "/v1/profiles",
-	patternProfile:    "/v1/profiles/aws-stack@1.1.0",
+	patternProfile:    pathProfileByName + "@1.1.0",
 	patternNewer:      "/v1/newer",
 	patternNotChecked: "/v1/notchecked",
 	patternEvents:     "/v1/events",
@@ -40,7 +40,7 @@ var detailRoutes = map[string][]string{
 
 // askRoutes are the routes of the click "Ask Palette". ask_test.go holds the tests of their answers.
 var askRoutes = map[string]string{
-	patternAsks: "/v1/asks",
+	patternAsks: testkit.AsksRoute,
 	patternAsk:  pathAsk,
 }
 
@@ -148,7 +148,7 @@ func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
 func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 	r := newRig(t)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
-	const jsonType, textType = "application/json", "text/plain; charset=utf-8"
+	const jsonType, textType = testkit.JSONType, "text/plain; charset=utf-8"
 	for _, c := range []struct {
 		name, path string
 		status     int
@@ -159,7 +159,7 @@ func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 		{"findings", summaryRoutes[patternFindings], 200, jsonType},
 		{"profiles", summaryRoutes[patternProfiles], 200, jsonType},
 		{"a profile by name and version", summaryRoutes[patternProfile], 200, jsonType},
-		{"a profile by name", "/v1/profiles/aws-stack", 200, jsonType},
+		{"a profile by name", pathProfileByName, 200, jsonType},
 		{"newer", summaryRoutes[patternNewer], 200, jsonType},
 		{"not checked", summaryRoutes[patternNotChecked], 200, jsonType},
 		{"events", summaryRoutes[patternEvents], 200, jsonType},
@@ -212,10 +212,10 @@ func TestTheRootServesThePageAndEachOtherPathIsNotAnAnswerOfTheAPI(t *testing.T)
 		_, _ = w.Write([]byte("<title>page</title>"))
 	})
 	h := (&Server{Source: stub{}, Page: page}).Handler()
-	if rec := get(h, "/"); rec.Code != 200 || !strings.Contains(rec.Body.String(), "page") || rec.Header().Get("Content-Security-Policy") == "" {
+	if rec := get(h, "/"); rec.Code != 200 || !strings.Contains(rec.Body.String(), "page") || rec.Header().Get(testkit.HeaderPolicy) == "" {
 		t.Errorf("status %d, body %q, headers %v", rec.Code, rec.Body.String(), rec.Header())
 	}
-	if rec := get(h, "/v1/nope"); rec.Code != 404 || rec.Header().Get("Content-Type") != "application/json" {
+	if rec := get(h, "/v1/nope"); rec.Code != 404 || rec.Header().Get("Content-Type") != testkit.JSONType {
 		t.Errorf("status %d, type %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }
@@ -231,9 +231,9 @@ func TestTheClusterRouteGivesEachValueOfThePage(t *testing.T) {
 		clock model.Clock
 	}{
 		{model.PageNoRecords, 0, model.Clock{Every: every}},
-		{model.PageLost, 1, model.Clock{Every: every, FailedRuns: 2, LastError: &model.ErrorRef{Kind: "transport"}}},
-		{model.PageLost, 1, model.Clock{Every: every, FailedRuns: 2, LastError: &model.ErrorRef{Kind: "api", Status: 401}}},
-		{model.PageStale, 1, model.Clock{Every: every, FailedRuns: 2, LastError: &model.ErrorRef{Kind: "unknown"}}},
+		{model.PageLost, 1, model.Clock{Every: every, FailedRuns: 2, LastError: &model.ErrorRef{Kind: docs.KindTransport}}},
+		{model.PageLost, 1, model.Clock{Every: every, FailedRuns: 2, LastError: &model.ErrorRef{Kind: docs.KindAPI, Status: 401}}},
+		{model.PageStale, 1, model.Clock{Every: every, FailedRuns: 2, LastError: &model.ErrorRef{Kind: docs.KindUnknown}}},
 		{model.PageStale, 1, model.Clock{Every: every, Last: &old}},
 		{model.PageFirstLoad, 1, model.Clock{Every: every}},
 		{model.PageOK, 1, model.Clock{Every: every, Last: &good}},
@@ -279,7 +279,7 @@ func TestTheProfileRowsHoldTheirFindingsAndWho(t *testing.T) {
 	var all ProfilesView
 	decode(t, get(h, summaryRoutes[patternProfiles]), &all)
 	var one ProfileView
-	decode(t, get(h, "/v1/profiles/aws-stack"), &one)
+	decode(t, get(h, pathProfileByName), &one)
 	if len(all.Profiles) != 1 || one.Name != "aws-stack" || one.Status != model.StatusDrift || len(one.Findings) != 2 || len(one.Who) != 1 || one.Who[0].Actor != "Betty Rubble" {
 		t.Fatalf("one %+v", one)
 	}
@@ -328,7 +328,7 @@ func TestTheDetailRouteSplitsTheValuesInThreeLists(t *testing.T) {
 	v := got.Values
 	if len(v.Settings) != 1 || v.Settings[0].Path != "charts.aws-ebs-csi-driver.controller.replicaCount" || v.Settings[0].Old != sentinelValue || v.Settings[0].New != sentinelValue ||
 		len(v.FollowsTheVersion) != 1 || v.FollowsTheVersion[0].Path != "charts.aws-ebs-csi-driver.image.tag" ||
-		len(v.RepeatsTheLists) != 1 || v.RepeatsTheLists[0].Path != "pack.content.images[0].image" || !v.Parseable {
+		len(v.RepeatsTheLists) != 1 || v.RepeatsTheLists[0].Path != testkit.ImagePath || !v.Parseable {
 		t.Errorf("values %+v", v)
 	}
 	if len(got.Flags) != 2 || got.Flags[0] != "AUTHORED" || got.Flags[1] != "IMAGES" ||
@@ -427,7 +427,7 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 		t.Fatal(err)
 	}
 	// strata keeps the verdict of the drifted record, and gives the reason in place of the writes
-	unread := regexp.MustCompile(`"who":\[[^\]]*\]`).ReplaceAllString(string(raw), `"whoError":"HTTP 403: AUDIT-REASON-SENTINEL"`)
+	unread := regexp.MustCompile(`"who":\[[^\]]*\]`).ReplaceAllString(string(raw), `"whoError":"HTTP 403: `+testkit.AuditSentinel+`"`)
 	if unread == string(raw) {
 		t.Fatal("the fixture holds no who")
 	}
@@ -457,7 +457,7 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 	decode(t, get(h, summaryRoutes[patternEvents]), &events)
 	sentences := 0
 	for _, e := range events.Events {
-		if e.Reason == "AuditUnread" && e.Message == "The audit log could not be read, so this does not say who made the change." {
+		if e.Reason == "AuditUnread" && e.Message == testkit.AuditUnread {
 			sentences++
 		}
 	}
@@ -465,12 +465,12 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 		t.Errorf("events %+v", events)
 	}
 	for _, route := range []string{"cluster", "findings", "profiles", "newer", "notchecked", "events"} {
-		if body := get(h, "/v1/"+route).Body.String(); strings.Contains(body, "AUDIT-REASON-SENTINEL") {
+		if body := get(h, "/v1/"+route).Body.String(); strings.Contains(body, testkit.AuditSentinel) {
 			t.Errorf("/v1/%s holds the text of the error: %s", route, body)
 		}
 	}
 	// the log of the pod names the status and never the body of the answer
-	if line := r.log.String(); strings.Contains(line, "AUDIT-REASON-SENTINEL") || !strings.Contains(line, `reason="HTTP 403"`) {
+	if line := r.log.String(); strings.Contains(line, testkit.AuditSentinel) || !strings.Contains(line, `reason="HTTP 403"`) {
 		t.Errorf("log %q", line)
 	}
 }

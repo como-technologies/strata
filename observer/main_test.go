@@ -50,6 +50,36 @@ func TestAnUnknownCommandExitsTwo(t *testing.T) {
 	}
 }
 
+// exitsTwoSaying runs the observer with args, and fails when it does not exit 2 with each of the words on stderr and
+// nothing on stdout. It gives the text on stderr.
+func exitsTwoSaying(t *testing.T, args []string, words ...string) string {
+	t.Helper()
+	var out, errs bytes.Buffer
+	code := run(args, &out, &errs)
+	ok := code == 2 && out.Len() == 0
+	for _, w := range words {
+		ok = ok && strings.Contains(errs.String(), w)
+	}
+	if !ok {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errs.String())
+	}
+	return errs.String()
+}
+
+const (
+	// sameCompare is the answer of `compare` for two sides that are the same, before fakeStrata adds the schema.
+	sameCompare = `{"same":true,"sameContent":true}`
+	// clusterUIDRequired is the error of a run with no --cluster-uid.
+	clusterUIDRequired = "--cluster-uid is required"
+	// alertSend is the file that sends the message of an alert to a webhook.
+	alertSend = "internal/alert/send.go"
+	// verifyAndSnapshot ends the branch of verify of the scripts of fakeStrata and of holdingStrata. verify prints that no
+	// record changed, and snapshot writes the read of the cluster payments.
+	verifyAndSnapshot = `  echo '` + testkit.VerifyUnchanged + `' ;;
+snapshot) echo '` + testkit.ClusterPayments + `' > "$out" ;;
+`
+)
+
 // fakeStrata writes a script that stands for the strata binary. compare is the line that
 // `compare` prints. verifyExit is the exit code of `verify`.
 func fakeStrata(t *testing.T, compare string, verifyExit int, behindFails bool) string {
@@ -58,9 +88,7 @@ func fakeStrata(t *testing.T, compare string, verifyExit int, behindFails bool) 
 	return testkit.Strata(t, `case $cmd in
 verify)
   if [ `+strconv.Itoa(verifyExit)+` = 2 ]; then echo '{"error":{"kind":"transport","message":"SENTINEL"}}' >&2; exit 2; fi
-  echo '`+testkit.VerifyUnchanged+`' ;;
-snapshot) echo '`+testkit.ClusterPayments+`' > "$out" ;;
-compare) echo '`+compare+`'; case '`+compare+`' in *'"same":true'*) exit 0 ;; *) exit 1 ;; esac ;;
+`+verifyAndSnapshot+`compare) echo '`+compare+`'; case '`+compare+`' in *'"same":true'*) exit 0 ;; *) exit 1 ;; esac ;;
 behind)
   if [ `+strconv.FormatBool(behindFails)+` = true ]; then echo '{"error":{"kind":"api","status":404}}' >&2; exit 2; fi
   echo '{"schema":"`+docs.BehindSchema+`","tool":{"version":"0.29.0"},"pins":[]}' ;;
@@ -77,7 +105,7 @@ func onceArgs(t *testing.T, bin string) []string {
 
 func TestOnceExitsZeroWithNoFindingAndPrintsTheSummary(t *testing.T) {
 	var out, errs bytes.Buffer
-	code := run(onceArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)), &out, &errs)
+	code := run(onceArgs(t, fakeStrata(t, sameCompare, 0, false)), &out, &errs)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errs.String())
 	}
@@ -92,7 +120,7 @@ func TestOnceExitsZeroWithNoFindingAndPrintsTheSummary(t *testing.T) {
 
 func TestOnceExitsOneWhenAFindingExists(t *testing.T) {
 	var out, errs bytes.Buffer
-	code := run(onceArgs(t, fakeStrata(t, `{"same":false,"sameContent":false,"rootB":"x","packs":[{"key":"k8s/kubernetes","status":"changed"}]}`, 0, false)), &out, &errs)
+	code := run(onceArgs(t, fakeStrata(t, drifting, 0, false)), &out, &errs)
 	var s model.Summary
 	if err := json.Unmarshal(out.Bytes(), &s); err != nil {
 		t.Fatalf("stdout %q: %v", out.String(), err)
@@ -135,19 +163,14 @@ func TestOnceRefusesAMissingFlagAndAPeriodThatIsNotPositive(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"no cluster uid", without("--cluster-uid"), "--cluster-uid is required"},
+		{"no cluster uid", without("--cluster-uid"), clusterUIDRequired},
 		{"no records", without("--records"), "--records is required"},
 		{"no work", without("--work"), "--work is required"},
 		{"no state", without("--state"), "--state is required"},
 		{"a period of zero", append(slices.Clone(good), "--content-every", "0s"), "more than zero"},
 		{"a flag that does not exist", append(slices.Clone(good), "--nope"), "flag provided but not defined"},
 	} {
-		t.Run(c.name, func(t *testing.T) {
-			var out, errs bytes.Buffer
-			if code := run(c.args, &out, &errs); code != 2 || !strings.Contains(errs.String(), c.want) || out.Len() != 0 {
-				t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errs.String())
-			}
-		})
+		t.Run(c.name, func(t *testing.T) { exitsTwoSaying(t, c.args, c.want) })
 	}
 }
 
@@ -169,9 +192,9 @@ func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnl
 		allowed []string
 	}{
 		{[]string{`"POST"`, `http.Post(`, `.PostForm(`}, nil},
-		{[]string{`http.MethodPost`}, []string{"internal/api/api.go", "internal/alert/send.go"}},
-		{[]string{`"net/http"`, `"net"`}, []string{"internal/api/", "internal/kube/", "internal/alert/send.go", "internal/testkit/"}},
-		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go", "internal/kube/secrets.go", "internal/alert/send.go"}},
+		{[]string{`http.MethodPost`}, []string{"internal/api/api.go", alertSend}},
+		{[]string{`"net/http"`, `"net"`}, []string{"internal/api/", "internal/kube/", alertSend, "internal/testkit/"}},
+		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go", "internal/kube/secrets.go", alertSend}},
 	}
 	for path, raw := range goFiles(t) {
 		if strings.HasSuffix(path, "_test.go") {
@@ -357,7 +380,7 @@ func TestNoLocalNameHidesAPackageThatItsFileImports(t *testing.T) {
 
 func TestOnceExitsOneWhenAFindingExistsAlsoIfTheOtherCycleFailed(t *testing.T) {
 	var out, errs bytes.Buffer
-	code := run(onceArgs(t, fakeStrata(t, `{"same":false,"sameContent":false,"rootB":"x","packs":[{"key":"k8s/kubernetes","status":"changed"}]}`, 0, true)), &out, &errs)
+	code := run(onceArgs(t, fakeStrata(t, drifting, 0, true)), &out, &errs)
 	var s model.Summary
 	if err := json.Unmarshal(out.Bytes(), &s); err != nil {
 		t.Fatalf("stdout %q: %v", out.String(), err)
@@ -387,25 +410,18 @@ func startServe(t *testing.T, args []string) (addr string, stop func() int, stde
 func TestServeRefusesAnAddressThatIsNotLoopbackWithExitTwo(t *testing.T) {
 	for _, addr := range []string{"0.0.0.0:8080", ":8080", "[::]:8080", "10.0.0.5:8080", "localhost:8080", "127.0.0.1"} {
 		t.Run(addr, func(t *testing.T) {
-			var out, errs bytes.Buffer
 			args := append([]string{"serve"}, onceArgs(t, "strata")[1:]...)
-			code := run(append(args, "--listen="+addr), &out, &errs)
-			if code != 2 || !strings.Contains(errs.String(), "--listen") || !strings.Contains(errs.String(), "loopback") || out.Len() != 0 {
-				t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errs.String())
-			}
+			exitsTwoSaying(t, append(args, "--listen="+addr), "--listen", "loopback")
 		})
 	}
 }
 
 func TestServeRefusesAMissingFlagLikeOnce(t *testing.T) {
-	var out, errs bytes.Buffer
-	if code := run([]string{"serve", "--listen", testkit.PortZero}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "--cluster-uid is required") {
-		t.Errorf("exit %d, stderr %q", code, errs.String())
-	}
+	exitsTwoSaying(t, []string{"serve", "--listen", testkit.PortZero}, clusterUIDRequired)
 }
 
 func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
-	args := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	args := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
 	addr, stop, stderr := startServe(t, args)
 	client := &http.Client{Timeout: 5 * time.Second}
 	get := func(method, path, host string) *http.Response {
@@ -424,11 +440,11 @@ func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
 		t.Cleanup(func() { resp.Body.Close() })
 		return resp
 	}
-	if resp := get("GET", "/v1/cluster", ""); resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "application/json" || resp.Header.Get("Cache-Control") != "no-store" {
+	if resp := get("GET", "/v1/cluster", ""); resp.StatusCode != 200 || resp.Header.Get("Content-Type") != testkit.JSONType || resp.Header.Get("Cache-Control") != "no-store" {
 		t.Errorf("GET /v1/cluster: %d %v", resp.StatusCode, resp.Header)
 	}
 	// The route / serves the page, with the headers of the server.
-	if resp := get("GET", "/", ""); resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") || resp.Header.Get("Content-Security-Policy") == "" {
+	if resp := get("GET", "/", ""); resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") || resp.Header.Get(testkit.HeaderPolicy) == "" {
 		t.Errorf("GET /: %d %v", resp.StatusCode, resp.Header)
 	}
 	if resp := get("GET", "/app.js", ""); resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
@@ -449,18 +465,18 @@ func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
 }
 
 func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
-	args := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	args := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
 	addr, stop, _ := startServe(t, args)
 	defer stop()
 	// The state of the page reads the content cycle only, so the wait also reads the versions cycle.
-	testkit.WaitFor(t, "the first cycle of each timer", func() bool {
+	testkit.WaitFor(t, testkit.FirstCycles, func() bool {
 		var got api.ClusterView
 		return getJSON(addr, "/v1/cluster", &got) && got.Page == model.PageOK && got.Versions.ReadAt != nil
 	})
 }
 
 func TestHealthExitsZeroWithTheServerUpAndOneWithNone(t *testing.T) {
-	args := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	args := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
 	addr, stop, _ := startServe(t, args)
 	var errs bytes.Buffer
 	if code := run([]string{"health", "--listen", addr}, io.Discard, &errs); code != 0 {
@@ -492,9 +508,7 @@ func holdingStrata(t *testing.T, hold, pids string) string {
 	return testkit.Strata(t, `case $cmd in
 verify)
   if [ -e '`+hold+`' ]; then sleep 0.2; fi
-  echo '`+testkit.VerifyUnchanged+`' ;;
-snapshot) echo '`+testkit.ClusterPayments+`' > "$out" ;;
-compare)
+`+verifyAndSnapshot+`compare)
   case $ref in
   pack:*)
     if [ -e '`+hold+`' ]; then echo $$ > '`+pids+`'; exec sleep 60; fi
@@ -593,7 +607,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 // directory of the process. So a relative --strata must become absolute at the start, or each run
 // fails with no process.
 func TestARelativeStrataPathAndANameOnThePathRunInEachCycle(t *testing.T) {
-	bin := fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)
+	bin := fakeStrata(t, sameCompare, 0, false)
 	dir := filepath.Dir(bin)
 	for _, c := range []struct{ name, path string }{
 		{"the current directory", "./strata"},
@@ -634,14 +648,14 @@ func podsAPI(t *testing.T) *testkit.KubeAPI {
 func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 	kubeAPI := podsAPI(t)
 	var out, errs bytes.Buffer
-	args := append(onceArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)), "--kube-dir", kubeAPI.Dir())
+	args := append(onceArgs(t, fakeStrata(t, sameCompare, 0, false)), "--kube-dir", kubeAPI.Dir())
 	if code := run(args, &out, &errs); code != 0 {
 		t.Fatalf("exit %d, stderr %s", code, errs.String())
 	}
 	if n := len(kubeAPI.Requests()); n != 0 {
 		t.Errorf("%d requests went to the API server", n)
 	}
-	serve := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	serve := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
 	addr, stop, _ := startServe(t, append(serve, "--kube-dir", kubeAPI.Dir()))
 	// With --read-pods, the content cycle reads the pods. So the count of the requests waits for its end.
 	testkit.WaitFor(t, "the first content cycle", func() bool {
@@ -661,7 +675,7 @@ func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *testing.T) {
 	kubeAPI := podsAPI(t)
 	var out, errs bytes.Buffer
-	args := append(onceArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)), "--read-pods", "--kube-dir", kubeAPI.Dir())
+	args := append(onceArgs(t, fakeStrata(t, sameCompare, 0, false)), "--read-pods", "--kube-dir", kubeAPI.Dir())
 	if code := run(args, &out, &errs); code != 0 {
 		t.Fatalf("exit %d, stderr %s", code, errs.String())
 	}
@@ -676,7 +690,7 @@ func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *te
 
 func TestServeWithReadPodsServesTheDigestsOfTheImages(t *testing.T) {
 	kubeAPI := podsAPI(t)
-	args := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	args := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
 	addr, stop, _ := startServe(t, append(args, "--read-pods", "--kube-dir", kubeAPI.Dir()))
 	var doc model.Observed
 	testkit.WaitFor(t, "the first read of the pods", func() bool {
@@ -690,15 +704,12 @@ func TestServeWithReadPodsServesTheDigestsOfTheImages(t *testing.T) {
 }
 
 func TestReadPodsNeedsTheVariablesOfTheKubelet(t *testing.T) {
-	t.Setenv("KUBERNETES_SERVICE_HOST", "")
-	t.Setenv("KUBERNETES_SERVICE_PORT", "")
+	t.Setenv(testkit.KubeHost, "")
+	t.Setenv(testkit.KubePort, "")
 	for _, command := range []string{"once", "serve"} {
 		t.Run(command, func(t *testing.T) {
-			var out, errs bytes.Buffer
 			args := append([]string{command}, onceArgs(t, "strata")[1:]...)
-			if code := run(append(args, "--read-pods"), &out, &errs); code != 2 || !strings.Contains(errs.String(), "KUBERNETES_SERVICE_HOST") || out.Len() != 0 {
-				t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errs.String())
-			}
+			exitsTwoSaying(t, append(args, "--read-pods"), testkit.KubeHost)
 		})
 	}
 }
@@ -711,7 +722,7 @@ func TestSeedNeedsTheClusterAndThePod(t *testing.T) {
 		t.Errorf("exit %d, stderr %q", code, errs.String())
 	}
 	errs.Reset()
-	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	t.Setenv(testkit.KubeHost, "")
 	if code := runContext(context.Background(), []string{"seed", "--cluster-uid", "c1", "--namespace", "strata-observer", "--strata", "/no/strata"}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "kube-config") {
 		t.Errorf("exit %d, stderr %q", code, errs.String())
 	}

@@ -152,8 +152,9 @@ func TestAValueOfManyLinesShowsOnlyTheLinesThatDifferWithAtMostThreeLinesOfConte
 		wantBefore = append(wantBefore, fmt.Sprintf("d|%d|-|  key-%02d: old", i, i))
 		wantAfter = append(wantAfter, fmt.Sprintf("a|%d|+|  key-%02d: new", i, i))
 	}
-	wantBefore = append(wantBefore, "c|16||  key-16: same", gap)
-	wantAfter = append(wantAfter, "c|16||  key-16: same", gap)
+	const same = "c|16||  key-16: same"
+	wantBefore = append(wantBefore, same, gap)
+	wantAfter = append(wantAfter, same, gap)
 	sameRows(t, "Before", before, wantBefore)
 	sameRows(t, "After", after, wantAfter)
 	for side, lines := range map[string][]string{"Before": before, "After": after} {
@@ -161,6 +162,12 @@ func TestAValueOfManyLinesShowsOnlyTheLinesThatDifferWithAtMostThreeLinesOfConte
 			t.Errorf("%s shows %d lines of context, want at most 3", side, n)
 		}
 	}
+	rowIsShort(t, before, after)
+}
+
+// rowIsShort fails when the row of the two sides is 200 pixels tall or more.
+func rowIsShort(t *testing.T, before, after []string) {
+	t.Helper()
 	if h := rowHeight(t, before, after); h >= 200 {
 		t.Errorf("the row is %.0f pixels tall, want less than 200", h)
 	}
@@ -191,9 +198,7 @@ func TestTheRealKubeadmFileOfKubernetesShowsItsThreeChangedLines(t *testing.T) {
 	}
 	sameRows(t, "Before", before, side("d", "-", "v1.35"))
 	sameRows(t, "After", after, side("a", "+", "v1.36"))
-	if h := rowHeight(t, before, after); h >= 200 {
-		t.Errorf("the row is %.0f pixels tall, want less than 200", h)
-	}
+	rowIsShort(t, before, after)
 }
 
 // A value of one line reads as it did: the whole value, with quotes for a string. A value with one end of line at
@@ -268,8 +273,9 @@ func TestAMaskInALineOfAValueStaysAMask(t *testing.T) {
 	if !(strings.Contains(strings.Join(before, "\n"), wantMasked) && strings.Contains(strings.Join(after, "\n"), wantMasked)) {
 		t.Errorf("the lines do not show the mask of the password: %q and %q", before, after)
 	}
-	sameRows(t, "Before", before, []string{gap, "c|2||user: admin", wantMasked, "d|4|-|version: 1", "c|5||token: ********", gap})
-	sameRows(t, "After", after, []string{gap, "c|2||user: admin", wantMasked, "a|4|+|version: 2", "c|5||token: ********", gap})
+	const user, token = "c|2||user: admin", "c|5||token: ********"
+	sameRows(t, "Before", before, []string{gap, user, wantMasked, "d|4|-|version: 1", token, gap})
+	sameRows(t, "After", after, []string{gap, user, wantMasked, "a|4|+|version: 2", token, gap})
 	mustNotHold(t, "the page", page, clear)
 }
 
@@ -278,7 +284,7 @@ func TestTheUnifiedAndSplitViewsDoNotChange(t *testing.T) {
 	with := longSet(t, changedLeaf(lineValue(24, 10, 15, "old"), lineValue(24, 10, 15, "new")))
 	without := longSet(t, changedLeaf("v1.35", "v1.36"))
 	textOf := func(page string) string {
-		card := cardOf(t, page, `data-tab="`+k8sMove+`"`)
+		card := cardOf(t, page, tabOf(k8sMove))
 		at := strings.Index(card, `<div class="dblock"`)
 		if at < 0 {
 			t.Fatal("the card shows no text of the values")
@@ -289,7 +295,7 @@ func TestTheUnifiedAndSplitViewsDoNotChange(t *testing.T) {
 		var pages [2]string
 		for i, dir := range []string{with, without} {
 			if layout == layoutSplit {
-				pages[i] = clickIn(t, dir, "scratch", k8sHash, "0", `{"view":"split"}`).After
+				pages[i] = clickIn(t, dir, "scratch", k8sHash, "0", splitClick).After
 			} else {
 				pages[i] = pagesOf(t, dir, k8sHash)[0]
 			}
