@@ -149,10 +149,11 @@ done < <(jq -r '.packs[] | select(.type == "helm" or .type == "oci") | [.type, .
            registries.json 2>/dev/null)
 
 # ---- summary
-run_id=$(basename "$run")
-write_summary "strata live verification" ". Cluster \`$C\`, project \`$PALETTE_PROJECT_UID\`," \
-  "profile \`$N\` versions 1.0.0 (\`$P\`) and 1.0.1 (\`$P2\`), registries profile \`$R\`."
-{
+# digest_table: the section of summary.md that compares the three digests of each Helm and OCI
+# pack of release.json and registries.json. The digest of the registry is the first line of the
+# registry-digest-<type>.out of each check. Each text of a pack, such as its name, is a `cell` of
+# markdown_jq, and the start of each digest is a `code`.
+digest_table() {
   echo
   echo "## Pack-ref digests (#2, #3)"
   echo
@@ -167,19 +168,24 @@ write_summary "strata live verification" ". Cluster \`$C\`, project \`$PALETTE_P
     for k in helm oci; do
       [ -s "registry-digest-$k.out" ] && jq -n --arg k "$k" --arg d "$(head -n 1 "registry-digest-$k.out")" '{($k): $d}'
     done | jq -s 'add // {}' > registry-digests.json
-    jq -rs --slurpfile own registry-digests.json '
+    jq -rs --slurpfile own registry-digests.json "$markdown_jq"'
       def bare: sub("^sha256:"; "");
-      def cell: if . == "" then "-" else "`" + .[0:(if startswith("sha256:") then 19 else 12 end)] + "`" end;
+      def digest: if . == "" then "-" else .[0:(if startswith("sha256:") then 19 else 12 end)] | code end;
       .[].packs[]
       | (.refDigest // "") as $ref | (.registryDigest // "") as $pal | ($own[0][.type] // "") as $reg
       | ([$ref, $pal, $reg] | map(select(. != "") | bare) | unique) as $distinct
-      | "| \(.name) | \(.type) | \($ref | cell) | \($pal | cell) | \($reg | cell) | \(.hash.upstreamSource) | \(
+      | "| \(.name | cell) | \(.type | cell) | \($ref | digest) | \($pal | digest) | \($reg | digest) | \(.hash.upstreamSource | cell) | \(
           if $ref == "" then "no ref digest" elif ($distinct | length) == 1 then "equal" else "differ" end) |"
     ' $([ -s release.json ] && echo release.json) $([ -s registries.json ] && echo registries.json)
   else
     echo "No release or registries record; see snapshot-release.err and snapshot-registries.err."
   fi
-} >> summary.md
+}
+
+run_id=$(basename "$run")
+write_summary "strata live verification" ". Cluster \`$C\`, project \`$PALETTE_PROJECT_UID\`," \
+  "profile \`$N\` versions 1.0.0 (\`$P\`) and 1.0.1 (\`$P2\`), registries profile \`$R\`."
+digest_table >> summary.md
 
 total=$(command grep -cE '^(PASS|FAIL) ' steps.log)
 echo

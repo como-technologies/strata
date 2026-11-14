@@ -751,6 +751,12 @@ of the secret does not show, because the two sides hold the mask: see
     - `drops[]`, the architectures of the pinned version that it does not
       support.
   - `behind`: `true` when `newer` is not empty.
+  - `nextPatch`, for a pin that is behind a newer minor version: the newest
+    version in `newer` of the minor version of the pin. It is absent when the
+    newest version is of the minor version of the pin, and when the version of
+    the pin does not parse. It is also absent when `newer` has no version of the
+    minor version of the pin. See
+    [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
     version, `impact`, the impact level, and `flags[]`. `flags[]` holds
     `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, or `CHARTS` for each change.

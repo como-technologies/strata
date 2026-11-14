@@ -730,7 +730,10 @@ the kubeconfig in `~/.kube/`.
 `verify.sh` continues after a failed check, so one run shows each result. In
 `runs/<UTC time>/`:
 
-- `summary.md` has the table of results and the digest table.
+- `summary.md` has the table of results and the digest table. Each text in a
+  cell, such as the name of a pack, shows a `|`, a tag, and a mark of markdown as
+  text, as [the markdown comment](../reference/formats.md#the-markdown-comment)
+  does.
 - `<check>.out` and `<check>.err` hold the output of each command. A failed
   comparison names the layer and the value in its `.out`.
 - `raw/cluster`, `raw/addon`, `raw/release`, `raw/next`, and `raw/registries`

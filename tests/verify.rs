@@ -14759,6 +14759,63 @@ fn behind_names_the_final_version_and_each_later_version_for_a_pin_that_is_a_pre
     );
 }
 
+/// The criterion of #854: `--json` of `behind` gives the next patch of a pin that is behind a newer
+/// minor version. So a script names the patch, and splits no version.
+#[test]
+fn the_json_of_behind_gives_the_next_patch_of_a_pin_that_is_behind_a_newer_minor_version() {
+    // 1.63.1 is behind 1.65.2, 1.65.0, and 1.63.4. 1.65.0 is behind 1.65.2 alone, of its own minor
+    // version, so the bump names that patch
+    let more = ["1.63.4", "1.65.2"];
+    let mut entity = public_entity();
+    for v in more {
+        entity = with_tag(entity, v, &format!("pk-{v}"));
+    }
+    let api = serve_registry(
+        more.map(|v| csi_summary_with(v, None, &["aws"])).to_vec(),
+        &[("reg-public", entity)],
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let records: Vec<std::path::PathBuf> = ["1.63.1", "1.65.0"]
+        .iter()
+        .map(|pin| {
+            let path = dir.path().join(format!("{pin}.json"));
+            let record = snapshot_of(&api, &format!("pack:csi-aws-ebs@{pin}")).unwrap();
+            common::write_snapshot(&path, &record, false);
+            path
+        })
+        .collect();
+    let r = behind_of(&api, &records, &ops::BehindOptions::default());
+    let json = render::renderer(Format::Json, Paint::off(), false)
+        .render_behind(&r, false)
+        .unwrap();
+    let doc: Value = serde_json::from_str(&json).unwrap();
+    let pins: Vec<(&Value, &Value, &Value)> = doc["pins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (&p["version"], &p["newer"][0]["version"], &p["nextPatch"]))
+        .collect();
+    assert_eq!(
+        pins,
+        [
+            (
+                &serde_json::json!("1.63.1"),
+                &serde_json::json!("1.65.2"),
+                &serde_json::json!("1.63.4")
+            ),
+            (
+                &serde_json::json!("1.65.0"),
+                &serde_json::json!("1.65.2"),
+                &Value::Null
+            ),
+        ],
+        "{json}"
+    );
+    // `--since` reads the field of a previous report
+    let back: ops::BehindReport = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.pins[0].next_patch.as_deref(), Some("1.63.4"));
+}
+
 /// A registry with 1.63.1 and 1.65.0, and four versions that do not parse: 1.63.1.1, with a tail
 /// of numbers, the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text, and
 /// 1.66.develop, with two numbers and a tail of text.
@@ -18208,35 +18265,33 @@ fn a_behind_report_with_values_of_a_later_release_reads_with_no_error_and_writes
 
 // ---- a text of an answer in the markdown -----------------------------------------------------
 
-/// The criterion of #832: a message of Palette in a note of a diff, and in a verdict, shows each
-/// tag of HTML as text in the markdown of a pull request comment.
-#[test]
-fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() {
+/// The markdown of `verify` that quotes the message of Palette `message`, in three places: a note
+/// of a diff, a verdict, and the sync of a registry in a verdict. Each one holds `start`, the start
+/// of the message as the markdown writes it, after the words of strata.
+fn markdown_that_quotes(message: &str, start: &str) -> [String; 3] {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     // the note of a cluster whose repave strata could not read
-    let api = serve_repave(dir.path(), "cluster-merged", "Pending").failing(
-        repave_route(),
-        403,
-        common::ANSWER_TAGS,
-    );
+    let api =
+        serve_repave(dir.path(), "cluster-merged", "Pending").failing(repave_route(), 403, message);
     let recorded = snapshot_cluster(&api, None).unwrap();
     let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
-    let md = common::markdown()
+    let note = common::markdown()
         .render(&v.diff, &recorded, &v.live, false)
         .unwrap();
     assert!(
-        md.contains("(strata could not read its reasons: HTTP 403: &lt;a href="),
-        "{md}"
+        note.contains(&format!(
+            "(strata could not read its reasons: HTTP 403: {start}"
+        )),
+        "{note}"
     );
-    common::assert_answer_tags_as_text(&md);
 
     // the verdict of a record whose audit log Palette refuses
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
         profile_audits("t0"),
         403,
-        common::ANSWER_TAGS,
+        message,
     );
     let v = ops::verify_with(
         &recorded,
@@ -18246,25 +18301,33 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() 
         &Progress::silent(),
     )
     .unwrap();
-    let md = common::markdown().verdict(&v.diff).unwrap();
+    let verdict = common::markdown().verdict(&v.diff).unwrap();
     assert!(
-        md.contains("\n\nwho: not read: HTTP 403: &lt;a href="),
-        "{md}"
+        verdict.contains(&format!("\n\nwho: not read: HTTP 403: {start}")),
+        "{verdict}"
     );
-    common::assert_answer_tags_as_text(&md);
 
     // the verdict also names the message of the last sync of a registry
     let mut doc = serde_json::to_value(&v.diff).unwrap();
     doc["verify"]["registrySync"] = serde_json::json!({
-        "lastSyncedTime": "", "status": "Failed", "message": common::ANSWER_TAGS
+        "lastSyncedTime": "", "status": "Failed", "message": message
     });
     let synced: strata::diff::Diff = serde_json::from_value(doc).unwrap();
-    let md = common::markdown().verdict(&synced).unwrap();
+    let sync = common::markdown().verdict(&synced).unwrap();
     assert!(
-        md.contains("; the last sync of the registry failed: &lt;a href="),
-        "{md}"
+        sync.contains(&format!("; the last sync of the registry failed: {start}")),
+        "{sync}"
     );
-    common::assert_answer_tags_as_text(&md);
+    [note, verdict, sync]
+}
+
+/// The criterion of #832: a message of Palette in a note of a diff, and in a verdict, shows each
+/// tag of HTML as text in the markdown of a pull request comment.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() {
+    for md in markdown_that_quotes(common::ANSWER_TAGS, "&lt;a href=") {
+        common::assert_answer_tags_as_text(&md);
+    }
 }
 
 /// The criteria of #872: a message of Palette with a link, an emphasis, and two backticks shows
@@ -18272,53 +18335,27 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() 
 /// tag between them shows as text.
 #[test]
 fn the_markdown_of_a_note_and_of_a_verdict_shows_the_marks_of_markdown_of_a_message_as_text() {
-    let dir = tempfile::tempdir().unwrap();
-    common::make_fixtures(dir.path());
-    let api = serve_repave(dir.path(), "cluster-merged", "Pending").failing(
-        repave_route(),
-        403,
-        common::ANSWER_MARKS,
-    );
-    let recorded = snapshot_cluster(&api, None).unwrap();
-    let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
-    let md = common::markdown()
-        .render(&v.diff, &recorded, &v.live, false)
-        .unwrap();
-    assert!(
-        md.contains("(strata could not read its reasons: HTTP 403: \\[x\\]"),
-        "{md}"
-    );
-    common::assert_answer_marks_as_text(&md);
+    for md in markdown_that_quotes(common::ANSWER_MARKS, "\\[x\\]") {
+        common::assert_answer_marks_as_text(&md);
+    }
+}
 
-    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
-        profile_audits("t0"),
-        403,
-        common::ANSWER_MARKS,
-    );
-    let v = ops::verify_with(
-        &recorded,
-        &Palette::new(&api),
-        "t1",
-        &who_options(),
-        &Progress::silent(),
-    )
-    .unwrap();
-    let md = common::markdown().verdict(&v.diff).unwrap();
-    assert!(md.contains("\n\nwho: not read: HTTP 403: \\[x\\]"), "{md}");
-    common::assert_answer_marks_as_text(&md);
+/// The criterion of #890: a bare address in a message of Palette stays as it is in a note and in
+/// a verdict. So the link that GitHub makes of it holds no escape, and keeps its target.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_keeps_a_bare_address_of_a_message_as_it_is() {
+    for md in markdown_that_quotes(common::ANSWER_ADDRESSES, common::ANSWER_ADDRESSES) {
+        common::assert_answer_addresses_as_they_are(&md);
+    }
+}
 
-    let mut doc = serde_json::to_value(&v.diff).unwrap();
-    doc["verify"]["registrySync"] = serde_json::json!({
-        "lastSyncedTime": "", "status": "Failed", "message": common::ANSWER_MARKS
-    });
-    let synced: strata::diff::Diff = serde_json::from_value(doc).unwrap();
-    let md = common::markdown().verdict(&synced).unwrap();
-    assert!(
-        md.contains("; the last sync of the registry failed: \\[x\\]"),
-        "{md}"
-    );
-    common::assert_answer_marks_as_text(&md);
+/// The criterion of #890: a `@name` in a message of Palette notifies nobody in a note and in a
+/// verdict. So an issue or a pull request comment that quotes the message mentions no person.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_holds_no_mention_of_github_from_a_message() {
+    for md in markdown_that_quotes(common::ANSWER_MENTIONS, "@&#8203;octocat") {
+        common::assert_answer_mentions_as_text(&md);
+    }
 }
 
 /// The criterion of #832: the error of a search of the edge hosts shows each tag of HTML as text
@@ -18478,8 +18515,11 @@ fn the_markdown_of_the_consumers_line_shows_the_name_of_the_profile_as_text() {
         .render(&d, &recorded, &on_cluster, false)
         .unwrap();
     let tags = strata::text::html_text(common::ANSWER_TAGS);
+    // the name ends with a `>`, so the `@` of the version can start a mention, and it gets a space
     assert!(
-        md.contains(&format!("\n**Consumers:** {tags}@1.3.0 has 2 consumers;")),
+        md.contains(&format!(
+            "\n**Consumers:** {tags}@&#8203;1.3.0 has 2 consumers;"
+        )),
         "{md}"
     );
     common::assert_only_strata_tags(&common::outside_code_blocks(&md));

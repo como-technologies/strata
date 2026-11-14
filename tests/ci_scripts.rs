@@ -5196,6 +5196,51 @@ fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
     );
 }
 
+/// The criterion of #854: the issue of a pin that is behind a newer minor version names the next
+/// patch, from `nextPatch` of `strata behind`. The script splits no version. The patch is a text of
+/// an answer, so each tag of HTML in it shows as text.
+#[test]
+fn upstream_report_names_the_next_patch_of_a_pin_that_is_behind_a_newer_minor_version() {
+    let u = Report::upstream();
+    u.report(1, &["1.65.0", "1.63.4"], None);
+    let issue_with = |patch: &str| {
+        let mut report = read_json(&u.dir.path().join("report.json"));
+        report["pins"][0]["nextPatch"] = serde_json::json!(patch);
+        u.put("report.json", &report.to_string());
+        let o = u.run(&["releases/*.json", "--dry-run"]);
+        assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+        text(&o.stdout)
+    };
+    let body = issue_with("1.63.4");
+    assert!(
+        body.contains(
+            "| `1.63.1` | 1.65.0, 1.63.4; next patch 1.63.4 | 1.65.0: cluster-wide IDENTITY \
+             AUTHORED | - |"
+        ),
+        "{body}"
+    );
+    // the state line keeps the field, so the next run gives it to `--since`
+    assert!(
+        body.lines()
+            .nth(1)
+            .unwrap()
+            .contains("\"nextPatch\":\"1.63.4\""),
+        "{body}"
+    );
+
+    let body = issue_with(common::ANSWER_TAGS);
+    let cell = strata::text::markdown_cell(&format!(
+        "1.65.0, 1.63.4; next patch {}",
+        common::ANSWER_TAGS
+    ));
+    assert!(
+        body.contains(&format!("| `1.63.1` | {cell} |")),
+        "{cell}\n{body}"
+    );
+    let shown: Vec<&str> = body.lines().skip(2).collect();
+    common::assert_answer_tags_as_text(&shown.join("\n"));
+}
+
 /// A dry run calls no host, so it needs no token. The three scripts that have a host agree on
 /// this on GitLab too, where the token is the only credential.
 #[test]
@@ -5321,9 +5366,10 @@ fn each_script_that_writes_markdown_has_the_jq_functions_of_the_report_scripts()
     }
 }
 
-/// The criteria of #872: the jq functions of the scripts write each text as the helpers of
+/// The criteria of #872 and #890: the jq functions of the scripts write each text as the helpers of
 /// `strata::text` do. So `cell` shows each mark of markdown of a quoted text as text, also two
-/// backticks. It keeps a run of `_` inside a word as it is.
+/// backticks. It keeps a run of `_` inside a word as it is. A `@name` of the text notifies nobody.
+/// It keeps each bare address that GitHub surely links as it is.
 #[test]
 fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
     use strata::text::{code_cell, code_span, html_text, markdown_cell};
@@ -5343,6 +5389,14 @@ fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
         common::ANSWER_TAGS,
         common::ANSWER_MARKS,
         "``a`` ~~gone~~ ![i](x) a\\*b\\|c",
+        common::ANSWER_MENTIONS,
+        "(@a) @@b é@c _@d *@e\n@f|@g &@a <@b a@-b @",
+        common::ANSWER_ADDRESSES,
+        "www.a.example/@b x (www.a.example/@b) \"www.a.example/@b\" 'https://a.example/@b'",
+        "https://a.example/x_(y)) https://a.example/x_*~.\" http://A.b-c.example:8080/x?y=@z#`f`[g](h)",
+        "https://-a.example/@b https://a_b.example/@b https://localhost/@b xhttps://a.example/@b",
+        "https://a.example/é@b https://a.example/<b> https://a.example/a&amp; https:// www. a|https://a.example/b|c",
+        " \thttps://a.example/@b\n www.a.example/@c\r\x0c@d  www.a.example/\x0b@e",
         "aws_stack LTS__24.x é_ü __init__ a_ _b a_-b",
         "first\nsecond | `x` &amp;",
         "",
@@ -5363,6 +5417,8 @@ fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
         }
     }
     common::assert_answer_marks_as_text(&markdown_cell(common::ANSWER_MARKS));
+    common::assert_answer_mentions_as_text(&markdown_cell(common::ANSWER_MENTIONS));
+    common::assert_answer_addresses_as_they_are(&markdown_cell(common::ANSWER_ADDRESSES));
 }
 
 /// The GitLab functions and the host block of `pr-comment.sh` are those of `verify-report.sh`, line

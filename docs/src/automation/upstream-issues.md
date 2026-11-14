@@ -28,6 +28,13 @@ first line, and the label `strata-behind`:
 - **Closed**, with a comment, on the first run where each pin of the pack is
   current.
 
+For a pin that is behind a newer minor version, the newer column ends with
+`; next patch <version>`. A pin with no newer patch of its own minor version
+does not have this text. The patch is the newest patch of the minor version of
+the pin, and a team can take it before the move to the newest version. The
+script reads it from `nextPatch` of `strata behind`: see
+[The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
+
 A pack that strata could not check keeps its issue as it is. An issue of a pack
 that no record pins is left alone.
 
@@ -58,8 +65,9 @@ The issue shows each text of an answer as text, as
 [the markdown comment](../reference/formats.md#the-markdown-comment) does. Such
 a text is a message of Palette, the error of a pin, the name of a registry, or
 the subject of a record. A tag of HTML or a mark of markdown in it shows as
-text. The name of the pack, each pinned version, a floating tag, and the path of
-a record are in code spans. The fence of each span is longer than each run of
+text, and a `@name` in it notifies nobody. A bare address in it keeps its
+link. The name of the pack, each pinned version, a floating tag, and the path
+of a record are in code spans. The fence of each span is longer than each run of
 backticks in its value.
 The marker writes each `&`, `<`, and `>` of the pack name as an entity, so a
 `-->` cannot end the comment.
