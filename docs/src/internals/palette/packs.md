@@ -698,7 +698,7 @@ a pack ref names a registry whose name holds a `/` by its uid: see
 [Refs](../../reference/refs.md#rules).
 
 `GET /v1/registries/metadata` lists the registries that the project of the
-request can see. So two projects can get two listings, and a snapshot of a set
-reads the listing one time for each project: see
+request can see. So two projects can get two listings. A snapshot of a set reads
+the listing one time for each project: see
 [A set of clusters](../../commands/snapshot/set.md). The code of Palette shows
 it; no live run shows it yet.

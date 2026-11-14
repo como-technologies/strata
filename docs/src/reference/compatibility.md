@@ -1130,10 +1130,9 @@ field, a value, an input, or an option is in the sections above.
 - **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
-- **`pack-in-several-registries` gives a registry whose name holds a `/` by its uid.** Before,
-  `registries` and the message gave the name, and a ref with that name named another registry.
-  A script that looks for such a name in `registries` must look for the uid. See
-  [Refs](refs.md#rules).
+- **`pack-in-several-registries` names a registry with a `/` by its uid.** Before, it gave
+  the name, and a ref with that name named another registry. A script that looks for such a
+  name in `registries` must look for the uid. See [Refs](refs.md#rules).
 - **A record of a version that the cluster does not run is `not-on-this-cluster`.** Before,
   it had a status such as `ok` or `newer`. A finding still wins, and the record then stays a
   `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,

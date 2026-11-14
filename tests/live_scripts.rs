@@ -7221,8 +7221,8 @@ fi
 "#;
 
 /// A run of `registry-kinds.sh` in which the second registry of stage 1, `strata-live/packs`, gets
-/// the uid `reg-slash`. The listing names it. strata gives `several` on standard error for the
-/// ref of the pack with no registry, and a record of the pack for the ref with the uid.
+/// the uid `reg-slash`. The listing names it. For the ref of the pack with no registry, strata
+/// gives `several` on standard error. For the ref with the uid, it gives a record of the pack.
 fn registry_kinds_slash(several: &str) -> (Stage, String) {
     let mut stage = registry_kinds_stage("");
     executable(
