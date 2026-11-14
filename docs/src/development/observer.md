@@ -491,6 +491,11 @@ move again when it has the slot.
 - The registry can gain a version after the last versions cycle. The document then lists
   the version of the page and a newer one. The answer is for the newer version, and the
   page shows it beside the move. The observer holds one answer for a pack of a profile.
+- The answer holds `updateChecks`, the `bump.updateChecks` of the pin, as strata gives it.
+  The observer adds no rule and compares no version: the page shows each check that the
+  field holds. The checks come from strata, so a `no-answer` with a bump keeps them. A pin
+  with an error, or with no bump, gives none. `internal/docs` lists the fields of the
+  checks in `forwarded`, because only the page reads them.
 
 - Palette checks the default values of the new version. It does not check the values
   of the team, so `no-error` is not "Palette takes the move". The page never reads

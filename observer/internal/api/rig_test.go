@@ -91,6 +91,9 @@ const (
 	askNoError = "ask-no-error.json"
 	askRefuses = "ask-refuses.json"
 	ask403     = "ask-403.json"
+	// askChecks holds the checks of the update that strata gives beside the answer of Palette. The registry gained
+	// 1.37.0 after the versions cycle, and the move to it skips a minor version.
+	askChecks = "ask-checks.json"
 )
 
 // answer prints a fixture and exits with the code exit.

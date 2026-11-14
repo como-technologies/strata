@@ -532,7 +532,7 @@ The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
 `first-seen`, `stale-unchecked`, `lost-unchecked`, `read-error`, `images`,
 `images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`, `alerts`,
-`alerts-unset`, and `moved-drift`. The server listens on `127.0.0.1:8080`. The flag
+`alerts-unset`, `moved-drift`, and `update-checks`. The server listens on `127.0.0.1:8080`. The flag
 `-listen` takes another loopback address, and `-data` takes another directory of sets.
 
 A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
@@ -571,6 +571,11 @@ the page are those of the data.
   `text-too-large` names `ok` and marks the text of two packs as too large. In the
   set `ok`, a click on a move gets its answer from `replies.json`, and a click on a
   move with no reply gets 404.
+- The set `update-checks` names `ok` in a file `base`. Its `asks.json` holds the three
+  answers of `asks`, each with the checks of the update that strata gives beside it. The
+  move of `kubernetes` skips a minor version, because the registry gained 1.37.0 after the
+  versions cycle. The answer for `traefik`, a refusal, names one required variable. The
+  answer for `dex`, a 403, names two. See [Ask Palette about a move](../automation/observer.md#ask-palette-about-a-move).
 - The file `alerts.json` is the answer of `/v1/alerts`. A set can lack it: the page is then
   the page of an observer that started without `--alerts`. The set `alerts` names `ok`
   and holds seven rules, in the four states. A test gives the same rules to the real

@@ -20,14 +20,16 @@ const (
 // Answer is the reply of Palette to the question about the move of one pack of one profile. Only the
 // detail tier carries it, because a refusal holds the message of Palette and the names of clusters. The
 // summary and the state hold none. Status is the HTTP status of a request that failed, and 0 when the
-// failure has none.
+// failure has none. UpdateChecks holds the checks of the update that strata gives beside the answer, as
+// `behind` gives them. It is nil when strata finds nothing, as in the document.
 type Answer struct {
-	Profile  string         `json:"profile"`
-	Key      string         `json:"key"`
-	Newest   string         `json:"newest"`
-	Verdict  Verdict        `json:"verdict"`
-	Refusals []docs.Refusal `json:"refusals"`
-	Status   int            `json:"status"`
+	Profile      string             `json:"profile"`
+	Key          string             `json:"key"`
+	Newest       string             `json:"newest"`
+	Verdict      Verdict            `json:"verdict"`
+	Refusals     []docs.Refusal     `json:"refusals"`
+	Status       int                `json:"status"`
+	UpdateChecks *docs.UpdateChecks `json:"updateChecks,omitempty"`
 }
 
 // Answered says that Palette gave an answer, with an error or without one. A second question would
@@ -39,10 +41,16 @@ func (a Answer) Answered() bool {
 // AnswerOf reads the answer for the move of a pack of a profile from the pin that `behind --pin` gave
 // back. A pin with an error, with no bump, or with no answer of Palette is a request that failed. The
 // words of the failure never leave this function: only the status does.
+//
+// The checks of the update come from strata, and not from Palette. So a bump keeps them, also when the
+// request to Palette failed.
 func AnswerOf(profile, key string, pin docs.Pin) Answer {
 	a := Answer{Profile: profile, Key: key, Verdict: VerdictNoAnswer, Refusals: []docs.Refusal{}}
 	if len(pin.Newer) > 0 {
 		a.Newest = pin.Newer[0].Version
+	}
+	if pin.Error == nil && pin.Bump != nil {
+		a.UpdateChecks = pin.Bump.UpdateChecks
 	}
 	switch {
 	case pin.Error != nil:

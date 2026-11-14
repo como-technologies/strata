@@ -689,18 +689,45 @@ function askButton(cls, subject, p, label) {
   return h`<button class="${cls}" data-ask="${subject}" data-pack="${p.key}"${asking ? raw(" disabled") : ""}>${asking ? "Asking..." : label}</button>`;
 }
 
-// askCell is the cell "Palette" of a row of the table of newer versions.
+// askCell is the cell "Palette" of a row of the table of newer versions. The words of the checks of strata follow the word of the answer.
 function askCell(subject, p) {
   const a = answerOf(subject, p);
   const failed = S.askFailed[askId(subject, p)] ? h`<div class="small mut askmsg">${ASK_FAILED}</div>` : "";
   if (!a) return h`${askButton("lnk", subject, p, "Ask Palette")}${failed}`;
-  const verdict = verdictOf(a);
-  if (verdict === VERDICT.NO_ANSWER) return h`<span class="mut">${ASK_ROW[verdict]}</span> ${askButton("lnk", subject, p, "Ask again")}${failed}`;
-  return h`<span class="fw">${ASK_ROW[verdict]}</span>`;
+  const verdict = verdictOf(a), checks = checksOf(a).map(c => h`<div class="small">${c.row}</div>`);
+  if (verdict === VERDICT.NO_ANSWER) return h`<span class="mut">${ASK_ROW[verdict]}</span> ${askButton("lnk", subject, p, "Ask again")}${checks}${failed}`;
+  return h`<span class="fw">${ASK_ROW[verdict]}</span>${checks}`;
 }
 
 // refusalLines draws one error that Palette gives: the code, the message, and the clusters.
 const refusalLines = r => h`<div class="mt3"><b>Palette refuses:</b> <span class="m">${r.code}</span></div>${r.message ? h`<div>${r.message}</div>` : ""}${r.clusters && r.clusters.length ? h`<div class="mut">on ${r.clusters.join(", ")}</div>` : ""}`;
+
+/* The checks of the update that strata gives beside the answer: the rules that Palette checks only at the update, and that the question
+   does not check. checksOf gives each check that found something, in the order of strata: the required variables, then the skip of a
+   minor version. Each check has the words of its row in the table and the lines of the card. An observer of an older release gives none. */
+const codeList = names => names.map((n, i) => h`${i ? ", " : ""}<span class="m">${n}</span>`);
+function variablesCheck(v) {
+  const names = v.names || [], n = names.length;
+  const head = h`<div class="mt3"><b>${plural(n, "The move adds a required variable:", `The move adds ${n} required variables:`)}</b> ${codeList(names)}</div>`;
+  const next = h`<div>${plural(n, "It has", "They have")} no default value. Give ${plural(n, "it", "each one")} a value at the update, or Palette refuses the update with <span class="m">${v.code}</span>.</div>`;
+  return {row: plural(n, "Adds a required variable", `Adds ${n} required variables`), card: h`${head}${next}`};
+}
+function skipCheck(s) {
+  const step = s.nextStep ? h`<span class="m">${ref(s.pack, s.nextStep)}</span>` : `a version of ${s.nextMinor}`;
+  const head = h`<div class="mt3"><b>The move skips a minor version:</b> <span class="m">${move(s.pack, s.from, s.to)}</span></div>`;
+  return {row: "Skips a minor version", card: h`${head}<div>Palette refuses the update with <span class="m">${s.code}</span>. Move to ${step} first.</div>`};
+}
+const checksOf = a => {
+  const c = a.updateChecks || {};
+  return [c.requiredVariables && variablesCheck(c.requiredVariables), c.skippedMinor && skipCheck(c.skippedMinor)].filter(Boolean);
+};
+// checkNote is the note of the checks on the card "Move to", under the answer of Palette. It is empty when strata found nothing.
+function checkNote(a) {
+  const list = checksOf(a);
+  if (!list.length) return "";
+  const why = plural(list.length, "Strata checks this rule, because the question to Palette does not check it.", "Strata checks these rules, because the question to Palette does not check them.");
+  return h`<div class="note a small">${list.map(c => c.card)}<div class="mt6">${why}</div></div>`;
+}
 
 // askBlock is the part of the card "Move to" that asks Palette, or that shows its answer.
 function askBlock(subject, p) {
@@ -709,13 +736,13 @@ function askBlock(subject, p) {
   if (!a) return h`<div class="small mut">${ASK_WHAT}</div><div class="mt9">${askButton("btn", subject, p, "Ask Palette about this move")}</div>${failed}`;
   switch (verdictOf(a)) {
     case VERDICT.NO_ERROR:
-      return h`<div class="note small"><b>Palette gave no error.</b> ${ASK_COVERS}</div>`;
+      return h`<div class="note small"><b>Palette gave no error.</b> ${ASK_COVERS}</div>${checkNote(a)}`;
     case VERDICT.REFUSES: {
       const list = a.refusals || [];
-      return h`<div class="note a small">${list.length ? list.map(refusalLines) : h`<div><b>Palette refuses.</b></div>`}<div class="mt6">Palette would not take this move as the profile is now. Nothing on this cluster changed.</div></div>`;
+      return h`<div class="note a small">${list.length ? list.map(refusalLines) : h`<div><b>Palette refuses.</b></div>`}<div class="mt6">Palette would not take this move as the profile is now. Nothing on this cluster changed.</div></div>${checkNote(a)}`;
     }
     default:
-      return h`<div class="note small"><b>Palette gave no answer${a.status ? `: HTTP ${a.status}` : ""}.</b> This is not a finding.</div><div class="mt9">${askButton("btn", subject, p, "Ask again")}</div>${failed}`;
+      return h`<div class="note small"><b>Palette gave no answer${a.status ? `: HTTP ${a.status}` : ""}.</b> This is not a finding.</div>${checkNote(a)}<div class="mt9">${askButton("btn", subject, p, "Ask again")}</div>${failed}`;
   }
 }
 

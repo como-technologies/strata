@@ -190,6 +190,16 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	if len(ask.Pins) != 1 || ask.Pins[0].Bump == nil || ask.Pins[0].Bump.To == "" {
 		t.Errorf("the question about one move gives %d pins, and the first has no bump: %+v", len(ask.Pins), ask.Pins)
 	}
+	// The question about a move of Kubernetes that skips a minor version: the bump holds the check of strata, with
+	// the next step (#867).
+	var skip Behind
+	decodeFile(t, dir, "ask-skip.json", &skip)
+	if len(skip.Pins) != 1 || skip.Pins[0].Bump == nil {
+		t.Fatalf("the question about the skip gives %d pins: %+v", len(skip.Pins), skip.Pins)
+	}
+	if s := skip.Pins[0].Bump.UpdateChecks.SkippedMinor; s == nil || s.Code == "" || s.From != skip.Pins[0].Version || s.To != skip.Pins[0].Bump.To || s.NextMinor == "" || s.NextStep == "" {
+		t.Errorf("the bump of the skip holds the check %+v", s)
+	}
 	for _, name := range []string{"compare-payments-aws-stack.json", "compare-payments-platform-addons.json"} {
 		var d Diff
 		decodeFile(t, dir, name, &d)

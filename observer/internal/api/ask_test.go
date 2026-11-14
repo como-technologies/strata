@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -103,6 +104,48 @@ func TestARefusalHoldsTheCodeTheMessageAndTheClustersOnTheDetailTierAndOnNoOther
 	}
 	if strings.Contains(r.log.String(), "DependencyPackUpgradeNotSupported") || strings.Contains(r.log.String(), "SENTINEL") {
 		t.Errorf("the log holds the answer:\n%s", r.log.String())
+	}
+}
+
+// Issue #867. The reply of the click and the list of answers hold the checks of the update that strata gives
+// beside the answer of Palette. They hold names of a pack and of a variable, so no summary route, no state, and
+// no log holds them.
+func TestTheChecksOfStrataReachTheDetailTierBesideTheAnswerAndNoOtherRoute(t *testing.T) {
+	r, o, _ := asked(t, askChecks)
+	h := handlerOf(o)
+	var got model.Answer
+	decode(t, click(h, pathAsk), &got)
+	if got.UpdateChecks == nil {
+		t.Fatalf("the answer holds no check: %+v", got)
+	}
+	skip, variables := got.UpdateChecks.SkippedMinor, got.UpdateChecks.RequiredVariables
+	if got.Verdict != model.VerdictNoError || got.Newest != "1.37.0" || skip == nil || variables == nil {
+		t.Fatalf("answer %+v", got)
+	}
+	if skip.Code != "K8sUpgradeNotSupported" || skip.From != "1.35.3" || skip.To != "1.37.0" || skip.NextMinor != "1.36" || skip.NextStep != "1.36.2" {
+		t.Errorf("the skip %+v", skip)
+	}
+	if variables.Code != "InvalidVariable" || !slices.Equal(variables.Names, []string{"platform_owner"}) {
+		t.Errorf("the variables %+v", variables)
+	}
+	var list AsksView
+	decode(t, get(h, "/v1/asks"), &list)
+	if len(list.Asks) != 1 || !reflect.DeepEqual(list.Asks[0].UpdateChecks, got.UpdateChecks) {
+		t.Errorf("the list of answers %+v", list)
+	}
+	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, word := range []string{"K8sUpgradeNotSupported", "InvalidVariable", "platform_owner", "nextStep"} {
+		for pattern, path := range summaryRoutes {
+			if body := get(h, path).Body.String(); strings.Contains(body, word) {
+				t.Errorf("%s holds %s: %s", pattern, word, body)
+			}
+		}
+		if strings.Contains(string(raw), word) || strings.Contains(r.log.String(), word) {
+			t.Errorf("the state or the log holds %s", word)
+		}
 	}
 }
 

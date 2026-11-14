@@ -321,6 +321,7 @@ status `200` then, and the verdict `no-answer`.
 | `verdict` | text | `no-error`, `refuses`, or `no-answer`: see the table below. |
 | `refusals` | list | One entry for each error that Palette gave. It is empty unless the verdict is `refuses`. |
 | `status` | number | The HTTP status of the request that failed. It is 0 when the request did not fail, or when the failure has no status. |
+| `updateChecks` | object | The checks of the update that strata gives beside the answer: `bump.updateChecks` of the pin, as [strata-behind/1](./documents.md#strata-behind1) gives it. It holds `requiredVariables`, `skippedMinor`, or both. It is absent when strata finds nothing, and when the run gives no bump. A `no-answer` with a bump keeps it, because strata makes the checks with no request. |
 
 An entry of `refusals` has these fields:
 

@@ -230,9 +230,37 @@ type Carrier struct {
 // PaletteValidationError holds the words of a request that failed. They can hold the body of an answer
 // of Palette, so only the status leaves the observer: see StatusOf.
 type Bump struct {
-	To                     string      `json:"to"`
-	PaletteValidation      *Validation `json:"paletteValidation"`
-	PaletteValidationError string      `json:"paletteValidationError"`
+	To                     string        `json:"to"`
+	PaletteValidation      *Validation   `json:"paletteValidation"`
+	PaletteValidationError string        `json:"paletteValidationError"`
+	UpdateChecks           *UpdateChecks `json:"updateChecks"`
+}
+
+// UpdateChecks is what strata checks about a move beside the answer of Palette: the rules that Palette
+// checks only at the update, and that no route of Palette checks before it. Only the detail tier sends
+// it, as strata gives it.
+type UpdateChecks struct {
+	RequiredVariables *RequiredVariables `json:"requiredVariables,omitempty"`
+	SkippedMinor      *MinorSkip         `json:"skippedMinor,omitempty"`
+}
+
+// RequiredVariables names each required variable with no default value that a move adds. Palette refuses
+// an update that gives such a variable no value, with Code. It holds names, and no value.
+type RequiredVariables struct {
+	Code  string   `json:"code"`
+	Names []string `json:"names"`
+}
+
+// MinorSkip is a move of the Kubernetes pack that skips a minor version. Palette refuses the update with
+// Code. NextMinor is the minor version that Palette allows next, and NextStep is its newest version in the
+// registry, when the registry has one.
+type MinorSkip struct {
+	Code      string `json:"code"`
+	Pack      string `json:"pack"`
+	From      string `json:"from"`
+	To        string `json:"to"`
+	NextMinor string `json:"nextMinor"`
+	NextStep  string `json:"nextStep,omitempty"`
 }
 
 // Validation is the answer of Palette to the question about a move: it accepts when it gives no error.

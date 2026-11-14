@@ -133,6 +133,12 @@ STRATA_BIN=$strata STRATA_CHECK_REGISTRY=$registry STRATA_CHECK_RECORD=$work/beh
   go -C "$observer" test ./internal/web/ -count=1 -run 'RunsAgainstTheStandIn'
 stop
 
+# The record pins kubernetes 1.34.9, and the move to 1.36.2 skips a minor version. The bump of the click holds the check of strata.
+start behind-4
+"$strata" snapshot aws-stack@1.1.20 -o skip-record.json -q
+"$strata" behind skip-record.json --pin k8s/kubernetes --json --compact -q >"$docs/ask-skip.json" || [ "$?" -eq 1 ]
+stop
+
 start cluster-release
 uid=$(cluster_uid payments)
 "$strata" snapshot "cluster:$uid" --raw-dir raw -o "$docs/cluster-payments.json" -q
@@ -219,5 +225,5 @@ expect stopped '.page == "lost" and .content.failedRuns == 2 and .content.lastEr
 STRATA_BIN=$strata STRATA_DOCS=$docs go -C "$observer" test ./internal/docs/ -count=1 -run 'Schema|DocumentsOfTheBinary|ClearValue|KindOfAFailedCheck'
 if [ "${1:-}" = --write ]; then
   mkdir -p "$observer/internal/docs/testdata"
-  cp "$docs/verify-summary-drift.json" "$docs/behind.json" "$docs/ask-behind.json" "$docs"/move-*.json "$observer/internal/docs/testdata/"
+  cp "$docs/verify-summary-drift.json" "$docs/behind.json" "$docs/ask-behind.json" "$docs/ask-skip.json" "$docs"/move-*.json "$observer/internal/docs/testdata/"
 fi

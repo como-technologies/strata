@@ -166,7 +166,7 @@ func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 		StateStaleUnchecked: model.PageStale, StateLostUnchecked: model.PageLost, StateReadError: model.PageOK,
 		StateImages: model.PageOK, StateImagesSplit: model.PageOK, StateImagesOff: model.PageOK, StateImagesUnread: model.PageOK,
 		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK, StateAlerts: model.PageOK, StateAlertsUnset: model.PageOK,
-		StateMovedDrift: model.PageOK}
+		StateMovedDrift: model.PageOK, StateUpdateChecks: model.PageOK}
 	if len(pages) != len(States) {
 		t.Fatalf("States lists %d sets, and the table of pages %d", len(States), len(pages))
 	}
@@ -786,6 +786,52 @@ func TestTheSetAsksHoldsOneAnswerOfEachVerdict(t *testing.T) {
 	if !reflect.DeepEqual(asks.Cluster, ok.Cluster) || !reflect.DeepEqual(asks.Profiles, ok.Profiles) || !reflect.DeepEqual(asks.Newer, ok.Newer) ||
 		!reflect.DeepEqual(asks.Findings, ok.Findings) {
 		t.Error("asks changes more than the answers")
+	}
+}
+
+// The set update-checks holds the answers of the set asks, each with the checks of the update that strata gives beside
+// it, and it changes nothing else of ok. The registry gained kubernetes 1.37.0 after the versions cycle: the answer of that
+// move is for 1.37.0, and the move from the pin of the row skips a minor version to the newest version of the row.
+func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
+	ok, asks, checks := load(t, StateOK), load(t, StateAsks), load(t, StateUpdateChecks)
+	moves := movesOf(checks)
+	if len(checks.Asks.Asks) != len(asks.Asks.Asks) {
+		t.Fatalf("update-checks holds %d answers, and asks %d", len(checks.Asks.Asks), len(asks.Asks.Asks))
+	}
+	var skips, variables int
+	for i, a := range checks.Asks.Asks {
+		held := asks.Asks.Asks[i]
+		if a.Profile != held.Profile || a.Key != held.Key || a.Verdict != held.Verdict || a.Status != held.Status || !reflect.DeepEqual(a.Refusals, held.Refusals) {
+			t.Errorf("the answer %+v is not the answer %+v of asks", a, held)
+		}
+		row := slices.IndexFunc(moves, func(m model.Answer) bool { return m.Profile == a.Profile && m.Key == a.Key })
+		if row < 0 {
+			t.Fatalf("the answer for %s %s is not about a move of the table", a.Profile, a.Key)
+		}
+		if a.UpdateChecks == nil {
+			t.Fatalf("the answer for %s %s holds no check", a.Profile, a.Key)
+		}
+		if s := a.UpdateChecks.SkippedMinor; s != nil {
+			skips++
+			if a.Key != "k8s/kubernetes" || s.Code != "K8sUpgradeNotSupported" || s.To != a.Newest || s.NextStep != moves[row].Newest || a.Newest == moves[row].Newest {
+				t.Errorf("the skip %+v of %s %s, the row gives %s", s, a.Profile, a.Key, moves[row].Newest)
+			}
+		} else if a.Newest != moves[row].Newest {
+			t.Errorf("the answer for %s %s is for %s, and the row for %s", a.Profile, a.Key, a.Newest, moves[row].Newest)
+		}
+		if v := a.UpdateChecks.RequiredVariables; v != nil {
+			variables += len(v.Names)
+			if v.Code != "InvalidVariable" || len(v.Names) == 0 || !slices.IsSorted(v.Names) {
+				t.Errorf("the variables %+v of %s %s", v, a.Profile, a.Key)
+			}
+		}
+	}
+	if skips != 1 || variables != 3 {
+		t.Errorf("%d skips and %d variables, want 1 and 3", skips, variables)
+	}
+	if !reflect.DeepEqual(checks.Cluster, ok.Cluster) || !reflect.DeepEqual(checks.Profiles, ok.Profiles) || !reflect.DeepEqual(checks.Newer, ok.Newer) ||
+		!reflect.DeepEqual(checks.Findings, ok.Findings) || !reflect.DeepEqual(checks.Replies, ok.Replies) {
+		t.Error("update-checks changes more than the answers")
 	}
 }
 

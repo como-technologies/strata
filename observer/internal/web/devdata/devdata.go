@@ -20,9 +20,12 @@
 // the manifests. The set text-too-large is ok with two packs whose text the observer dropped.
 //
 // The file asks.json holds the answers of Palette that the observer holds. The set asks is ok with one
-// answer of each verdict. The file replies.json is optional: it holds the answer that a click on a move
-// gives when the set holds none for it. A move with no reply gives "not found", as a move that the
-// observer does not know. The set ok holds a reply for each move of its Newer table but one.
+// answer of each verdict. The set update-checks is ok with three answers, and with the checks of the
+// update that strata gives beside them. The registry gained kubernetes 1.37.0 after the versions cycle.
+// So the answer of that move is for 1.37.0, and the move skips a minor version. The file replies.json is
+// optional: it holds the answer that a click on a move gives when the set holds none for it. A move with
+// no reply gives "not found", as a move that the observer does not know. The set ok holds a reply for
+// each move of its Newer table but one.
 //
 // The file alerts.json is optional: it holds the answer of /v1/alerts. A set that lacks it, and whose base lacks
 // it, is a page of an observer that started without --alerts. The set alerts is ok with rules, and the set
@@ -92,12 +95,16 @@ const (
 
 	// The state of a move. Moved-drift holds a record with a finding of a version that the cluster no longer runs.
 	StateMovedDrift State = "moved-drift"
+
+	// The state of the checks of strata. Update-checks holds answers of Palette with the checks of the update that strata gives
+	// beside them: a move of Kubernetes that skips a minor version, and moves that add required variables.
+	StateUpdateChecks State = "update-checks"
 )
 
 // States lists the sets, in the order that the recipe `observer-dev` names them.
 var States = []State{StateOK, StateQuiet, StateFirstLoad, StateNoRecords, StateStale, StateLost, StateFirstSeen,
 	StateStaleUnchecked, StateLostUnchecked, StateReadError, StateImages, StateImagesSplit, StateImagesOff, StateImagesUnread,
-	StateAsks, StateTextTooLarge, StateAlerts, StateAlertsUnset, StateMovedDrift}
+	StateAsks, StateTextTooLarge, StateAlerts, StateAlertsUnset, StateMovedDrift, StateUpdateChecks}
 
 // Reference is the time that the data is written for. Load moves each time of a set by the
 // difference between now and Reference, so that the ages on the page are those of the data.

@@ -165,15 +165,29 @@ one of three ways:
 - **Palette gave no error.** Palette checked the default values of the new version.
   It did not check the values of your team: see [Palette accepts the move, or refuses
   it](../commands/behind.md#palette-accepts-the-move-or-refuses-it). It did not check
-  the minor version of Kubernetes either. `strata behind --pin` on the record says
-  when the move skips one: see [A move that skips a minor
-  version](../commands/behind.md#a-move-that-skips-a-minor-version).
+  the minor version of Kubernetes either. Strata checks it, and the page shows the
+  check beside the answer.
 - **`Palette refuses: <code>`.** Palette gave an error, such as
   `DependencyPackUpgradeNotSupported`. The page shows the message of Palette and the
   clusters that it names. See [The upgrade
   dependency](../internals/palette/validate-routes.md#the-upgrade-dependency).
 - **Palette gave no answer.** A request failed. The page shows the HTTP status. This
   is no finding, and it raises no severity.
+
+Palette checks two rules only at the update, and the question does not check them. Strata
+checks them with no request, and the page shows each check that finds something beside
+each of the three answers:
+
+- **A move of Kubernetes that skips a minor version.** The column "Palette" adds "Skips a
+  minor version". The card says that Palette refuses the update with
+  `K8sUpgradeNotSupported`, and it names the next step, such as `kubernetes@1.36.2`. Move
+  to that version first: see [A move that skips a minor
+  version](../commands/behind.md#a-move-that-skips-a-minor-version).
+- **A move that adds a required variable with no default value.** The column adds "Adds a
+  required variable", and the card names the variable. Give it a value at the update, or
+  Palette refuses the update with `InvalidVariable`. The bump of a pack names a required
+  variable only when strata gives one. A variable belongs to the profile, so `behind` names
+  the variables of a move in the bump of a profile version.
 
 A second click on an answered move sends nothing. The observer asks again after
 "Palette gave no answer". Nothing asks on a timer. The column "Palette" of the table
