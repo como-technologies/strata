@@ -88,10 +88,11 @@ Strata reads the whole file before it sends a request:
   - A param of a layer is text. `installOrder` is the one param that is an
     integer. The message names the layer and the param.
   - A variable has a `name` that is text. A flag (`required`, `hidden`,
-    `immutable`, or `isSensitive`) is a boolean. A field of text is text, a
-    number, or a flag, and keeps its text: `defaultValue: 8080` is `8080`. A
-    list or a map there is refused. A `null` is the default of the field.
-    `format` and `inputType` take the default for a number or a flag.
+    `immutable`, `isSensitive`, or `default` of an option) is a boolean. A
+    field of text is text, a number, or a flag, and keeps its text:
+    `defaultValue: 8080` is `8080`. A list or a map there is refused. A `null`
+    is the default of the field. `format` and `inputType` take the default for
+    a number or a flag.
 
   So strata reports a misspelled field such as `valuesfile`.
 - A values file or a manifest file that strata cannot read is `io`.

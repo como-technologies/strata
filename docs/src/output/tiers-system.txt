@@ -1,0 +1,3 @@
+$ jq -c '.source.cluster.tiers.policy | {hash: .hash[0:12], systemRbacs: [.systemRbacs[] | "\(.role.name): \(.subjects[].name)"]}' runs/payments-fred.json runs/payments-wilma.json
+{"hash":"91ca2c47be8f","systemRbacs":["cluster-admin: fred@example.com"]}
+{"hash":"91ca2c47be8f","systemRbacs":["view: wilma@example.com"]}

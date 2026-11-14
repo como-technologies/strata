@@ -8,8 +8,8 @@
 # It creates a profile of the tenant with the name, the version, and the packs of the release
 # profile, through the API with no project. It reads the profile listing and the profile search
 # of the project, and the document of each version. It lists the versions with strata, asks for
-# the ref that two scopes answer, and records the tenant version by its uid. Then it deletes the
-# tenant profile.
+# the ref that two scopes answer, and records the tenant version by its uid. It asks strata for
+# the consumers of each version (#621). Then it deletes the tenant profile.
 #
 # Needs the profiles (just live-profiles) and no cluster: no cost. It leaves the tenant as it
 # found it. Needs the strata release binary, jq, and the key as verify.sh needs it. Results go
@@ -90,6 +90,14 @@ check tenant-list 0 '#113: at tenant scope, list --json gives scope tenant for t
   bash -c "\"$strata\" list profiles --project '' --json | jq -e --arg t '$T' '[.profiles[] | select(.uid == \$t)][0].scope == \"tenant\"'"
 check tenant-list-no-mark 0 '#113: at tenant scope, the row of the version has no mark' -- \
   bash -c "\"$strata\" list profiles --project '' --no-color | grep -qE '^  $NAME@$VERSION +$T +[a-z]+\$'"
+# each project can use a profile of the tenant. So consumers searches each project of the tenant
+# listing, and names each one that it could not read (#621)
+check tenant-consumers 0 "#621: consumers of the tenant version exits 0: no cluster runs it, and the key reads each project" -- \
+  "$strata" consumers "$T" --json
+check tenant-consumers-projects 0 '#621: consumers searched each project of the tenant listing, and names none that it could not read' -- \
+  jq -e '.profile.scope == "tenant" and .projectsRead.read >= 1 and ((.projectsRead.unread // []) | length) == 0' tenant-consumers.out
+check release-consumers 0 '#621: consumers of the release names its project by name, and searches no other project' -- \
+  bash -c "\"$strata\" consumers '$R' --json | jq -e '.profile.scope == \"project\" and (.profile.projectName // \"\" | length) > 0 and (has(\"projectsRead\") | not)'"
 
 echo "== the tenant profile goes" | tee -a steps.log
 check tenant-delete 0 "#113: delete the tenant profile $T" -- "$live/api.sh" delete-tenant "$T"

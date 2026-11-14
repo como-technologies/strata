@@ -59,6 +59,16 @@ itself. A cluster on AWS gives these fields:
   code of Palette shows it; no live run shows it yet. Stage 8 of
   [tiers.sh](../../development/live-runs.md#tierssh) reads the three routes
   with such a key.
+- An item of the bindings route with `spec.isSystem` true is a role binding of
+  the system. In such an item, each binding holds only the subject that is the
+  user of the key. The answer drops a binding with no such subject, and keeps
+  the item. This is true for each key, also the key of a tenant admin. So the
+  keys of two users can get different bindings for one cluster. The code of
+  Palette shows it; no live run shows it yet. Stage 10 of
+  [tiers.sh](../../development/live-runs.md#tierssh) reads the bindings of one
+  cluster with the keys of two users. Strata keeps each such binding out of
+  the hash of the policy tier: see
+  [A role binding of the system](../../commands/snapshot/cluster.md#a-role-binding-of-the-system).
 - Palette takes an edit of the subjects of a binding through
   `PUT /v1/spectroclusters/{uid}/config/rbacs`, and the bindings route then
   gives the new subject. The edit also changes the `spcHash` of the cluster.
@@ -299,7 +309,7 @@ request has a result for Project Viewer only.
 Cluster Viewer alone gives every answer except the audit log. The audit log answers
 HTTP 403 with the code `AccessDenied`, and the message names `audit.list`. Then
 `verify --who` keeps its verdict and cannot name the writer: see
-[Who changed it](../../commands/verify.md#who-changed-it).
+[When strata cannot read the log](../../commands/verify.md#when-strata-cannot-read-the-log).
 
 The live run used these two roles only. The column of the built-in roles comes from
 the code of Palette. A custom role at project scope needs `cluster.get`,
@@ -332,8 +342,8 @@ A request without its permission gets one of these answers:
 The profile listing and the cluster listing check the role in the project of
 the request: `clusterProfile.list` and `cluster.list`. When no role there gives
 the permission, each listing answers HTTP 500 with `ResourceAccessDenied`, and
-not 403. The message names the project by its name, as in
-`Project 'dev' access denied`.
+not 403. The message names the project by its name, or by its uid when the key
+has no role in the project, as in `Project 'dev' access denied`.
 
 The saved tag filters need `filter.list` in the tenant. Without it, Palette
 answers HTTP 403 with `AccessDenied`, and the
@@ -510,6 +520,34 @@ keeps the clusters that run the version. The checks `search-profile-runs`,
 `search-nested-misses-member`, `member-consumer-group`, and
 `group-virtual-clusters` of `cluster-group.sh` show it on a live tenant: see
 [cluster-group.sh](../../development/live-runs.md#cluster-groupsh).
+
+## The reach of a search
+
+The code of Palette shows these facts; no live run shows the refusal yet:
+
+- The cluster search and the edge host search at tenant scope need `project.list`
+  in the tenant. Without it, Palette answers HTTP 403 with `AccessDenied`.
+- With it, each search gives the projects where a role of the key gives the
+  listing. The cluster search needs `cluster.list`, and the edge host search
+  needs `edgehost.list`. It omits each other project, with no error. A role of the tenant, such
+  as Tenant Viewer, gives the listing in each project.
+- The search of one project, with its `ProjectUid`, answers HTTP 500 with the
+  code `ResourceAccessDenied` when no role of the key there gives the listing.
+  The message names the project by its name, as in `Project 'staging' access
+  denied`.
+- At tenant scope, the project listing holds each project of the tenant only for
+  a key whose role gives `project.list` in the tenant. For another key, it holds
+  the projects of its roles.
+- A profile of a project is for the clusters of its project. Each project of
+  the tenant can use a profile of the tenant. The profile document names the
+  project of a profile of a project in `metadata.annotations.projectUid`.
+
+So [`strata consumers`](../../commands/consumers.md#a-profile-of-the-tenant)
+searches each project of the tenant listing for a profile of the tenant or of
+the system. It names each project whose search Palette refuses. The checks
+`tenant-consumers` and `tenant-consumers-projects` of
+[scope.sh](../../development/live-runs.md#scopesh) search each project with a
+key that reads each one.
 
 ## A deleted cluster
 

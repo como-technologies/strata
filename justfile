@@ -674,6 +674,11 @@ live-tiers-narrow: build
 live-tiers-unknown-key: build
     examples/live/tiers.sh 9
 
+# The second user test (#838): what Palette answers to the keys of two users for a role binding of the system of cluster A, and compare of a record with each key. Needs live-up and STRATA_LIVE_SECOND_KEY; reads only.
+[group('live checks')]
+live-tiers-second-key: build
+    examples/live/tiers.sh 10
+
 # What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
 [group('live')]
 live-inventory:
