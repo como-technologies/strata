@@ -37,7 +37,7 @@ func TestACarriedAnswerOnAPackWithANewerVersionIsNotIdenticalUndisturbedOrSame(t
 	dir := carriedSet(t)
 	for _, side := range []string{"published", "cluster"} {
 		t.Run(side, func(t *testing.T) {
-			page := pageWith(t, dir, "scratch", ubuntuHash, `S.side["`+ubuntuSide+`"] = "`+side+`"`)
+			page := pageWith(t, dir, scratch, ubuntuHash, `S.side["`+ubuntuSide+`"] = "`+side+`"`)
 			mustHold(t, side, page, `<option value="`+side+`" selected>`, hiddenTitle, "Strata could not read the record.")
 			mustNotHold(t, side, page, "Identical", "Undisturbed", sameBadge, "tone-calm")
 		})
@@ -50,9 +50,9 @@ func TestACarriedAnswerIsNoOKOnTheProfilePageAndInCheckThisYourself(t *testing.T
 	for _, page := range pagesOf(t, dir, barneyHash, ubuntuHash) {
 		mustNotHold(t, "the page", page, unchangedWords, "Same content")
 		for _, question := range []string{qPaletteHas, qClusterRuns, "What changed?"} {
-			row := rowWith(t, page, question)
-			mustNotHold(t, question, row, badgeOf("g"))
-			mustHold(t, question, row, badgeOf("y"))
+			answer := answerTo(t, page, question)
+			mustNotHold(t, question, answer, badgeOf("g"))
+			mustHold(t, question, answer, badgeOf("y"))
 		}
 	}
 }
@@ -62,5 +62,5 @@ func TestAProfileWithNoCauseKeepsTheWordsOfItsSides(t *testing.T) {
 	dir := carriedSet(t)
 	page := pagesOf(t, dir, "#p-bambam-secrets@2.0.1")[0]
 	mustHold(t, "the profile", page, unchangedWords)
-	mustHold(t, "the row", rowWith(t, page, qPaletteHas), badge("g", "OK"))
+	mustHold(t, "the row", answerTo(t, page, qPaletteHas), badge("g", "OK"))
 }

@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,47 +25,6 @@ STRATA_BIN              the strata binary.
 STRATA_CHECK_RECORD     the record file that the first row of the card must give back, as the pod holds it.
 STRATA_CHECK_API        a directory with the answer of each route of a real server, for the first run: a cluster with a finding.
 STRATA_CHECK_REGISTRY   the uid of a registry of the stand-in, for the second run: the move of a pack to its newest version. */
-
-// secretFile is the Secret of a records script, read back as `kubectl get secret -o json` gives it.
-type secretFile struct {
-	name string
-	data map[string]string
-}
-
-var (
-	secretName = regexp.MustCompile(`^  name: (` + recordsSecret + `\d)$`)
-	secretData = regexp.MustCompile(`^  ([^ :]+): (\S+)$`)
-)
-
-// readSecrets reads the output of scripts/ci/observer-records.sh: four Secrets in YAML, each with a data map of keys and base64 text.
-func readSecrets(t *testing.T, yaml string) []secretFile {
-	t.Helper()
-	var out []secretFile
-	for _, doc := range strings.Split(yaml, "---\n") {
-		var s secretFile
-		inData := false
-		for _, line := range strings.Split(doc, "\n") {
-			switch {
-			case secretName.MatchString(line):
-				s.name = secretName.FindStringSubmatch(line)[1]
-			case line == "data:":
-				inData, s.data = true, map[string]string{}
-			case line == "data: {}":
-				s.data = map[string]string{}
-			case inData && secretData.MatchString(line):
-				m := secretData.FindStringSubmatch(line)
-				s.data[m[1]] = m[2]
-			}
-		}
-		if s.name != "" {
-			out = append(out, s)
-		}
-	}
-	if len(out) != 4 {
-		t.Fatalf("the records script wrote %d Secrets, want 4", len(out))
-	}
-	return out
-}
 
 // fakeKubectl writes a kubectl that answers the one call of the first row, `get secret strata-observer-records-N -o json`, from
 // the files of a directory. It refuses any other call, so the page cannot give a command that this test does not run for real.
@@ -134,9 +92,12 @@ func secretsOf(t *testing.T, record string) string {
 	if err := os.MkdirAll(secrets, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range readSecrets(t, string(yaml)) {
-		raw := testkit.MustJSON(t, map[string]any{"data": s.data})
-		testkit.WriteIn(t, secrets, s.name+".json", string(raw))
+	written := testkit.RecordSecrets(t, string(yaml))
+	if len(written) != 4 {
+		t.Fatalf("the records script wrote %d Secrets, want 4", len(written))
+	}
+	for name, data := range written {
+		testkit.WriteIn(t, secrets, name+".json", string(testkit.MustJSON(t, map[string]any{"data": data})))
 	}
 	return secrets
 }
@@ -145,11 +106,7 @@ func secretsOf(t *testing.T, record string) string {
 // command with the tools of the pod (bash, jq, base64, and gzip), and a stand-in for kubectl. The key of a record has the name and
 // the version of its profile, and a character outside A-Z a-z 0-9 . _ - becomes an underscore, as the page writes it.
 func TestTheCommandOfTheFirstRowReadsARecordOutOfTheSecretsOfTheRecordsScript(t *testing.T) {
-	for _, tool := range []string{"bash", "jq", "base64", "gzip", "gunzip"} {
-		if _, err := exec.LookPath(tool); err != nil {
-			t.Skipf("%s is not on the PATH", tool)
-		}
-	}
+	testkit.NeedTools(t, "bash", "jq", "base64", "gzip", "gunzip")
 	body := testkit.Record(docs.SnapshotSchema, "fred identity!", "2.3.0", `,"cluster":null`, `,"packs":[1,2,3]`)
 	record := testkit.WriteIn(t, t.TempDir(), "release.json", body)
 	bin, dir := checkWork(t, "")
@@ -207,21 +164,15 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 			bin, dir := checkWork(t, strata)
 			fakeKubectl(t, bin, secretsOf(t, record))
 
-			raw, err := os.ReadFile(filepath.Join(apiDir, "profiles.json"))
-			if err != nil {
-				t.Fatal(err)
-			}
 			var profiles api.ProfilesView
-			if err := json.Unmarshal(raw, &profiles); err != nil || len(profiles.Profiles) == 0 {
-				t.Fatalf("profiles.json: %v, %d profiles", err, len(profiles.Profiles))
+			if testkit.DecodeFile(t, filepath.Join(apiDir, "profiles.json"), &profiles); len(profiles.Profiles) == 0 {
+				t.Fatal("profiles.json holds no profile")
 			}
 			// The Secrets hold one record, so the commands of the profile of that record are the ones that can run.
 			var source struct {
 				Source struct{ Name, Version string }
 			}
-			if err := json.Unmarshal(want, &source); err != nil {
-				t.Fatal(err)
-			}
+			testkit.Decode(t, record, want, &source)
 			var hashes []string
 			for _, x := range profiles.Profiles {
 				if x.Name != source.Source.Name || x.Version != source.Source.Version {
@@ -257,9 +208,10 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 				t.Fatalf("the first command exited with %d:\n%s", code, out)
 			}
 			got, err := os.ReadFile(filepath.Join(dir, "record.json"))
-			if err != nil || !bytes.Equal(got, want) {
-				t.Fatalf("record.json is not the record that the records script wrote: %v", err)
+			if err != nil {
+				t.Fatal(err)
 			}
+			noProblems(t, "the record that the first command writes", []string{copyProblem("record.json", want, got)})
 			for _, c := range commands[1:] {
 				code, out := runBash(t, dir, bin, c)
 				mustAnswer(t, c, code, out)

@@ -56,21 +56,19 @@ type diffLine struct {
 	noEOL              bool
 }
 
-var hunkHead = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
-
 // readUnified reads a unified text by the rules of the issue: the two header lines come before the first
 // hunk, a line "--- x" in a hunk is a removed line, and the line numbers come from the heads of the hunks.
 func readUnified(text string) []diffLine {
 	var out []diffLine
 	var a, b, hunks int
 	for _, l := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
-		if m := hunkHead.FindStringSubmatch(l); m != nil {
+		if m := testkit.HunkHead.FindStringSubmatch(l); m != nil {
 			if hunks > 0 {
 				out = append(out, diffLine{sign: "@", text: l})
 			}
 			hunks++
 			a, _ = strconv.Atoi(m[1])
-			b, _ = strconv.Atoi(m[2])
+			b, _ = strconv.Atoi(m[3])
 			continue
 		}
 		if hunks == 0 || l == "" {
@@ -337,8 +335,8 @@ func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 			card := cardOf(t, pageOf(t, screens, c.hash, variantOf(c.open, layout, "", "")), tabOf(c.tab))
 			sameRows(t, where, diffRowsOf(card), layoutRows(layout, text))
 			added, removed := headCounts(text)
-			mustHold(t, where, card, fmt.Sprintf(diffHeadTag+`<span>%s values `+countsFormat+`</span>`, c.key, added, removed),
-				`data-k="values">Values`)
+			mustHold(t, where, card, diffHeadTag+span(fmt.Sprintf(`%s values `+countsFormat, c.key, added, removed)),
+				tabAttrs(c.tab, "values")+">Values")
 			mustHoldInOrder(t, where+": the table of the settings, then the text", card, settingsHead, diffHead)
 		}
 	}
@@ -378,7 +376,7 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 			want = append(want, unifiedRowsOf(m.Unified)...)
 			wantSplit = append(wantSplit, splitRowsOf(m.Unified)...)
 			added, removed := headCounts(m.Unified)
-			heads = append(heads, fmt.Sprintf(diffHeadTag+`<span>manifest %s <span class="mut">%s</span> `+countsFormat+`</span>`, m.Name, m.Op, added, removed))
+			heads = append(heads, diffHeadTag+span(fmt.Sprintf(`manifest %s <span class="mut">%s</span> `+countsFormat, m.Name, m.Op, added, removed)))
 		}
 		for _, layout := range []string{layoutUnified, layoutSplit} {
 			where := c.tab + " " + layout
@@ -432,7 +430,7 @@ func TestTheReadingOfTheTextFollowsTheRulesOfTheIssue(t *testing.T) {
 		if layout == layoutSplit {
 			clicks = append(clicks, splitClick)
 		}
-		card := cardOf(t, clickIn(t, dir, "scratch", dexHash, "0", clicks...).After, tabOf(dexPublished))
+		card := cardOf(t, clickIn(t, dir, scratch, dexHash, "0", clicks...).After, tabOf(dexPublished))
 		sameRows(t, layout, diffRowsOf(card), layoutRows(layout, text))
 		mustHold(t, layout, card, fmt.Sprintf(countsFormat, 5, 2))
 	}
@@ -500,9 +498,14 @@ func pressedButton(attr, view, label string, on bool) string {
 	return `<button ` + pressedAttrs(attr, view, on) + ` class="` + onClass(on) + `">` + label + `</button>`
 }
 
-// pressedAttrs gives the attributes of pressedButton that name the view and say if the button is pressed.
+// pressedAttrs gives the attributes of pressedButton that name the view and say if the button is pressed. pressedAttrsOf
+// gives them with the text of aria-pressed, such as a pattern.
 func pressedAttrs(attr, view string, on bool) string {
-	return `data-` + attr + `="` + view + `" aria-pressed="` + strconv.FormatBool(on) + `"`
+	return pressedAttrsOf(attr, view, strconv.FormatBool(on))
+}
+
+func pressedAttrsOf(attr, view, pressed string) string {
+	return `data-` + attr + `="` + view + `" aria-pressed="` + pressed + `"`
 }
 
 // Both layouts have the same control in the head of each diff, on the Values tab and on the Manifests
@@ -553,7 +556,7 @@ func TestALineOfADiffWithMarkupShowsAsText(t *testing.T) {
 		d.Manifests[0].Unified = strings.Replace(d.Manifests[0].Unified, "@@ -5,5 +5,5 @@\n", "@@ -5,5 +5,5 @@ "+evil+"\n+"+evil+"\n", 1) + "@@ -90 +90 @@ " + evil + "\n-" + evil + "\n+" + evil + "\n"
 	})})
 	for _, clicks := range [][]string{nil, {splitClick}, {tabClick(dexPublished, "manifests")}, {splitClick, tabClick(dexPublished, "manifests")}} {
-		r := clickIn(t, dir, "scratch", dexHash, "0", clicks...)
+		r := clickIn(t, dir, scratch, dexHash, "0", clicks...)
 		where := fmt.Sprint("clicks ", clicks)
 		checkMarkup(t, screen{Hash: where, HTML: r.After})
 		mustHold(t, where, r.After, injection)
@@ -582,16 +585,17 @@ func registryUidOf(t *testing.T, set *devdata.Set, name string) string {
 func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	set := loadSet(t, devdata.StateTextTooLarge)
 	screens := render(t, devdata.StateTextTooLarge, false)
-	tone := splashClass("sm", "off")
+	tooLarge := placeNamed(t, "a text too large")
 	uid := registryUidOf(t, set, "kubernetes")
 	published := cardOf(t, pageOf(t, screens, dexHash, ""), tabOf(dexPublished))
 	where := "the values of dex"
-	mustHold(t, where, published, tooLargeTitle, tooLargeFact, tone, dexFullCompare)
+	checkPlace(t, tooLarge, published)
 	mustNotHold(t, where, published, diffHead, diffBody, `data-view=`)
 	// The manifest keeps its row in the small table, because it has no text, and the splash comes with the command.
 	manifests := cardOf(t, pageOf(t, screens, dexHash, "tab "+dexPublished+" manifests"), tabAttrs(dexPublished, "manifests"))
 	where = "the manifests of dex"
-	mustHold(t, where, manifests, tooLargeTitle, tooLargeFact, dexFullCompare, `<tr><td class="m">changed</td>`+manifestCell+`fred-realm-config</td></tr>`)
+	checkPlace(t, tooLarge, manifests)
+	mustHold(t, where, manifests, `<tr><td class="m">changed</td>`+manifestCell+`fred-realm-config</td></tr>`)
 	mustNotHold(t, where, manifests, diffHead, diffBody)
 	// The newer side of the same pack keeps its text.
 	move := cardOf(t, pageOf(t, screens, dexHash, "side newer"), tabOf(dexMove))
@@ -601,7 +605,8 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	// The newer side of kubernetes has the command with the two versions of the pack.
 	k8s := cardOf(t, pageOf(t, screens, k8sHash, ""), tabOf(k8sMove))
 	where = testkit.KubernetesValues
-	mustHold(t, where, k8s, tooLargeTitle, tooLargeFact, "<code>"+comparePacks+uid+"/kubernetes@1.35.3 pack:"+uid+"/kubernetes@1.36.2 --full</code>")
+	tooLarge.steps = []string{"<code>" + comparePacks + uid + "/kubernetes@1.35.3 pack:" + uid + "/kubernetes@1.36.2 --full</code>"}
+	checkPlace(t, tooLarge, k8s)
 	mustNotHold(t, where, k8s, diffHead)
 	// The pack has no manifest, so the Manifests tab says so, links to the tab with the change, and shows no splash of a large text.
 	none := cardOf(t, pageOf(t, screens, k8sHash, "tab "+k8sMove+" manifests"), tabAttrs(k8sMove, "manifests"))
@@ -623,7 +628,7 @@ func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 		d.Values.Unified, d.TextTooLarge = "", true
 	})})
 	command := compareCluster + set.Cluster.Cluster.Name + "/fred-identity"
-	r := clickIn(t, dir, "scratch", dexHash, "0")
+	r := clickIn(t, dir, scratch, dexHash, "0")
 	card := cardOf(t, r.After, tabOf("side-"+testkit.DexProfile+"-addon/dex-cluster"))
 	mustHold(t, "the cluster side", card, tooLargeNote, "<code>"+command+" --full</code>")
 	mustNotHold(t, "the cluster side", card, diffHead)
@@ -640,7 +645,7 @@ func TestTheCommandOfATextAboveTheCapShowsNamesAsText(t *testing.T) {
 		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SideCluster)
 		d.Values.Unified, d.TextTooLarge = "", true
 	})})
-	page := clickIn(t, dir, "scratch", dexHash, "0").After
+	page := clickIn(t, dir, scratch, dexHash, "0").After
 	mustHold(t, "the command", page, `&#39;cluster:`+injection+`/fred-identity&#39; --full`)
 	mustNotHold(t, "the command", page, "<img")
 }
@@ -651,7 +656,7 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 	set := loadSet(t, devdata.StateOK)
 	screens := render(t, devdata.StateOK, false)
 	table := pageOf(t, screens, "#newer", "")
-	mustHold(t, "the table", table, `data-sort="nt" data-col="listed">Listed<svg class="sorti"`, `</svg></button></th><th class="narrow-hide" title="Asks Palette whether it would take this move on the clusters that run this profile. It changes nothing.">Palette</th></tr></thead>`)
+	mustHold(t, "the table", table, `data-sort="nt" `+sortCol("listed", "Listed")+sortIcon, `</svg></button></th><th class="narrow-hide" title="Asks Palette whether it would take this move on the clusters that run this profile. It changes nothing.">Palette</th></tr></thead>`)
 	if got := strings.Count(table, askButtonEnd); got != len(set.Newer.Newer) {
 		t.Errorf("the table has %d buttons for %d rows", got, len(set.Newer.Newer))
 	}
@@ -918,11 +923,11 @@ func TestAClickThatGetsAnAnswerWithoutAVersionEndsWithTheWordNoAnswer(t *testing
 		t.Run("newest "+newest, func(t *testing.T) {
 			reply := `{"asks":[{"profile":"` + testkit.DexProfile + `","key":"addon/dex","newest":"` + newest + `",` + testkit.NoAnswerVerdict + `,"refusals":[],"status":502}]}`
 			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": func([]byte) []byte { return []byte(reply) }})
-			r := clickIn(t, dir, "scratch", dexHash, "0", dexClick)
+			r := clickIn(t, dir, scratch, dexHash, "0", dexClick)
 			mustHold(t, "after", textOf(r.After), gaveNoAnswer+": HTTP 502.")
 			mustHold(t, "after", r.After, cardButton+dexMoveAttrs+askAgainEnd)
 			mustNotHold(t, "after", r.After, askThisMove, couldNotAsk)
-			table := clickIn(t, dir, "scratch", "#newer", "0", dexClick)
+			table := clickIn(t, dir, scratch, "#newer", "0", dexClick)
 			mustHold(t, "the table", rowTo(t, table.After, dexHash), noAnswerSpan, askAgain)
 		})
 	}

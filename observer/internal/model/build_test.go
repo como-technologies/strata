@@ -28,11 +28,7 @@ func TestTheSummaryHoldsNoOldValueAndNoNewValue(t *testing.T) {
 	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")), &docs.Verify{Who: who()}, "csi/csi-aws-ebs"),
 		docs.Diff{RootB: "r3", Packs: []docs.Pack{changed("csi/csi-aws-ebs", "charts.a.b")}})
 	out := string(testkit.MustJSON(t, build(ptr(content(t, r)), nil)))
-	for _, banned := range []string{"OLD-SENTINEL", "NEW-SENTINEL", `"old"`, `"new":"`, "charts.a.", "changedPaths"} {
-		if strings.Contains(out, banned) {
-			t.Errorf("the summary holds %s: %s", banned, out)
-		}
-	}
+	testkit.HoldsNone(t, "the summary", out, []string{"OLD-SENTINEL", "NEW-SENTINEL", `"old"`, `"new":"`, "charts.a.", "changedPaths"}...)
 	if !strings.Contains(out, `"fold":{"settings":2,"followsTheVersion":0,"repeatsTheLists":0}`) {
 		t.Errorf("the count of the changed values is not there: %s", out)
 	}
@@ -46,11 +42,7 @@ func TestAnEmptyListIsNeverNull(t *testing.T) {
 		}
 	}
 	good := string(testkit.MustJSON(t, build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))), nil)))
-	for _, banned := range []string{":null,\"flags\"", `"flags":null`, `"packs":null`, `"profiles":null`, `"findings":null`} {
-		if strings.Contains(good, banned) {
-			t.Errorf("a list is null (%s): %s", banned, good)
-		}
-	}
+	testkit.HoldsNone(t, "the summary of a good build", good, []string{":null,\"flags\"", `"flags":null`, `"packs":null`, `"profiles":null`, `"findings":null`}...)
 }
 
 func TestTheClusterFlagsAppearOnlyWhenAFindingExists(t *testing.T) {
@@ -540,11 +532,7 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 		t.Errorf("the move\n got %+v\nwant %+v", *n.Move, want)
 	}
 	raw := string(testkit.MustJSON(t, s))
-	for _, banned := range []string{"OLD-SENTINEL", "NEW-SENTINEL", "replicas"} {
-		if strings.Contains(raw, banned) {
-			t.Errorf("the summary holds %q", banned)
-		}
-	}
+	testkit.HoldsNone(t, "the summary", raw, []string{"OLD-SENTINEL", "NEW-SENTINEL", "replicas"}...)
 
 	// a compare that failed names the newer version with no move, and says so
 	v.ProfileMoves, v.ProfileUnread = nil, map[string]bool{"barney-addons@1.3.1": true}

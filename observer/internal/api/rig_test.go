@@ -253,10 +253,8 @@ func (r *rig) once(o *check.Observer) model.Summary {
 	return s
 }
 
-// get makes a request to the handler. The Host is a loopback address, as a port-forward gives.
-func get(h http.Handler, path string) *httptest.ResponseRecorder {
-	return testkit.Serve(h, http.MethodGet, path, testkit.LoopbackHost, "")
-}
+// get makes a request to the handler with testkit.Get. The Host is a loopback address, as a port-forward gives.
+var get = testkit.Get
 
 func handlerOf(src Source) http.Handler {
 	return (&Server{Source: src}).Handler()

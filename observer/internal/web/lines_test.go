@@ -39,6 +39,9 @@ func lineValue(n, first, last int, tag string) string {
 	return b.String()
 }
 
+// dblockOpen starts the block of a text of a diff, before its id.
+const dblockOpen = `<div class="dblock"`
+
 // longSet makes a directory of sets whose pack kubernetes holds the one changed value leaf. It also changes the
 // entry of the newer side with each edit.
 func longSet(t *testing.T, leaf docs.Leaf, edit ...func(*api.PackDiff)) string {
@@ -182,7 +185,7 @@ func TestTheRealKubeadmFileOfKubernetesShowsItsThreeChangedLines(t *testing.T) {
 	if old, _ := leaf.Old.(string); leaf.Path != contentPath || strings.Count(old, "\n") != 21 {
 		t.Fatalf("the set ok must hold the real file of 21 lines as the first setting of kubernetes, not %q", leaf.Path)
 	}
-	before, after := sidesOf(t, pagesOf(t, writeSet(t, devdata.StateOK, nil), k8sHash)[0], contentPath)
+	before, after := sidesOf(t, shown(t, devdata.StateOK, k8sHash)[0], contentPath)
 	side := func(class, mark, version string) []string {
 		return []string{
 			gap,
@@ -244,8 +247,8 @@ func TestAValueWithMoreThanFortyChangedLinesSaysHowManyAndLinksToTheText(t *test
 		mustHold(t, count, row, `<td class="val" colspan="2"><button class="lnk" data-jump="`+textID+`">`+count+`</button></td>`)
 		mustNotHold(t, count, row, `class="vls"`)
 		// The text below the table has that id, and a click on the link jumps to it without a change of the screen.
-		mustHold(t, count, page, `<div class="dblock" id="`+textID+`">`)
-		r := clickIn(t, dir, "scratch", k8sHash, "0", `{"jump":"`+textID+`"}`)
+		mustHold(t, count, page, dblockOpen+` id="`+textID+`">`)
+		r := clickIn(t, dir, scratch, k8sHash, "0", `{"jump":"`+textID+`"}`)
 		if len(r.Jumps) == 0 || r.Jumps[0] != textID || r.Hash != k8sHash {
 			t.Errorf("a click on the link jumped to %v and left the hash %q, want the id %q and the hash %q", r.Jumps, r.Hash, textID, k8sHash)
 		}
@@ -286,7 +289,7 @@ func TestTheUnifiedAndSplitViewsDoNotChange(t *testing.T) {
 	without := longSet(t, changedLeaf("v1.35", "v1.36"))
 	textOf := func(page string) string {
 		card := cardOf(t, page, tabOf(k8sMove))
-		at := strings.Index(card, `<div class="dblock"`)
+		at := strings.Index(card, dblockOpen)
 		if at < 0 {
 			t.Fatal("the card shows no text of the values")
 		}
@@ -296,7 +299,7 @@ func TestTheUnifiedAndSplitViewsDoNotChange(t *testing.T) {
 		var pages [2]string
 		for i, dir := range []string{with, without} {
 			if layout == layoutSplit {
-				pages[i] = clickIn(t, dir, "scratch", k8sHash, "0", splitClick).After
+				pages[i] = clickIn(t, dir, scratch, k8sHash, "0", splitClick).After
 			} else {
 				pages[i] = pagesOf(t, dir, k8sHash)[0]
 			}

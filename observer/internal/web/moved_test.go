@@ -30,9 +30,12 @@ func filterButton(filter, words string, on bool) string {
 }
 
 // filterButtonClass gives the button of the filter of the table of the profiles, with its words and its class.
+// filterOpen starts the button, before the filter.
 func filterButtonClass(filter, words, class string) string {
-	return `<button data-filter="` + filter + `" class="` + class + `">` + words + `</button>`
+	return filterOpen + filter + `" class="` + class + `">` + words + `</button>`
 }
+
+const filterOpen = `<button data-filter="`
 
 // versionPageOfMoved checks the page of the version moved. It must hold the badge of the status and the fact of a version
 // that the cluster no longer runs. It names no move and no newer version. Each of its 3 packs says only what images it lists.

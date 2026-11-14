@@ -140,10 +140,10 @@ func TestAClickShowsTheChecksOfTheAnswerAtOnce(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": func([]byte) []byte {
 		return testkit.MustJSON(t, api.AsksView{Asks: []model.Answer{k8s}})
 	}})
-	r := clickIn(t, dir, "scratch", k8sHash, "0", k8sClick)
+	r := clickIn(t, dir, scratch, k8sHash, "0", k8sClick)
 	mustNotHold(t, "before", r.Before, skipNote, gaveNoError)
 	mustHold(t, "after", textOf(r.After), noErrorCovers, skipHead, skipStep, oneRule)
-	table := clickIn(t, dir, "scratch", "#newer", "0", k8sClick)
+	table := clickIn(t, dir, scratch, "#newer", "0", k8sClick)
 	mustHold(t, "the table", rowTo(t, table.After, k8sHash), cellWith(noErrorCell, skipLine))
 }
 

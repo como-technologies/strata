@@ -80,7 +80,7 @@ const (
 	buildHeld       = buildSlabs + "{opacity:.7}"
 	lostMoved       = "{transform:translate(9px,-8px)}"
 	noMotionRule    = "no rule for " + motionQuery
-	slabsSVG        = `<svg class="slabs tone-`
+	slabsSVG        = `<svg ` + markOpen
 )
 
 // motionProblems lists what is wrong in the way that a style stops its animations for a person who asks for less motion. Each
@@ -214,11 +214,7 @@ func TestTheMarkOfTheSplashIsTheGeometryOfTheLogo(t *testing.T) {
 // assets/ keep the rules of the page, and the splash adds no font, no library, and no image.
 func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testing.T) {
 	policy := serve(t, "/").Header().Get(testkit.HeaderPolicy)
-	for _, want := range []string{"default-src 'none'", "script-src 'self'", "style-src 'self'", "font-src 'self'", "img-src 'self'"} {
-		if !strings.Contains(policy, want) {
-			t.Errorf("the policy %q lacks %s", policy, want)
-		}
-	}
+	mustHold(t, "the policy", policy, []string{"default-src 'none'", "script-src 'self'", "style-src 'self'", "font-src 'self'", "img-src 'self'"}...)
 	if strings.Contains(policy, "unsafe-inline") || strings.Contains(policy, "data:") {
 		t.Errorf("the policy %q allows "+problemStyle+" or a data address", policy)
 	}
@@ -236,13 +232,10 @@ func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testin
 		t.Errorf("assets/ holds %v, want %v", names, want)
 	}
 	script := readScripts(t)
-	for _, banned := range []string{"<img", "new Image", "@import", "<link", "<style"} {
-		if strings.Contains(script, banned) {
-			t.Errorf("the scripts hold %s", banned)
-		}
-	}
+	mustNotHold(t, "the scripts", script, []string{"<img", "new Image", "@import", "<link", "<style"}...)
 	// The mark is drawn in markup through h``, like every other part of the page.
-	if !strings.Contains(script, slabsSVG+`${tone}"`) || strings.Count(script, "innerHTML") != 1 {
-		t.Error("the mark is not drawn through the template of the scripts")
-	}
+	mustHold(t, "the scripts", script, slabsSVG+`${tone}"`)
+	var got []string
+	problemsInScreens(script, func(p string) { got = append(got, p) })
+	noProblems(t, "the scripts", got)
 }

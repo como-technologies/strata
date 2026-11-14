@@ -26,6 +26,23 @@ func TestOutFileGivesTheArgumentAfterTheFlagAndAnErrorWhenThereIsNone(t *testing
 	}
 }
 
+// With the variable CI set, a missing tool, such as node for the render tests of internal/web, fails the test. Else
+// it skips. This test needs no tool.
+func TestWithCISetAMissingToolFailsTheTest(t *testing.T) {
+	for _, c := range []struct {
+		name, ci      string
+		failed, skips bool
+	}{{"no CI", "", false, true}, {"CI is true", "true", true, false}, {"CI is 1", "1", true, false}} {
+		t.Run(c.name, func(t *testing.T) {
+			var failed, skipped bool
+			WhenMissing(c.ci, "node", func(...any) { failed = true }, func(...any) { skipped = true })
+			if failed != c.failed || skipped != c.skips {
+				t.Errorf("failed %v and skipped %v, want %v and %v", failed, skipped, c.failed, c.skips)
+			}
+		})
+	}
+}
+
 func TestClusterRunsTheProfilesThatTheCallGives(t *testing.T) {
 	c := Payments(AddonsProfile)
 	got := c.Source.Cluster

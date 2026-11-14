@@ -370,9 +370,5 @@ func TestAContentCycleNeverWaitsForAVersionsCycleAndTheProgressShows(t *testing.
 		t.Errorf(stillRunning, "versions")
 	}
 	log := r.log.String()
-	for _, want := range []string{"cycle=versions phase=start", "cycle=content phase=start", "cycle=content phase=end verdict=ok processes=", "cycle=versions phase=end verdict=ok processes="} {
-		if !strings.Contains(log, want) {
-			t.Errorf("the log has no %q", want)
-		}
-	}
+	testkit.HoldsAll(t, "the log", log, []string{"cycle=versions phase=start", "cycle=content phase=start", "cycle=content phase=end verdict=ok processes=", "cycle=versions phase=end verdict=ok processes="}...)
 }

@@ -147,11 +147,7 @@ func TestAFailedSendKeepsTheMessageAndSendsItOnceAfterItWorks(t *testing.T) {
 	if len(b.send.sent) != 0 || len(b.store.Outbox) != 1 || b.store.Items["d1"].Sent != nil {
 		t.Fatalf(sentWaiting, len(b.send.sent), len(b.store.Outbox), b.store.Items["d1"])
 	}
-	for _, want := range []string{"channel=oncall", "verdict=failed", "kind=status", "status=503"} {
-		if !strings.Contains(b.log.String(), want) {
-			t.Errorf("the log lacks %q: %s", want, b.log.String())
-		}
-	}
+	testkit.HoldsAll(t, "the log", b.log.String(), []string{"channel=oncall", "verdict=failed", "kind=status", "status=503"}...)
 	delete(b.send.fail, "oncall")
 	b.later(15 * time.Minute)
 	b.cycle([]Subject{drift}, content)

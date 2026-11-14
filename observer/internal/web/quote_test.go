@@ -4,7 +4,6 @@ import (
 	"fmt"
 	htmlpkg "html"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -54,16 +53,19 @@ func jsonText(t *testing.T, s string) string {
 // that starts with a quote is a whole JSON string. The other old texts change wherever they stand.
 func renamedSet(t *testing.T, from devdata.State, swaps [][2]string) string {
 	t.Helper()
-	rename := func(raw []byte) []byte {
-		text := string(raw)
-		for _, s := range swaps {
-			to := jsonText(t, s[1])
-			if strings.HasPrefix(s[0], `"`) {
-				to = `"` + to + `"`
-			}
-			text = strings.ReplaceAll(text, s[0], to)
+	var edits []func([]byte) []byte
+	for _, s := range swaps {
+		to := jsonText(t, s[1])
+		if strings.HasPrefix(s[0], `"`) {
+			to = `"` + to + `"`
 		}
-		return []byte(text)
+		edits = append(edits, replaceText(s[0], to))
+	}
+	rename := func(raw []byte) []byte {
+		for _, edit := range edits {
+			raw = edit(raw)
+		}
+		return raw
 	}
 	edit := map[string]func([]byte) []byte{"alerts.json": rename}
 	for _, name := range devdata.Files {
@@ -86,6 +88,15 @@ func commandAfter(t *testing.T, markup, text string) string {
 		t.Fatalf("no command follows %q", text)
 	}
 	return htmlpkg.UnescapeString(m[1])
+}
+
+// argsAre fails when the command of the page, which argumentsOf runs, gives the tool other arguments than want. where
+// names the command in the failure.
+func argsAre(t *testing.T, where, bin, dir, command string, want []string) {
+	t.Helper()
+	if got := argumentsOf(t, bin, dir, command); got != nil && !slices.Equal(got, want) {
+		t.Errorf("%s: "+gaveArgs, where, command, got, want)
+	}
 }
 
 // argumentsOf runs a command of the page with bash in dir, with the stand-ins of bin first on the PATH, and it gives the arguments that
@@ -115,12 +126,10 @@ func writeTool(t *testing.T, path, body string) {
 	testkit.WriteExec(t, path, body)
 }
 
-// needBash skips the test when bash is not on the PATH.
+// needBash ends the test with testkit.NeedTools when bash is not on the PATH.
 func needBash(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("bash is not on the PATH")
-	}
+	testkit.NeedTools(t, "bash")
 }
 
 // noMarkers fails when a command substitution of a name wrote a file in dir: the name ran as code.
@@ -169,9 +178,7 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 				if !c.plain && named && !strings.Contains(command, "'") {
 					t.Errorf("%s: the command %q has no quote around the name", where, command)
 				}
-				if got := argumentsOf(t, bin, dir, command); got != nil && !slices.Equal(got, want) {
-					t.Errorf("%s: "+gaveArgs, where, command, got, want)
-				}
+				argsAre(t, where, bin, dir, command, want)
 			}
 
 			// The card: the page of a profile and the page of a pack, with a move to a newer version.

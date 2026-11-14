@@ -82,7 +82,7 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 			}
 		}
 	})})
-	same := pageWith(t, dir, "scratch", vendor, `S.side["side-`+wilmaSubject+`-`+testkit.VendorPack+`"] = "newest"`)
+	same := pageWith(t, dir, scratch, vendor, `S.side["side-`+wilmaSubject+`-`+testkit.VendorPack+`"] = "newest"`)
 	mustHold(t, "a pack that the move does not change", same, badge("g", "Identical"),
 		"The newest version of the profile holds what the record holds for this pack.")
 
@@ -118,10 +118,7 @@ func TestTheCommandOfTheMoveOfAProfilePastesAsTheArgumentsItMeans(t *testing.T) 
 			if len(rows) != 1 {
 				t.Fatalf("%d rows of the move", len(rows))
 			}
-			want := []string{"compare", "record.json", profile + "@3.2.0", "--full"}
-			if got := argumentsOf(t, bin, dir, rows[0].command); got != nil && !slices.Equal(got, want) {
-				t.Errorf(gaveArgs, rows[0].command, got, want)
-			}
+			argsAre(t, "the move", bin, dir, rows[0].command, []string{"compare", "record.json", profile + "@3.2.0", "--full"})
 			noMarkers(t, dir)
 		})
 	}

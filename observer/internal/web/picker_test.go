@@ -41,9 +41,5 @@ func TestTheListOfTheCompareDropdownTakesTheTokensOfTheTheme(t *testing.T) {
 // The dropdown needs no script: the change of a side still goes through the one handler of the page.
 func TestTheDropdownCompareHasNoScriptForItsList(t *testing.T) {
 	script := readScripts(t)
-	for _, word := range []string{"showPicker", "picker", "base-select"} {
-		if strings.Contains(script, word) {
-			t.Errorf("the scripts hold %q: the style draws the list", word)
-		}
-	}
+	mustNotHold(t, "the scripts", script, []string{"showPicker", "picker", "base-select"}...)
 }

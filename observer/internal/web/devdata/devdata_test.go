@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"reflect"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -61,28 +61,10 @@ func sameAsOK(t *testing.T, ok, s *Set, state State, changed ...any) {
 	}
 }
 
-// normal reads JSON into plain values, so that two documents compare with no regard to the layout.
-func normal(t *testing.T, raw []byte) any {
-	t.Helper()
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		t.Fatalf("%v: %s", err, raw)
-	}
-	return v
-}
-
-func encoded(t *testing.T, v any) any {
-	t.Helper()
-	raw := testkit.MustJSON(t, v)
-	return normal(t, raw)
-}
-
 // sameAsFile fails when the type v encodes to another document than the file raw holds.
 func sameAsFile(t *testing.T, v any, raw []byte) {
 	t.Helper()
-	if got, want := encoded(t, v), normal(t, raw); !reflect.DeepEqual(got, want) {
-		t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
-	}
+	testkit.SamePlain(t, "the type", v, json.RawMessage(raw))
 }
 
 // Each file of each set decodes into the type of its route, and the decode refuses a field that the
@@ -140,7 +122,7 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 		s := load(t, state)
 		h := (&api.Server{Source: s}).Handler()
 		get := func(path string) (int, any) {
-			rec := testkit.Serve(h, http.MethodGet, path, testkit.LoopbackHost, "")
+			rec := testkit.Get(h, path)
 			var v any
 			_ = json.Unmarshal(rec.Body.Bytes(), &v)
 			return rec.Code, v
@@ -158,20 +140,20 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			serves(route, normal(t, raw))
+			serves(route, testkit.Plain(t, json.RawMessage(raw)))
 		}
-		serves("/v1/alerts", encoded(t, s.AlertRules))
+		serves("/v1/alerts", testkit.Plain(t, s.AlertRules))
 		for _, img := range s.Images.Images {
 			view, _ := s.Images.ImageOf(img.Ref)
 			path := "/v1/images/" + url.PathEscape(img.Ref)
-			serves(path, encoded(t, view))
+			serves(path, testkit.Plain(t, view))
 		}
 		if code, _ := get("/v1/images/" + url.PathEscape(testkit.NoImage)); code != http.StatusNotFound {
 			t.Errorf("%s: an image that no pod runs gave %d", state, code)
 		}
 		for _, d := range s.Diffs {
 			path := "/v1/packs/" + d.Profile + "/" + d.Key + "/diff?side=" + string(d.Side)
-			serves(path, encoded(t, d))
+			serves(path, testkit.Plain(t, d))
 		}
 		if _, found, _ := s.PackDiff(context.Background(), "nobody@1.0.0", "addon/none", model.SideNewer); found {
 			t.Errorf("%s: a pack that no entry names has a diff", state)
@@ -584,8 +566,6 @@ func TestTheSetsOfThePodsHoldTheirStates(t *testing.T) {
 	}
 }
 
-var hunkHead = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@$`)
-
 // lineCount reads the count of a hunk head. A head with no count means one line.
 func lineCount(s string) int {
 	if s == "" {
@@ -615,7 +595,7 @@ func unifiedProblem(text string) string {
 	var old, now, wantOld, wantNow, hunks int
 	closed := func() bool { return old == wantOld && now == wantNow }
 	for _, l := range lines[2:] {
-		if m := hunkHead.FindStringSubmatch(l); m != nil {
+		if m := testkit.HunkHead.FindStringSubmatch(l); m != nil {
 			if hunks > 0 && !closed() {
 				return "a" + hunkLines
 			}
@@ -655,9 +635,7 @@ func TestEachUnifiedTextOfEachSetAgreesWithItsHunkHeads(t *testing.T) {
 				if text != "" {
 					texts++
 				}
-				if p := unifiedProblem(text); p != "" {
-					t.Errorf("%s: %s %s %s of %s: %s", state, d.Profile, d.Key, d.Side, what, p)
-				}
+				testkit.NoProblems(t, fmt.Sprintf("%s: %s %s %s of %s", state, d.Profile, d.Key, d.Side, what), []string{unifiedProblem(text)})
 			}
 		}
 	}
@@ -670,13 +648,9 @@ func TestEachUnifiedTextOfEachSetAgreesWithItsHunkHeads(t *testing.T) {
 		"@@ -1 +1 @@\n-a\n+b\n":                         "header lines",
 		"--- a: x\n+++ b: x\n-a\n":                      beforeHunk,
 	} {
-		if got := unifiedProblem(text); !strings.Contains(got, want) {
-			t.Errorf("the check gave %q for %q, want %q", got, text, want)
-		}
+		testkit.FindsProblem(t, fmt.Sprintf("%q", text), []string{unifiedProblem(text)}, want)
 	}
-	if got := unifiedProblem("--- a: x\n+++ b: x\n@@ -0,0 +1,2 @@\n+a\n+b\n" + testkit.NoEOL + "\n"); got != "" {
-		t.Errorf("a good text has the problem %q", got)
-	}
+	testkit.NoProblems(t, "a good text", []string{unifiedProblem("--- a: x\n+++ b: x\n@@ -0,0 +1,2 @@\n+a\n+b\n" + testkit.NoEOL + "\n")})
 }
 
 // The set ok holds text for the values of dex, for its manifest, and for the values of kubernetes. The
@@ -848,7 +822,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 			if a.Key != testkit.KubernetesKey || s.Code != testkit.CodeMinorSkip || s.To != a.Newest || s.NextStep != moves[row].Newest || a.Newest == moves[row].Newest {
 				t.Errorf("the skip %+v of %s %s, the row gives %s", s, a.Profile, a.Key, moves[row].Newest)
 			}
-		} else if a.Newest != moves[row].Newest {
+		} else if !isMove(moves, a) {
 			t.Errorf("the answer for %s %s is for %s, and the row for %s", a.Profile, a.Key, a.Newest, moves[row].Newest)
 		}
 		if v := a.UpdateChecks.RequiredVariables; v != nil {
@@ -960,7 +934,7 @@ func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
 	for _, name := range v.Channels {
 		channels[name] = map[string]string{"urlFile": "f"}
 	}
-	list, _ := encoded(t, v.Rules).([]any)
+	list, _ := testkit.Plain(t, v.Rules).([]any)
 	for _, r := range list {
 		delete(r.(map[string]any), "state")
 	}
@@ -981,9 +955,7 @@ func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
 	queue := slices.Clone(store.Outbox)
 	store.Settle(queue, slices.Repeat([]bool{true}, len(queue)), Reference)
 	want := engine.View(store, subjects, s.Cluster.Cluster.Name, Reference)
-	if !reflect.DeepEqual(encoded(t, v), encoded(t, want)) {
-		t.Errorf("the set holds\n%v\nthe engine gives\n%v", encoded(t, v), encoded(t, want))
-	}
+	testkit.SamePlain(t, "the view of the set", v, want)
 	seen := map[alert.State]bool{}
 	for _, r := range v.Rules {
 		seen[r.State] = true
@@ -994,7 +966,5 @@ func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
 }
 
 func TestTheSetAlertsUnsetIsAnObserverStartedWithoutAlerts(t *testing.T) {
-	if got, want := encoded(t, load(t, StateAlertsUnset).AlertRules), encoded(t, alert.Unset()); !reflect.DeepEqual(got, want) {
-		t.Errorf("the set holds\n%v\nthe observer gives\n%v", got, want)
-	}
+	testkit.SamePlain(t, "the alerts of the set", load(t, StateAlertsUnset).AlertRules, alert.Unset())
 }

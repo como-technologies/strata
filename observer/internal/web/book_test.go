@@ -140,7 +140,7 @@ func TestALostPageNamesTheKeyOnlyForARefusal(t *testing.T) {
 			dir := writeSet(t, devdata.StateLostUnchecked, map[string]func([]byte) []byte{
 				"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Content.LastError = &lastError }),
 			})
-			page := pageWith(t, dir, "scratch", "#overview", "")
+			page := pageWith(t, dir, scratch, "#overview", "")
 			mustHold(t, c.name, page, c.want)
 			mustNotHold(t, c.name, page, c.not)
 		})
@@ -161,7 +161,7 @@ func TestTheThirdFactOfAllQuietIsASingleShortLabel(t *testing.T) {
 		dir := writeSet(t, devdata.StateQuiet, map[string]func([]byte) []byte{
 			"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Counts.Newer = c.newer }),
 		})
-		mustHold(t, "the facts of "+calmQuiet, pageWith(t, dir, "scratch", "#findings", ""), c.want)
+		mustHold(t, "the facts of "+calmQuiet, pageWith(t, dir, scratch, "#findings", ""), c.want)
 	}
 }
 

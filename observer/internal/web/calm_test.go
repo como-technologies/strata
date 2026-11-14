@@ -98,7 +98,7 @@ func calmPages(t *testing.T, dir, code string) []string {
 	t.Helper()
 	var out []string
 	for _, hash := range calmPlaces {
-		out = append(out, pageWith(t, dir, "scratch", hash, code))
+		out = append(out, pageWith(t, dir, scratch, hash, code))
 	}
 	return out
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -57,7 +56,7 @@ func (noSource) StartCycle(string) (model.Start, bool) { return model.Start{}, f
 func serve(t *testing.T, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	h := (&api.Server{Source: noSource{}, Page: api.Page(files(t))}).Handler()
-	return testkit.Serve(h, http.MethodGet, target, testkit.LoopbackHost, "")
+	return testkit.Get(h, target)
 }
 
 func TestEachAssetIsServedWithItsType(t *testing.T) {
@@ -177,11 +176,7 @@ func TestLicensesNamesEachFontWithItsChecksum(t *testing.T) {
 			t.Errorf("LICENSES.md does not name %s with its checksum", f)
 		}
 	}
-	for _, want := range []string{"OFL-1.1", "SIL OPEN FONT LICENSE Version 1.1", "5.3.0"} {
-		if !strings.Contains(string(licenses), want) {
-			t.Errorf("LICENSES.md has no %q", want)
-		}
-	}
+	mustHold(t, "LICENSES.md", string(licenses), []string{"OFL-1.1", "SIL OPEN FONT LICENSE Version 1.1", "5.3.0"}...)
 }
 
 var (
@@ -370,21 +365,14 @@ func problemsInStyle(text string, add func(string)) {
 	}
 }
 
-// noProblems fails when a check found problems in what.
-func noProblems(t *testing.T, what string, got []string) {
-	t.Helper()
-	if len(got) != 0 {
-		t.Errorf("%s has problems:\n%s", what, strings.Join(got, "\n"))
-	}
-}
-
-// findsProblem fails when no problem that a check found in what holds want.
-func findsProblem(t *testing.T, what string, got []string, want string) {
-	t.Helper()
-	if !strings.Contains(strings.Join(got, "\n"), want) {
-		t.Errorf("%s: problems %q, want one with %q", what, got, want)
-	}
-}
+// noProblems and findsProblem are the checks of the problems that a check of the page found, and mustHold and
+// mustNotHold are the checks of the words of a screen. Each one is a helper of testkit.
+var (
+	noProblems   = testkit.NoProblems
+	findsProblem = testkit.FindsProblem
+	mustHold     = testkit.HoldsAll
+	mustNotHold  = testkit.HoldsNone
+)
 
 func TestTheAssetsHoldNoExternalAddressNoInlineStyleNoInlineScriptAndNoUnescapedValue(t *testing.T) {
 	noProblems(t, "assets/", problems(files(t)))
@@ -479,17 +467,6 @@ type screen struct {
 	Error   string `json:"error"`
 }
 
-// whenNodeIsMissing ends a test that needs node. With the variable CI set, the test fails: a runner with
-// no node would skip each render test, and the checks would pass with nothing checked. Else the test
-// skips, and the lead checks the render.
-func whenNodeIsMissing(ci string, fail, skip func(args ...any)) {
-	if ci != "" {
-		fail("node is not on the PATH, and CI is set: a runner must have node, or the render tests check nothing")
-		return
-	}
-	skip("node is not on the PATH: the lead checks the render")
-}
-
 // runNode runs testdata/render.js for one set of testdata/api, with the arguments that follow the
 // set, and gives what it prints.
 func runNode(t *testing.T, state devdata.State, extra ...string) []byte {
@@ -501,9 +478,7 @@ func runNode(t *testing.T, state devdata.State, extra ...string) []byte {
 func nodeJSON[T any](t *testing.T, raw []byte) T {
 	t.Helper()
 	var v T
-	if err := json.Unmarshal(raw, &v); err != nil {
-		t.Fatalf("the output of render.js is no JSON: %v", err)
-	}
+	testkit.Decode(t, "the output of render.js", raw, &v)
 	return v
 }
 
@@ -561,7 +536,7 @@ func runNodeAssets(t *testing.T, assets, apiDir string, state devdata.State, ext
 	t.Helper()
 	node, err := exec.LookPath("node")
 	if err != nil {
-		whenNodeIsMissing(os.Getenv("CI"), t.Fatal, t.Skip)
+		testkit.WhenMissing(os.Getenv("CI"), "node", t.Fatal, t.Skip)
 		return nil
 	}
 	names, err := scriptsOf(os.DirFS(assets))
@@ -591,7 +566,14 @@ func render(t *testing.T, state devdata.State, poison bool) []screen {
 	if poison {
 		extra = append(extra, "poison")
 	}
-	screens := nodeJSON[[]screen](t, runNode(t, state, extra...))
+	return renderIn(t, "assets", "testdata/api", state, extra...)
+}
+
+// renderIn crawls each screen of the set state of the directory of sets apiDir with the scripts of assets, and fails for
+// a screen that threw.
+func renderIn(t *testing.T, assets, apiDir string, state devdata.State, extra ...string) []screen {
+	t.Helper()
+	screens := nodeJSON[[]screen](t, runNodeAssets(t, assets, apiDir, state, extra...))
 	for _, s := range screens {
 		if s.Error != "" {
 			t.Errorf("%s %s threw: %s", s.Hash, s.Variant, s.Error)
@@ -765,11 +747,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 			for _, s := range render(t, c.state, false) {
 				checkMarkup(t, s)
 				if s.Hash == "#overview" && s.Variant == "" {
-					for _, w := range c.words {
-						if !strings.Contains(s.HTML, w) {
-							t.Errorf("the overview of %s has no %q", c.state, w)
-						}
-					}
+					mustHold(t, "the overview of "+string(c.state), s.HTML, c.words...)
 				}
 			}
 		})
@@ -788,11 +766,7 @@ func TestAnOutageBeforeTheFirstGoodCheckClaimsNothing(t *testing.T) {
 				t.Fatalf("only %d screens", len(screens))
 			}
 			for _, s := range screens {
-				for _, b := range banned {
-					if strings.Contains(s.HTML, b) {
-						t.Errorf("%s %s says %q", s.Hash, s.Variant, b)
-					}
-				}
+				mustNotHold(t, s.Hash+" "+s.Variant, s.HTML, banned...)
 			}
 			for _, s := range screens {
 				if s.Hash == "#overview" && s.Variant == "" {
@@ -865,9 +839,7 @@ func TestAMoveThatWasNotReadShowsNoCount(t *testing.T) {
 // slot, so the next render asks again.
 func TestAFailedDetailRequestAsksAgainOnTheNextRender(t *testing.T) {
 	pages := retried(t, dexHash)
-	if !strings.Contains(pages[0], busyTitle) || !strings.Contains(pages[0], "Try now") {
-		t.Errorf("the first render does not say that the request failed: %.600s", pages[0])
-	}
+	checkPlace(t, placeNamed(t, "a diff that a cycle holds"), pages[0])
 	if strings.Contains(pages[1], busyTitle) || !strings.Contains(pages[1], dexIDTokens) {
 		t.Errorf("the second render did not ask again: %.600s", pages[1])
 	}
@@ -1004,7 +976,7 @@ func TestTheChipsOfTheFilterShowANumberAfterAGoodCheckAndNoChipBefore(t *testing
 						t.Errorf("%s %s: a chip says %q, want a number", s.Hash, s.Variant, m[1])
 					}
 				}
-				if !c.chips && strings.Contains(s.HTML, "data-filter=") {
+				if !c.chips && strings.Contains(s.HTML, filterOpen) {
 					t.Errorf("%s %s shows a filter before a check ended well", s.Hash, s.Variant)
 				}
 			}
@@ -1119,33 +1091,32 @@ func ruleIs(t *testing.T, css, selector, want string) {
 // rulesHold fails when the rule of a selector in css lacks one of the declarations that the map gives it.
 func rulesHold(t *testing.T, css string, rules map[string][]string) {
 	t.Helper()
+	noProblems(t, "the style", rulesProblems(css, rules))
+}
+
+// rulesProblems lists each declaration of the map that the rule of its selector in css lacks.
+func rulesProblems(css string, rules map[string][]string) []string {
+	var out []string
 	for selector, want := range rules {
 		for _, w := range want {
 			if p := lackProblem(css, selector, w); p != "" {
-				t.Error(p)
+				out = append(out, p)
 			}
-		}
-	}
-}
-
-// tabRowProblems lists what is missing in the rule of the row of tabs. A tab has a margin of -1px, so
-// the row overflows on the vertical axis, and a scrollbar shows. The row scrolls sideways on a phone.
-func tabRowProblems(css string) []string {
-	var out []string
-	for _, want := range []string{"overflow-x:auto;", "overflow-y:hidden;"} {
-		if p := lackProblem(css, ".tabs", want); p != "" {
-			out = append(out, p)
 		}
 	}
 	return out
 }
+
+// tabRow is what the rule of the row of tabs holds. A tab has a margin of -1px, so the row overflows on the vertical
+// axis, and a scrollbar shows. The row scrolls sideways on a phone.
+var tabRow = map[string][]string{".tabs": {"overflow-x:auto;", "overflow-y:hidden;"}}
 
 func TestTheRowOfTabsHasNoVerticalScrollbar(t *testing.T) {
 	css, err := fs.ReadFile(files(t), "app.css")
 	if err != nil {
 		t.Fatal(err)
 	}
-	noProblems(t, "app.css", tabRowProblems(string(css)))
+	noProblems(t, "app.css", rulesProblems(string(css), tabRow))
 	// The check can fail.
 	const noX, noY = "lacks overflow-x:auto;", "lacks overflow-y:hidden;"
 	for css, want := range map[string]string{
@@ -1154,9 +1125,9 @@ func TestTheRowOfTabsHasNoVerticalScrollbar(t *testing.T) {
 		`.tab{overflow-y:hidden}`:                                     noX,
 		`@media (max-width:760px){.tabs{overflow-x:auto}} .tabs{a:b}`: noY,
 	} {
-		findsProblem(t, css, tabRowProblems(css), want)
+		findsProblem(t, css, rulesProblems(css, tabRow), want)
 	}
-	noProblems(t, "a good rule", tabRowProblems(`.tabs{display:flex; overflow-x: auto; overflow-y: hidden}`))
+	noProblems(t, "a good rule", rulesProblems(`.tabs{display:flex; overflow-x: auto; overflow-y: hidden}`, tabRow))
 }
 
 /* The tests below hold the look of the page: the logo, the choice of a theme, and the colors. */
@@ -1305,21 +1276,15 @@ func TestEachCopyOfTheLogoIsItsSourceByteForByte(t *testing.T) {
 // The check of a copy must be able to fail.
 func TestTheCheckOfACopyFindsAByteThatDiffers(t *testing.T) {
 	source := []byte(`<svg><path fill="#5b2fc4"/></svg>`)
-	if got := copyProblem("copy", source, slices.Clone(source)); got != "" {
-		t.Errorf("a copy that is the same has the problem %q", got)
-	}
+	noProblems(t, "a copy that is the same", []string{copyProblem("copy", source, slices.Clone(source))})
 	for name, copy := range map[string][]byte{
 		"a byte of a color":   bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1),
 		"a missing last byte": source[:len(source)-1],
 		"a byte at the end":   append(slices.Clone(source), '\n'),
 	} {
-		if got := copyProblem("copy", source, copy); !strings.Contains(got, differsAt) {
-			t.Errorf("%s: the problem is %q", name, got)
-		}
+		findsProblem(t, name, []string{copyProblem("copy", source, copy)}, differsAt)
 	}
-	if got := copyProblem("copy", source, bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1)); !strings.Contains(got, "at byte 23 ") {
-		t.Errorf("the problem is %q, want the byte 23", got)
-	}
+	findsProblem(t, "a byte of a color", []string{copyProblem("copy", source, bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1))}, "at byte 23 ")
 }
 
 // driftRed is the red of a drift. A drift is white on this red in both schemes, so its rule holds the
@@ -1351,9 +1316,7 @@ func TestADriftIsWhiteOnRedInBothSchemes(t *testing.T) {
 		"another text color": redBadge + driftRed + `;color:#eee}` + goodCount,
 		"no count rule":      goodBadge,
 	} {
-		if got := driftProblems(css); len(got) == 0 {
-			t.Errorf("%s: the check found nothing", name)
-		}
+		findsProblem(t, name, driftProblems(css), "")
 	}
 	noProblems(t, "a good rule", driftProblems(`.badge.r{ background: `+driftRed+`; color: #fff } .cnt.r{background:`+driftRed+`;color:#fff;}`))
 }
@@ -1441,12 +1404,11 @@ func TestNoColorHasTwoCopies(t *testing.T) {
 	css := string(readPage(t, "app.css"))
 	noProblems(t, "app.css", themeProblems(css))
 	// A token that differs between the schemes is a light-dark() and not a plain color.
-	root := ruleOf(css, ":root")
+	var twoSchemes []string
 	for _, token := range []string{"--bg", "--panel", "--ink", "--nav", "--accent", "--red", "--amb", "--violet", "--grn", "--add", "--addw", "--del", "--delw", "--gut"} {
-		if !regexp.MustCompile(token + `:light-dark\(`).MatchString(root) {
-			t.Errorf("the token %s is not a light-dark()", token)
-		}
+		twoSchemes = append(twoSchemes, token+":light-dark(")
 	}
+	rulesHold(t, css, map[string][]string{":root": twoSchemes})
 	// twoTones is the one color of the good stylesheet, with a light and a dark value.
 	const twoTones = "light-dark(#fff,#000)"
 	const good = `:root{` + schemeOfRoot + `--bg:` + twoTones + `;--navink:#ccc}
@@ -1475,16 +1437,12 @@ func TestTheOldBlueIsGone(t *testing.T) {
 			return err
 		}
 		text := strings.ToLower(string(readPage(t, name)))
-		for _, old := range []string{"2f6fde", "6ea2f7", "4d8df0", "--blue"} {
-			if strings.Contains(text, old) {
-				t.Errorf("%s still has %s", name, old)
-			}
-		}
+		mustNotHold(t, name, text, []string{"2f6fde", "6ea2f7", "4d8df0", "--blue"}...)
 		return nil
 	})
 }
 
-var themeButton = regexp.MustCompile(`<button type="button" data-theme-choice="([a-z]+)" aria-pressed="(true|false)">([A-Za-z]+)</button>`)
+var themeButton = regexp.MustCompile(`<button type="button" ` + pressedAttrsOf("theme-choice", `([a-z]+)`, `(true|false)`) + `>([A-Za-z]+)</button>`)
 
 // The foot of the nav has three buttons, Auto, Light, and Dark. Each says its state with aria-pressed,
 // and Auto is pressed until theme.js reads the choice. theme.js is a file of its own in the head, so
@@ -1513,11 +1471,7 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 		}
 	}
 	script := string(readPage(t, themeScript))
-	for _, word := range []string{`"strata-observer-theme"`, "localStorage.removeItem", "aria-pressed", "data-theme-choice", "catch"} {
-		if !strings.Contains(script, word) {
-			t.Errorf(themeScript+" has no %s", word)
-		}
-	}
+	mustHold(t, themeScript, script, []string{`"strata-observer-theme"`, "localStorage.removeItem", "aria-pressed", "data-theme-choice", "catch"}...)
 	if strings.Contains(readScripts(t), "localStorage") {
 		t.Error("a script of the screens reads the storage: the choice of a theme is in " + themeScript)
 	}
@@ -1526,22 +1480,6 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 /* The tests below hold the screens of the pods: the list of images, the page of an image, the finding of
 an image, the tile, the nav, and the words for a read that is off or failed. They run with node as the
 tests above do. */
-
-// With the variable CI set, a missing node fails the test. Else it skips. This test needs no node.
-func TestWithCISetAMissingNodeFailsTheTest(t *testing.T) {
-	for _, c := range []struct {
-		name, ci      string
-		failed, skips bool
-	}{{"no CI", "", false, true}, {"CI is true", "true", true, false}, {"CI is 1", "1", true, false}} {
-		t.Run(c.name, func(t *testing.T) {
-			var failed, skipped bool
-			whenNodeIsMissing(c.ci, func(...any) { failed = true }, func(...any) { skipped = true })
-			if failed != c.failed || skipped != c.skips {
-				t.Errorf("failed %v and skipped %v, want %v and %v", failed, skipped, c.failed, c.skips)
-			}
-		})
-	}
-}
 
 // encodeURIComponent writes a text as the function of the same name does in the page. The page keeps
 // the @ of a name.
@@ -1610,24 +1548,33 @@ func rowTo(t *testing.T, html, hash string) string {
 	return rowWith(t, html, goTo(hash))
 }
 
-// tileLabel gives the label of a tile of the overview. tileLink gives the start of the link of a tile to the screen hash, up
-// to its label.
+// tileLabel gives the label of a tile of the overview. tileLink gives the address of the link of a tile to the screen
+// hash, with its label, and tileHref gives the address alone.
 func tileLabel(label string) string { return tileLabelStart + label + `</div>` }
 
-func tileLink(hash, label string) string { return `href="` + hash + `">` + tileLabelStart + label }
+func tileLink(hash, label string) string { return tileHref(hash) + tileLabel(label) }
 
-// tileLabelStart starts the label of a tile. tileStart starts the link of a tile of the tone, before its address.
-const tileLabelStart = `<div class="l">`
+func tileHref(hash string) string { return `href="` + hash + `">` }
 
-func tileStart(tone string) string { return `<a class="tile ` + tone + `" ` }
+// tileLabelStart starts the label of a tile. tileOpen starts the link of a tile, and tileStart starts the link of a tile
+// of the tone, before its address.
+const (
+	tileLabelStart = `<div class="l">`
+	tileOpen       = `<a class="tile `
+)
+
+func tileStart(tone string) string { return tileOpen + tone + `" ` }
 
 // tileValue gives the value of a tile of the overview, and tileSub gives the line under the value.
 func tileValue(value string) string { return `<div class="v">` + value + `</div>` }
 
 func tileSub(sub string) string { return `<div class="s">` + sub + `</div>` }
 
-// badgeOf is the start of a badge of the class, and badge is the badge of the class with its word.
-func badgeOf(class string) string { return `<span class="badge ` + class + `">` }
+// badgeOf is the start of a badge of the class, and badge is the badge of the class with its word. badgeOpen starts a
+// badge, before its class.
+func badgeOf(class string) string { return badgeOpen + class + `">` }
+
+const badgeOpen = `<span class="badge `
 
 func badge(class, word string) string { return badgeOf(class) + word + "</span>" }
 
@@ -1646,24 +1593,6 @@ func countSpan(class, count string) string {
 // pattern, and class follows the class cnt of the count.
 func navItem(hash, label, class string) *regexp.Regexp {
 	return regexp.MustCompile(navLink(hash) + `"[^"]*">` + navCount(label, class, `([^<]*)`) + `</a>`)
-}
-
-func mustHold(t *testing.T, where, html string, words ...string) {
-	t.Helper()
-	for _, w := range words {
-		if !strings.Contains(html, w) {
-			t.Errorf("%s has no %q", where, w)
-		}
-	}
-}
-
-func mustNotHold(t *testing.T, where, html string, words ...string) {
-	t.Helper()
-	for _, w := range words {
-		if strings.Contains(html, w) {
-			t.Errorf("%s holds %q", where, w)
-		}
-	}
 }
 
 // The badge of an image, and the badge of one digest, as the page draws them.
@@ -1703,8 +1632,23 @@ var imageSets = []devdata.State{devdata.StateOK, devdata.StateImages, devdata.St
 // sortHead starts the head of a column of the list of the images that sorts by text and is not sorted now. class is
 // the class of the head, col names the column, and label is its word.
 func sortHead(class, col, label string) string {
-	return `<th class="` + class + `" aria-sort="none"><button type="button" class="sort" data-sort="it" data-col="` + col + `">` + label + `<`
+	return `<th class="` + class + `" ` + sortAria("none") + `>` + sortButton("it", col, "", label) + `<`
 }
+
+// sortAria gives the attribute that says how a head sorts its table now: none, ascending, or descending.
+func sortAria(state string) string { return `aria-sort="` + state + `"` }
+
+// sortButton gives the button of the head of a column that sorts the table by col, up to its label. on follows the
+// class sort: "" for a column that is not sorted now, " on asc", or " on desc".
+func sortButton(table, col, on, label string) string {
+	return `<button type="button" class="sort` + on + `" data-sort="` + table + `" ` + sortCol(col, label)
+}
+
+// sortCol gives the end of the button of a column that sorts by col, up to its label. sortIcon starts the icon of the
+// button.
+func sortCol(col, label string) string { return `data-col="` + col + `">` + label }
+
+const sortIcon = `<svg class="sorti"`
 
 // The list shows the count line, and one row for each image: its status, its reference, its pack, the
 // number of its pods, and its digest. An image with no digest of a repo reads Not checked and never OK.
@@ -1715,7 +1659,7 @@ func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.
 			o := set.Images
 			list := pageOf(t, render(t, state, false), "#images", "")
 			mustHold(t, "the list", list, fmt.Sprintf(`<h2>Images <span class="sub">%d images. %d match a pack. %d do not.</span></h2>`, o.Counts.Images, o.Counts.Matched, o.Counts.Images-o.Counts.Matched),
-				`data-col="status">Status<`, `data-col="image">Image<`, sortHead("narrow-hide", "pack", "Pack"),
+				sortCol("status", "Status")+"<", sortCol("image", "Image")+"<", sortHead("narrow-hide", "pack", "Pack"),
 				sortHead("n narrow-hide", "pods", "Pods"), `<th>Digest</th></tr></thead>`)
 			if got := strings.Count(list, linkRowStart); got != len(o.Images) {
 				t.Errorf("the list has %d rows for %d images", got, len(o.Images))
@@ -1798,7 +1742,7 @@ func TestThePageOfAnImageShowsTheRecordAndEachDigestOfThePods(t *testing.T) {
 				}
 				mustHold(t, img.Ref, page, `<h1 class="m h1m">`+img.Ref+`</h1>`+imageBadges[img.Status], labelRow("Named by", named), labelRow("Match", match),
 					`<nav class="crumbs" aria-label="Where you are"><a href="#images">Images</a> `+span("/")+` <b>`+img.Ref+`</b></nav>`,
-					`data-k="this">This image</button>`, `data-k="catch">`+catchTab,
+					tabAttrs("image-"+img.Ref, "this")+">This image</button>", tabAttrs("image-"+img.Ref, "catch")+">"+catchTab,
 					`<th>Where</th><th class="narrow-hide">Reference</th><th>Digest</th><th>Status</th>`)
 				mustNotHold(t, img.Ref, page, "Your real case", "With a source read")
 				for _, p := range img.Packs {
@@ -1884,7 +1828,7 @@ func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
 			mustHold(t, "the finding", row, `<td class="w90">`+c.badge+`</td>`, `<a href="`+href+`">`+c.title+`</a>`,
 				`<span class="lab"><i>profile=</i>"`+wilmaSubject+`"</span>`, `<span class="lab wrap"><i>image=</i>"`+testkit.VendorRef+`"</span>`)
 			mustNotHold(t, "the finding", row, ">Drift<")
-			mustHold(t, "the tile", overview, tileStart("r")+tileLink("#findings", "Drift")+"</div>"+tileValue("1"))
+			mustHold(t, "the tile", overview, tileStart("r")+tileLink("#findings", "Drift")+tileValue("1"))
 			mustHold(t, "the nav", overview, countSpan(" r", "2"))
 		})
 	}
@@ -1915,7 +1859,7 @@ func TestTheRowOfAProfileNamesItsNewerProfileVersionInWordsOfItsOwn(t *testing.T
 }
 
 var (
-	tileOfImages = regexp.MustCompile(tileStart(`(\w+)`) + tileLink("#images", imageChanges) + `</div>` + tileValue(`([^<]*)`) + tileSub(`([^<]*)`) + `</a>`)
+	tileOfImages = regexp.MustCompile(tileStart(`(\w+)`) + tileLink("#images", imageChanges) + tileValue(`([^<]*)`) + tileSub(`([^<]*)`) + `</a>`)
 	navOfImages  = navItem("#images", "Images", "")
 )
 
@@ -1994,11 +1938,11 @@ func TestWithNoReadOfThePodsTheTileIsGoneAndTheNavItemSaysOff(t *testing.T) {
 			screens := render(t, state, false)
 			overview := pageOf(t, screens, "#overview", "")
 			tiles := tileSection.FindString(overview)
-			if got := strings.Count(tiles, `<a class="tile `); got != 4 {
+			if got := strings.Count(tiles, tileOpen); got != 4 {
 				t.Errorf("the overview has %d tiles, want 4", got)
 			}
 			mustHold(t, "the tiles", tiles, tileLabel("Drift"), tileLabel(newerVersions), tileLabel(wordNotChecked), tileLabel("Profiles"))
-			mustNotHold(t, "the overview", overview, imageChanges, tileLink("#images", ""))
+			mustNotHold(t, "the overview", overview, imageChanges, tileHref("#images")+tileLabelStart)
 			if n := navOfImages.FindStringSubmatch(overview); n == nil || n[1] != "Off" {
 				t.Errorf("the nav item is %q, want the count Off", n)
 			}
@@ -2013,12 +1957,12 @@ func TestWithTheReadOfThePodsOnTheTileShowsAlsoAfterAFailedRead(t *testing.T) {
 		"images.json": podsRefused(t),
 	})
 	for name, overview := range map[string]string{
-		"a good read":                         pagesOf(t, writeSet(t, devdata.StateOK, nil), "#overview")[0],
+		"a good read":                         shown(t, devdata.StateOK, "#overview")[0],
 		"a read that failed after a good one": pagesOf(t, failed, "#overview")[0],
 		"a read that never ended well":        pageOf(t, render(t, devdata.StateImagesUnread, false), "#overview", ""),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if got := strings.Count(tileSection.FindString(overview), `<a class="tile `); got != 5 {
+			if got := strings.Count(tileSection.FindString(overview), tileOpen); got != 5 {
 				t.Errorf("the overview has %d tiles, want 5", got)
 			}
 			if tileOfImages.FindStringSubmatch(overview) == nil {
@@ -2037,9 +1981,9 @@ func TestWithThePodsOffTheScreenOfTheImagesSaysHowToTurnTheReadOn(t *testing.T) 
 	for _, state := range []devdata.State{devdata.StateImagesOff, devdata.StateQuiet} {
 		t.Run(string(state), func(t *testing.T) {
 			list := pageOf(t, render(t, state, false), "#images", "")
-			mustHold(t, "the screen", list, `<span class="sub">Pods not read</span>`, podsOffTitle, podsOffFact,
-				`The read needs a role that can list pods, and that role can also read their <span class="m">env</span>.`,
-				podsOffNext, splashClass("md", "off"))
+			checkPlace(t, placeNamed(t, "the pods off"), list)
+			mustHold(t, "the screen", list, `<span class="sub">Pods not read</span>`,
+				`The read needs a role that can list pods, and that role can also read their <span class="m">env</span>.`)
 			mustNotHold(t, "the screen", list, "<table", comparedFirst)
 		})
 	}
@@ -2049,10 +1993,8 @@ func TestWithThePodsOffTheScreenOfTheImagesSaysHowToTurnTheReadOn(t *testing.T) 
 // with the words of the error.
 func TestWithAReadThatNeverEndedWellTheScreenOfTheImagesGivesTheError(t *testing.T) {
 	list := pageOf(t, render(t, devdata.StateImagesUnread, false), "#images", "")
-	mustHold(t, "the screen", list, `<span class="sub">`+notReadYet+`</span>`, podsTitle,
-		podsRefusedWords,
-		askListPods, canListPods,
-		splashClass("md", "warn"))
+	checkPlace(t, placeNamed(t, podsUnread), list)
+	mustHold(t, "the screen", list, `<span class="sub">`+notReadYet+`</span>`)
 	mustNotHold(t, "the screen", list, "<table", podsOffFact)
 }
 
@@ -2088,12 +2030,15 @@ func TestTheCoverageRowOfTheImagesFollowsTheRead(t *testing.T) {
 	}
 }
 
+// scratch is the set that writeSet writes in a new directory of sets.
+const scratch = "scratch"
+
 // writeSet copies a set into a new directory of sets, as the set "scratch", with the files that edit
 // names changed. It gives the directory.
 func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []byte) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.MkdirAll(path.Join(dir, "scratch"), 0o755); err != nil {
+	if err := os.MkdirAll(path.Join(dir, scratch), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// The files alerts.json and replies.json are optional. A set without alerts.json is the page of an observer
@@ -2109,7 +2054,7 @@ func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []b
 		if f := edit[name]; f != nil {
 			raw = f(raw)
 		}
-		testkit.WriteIn(t, path.Join(dir, "scratch"), name, string(raw))
+		testkit.WriteIn(t, path.Join(dir, scratch), name, string(raw))
 	}
 	return dir
 }
@@ -2134,13 +2079,18 @@ func replaceText(from, to string) func([]byte) []byte {
 
 // podsRefused edits the document of the pods of a set: the last read failed, because the API server refused it with a 403.
 func podsRefused(t *testing.T) func([]byte) []byte {
-	return editJSON(t, func(o *model.Observed) { o.Error = &model.ErrorRef{Kind: docs.KindKubeAPI, Status: 403} })
+	return podsFailedWith(t, model.ErrorRef{Kind: docs.KindKubeAPI, Status: 403})
+}
+
+// podsFailedWith edits the document of the pods of a set: the last read failed with the error.
+func podsFailedWith(t *testing.T, err model.ErrorRef) func([]byte) []byte {
+	return editJSON(t, func(o *model.Observed) { o.Error = &err })
 }
 
 // pagesOf shows some screens of the set that writeSet wrote in dir, with no crawl.
 func pagesOf(t *testing.T, dir string, hashes ...string) []string {
 	t.Helper()
-	return showIn(t, dir, "scratch", hashes...)
+	return showIn(t, dir, scratch, hashes...)
 }
 
 // A read that failed after a good one keeps the list of the good read. Each screen says so in an amber
@@ -2156,7 +2106,7 @@ func TestAReadThatFailedAfterAGoodOneShowsAnAmberBarOnEachScreen(t *testing.T) {
 	}
 	mustHold(t, imageScreens[1], pages[1], "8 images", linkRowStart)
 	for _, hash := range []string{"#overview", "#images"} {
-		mustNotHold(t, hash, pagesOf(t, writeSet(t, devdata.StateOK, nil), hash)[0], podsFailed)
+		mustNotHold(t, hash, shown(t, devdata.StateOK, hash)[0], podsFailed)
 	}
 }
 
@@ -2176,7 +2126,7 @@ func TestTheWordsOfAFailedReadOfThePodsNameTheApiServer(t *testing.T) {
 	} {
 		t.Run(c.err.Kind+strconv.Itoa(c.err.Status), func(t *testing.T) {
 			dir := writeSet(t, devdata.StateImagesUnread, map[string]func([]byte) []byte{
-				"images.json": editJSON(t, func(o *model.Observed) { o.Error = &c.err }),
+				"images.json": podsFailedWith(t, c.err),
 			})
 			list := pagesOf(t, dir, "#images")[0]
 			mustHold(t, imageScreens[1], list, podsFailed+". <b>"+c.want+".</b>")
@@ -2202,7 +2152,7 @@ func TestAnImageReferenceWithAnImgTagShowsAsText(t *testing.T) {
 
 // An image that the data does not hold shows the page of a missing item, under the nav item Images.
 func TestAnImageThatNoPodRunsShowsAMissingPage(t *testing.T) {
-	page := pagesOf(t, writeSet(t, devdata.StateOK, nil), imageHash(testkit.NoImage))[0]
+	page := shown(t, devdata.StateOK, imageHash(testkit.NoImage))[0]
 	mustHold(t, "the page", page, "No pod runs this image", `<span class="m">`+testkit.NoImage+`</span> runs in no pod now.`, `<a class="btn" href="#images">All images</a>`, imagesOn)
 }
 

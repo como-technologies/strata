@@ -59,8 +59,15 @@ type place struct {
 	fact, steps []string
 }
 
-// splashClass gives the class of a splash of the size and the tone.
-func splashClass(size, tone string) string { return `class="splash ` + size + ` tone-` + tone + `"` }
+// splashClass gives the class of a splash of the size and the tone, and splashOpen starts it, before the size.
+func splashClass(size, tone string) string { return splashOpen + size + ` tone-` + tone + `"` }
+
+const splashOpen = `class="splash `
+
+// markClass gives the class of the mark of the tone, and markOpen starts it, before the tone.
+func markClass(tone string) string { return markOpen + tone + `"` }
+
+const markOpen = `class="slabs tone-`
 
 // bookNext gives the next step of a place that ends with the section of The observer in the book. step holds the first
 // words of the step.
@@ -197,80 +204,94 @@ const (
 	gaveArgs = "the command %q gave the arguments %q, want %q"
 )
 
-// The places of the issue: the first check, no records, lost with nothing read, a page that cannot reach the observer, a route
+// places are the places of the issue: the first check, no records, lost with nothing read, a page that cannot reach the observer, a route
 // that does not exist, no findings, no newer versions, nothing unchecked, the pods off, the read of the pods failed, alerts not
 // set, a pack that matches its record, a pack not checked, a diff that a cycle holds, a text too large, an empty tab, a filter with
 // no match, and no events. The page also has a place for a first read that the observer has not ended, the stop of the checks
 // before a good one, and the read of the pods that is not done yet.
-func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
-	places := []place{
-		{"the first check", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateFirstLoad), "#overview", "") }, "build", "lg", "Reading the layers",
-			[]string{firstCheck + ", and this page fills in when it ends. The observer reads each record, then asks Palette for the same version."}, nil},
-		{"no records", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateNoRecords), "#overview", "") }, "off", "lg", noRecordsTitle,
-			[]string{noRecordsFact},
-			[]string{`<p class="sub"><b>Start now.</b> An install with the chart runs a job that records what each profile of this cluster holds now. Its log says what it did.</p>`,
-				"<code>" + kubeLogs + " -l app.kubernetes.io/name=strata-observer-seed --tail=20</code>",
-				`<p class="sub">With no chart, this command records the same. ` + noApproval + `</p>`,
-				"<code>" + firstSeenCmd + applyEnd,
-				`<p class="sub"><b>From your pipeline.</b> Publish the records that a review approved.</p>`,
-				"<code>" + testkit.RecordsTool + " --revision &quot;$GIT_SHA&quot; releases/*.json" + applyEnd}},
-		{"lost with nothing read", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateLostUnchecked), "#overview", "") }, "lost", "lg", lostTitle,
-			[]string{lostFact + ", and " + noClear + "."},
-			[]string{nextStep + checkTheKey + ` <span class="m">` + keySecret + `</span>` + readTheLog + `</div>`, logCommand}},
-		{"checks stopped with nothing read", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateStaleUnchecked), "#overview", "") }, "warn", "lg", stoppedTitle,
-			[]string{"The content check runs every 15m. " + noGoodCheck + ", so this page has nothing to show yet."}, []string{nextStep + `Read the log.</div>`, logCommand}},
-		{"the page " + cannotReach, func(t *testing.T) string {
-			before, _ := offline(t)
-			return before
-		}, "lost", "lg", offlineTitle,
-			[]string{"The port-forward may have ended, or the pod may have restarted. This page asks again each 30 seconds."},
-			[]string{"<code>" + kubeNS + " port-forward deploy/strata-observer 18080:8080</code>", retryButton("page")}},
-		{"a route that does not exist", func(t *testing.T) string { return shown(t, devdata.StateOK, "#p-old-profile@1.0.0")[0] }, "off", "lg", "This profile is not here",
-			[]string{`<span class="m">old-profile@1.0.0</span> is in no record now. A new revision of the records can remove it.`}, []string{`<a class="btn" href="#profiles">All profiles</a>`}},
-		{"no findings", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#findings", "") }, "calm", "md", quietTitle,
-			[]string{calmNothing + ". <b>29 of 29 packs</b> were checked in full, ", " ago."},
-			[]string{span("profiles match their records"), span("not checked"), newerFact}},
-		{"no newer versions", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#newer", "") }, "calm", "md", "Nothing newer to dig up",
-			[]string{calmCurrent + ". The registries list nothing newer than what you pin. Read ", " ago, every 6h."}, nil},
-		{"nothing unchecked", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#notchecked", "") }, "calm", "md", "Every layer was read",
-			[]string{"Each pack was checked in full. Strata read each record, and each answer came back. A check still does not cover the items below."},
-			[]string{linkButton + `data-jump="coverage">` + coverJump + `</button>`}},
-		{"the pods off", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesOff), "#images", "") }, "off", "md", podsOffTitle,
-			[]string{podsOffFact + " With the read on, the page shows the digest that each tag runs, and finds a tag that moved."},
-			[]string{bookNext(podsOffNext, "The pods of the cluster")}},
-		{podsUnread, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesUnread), "#images", "") }, "warn", "md", podsTitle,
-			[]string{podsRefusedWords + " The findings of the content check are not affected."},
-			[]string{askListPods, canListPods}},
-		{"alerts not set", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateAlertsUnset), "#alerts", "") }, "off", "md", alertsOffTitle,
-			[]string{alertsOffFact + " A message goes to a webhook when a finding opens and when it clears."},
-			[]string{bookNext(alertsNext, "Alerts")}},
-		{matchesRecord, func(t *testing.T) string {
-			return pageOf(t, crawl(t, devdata.StateQuiet), dexHash, "")
-		}, "same", "md", "Undisturbed",
-			[]string{sameFact},
-			[]string{samePublished, sameCopy, noNewerVersion}},
-		{matchesRecord + ", on a page with findings", func(t *testing.T) string {
-			return pageOf(t, crawl(t, devdata.StateOK), reloaderHash, "")
-		}, "same", "md", "Undisturbed", []string{sameFact},
-			[]string{samePublished, noNewerVersion}},
-		{"a pack that was not checked", func(t *testing.T) string {
-			return pageOf(t, crawl(t, devdata.StateOK), "#k-gazoo-backup@1.2.0/addon/velero", "")
-		}, "warn", "md", hiddenTitle,
-			[]string{"This pack was not fully checked. velero has no upstream digest. The content check runs every 15m."}, []string{nextStep + `<a href="#notchecked">Why, on the ` + wordNotChecked + ` page</a></div>`}},
-		{"a diff that a cycle holds", func(t *testing.T) string { return retried(t, dexHash)[0] }, "build", "sm", busyTitle, []string{"The observer answers one read at a time. This page asks again each 30 seconds."},
-			[]string{retryButton("diff")}},
-		{"a text too large", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateTextTooLarge), dexHash, "") }, "off", "sm", tooLargeTitle,
-			[]string{tooLargeFact},
-			[]string{dexFullCompare}},
-		{"an empty tab", func(t *testing.T) string {
-			return pageWith(t, "testdata/api", devdata.StateOK, dexHash, `S.tabs["`+dexPublished+`"] = "images"`)
-		}, "same", "inl", "",
-			[]string{span("No image" + changedHere), tabLink(dexPublished, "values", "Values")}, nil},
-		{"a filter with no match", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateOK), "#profiles", "search none") }, "off", "inl", "",
-			[]string{`<span>No profile matches <span class="m">no profile has this name</span>.</span>`, linkButton + `data-clear="filter">Clear the filter</button>`}, nil},
-		{"no events", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#overview", "") }, "calm", "inl", "",
-			[]string{"<span>" + calmQuiet + ": no events in the last 7 days.</span>"}, nil},
+var places = []place{
+	{"the first check", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateFirstLoad), "#overview", "") }, "build", "lg", "Reading the layers",
+		[]string{firstCheck + ", and this page fills in when it ends. The observer reads each record, then asks Palette for the same version."}, nil},
+	{"no records", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateNoRecords), "#overview", "") }, "off", "lg", noRecordsTitle,
+		[]string{noRecordsFact},
+		[]string{`<p class="sub"><b>Start now.</b> An install with the chart runs a job that records what each profile of this cluster holds now. Its log says what it did.</p>`,
+			"<code>" + kubeLogs + " -l app.kubernetes.io/name=strata-observer-seed --tail=20</code>",
+			`<p class="sub">With no chart, this command records the same. ` + noApproval + `</p>`,
+			"<code>" + firstSeenCmd + applyEnd,
+			`<p class="sub"><b>From your pipeline.</b> Publish the records that a review approved.</p>`,
+			"<code>" + testkit.RecordsTool + " --revision &quot;$GIT_SHA&quot; releases/*.json" + applyEnd}},
+	{"lost with nothing read", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateLostUnchecked), "#overview", "") }, "lost", "lg", lostTitle,
+		[]string{lostFact + ", and " + noClear + "."},
+		[]string{nextStep + checkTheKey + ` <span class="m">` + keySecret + `</span>` + readTheLog + `</div>`, logCommand}},
+	{"checks stopped with nothing read", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateStaleUnchecked), "#overview", "") }, "warn", "lg", stoppedTitle,
+		[]string{"The content check runs every 15m. " + noGoodCheck + ", so this page has nothing to show yet."}, []string{nextStep + `Read the log.</div>`, logCommand}},
+	{"the page " + cannotReach, func(t *testing.T) string {
+		before, _ := offline(t)
+		return before
+	}, "lost", "lg", offlineTitle,
+		[]string{"The port-forward may have ended, or the pod may have restarted. This page asks again each 30 seconds."},
+		[]string{"<code>" + kubeNS + " port-forward deploy/strata-observer 18080:8080</code>", retryButton("page")}},
+	{"a route that does not exist", func(t *testing.T) string { return shown(t, devdata.StateOK, "#p-old-profile@1.0.0")[0] }, "off", "lg", "This profile is not here",
+		[]string{`<span class="m">old-profile@1.0.0</span> is in no record now. A new revision of the records can remove it.`}, []string{`<a class="btn" href="#profiles">All profiles</a>`}},
+	{"no findings", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#findings", "") }, "calm", "md", quietTitle,
+		[]string{calmNothing + ". <b>29 of 29 packs</b> were checked in full, ", " ago."},
+		[]string{span("profiles match their records"), span("not checked"), newerFact}},
+	{"no newer versions", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#newer", "") }, "calm", "md", "Nothing newer to dig up",
+		[]string{calmCurrent + ". The registries list nothing newer than what you pin. Read ", " ago, every 6h."}, nil},
+	{"nothing unchecked", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#notchecked", "") }, "calm", "md", "Every layer was read",
+		[]string{"Each pack was checked in full. Strata read each record, and each answer came back. A check still does not cover the items below."},
+		[]string{linkButton + `data-jump="coverage">` + coverJump + `</button>`}},
+	{"the pods off", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesOff), "#images", "") }, "off", "md", podsOffTitle,
+		[]string{podsOffFact + " With the read on, the page shows the digest that each tag runs, and finds a tag that moved."},
+		[]string{bookNext(podsOffNext, "The pods of the cluster")}},
+	{podsUnread, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesUnread), "#images", "") }, "warn", "md", podsTitle,
+		[]string{podsRefusedWords + " The findings of the content check are not affected."},
+		[]string{askListPods, canListPods}},
+	{"alerts not set", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateAlertsUnset), "#alerts", "") }, "off", "md", alertsOffTitle,
+		[]string{alertsOffFact + " A message goes to a webhook when a finding opens and when it clears."},
+		[]string{bookNext(alertsNext, "Alerts")}},
+	{matchesRecord, func(t *testing.T) string {
+		return pageOf(t, crawl(t, devdata.StateQuiet), dexHash, "")
+	}, "same", "md", "Undisturbed",
+		[]string{sameFact},
+		[]string{samePublished, sameCopy, noNewerVersion}},
+	{matchesRecord + ", on a page with findings", func(t *testing.T) string {
+		return pageOf(t, crawl(t, devdata.StateOK), reloaderHash, "")
+	}, "same", "md", "Undisturbed", []string{sameFact},
+		[]string{samePublished, noNewerVersion}},
+	{"a pack that was not checked", func(t *testing.T) string {
+		return pageOf(t, crawl(t, devdata.StateOK), "#k-gazoo-backup@1.2.0/addon/velero", "")
+	}, "warn", "md", hiddenTitle,
+		[]string{"This pack was not fully checked. velero has no upstream digest. The content check runs every 15m."}, []string{nextStep + `<a href="#notchecked">Why, on the ` + wordNotChecked + ` page</a></div>`}},
+	{"a diff that a cycle holds", func(t *testing.T) string { return retried(t, dexHash)[0] }, "build", "sm", busyTitle, []string{"The observer answers one read at a time. This page asks again each 30 seconds."},
+		[]string{retryButton("diff")}},
+	{"a text too large", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateTextTooLarge), dexHash, "") }, "off", "sm", tooLargeTitle,
+		[]string{tooLargeFact},
+		[]string{dexFullCompare}},
+	{"an empty tab", func(t *testing.T) string {
+		return pageWith(t, "testdata/api", devdata.StateOK, dexHash, `S.tabs["`+dexPublished+`"] = "images"`)
+	}, "same", "inl", "",
+		[]string{span("No image" + changedHere), tabLink(dexPublished, "values", "Values")}, nil},
+	{"a filter with no match", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateOK), "#profiles", "search none") }, "off", "inl", "",
+		[]string{span(`No profile matches <span class="m">no profile has this name</span>.`), linkButton + `data-clear="filter">Clear the filter</button>`}, nil},
+	{"no events", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#overview", "") }, "calm", "inl", "",
+		[]string{span(calmQuiet + ": no events in the last 7 days.")}, nil},
+}
+
+// placeNamed gives the place of the table places with the name.
+func placeNamed(t *testing.T, name string) place {
+	t.Helper()
+	for _, p := range places {
+		if p.name == name {
+			return p
+		}
 	}
+	t.Fatalf("no place is named %q", name)
+	return place{}
+}
+
+// Each place of the table places has its tone, its title, its fact, and its next step.
+func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 	for _, p := range places {
 		t.Run(p.name, func(t *testing.T) { checkPlace(t, p, p.screen(t)) })
 	}
@@ -284,10 +305,7 @@ func TestEachToneIsDrawnByAPlaceWithItsMark(t *testing.T) {
 		"lost": pageOf(t, crawl(t, devdata.StateLostUnchecked), "#overview", ""),
 	}
 	for tone, html := range seen {
-		mustHold(t, tone, html, `class="slabs tone-`+tone+`"`, `class="splash`)
-		if got := strings.Count(html, `class="slabs tone-`+tone+`"`); got == 0 {
-			t.Errorf("no mark of the tone %s", tone)
-		}
+		mustHold(t, tone, html, markClass(tone), splashOpen)
 	}
 }
 
@@ -384,11 +402,11 @@ func TestTheRuleOfACalmToneIsWhatKeepsItOffAPageWithAFinding(t *testing.T) {
 	}
 	dir := copyScripts(t, func(script string) string { return gate.ReplaceAllString(script, "const calmOk = () => true;") })
 	quiet := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"events.json": func([]byte) []byte { return []byte(`{"events":[]}`) }})
-	screens := nodeJSON[[]screen](t, runNodeAssets(t, dir, quiet, "scratch"))
+	screens := renderIn(t, dir, quiet, scratch)
 	if got := calmScreens(screens); len(got) == 0 {
 		t.Error("without the rule, the page with a finding still shows no calm tone: the test cannot fail")
 	}
-	real := nodeJSON[[]screen](t, runNodeAssets(t, "assets", quiet, "scratch"))
+	real := renderIn(t, "assets", quiet, scratch)
 	if got := calmScreens(real); len(got) != 0 {
 		t.Errorf("the real scripts show a calm tone on %q", got)
 	}
@@ -409,7 +427,7 @@ func TestLostAndStaleWithFindingsStayABarOverTheFindings(t *testing.T) {
 				page := pageOf(t, screens, hash, "")
 				mustHoldInOrder(t, hash, page, c.bar, publishedChanged)
 				mustHold(t, hash, page, linkRow(dexHash))
-				mustNotHold(t, hash, page, `class="splash lg`)
+				mustNotHold(t, hash, page, splashOpen+"lg")
 			}
 		})
 	}
@@ -624,18 +642,23 @@ func tabOn(id, k string) string {
 }
 
 // tabLink gives the link of an empty tab to the tab k of the tabs id, which has the change. words name the tab k.
+// changeIsOn starts the words of the link.
 func tabLink(id, k, words string) string {
-	return linkButton + tabAttrs(id, k) + `>The change is on ` + words + ` →</button>`
+	return linkButton + tabAttrs(id, k) + `>` + changeIsOn + words + ` →</button>`
 }
 
-// flagLink gives the badge of the flag f that opens the tab k of the tabs id on the page hash. plainFlag gives a badge of
-// the class that opens no tab.
-func flagLink(hash, id, k, f string) string {
-	return `<a class="badge b" href="` + hash + `" ` + tabAttrs(id, k) + `>` + f + `</a>`
+const changeIsOn = "The change is on "
+
+// flagLink gives the badge of the flag f that opens the tab k of the tabs id on the page hash. flagLinkOf gives that
+// badge with the class. plainFlag gives a badge of the class that opens no tab.
+func flagLink(hash, id, k, f string) string { return flagLinkOf("b", hash, id, k, f) }
+
+func flagLinkOf(class, hash, id, k, f string) string {
+	return `<a class="badge ` + class + `" href="` + hash + `" ` + tabAttrs(id, k) + `>` + f + `</a>`
 }
 
 func plainFlag(class, f string) string {
-	return `<span class="badge ` + class + `" tabindex="0">` + f + `</span>`
+	return badgeOpen + class + `" tabindex="0">` + f + `</span>`
 }
 
 // The pack page opens on the first tab with a change.
@@ -680,29 +703,30 @@ func TestAnEmptyTabSaysSoAndLinksToTheTabWithTheChange(t *testing.T) {
 		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
 		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
 	})})
-	empty := pageWith(t, dir, "scratch", dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
+	empty := pageWith(t, dir, scratch, dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
 	link := tabLink(dexPublished, "manifests", "Manifests")
 	mustHold(t, "the empty Values tab", empty, span("No value"+changedHere), link)
 	for _, c := range []struct{ tab, noun string }{{"images", "image"}, {"charts", "chart"}} {
-		page := pageWith(t, dir, "scratch", dexHash, `S.tabs["`+dexPublished+`"] = "`+c.tab+`"`)
+		page := pageWith(t, dir, scratch, dexHash, `S.tabs["`+dexPublished+`"] = "`+c.tab+`"`)
 		mustHold(t, "the empty tab "+c.tab, page, span("No "+c.noun+changedHere), link)
 	}
-	r := clickIn(t, dir, "scratch", dexHash, "0", tabClick(dexPublished, "values"), tabClick(dexPublished, "manifests"))
+	r := clickIn(t, dir, scratch, dexHash, "0", tabClick(dexPublished, "values"), tabClick(dexPublished, "manifests"))
 	mustHold(t, "after the link", r.After, tabOn(dexPublished, "manifests"), dexManifest)
 	// A card with no change anywhere says only that nothing changed, and it links nowhere.
 	none := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
 		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
 		d.Values.Settings, d.Values.Unified, d.Manifests = []docs.Leaf{}, "", []docs.Manifest{}
 	})})
-	page := pageWith(t, none, "scratch", dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
+	page := pageWith(t, none, scratch, dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
 	where := "a card with no change"
 	mustHold(t, where, page, span("No value changed."))
-	mustNotHold(t, where, page, "The change is on")
+	mustNotHold(t, where, page, changeIsOn)
 }
 
 // ---- The five change flags ----
 
-var flagPattern = regexp.MustCompile(flagWrap + `(?:<a class="badge (b|y off)" href="([^"]*)" data-tab="([^"]*)" data-k="([^"]*)">([A-Z]+)</a>|<span class="badge (b|y off)" tabindex="0">([A-Z]+)</span>)<span class="tip" role="tooltip"><b>([A-Z]+)</b>([^<]*)</span></span>`)
+var flagPattern = regexp.MustCompile(flagWrap + `(?:` + flagLinkOf(`(b|y off)`, `([^"]*)`, `([^"]*)`, `([^"]*)`, `([A-Z]+)`) + `|` +
+	plainFlag(`(b|y off)`, `([A-Z]+)`) + `)<span class="tip" role="tooltip"><b>([A-Z]+)</b>([^<]*)</span></span>`)
 
 var flagNames = []string{"IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"}
 
@@ -821,7 +845,7 @@ func TestAuthoredOpensManifestsWhenOnlyAManifestChanged(t *testing.T) {
 	})})
 	page := pagesOf(t, dir, dexHash)[0]
 	mustHold(t, "the flag", page, flagLink(dexHash, dexPublished, "manifests", "AUTHORED"))
-	r := clickIn(t, dir, "scratch", dexHash, "0", tabClick(dexPublished, "manifests"))
+	r := clickIn(t, dir, scratch, dexHash, "0", tabClick(dexPublished, "manifests"))
 	mustHold(t, "after a click on the flag", r.After, tabOn(dexPublished, "manifests"), dexManifest)
 	// The newer side of dex lights all five flags: three open a tab, and two stay plain.
 	move := pageOf(t, crawl(t, devdata.StateOK), dexHash, "side newer")
@@ -856,6 +880,18 @@ func termRows(t *testing.T, page string) []termRow {
 		t.Fatalf("the card has %d rows, and the pattern reads %d", got, len(out))
 	}
 	return out
+}
+
+// answerTo gives what the card "Check this yourself" of the page says now for the question.
+func answerTo(t *testing.T, page, question string) string {
+	t.Helper()
+	for _, r := range termRows(t, page) {
+		if r.question == question {
+			return r.answer
+		}
+	}
+	t.Fatalf("the card has no question %q", question)
+	return ""
 }
 
 const recordRead = "for i in 0 1 2 3; do " + kubeNS + " get secret " + recordsSecret + "$i -o json | jq -r --arg k '%s' '.data[$k] // empty'; done | base64 -d | gunzip > record.json"
@@ -932,22 +968,14 @@ func TestTheNamesInTheCommandsOfTheCardAreRealNames(t *testing.T) {
 		t.Error("the namespace of deploy/observer is not strata-observer")
 	}
 	script := string(readFile(t, testkit.RecordsScript))
-	for _, want := range []string{`"\(.source.name)_\(.source.version).json.gz"`, `tr -c 'A-Za-z0-9._\n-' _`, recordsSecret + "$i"} {
-		if !strings.Contains(script, want) {
-			t.Errorf(testkit.RecordsTool+" no longer holds %q, and the first row of the card reads the key that it writes", want)
-		}
-	}
+	mustHold(t, testkit.RecordsTool, script, []string{`"\(.source.name)_\(.source.version).json.gz"`, `tr -c 'A-Za-z0-9._\n-' _`, recordsSecret + "$i"}...)
 	app := readScripts(t)
 	if !strings.Contains(app, "replace(/[^A-Za-z0-9._-]/g, \"_\")") {
 		t.Error("the page writes the key of a record by another rule than the script of the records")
 	}
 	for file, flags := range map[string][]string{"help-behind.txt": {"--pin <LAYER/NAME>"}, "help-verify.txt": {"--who", "--full"}, "help-compare.txt": {"--full"}} {
 		help := string(readFile(t, "../../../docs/src/output/"+file))
-		for _, f := range flags {
-			if !strings.Contains(help, f) {
-				t.Errorf("%s has no %s", file, f)
-			}
-		}
+		mustHold(t, file, help, flags...)
 	}
 }
 
@@ -975,9 +1003,9 @@ func TestNoInlineStyleReachesAScreenOfAnySet(t *testing.T) {
 	for _, state := range devdata.States {
 		t.Run(string(state), func(t *testing.T) {
 			for _, s := range crawl(t, state) {
-				if inlineStyle.MatchString(s.HTML) || strings.Contains(s.HTML, "<style") {
-					t.Errorf("%s %s holds "+problemStyle, s.Hash, s.Variant)
-				}
+				var got []string
+				problemsInPage(s.HTML, func(p string) { got = append(got, p) })
+				noProblems(t, s.Hash+" "+s.Variant, got)
 			}
 		})
 	}
@@ -1046,15 +1074,15 @@ func newerOrder(page, subject string) []string {
 // the order of the page. A version sorts by SemVer 2.0.0, so 1.20.1 comes before 1.36.2, and a version that
 // is no SemVer sorts in natural order.
 func TestAHeadSortsItsTableUpThenDownThenBack(t *testing.T) {
-	const sortedUp, sortedDown = `aria-sort="ascending"`, `aria-sort="descending"`
+	sortedUp, sortedDown := sortAria("ascending"), sortAria("descending")
 	natural := newerOrder(pageOf(t, render(t, devdata.StateOK, false), "#newer", ""), k8sSubject)
 	up := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.sort.nt = {col: "move", dir: 1}`)
-	mustHold(t, "up", up, `<th class="" `+sortedUp+`><button type="button" class="sort on asc" data-sort="nt" data-col="move">Move<svg class="sorti"`)
+	mustHold(t, "up", up, `<th class="" `+sortedUp+`>`+sortButton("nt", "move", " on asc", "Move")+sortIcon)
 	if got, want := newerOrder(up, k8sSubject), []string{"cni-cilium-oss", "cert-manager", "kubernetes", "csi-aws-ebs", "ubuntu-aws"}; !slices.Equal(got, want) {
 		t.Errorf("up: %v, want %v", got, want)
 	}
 	down := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.sort.nt = {col: "move", dir: -1}`)
-	mustHold(t, "down", down, sortedDown, `class="sort on desc" data-sort="nt" data-col="move"`)
+	mustHold(t, "down", down, sortedDown, sortButton("nt", "move", " on desc", "Move"))
 	if got, want := newerOrder(down, k8sSubject), []string{"ubuntu-aws", "csi-aws-ebs", "kubernetes", "cert-manager", "cni-cilium-oss"}; !slices.Equal(got, want) {
 		t.Errorf("down: %v, want %v", got, want)
 	}
@@ -1189,6 +1217,6 @@ func TestNewerVersionsShowADashUntilTheFirstReadOfTheVersions(t *testing.T) {
 		navCount(newerVersions, "", "-"))
 	reading := pageWith(t, "testdata/api", devdata.StateOK, "#overview", versionsUnread+runningJS("versions", "", 0, 1))
 	mustHold(t, "reading", reading, tileValue("-")+tileSub("Reading the registries"))
-	read := pageWith(t, "testdata/api", devdata.StateOK, "#overview", "")
+	read := shown(t, devdata.StateOK, "#overview")[0]
 	mustNotHold(t, "read", read, tileLabel(newerVersions)+tileValue("-"))
 }

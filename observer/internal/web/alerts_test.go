@@ -84,9 +84,8 @@ func TestWithNoAlertsFlagTheScreenSaysTheSendIsOptIn(t *testing.T) {
 	for _, state := range []devdata.State{devdata.StateOK, devdata.StateAlertsUnset} {
 		t.Run(string(state), func(t *testing.T) {
 			screen := pageOf(t, render(t, state, false), "#alerts", "")
-			mustHold(t, "the screen", screen, rulesHead+notSet+`</span></h2>`, alertsOffTitle, alertsOffFact,
-				"The rules are a file in Git, so a mute always has a name and an end date.",
-				alertsNext, splashClass("md", "off"))
+			checkPlace(t, placeNamed(t, "alerts not set"), screen)
+			mustHold(t, "the screen", screen, rulesHead+notSet+`</span></h2>`, "The rules are a file in Git, so a mute always has a name and an end date.")
 			mustNotHold(t, "the screen", screen, "<table>", "Sample message", "Firing")
 		})
 	}

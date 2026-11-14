@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -234,6 +235,11 @@ func Serve(h http.Handler, method, path, host, site string) *httptest.ResponseRe
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+// Get sends a GET for path to the handler h, with the Host LoopbackHost and no header FetchSite, and gives the answer.
+func Get(h http.Handler, path string) *httptest.ResponseRecorder {
+	return Serve(h, http.MethodGet, path, LoopbackHost, "")
 }
 
 // AskFlow checks the click "Ask Palette" on the move of dex of the dev data ok. get sends a GET to a path of the
@@ -467,6 +473,14 @@ func Decode(t *testing.T, what string, raw []byte, v any) {
 	}
 }
 
+// SamePlain fails when got and want encode to other JSON, compared as plain values. what names got in the failure.
+func SamePlain(t *testing.T, what string, got, want any) {
+	t.Helper()
+	if g, w := Plain(t, got), Plain(t, want); !reflect.DeepEqual(g, w) {
+		t.Errorf("%s gives\n%v\nwant\n%v", what, g, w)
+	}
+}
+
 // Plain gives the plain values of the JSON of v, such as a map[string]any, so that a test can compare two documents. A
 // json.RawMessage gives the values of the text that it holds.
 func Plain(t *testing.T, v any) any {
@@ -607,6 +621,10 @@ var (
 	secretName = regexp.MustCompile(`^  name: (\S+)$`)
 	secretData = regexp.MustCompile(`^  ([^ :]+): (\S+)$`)
 )
+
+// HunkHead reads the head of a hunk of a unified text: the first line and the count of lines of the old side, then of
+// the new side. A head with no count names one line.
+var HunkHead = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@$`)
 
 // RecordSecrets reads the Secrets in YAML that the records script prints. It gives the data of each Secret by its
 // name: each key with its text in base64. A Secret with no data gives an empty map. It fails the test when the YAML
