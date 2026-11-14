@@ -1,4 +1,4 @@
-$ strata list profiles --packs
+$ strata list profiles --detail
 project dev (uid 64f20000000000000000a0d1)
 
 4 profiles

@@ -34,7 +34,7 @@ fn one_run_report() -> Value {
     })
 }
 
-/// A run of `strata list profiles --packs` that has the settings `env`, and gets its home from
+/// A run of `strata list profiles --detail` that has the settings `env`, and gets its home from
 /// `home`. The guard of the tests stops the send and names an address that refuses a
 /// connection. This run has no setting `STRATA_REPORT` but the one in `env`. Each test that uses
 /// it gives the address of a stand-in in `env`.
@@ -49,7 +49,7 @@ fn trap() -> Endpoint {
     Endpoint::answering(Answer::Status(403))
 }
 
-/// A run of `strata list profiles --packs` that the guard of the tests does not cover. The run
+/// A run of `strata list profiles --detail` that the guard of the tests does not cover. The run
 /// has neither `STRATA_REPORT` nor `STRATA_REPORT_URL` from the environment. It reads the file
 /// `.palette.env` of `home`, and else it has the address that the release names. The proxy `trap`
 /// takes each request that leaves the machine, so no request reaches an address.

@@ -7,8 +7,8 @@ use super::consumers::{
 };
 use super::list::{
     applied_ref, cluster_count, list_count, list_scope, listed_registry, no_version_sentence,
-    pack_version, profile_marks, project_label, registry_heading, side_projects, version_note,
-    virtual_line, virtual_note,
+    pack_version, profile_marks, project_label, registry_count, registry_heading,
+    registry_kind_cell, side_projects, version_note, virtual_line, virtual_note,
 };
 use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_pack_sentences, pack_order_note, tier_line,
@@ -26,8 +26,8 @@ use crate::closed_set::unknown::report::Report;
 use crate::diff::Diff;
 use crate::error::Result;
 use crate::ops::{
-    Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing,
-    PackListing, PairStatus, RecordStatus, SavedFilter, VerifySummary,
+    Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject,
+    ListedRegistry, Listing, PackListing, PairStatus, RecordStatus, SavedFilter, VerifySummary,
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
@@ -424,6 +424,9 @@ impl Renderer for TerminalRenderer {
         if let Some(filters) = &l.filters {
             list_filters(&mut out, p, filters);
         }
+        if let Some(registries) = &l.registries {
+            list_registries(&mut out, p, registries);
+        }
         for line in super::list::unread_lines(l) {
             out.push_str(&format!("\n{}\n", p.red(&line)));
         }
@@ -612,6 +615,29 @@ fn list_filters(out: &mut String, p: &Paint, filters: &[SavedFilter]) {
     }
 }
 
+/// The table of the registries of a listing, with its count.
+fn list_registries(out: &mut String, p: &Paint, registries: &[ListedRegistry]) {
+    out.push_str(&format!("\n{}\n", registry_count(registries.len())));
+    let rows: Vec<Vec<String>> = registries
+        .iter()
+        .map(|r| {
+            vec![
+                dash(&r.name).to_string(),
+                r.uid.clone(),
+                registry_kind_cell(r).to_string(),
+            ]
+        })
+        .collect();
+    let widths = column_widths(&rows);
+    for row in &rows {
+        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+            0 => p.bold(cell),
+            1 => p.dim(cell),
+            _ => cell.to_string(),
+        }));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -670,6 +696,7 @@ mod tests {
             resolved: None,
             query_filter: None,
             filters: None,
+            registries: None,
             errors: std::collections::BTreeMap::new(),
         };
         let clusters: Vec<ListedCluster> = ["Running", "Provisioning", "Error"]

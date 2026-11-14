@@ -97,7 +97,7 @@ cluster now, and verifies the record:
 
 The verdict of `verify` gives the count too, and so does
 [a row of `verify --summary`](../verify.md#check-many-records).
-`strata list clusters --applied`
+`strata list clusters --detail`
 names each profile and its version. `--json` gives them in
 `a.cluster.profiles` and `b.cluster.profiles`.
 

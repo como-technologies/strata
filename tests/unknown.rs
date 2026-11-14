@@ -25,7 +25,7 @@ fn note() -> String {
     )
 }
 
-/// Run `strata list profiles --packs` with the arguments `more` against `api`.
+/// Run `strata list profiles --detail` with the arguments `more` against `api`.
 fn list(api: &str, home: &Path, more: &[&str]) -> Run {
     Run::of(&mut list_command(api, home, more))
 }
@@ -69,7 +69,7 @@ fn quiet_hides_the_note_and_the_environment_hides_it_too() {
         .env_remove("XDG_STATE_HOME")
         .env("STRATA_QUIET", "1")
         .env("PALETTE_API", &api)
-        .args(["list", "profiles", "--packs"]);
+        .args(["list", "profiles", "--detail"]);
     let silent = Run::of(&mut command);
     assert!(!silent.err.contains("Palette gave"), "{}", silent.err);
 }
@@ -114,7 +114,7 @@ fn the_state_home_of_the_environment_decides_where_the_log_is() {
         .env_remove("STRATA_QUIET")
         .env("XDG_STATE_HOME", state.path())
         .env("PALETTE_API", &api)
-        .args(["list", "profiles", "--packs"]);
+        .args(["list", "profiles", "--detail"]);
     let run = Run::of(&mut command);
     assert_eq!(run.code, 0, "{}", run.err);
     assert_eq!(lines_of(&state.path().join("strata").join(FILE)).len(), 1);
