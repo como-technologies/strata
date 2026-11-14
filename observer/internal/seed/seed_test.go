@@ -175,12 +175,7 @@ func TestTheSeedWritesWhatTheScriptOfThePipelineWrites(t *testing.T) {
 			case !ok:
 				t.Errorf("%s: the seed has no %s", Name(i), k)
 			case k == MetaKey:
-				var a, b map[string]any
-				_ = json.Unmarshal(g, &a)
-				_ = json.Unmarshal(w, &b)
-				if !jsonEqual(a, b) {
-					t.Errorf("%s: meta.json is %s, the script writes %s", Name(i), g, w)
-				}
+				testkit.SamePlain(t, Name(i)+": the meta file of the seed", json.RawMessage(g), json.RawMessage(w))
 			case gunzip(t, g) != gunzip(t, w):
 				t.Errorf("%s: %s differs from the record of the script", Name(i), k)
 			}
@@ -204,12 +199,6 @@ func secretsOfYAML(t *testing.T, out string) map[string]map[string][]byte {
 		got[name] = data
 	}
 	return got
-}
-
-func jsonEqual(a, b map[string]any) bool {
-	x, _ := json.Marshal(a)
-	y, _ := json.Marshal(b)
-	return bytes.Equal(x, y)
 }
 
 func metaFirstSeen() baseline.Meta {

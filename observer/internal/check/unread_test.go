@@ -1,7 +1,6 @@
 package check
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -290,10 +289,7 @@ func TestTheRealOutputWithNoRecordIsTheSetNoRecords(t *testing.T) {
 	}
 	r := newRig(t)
 	w := &world{cluster: testkit.Cluster("quarry-1", names...)}
-	s, err := r.observer(w).Once(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := once(t, r.observer(w))
 	got, want := asMap(t, s), asMap(t, json.RawMessage(raw))
 	// A run names its own times and cluster.
 	for _, m := range []map[string]any{got, want} {
@@ -306,9 +302,7 @@ func TestTheRealOutputWithNoRecordIsTheSetNoRecords(t *testing.T) {
 			t.Errorf("%s: the observer gives\n%v\nthe set holds\n%v", key, got[key], wantValue)
 		}
 	}
-	if !strings.Contains(string(raw), `"readAt":null`) {
-		t.Error("the set does not say readAt null")
-	}
+	testkit.HoldsAll(t, "the set", string(raw), `"readAt":null`)
 }
 
 func asMap(t *testing.T, v any) map[string]any {

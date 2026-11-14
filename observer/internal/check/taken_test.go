@@ -65,9 +65,7 @@ func TestFirstSeenRecordsGetARecordOfAProfileThatTheClusterRunsAfterTheSeed(t *t
 		t.Fatalf("the first cycle: %q", profileStatus(s, testkit.EdgeProfile))
 	}
 	snapshotsAndTokens(t, w, o, 1)
-	if !strings.Contains(r.log.String(), "verdict=taken records=1") {
-		t.Errorf("the log:\n%s", r.log.String())
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "verdict=taken records=1")
 	cycle(t, o)
 	s := o.Summary()
 	if st := profileStatus(s, testkit.EdgeProfile); st == model.StatusNoRecord || st == "" {

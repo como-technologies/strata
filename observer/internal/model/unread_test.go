@@ -341,8 +341,7 @@ func TestCarryTakesNoRecordForAFileThatCannotBeReadWhenTheLastCycleHeldNone(t *t
 func TestABlindContentHoldsEachKnownIDThatNoReadableRecordGives(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
 	readable := rec("zed", "1.0.0", docs.VerifyUnchanged, dex)
-	known := []string{FindingID(PublishedChanged, testkit.DexProfile), FindingID(ImageMoved, testkit.DexProfile),
-		FindingID(PublishedChanged, "zed@1.0.0"), FindingID(ClusterDiffers, "zed@1.0.0"), FindingID(ImageSplit, "zed@1.0.0")}
+	known := append(dexIDs(PublishedChanged, ImageMoved), FindingID(PublishedChanged, "zed@1.0.0"), FindingID(ClusterDiffers, "zed@1.0.0"), FindingID(ImageSplit, "zed@1.0.0"))
 	now := bad(t, "fred-identity.json.gz", readable)
 	got := BlindIDs(now, known)
 	if !slices.Equal(got, known[:2]) {

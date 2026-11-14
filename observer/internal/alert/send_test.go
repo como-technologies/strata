@@ -22,7 +22,7 @@ const platformOncall = "platform-oncall"
 // TLS server, the webhook trusts its certificate and keeps its own rules about redirects.
 func hook(t *testing.T, addr string, allowHTTP bool, srv *httptest.Server) (*Webhook, string) {
 	t.Helper()
-	file := testkit.WriteIn(t, t.TempDir(), platformOncall, addr+"\n")
+	file := testkit.AddressFile(t, platformOncall, addr+"\n")
 	w := webhookOf(file, allowHTTP)
 	if srv != nil {
 		w.client.Transport = srv.Client().Transport

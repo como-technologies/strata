@@ -95,9 +95,7 @@ func TestTheLogHoldsNoSentinelThroughAFullCycleThatFails(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("the failed compare gave %d: %s", rec.Code, rec.Body.String())
 		}
-		if strings.Contains(rec.Body.String(), "SENTINEL") {
-			t.Errorf("the body of the failure holds the sentinel: %s", rec.Body.String())
-		}
+		testkit.HoldsNone(t, "the body", rec.Body.String(), "SENTINEL")
 		requestEverything(t, h)
 		assertLog(t, r)
 	})

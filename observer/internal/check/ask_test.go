@@ -110,9 +110,8 @@ func TestAskRunsBehindForOnePackOnTheRecordOfTheProfileAndKeepsTheAnswer(t *test
 	if names := entries(t, r.work); len(names) != 0 {
 		t.Errorf("work holds %v", names)
 	}
-	if !strings.Contains(r.log.String(), "verdict=no-error") || strings.Contains(r.log.String(), testkit.KubernetesKey) {
-		t.Errorf("the log of the ask:\n%s", r.log.String())
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "verdict=no-error")
+	testkit.HoldsNone(t, "the log", r.log.String(), testkit.KubernetesKey)
 }
 
 func TestAskReadsARefusalAndAFailedRequestAsTheirVerdicts(t *testing.T) {
@@ -137,9 +136,7 @@ func TestAskReadsARefusalAndAFailedRequestAsTheirVerdicts(t *testing.T) {
 			if c.verdict == model.VerdictRefuses && (len(got.Refusals) != 1 || got.Refusals[0].Code != refusal.Code) {
 				t.Errorf("refusals %+v", got.Refusals)
 			}
-			if strings.Contains(r.log.String(), "SENTINEL") {
-				t.Errorf("the log holds the message:\n%s", r.log.String())
-			}
+			testkit.HoldsNone(t, "the log", r.log.String(), "SENTINEL")
 		})
 	}
 }

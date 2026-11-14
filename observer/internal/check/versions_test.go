@@ -82,12 +82,8 @@ func TestTheCacheAsksEachMoveOnce(t *testing.T) {
 
 func TestTheCacheOfTheMovesSurvivesARestartAndHoldsNoValue(t *testing.T) {
 	r, w := withBehind(t)
-	if err := r.observer(w).RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.restart(w).RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, r.observer(w))
+	versions(t, r.restart(w))
 	if got := w.countMoves(); got != 4 {
 		t.Errorf(testkit.PackCompares+" after a restart", got)
 	}
@@ -100,9 +96,7 @@ func TestTheCacheOfTheMovesSurvivesARestartAndHoldsNoValue(t *testing.T) {
 
 func TestANewBinaryAsksAgainAndTheOldKeysGo(t *testing.T) {
 	r, w := withBehind(t)
-	if err := r.observer(w).RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, r.observer(w))
 	w.behind.Tool.Version = "99.0.0"
 	o := r.restart(w)
 	versions(t, o)
@@ -189,12 +183,8 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 	o := r.observer(w)
 	ctx := context.Background()
 	// the rows of the profiles come from a content cycle
-	if err := o.RunContent(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := o.RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
+	versions(t, o)
 	byName := map[string]model.Profile{}
 	for _, p := range o.Summary().Profiles {
 		byName[p.Name] = p
@@ -223,9 +213,7 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 			t.Errorf("%s: %v %v", c.name, ok, err)
 		}
 	}
-	if err := o.RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	if got := w.countProfileMoves(); got != 4 {
 		t.Errorf("%d compares after two cycles", got)
 	}

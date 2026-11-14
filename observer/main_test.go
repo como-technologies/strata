@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -60,9 +61,7 @@ func runOnce(t *testing.T, args []string) (code int, s model.Summary, stdout, st
 	t.Helper()
 	var out, errs bytes.Buffer
 	code = run(args, &out, &errs)
-	if err := json.Unmarshal(out.Bytes(), &s); err != nil {
-		t.Fatalf(testkit.ExitStderr+", stdout %q: %v", code, errs.String(), out.String(), err)
-	}
+	testkit.Decode(t, fmt.Sprintf("the stdout of a run that exits %d, with the stderr %q,", code, errs.String()), out.Bytes(), &s)
 	return code, s, out.String(), errs.String()
 }
 
@@ -430,9 +429,7 @@ func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
 	if code := stop(); code != 0 {
 		t.Errorf(testkit.ExitStderr, code, stderr.String())
 	}
-	if strings.Contains(stderr.String(), "SENTINEL") {
-		t.Errorf("stderr %s", stderr.String())
-	}
+	testkit.HoldsNone(t, "stderr", stderr.String(), "SENTINEL")
 }
 
 func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {

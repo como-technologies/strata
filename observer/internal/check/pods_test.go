@@ -235,9 +235,8 @@ func TestAFailedReadGivesTheCausePodsNotReadAndTheCycleEndsWell(t *testing.T) {
 		t.Errorf("document %+v", doc)
 	}
 	logged := r.log.String()
-	if !strings.Contains(logged, docs.KindKubeAPI) || strings.Contains(logged, "forbidden") {
-		t.Errorf("log %s", logged)
-	}
+	testkit.HoldsAll(t, "the log line", logged, docs.KindKubeAPI)
+	testkit.HoldsNone(t, "the log line", logged, "forbidden")
 }
 
 func TestAFailedReadKeepsTheLastGoodImagesAndTheFindings(t *testing.T) {

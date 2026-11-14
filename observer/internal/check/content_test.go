@@ -177,10 +177,7 @@ func TestARowWithAnErrorBesideGoodRowsIsACauseAndNotAFailedCycle(t *testing.T) {
 func TestNoRecordRunsNoVerifyAndNoBehind(t *testing.T) {
 	r := newRig(t)
 	w := &world{cluster: testkit.Payments()}
-	s, err := r.observer(w).Once(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := once(t, r.observer(w))
 	if s.Page != model.PageNoRecords || w.count(runner.CmdVerify) != 0 || w.count(runner.CmdBehind) != 0 || s.Records.Baseline != baseline.Unknown || s.Records.Count != 0 {
 		t.Errorf("page %q, "+verifyBehind+", records %+v", s.Page, w.count(runner.CmdVerify), w.count(runner.CmdBehind), s.Records)
 	}
@@ -351,10 +348,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *t
 	w.rows[0].Diff.Verify.Who = nil
 	w.rows[0].Diff.Verify.WhoError = reason
 	w.rows[0].Name, w.rows[0].Version = "aws-stack", "1.1.0"
-	s, err := r.observer(w).Once(context.Background())
-	if err != nil {
-		t.Fatalf("error %v", err)
-	}
+	s := once(t, r.observer(w))
 	if len(s.Findings) != 1 || s.Findings[0].Kind != model.PublishedChanged || !s.Findings[0].WhoUnread || len(s.Findings[0].Who) != 0 {
 		t.Fatalf("findings %+v", s.Findings)
 	}
@@ -362,9 +356,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *t
 		t.Errorf("notChecked %+v, content %+v, counts %+v", s.NotChecked, s.Content, s.Counts)
 	}
 	raw := testkit.MustJSON(t, s)
-	if strings.Contains(string(raw), "AccessDenied") {
-		t.Errorf("the summary holds the text of the error: %s", raw)
-	}
+	testkit.HoldsNone(t, "the document", string(raw), "AccessDenied")
 	// the log of the pod names the status and the profile, and never the body of the answer
 	if line := r.log.String(); !strings.Contains(line, "the audit log could not be read") || !strings.Contains(line, `reason="HTTP 403"`) || !strings.Contains(line, "profile="+testkit.AWSStackProfile) {
 		t.Errorf("log %q", line)
@@ -390,9 +382,7 @@ func TestTheLineAboutAnUnreadAuditLogHoldsTheStatusAndNoOtherText(t *testing.T) 
 			w.rows[0].Diff.Verify.Who = nil
 			w.rows[0].Diff.Verify.WhoError = c.whoError
 			w.rows[0].Name, w.rows[0].Version = "aws-stack", "1.1.0"
-			if _, err := r.observer(w).Once(context.Background()); err != nil {
-				t.Fatalf("error %v", err)
-			}
+			once(t, r.observer(w))
 			if line := r.log.String(); strings.Contains(line, "AUDIT-BODY-MARKER") || !strings.Contains(line, c.want) {
 				t.Errorf("want %s, log %q", c.want, line)
 			}
@@ -403,10 +393,6 @@ func TestTheLineAboutAnUnreadAuditLogHoldsTheStatusAndNoOtherText(t *testing.T) 
 func TestARecordWhoseAuditLogWasReadWritesNoLineAboutIt(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
 	w.rows[0] = drift(t)
-	if _, err := r.observer(w).Once(context.Background()); err != nil {
-		t.Fatalf("error %v", err)
-	}
-	if strings.Contains(r.log.String(), "audit log") {
-		t.Errorf("log %q", r.log.String())
-	}
+	once(t, r.observer(w))
+	testkit.HoldsNone(t, "the log", r.log.String(), "audit log")
 }

@@ -213,9 +213,7 @@ func TestTheMarkOfTheSplashIsTheGeometryOfTheLogo(t *testing.T) {
 func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testing.T) {
 	policy := serve(t, "/").Header().Get(testkit.HeaderPolicy)
 	mustHold(t, "the policy", policy, []string{"default-src 'none'", "script-src 'self'", "style-src 'self'", "font-src 'self'", "img-src 'self'"}...)
-	if strings.Contains(policy, "unsafe-inline") || strings.Contains(policy, "data:") {
-		t.Errorf("the policy %q allows "+problemStyle+" or a data address", policy)
-	}
+	mustNotHold(t, "the policy", policy, "unsafe-inline", "data:")
 	noProblems(t, "assets/", problems(files(t)))
 	var names []string
 	entries, err := os.ReadDir("assets")

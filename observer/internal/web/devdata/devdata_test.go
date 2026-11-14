@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"reflect"
@@ -121,18 +122,14 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 	for _, state := range States {
 		s := load(t, state)
 		h := (&api.Server{Source: s}).Handler()
-		get := func(path string) (int, any) {
-			rec := testkit.Get(h, path)
-			var v any
-			_ = json.Unmarshal(rec.Body.Bytes(), &v)
-			return rec.Code, v
-		}
 		// serves fails when the route of path does not give the document want.
 		serves := func(path string, want any) {
 			t.Helper()
-			if code, got := get(path); code != http.StatusOK || !reflect.DeepEqual(got, want) {
-				t.Errorf("%s: %s gave %d and\n%v\nwant\n%v", state, path, code, got, want)
+			rec := testkit.Get(h, path)
+			if rec.Code != http.StatusOK {
+				t.Errorf("%s: %s gave %d", state, path, rec.Code)
 			}
+			testkit.SamePlain(t, string(state)+": "+path, json.RawMessage(rec.Body.Bytes()), want)
 		}
 		for route, file := range map[string]string{"/v1/cluster": fileCluster, "/v1/findings": fileFindings, "/v1/profiles": fileProfiles,
 			"/v1/newer": fileNewer, "/v1/notchecked": fileNotChecked, "/v1/events": fileEvents, "/v1/images": fileImages, testkit.AsksRoute: fileAsks} {
@@ -148,7 +145,7 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 			path := "/v1/images/" + url.PathEscape(img.Ref)
 			serves(path, testkit.Plain(t, view))
 		}
-		if code, _ := get("/v1/images/" + url.PathEscape(testkit.NoImage)); code != http.StatusNotFound {
+		if code := testkit.Get(h, "/v1/images/"+url.PathEscape(testkit.NoImage)).Code; code != http.StatusNotFound {
 			t.Errorf("%s: an image that no pod runs gave %d", state, code)
 		}
 		for _, d := range s.Diffs {
@@ -912,16 +909,15 @@ func TestClicksThatComeTogetherLeaveOneAnswerForEachMove(t *testing.T) {
 func TestThePostOfTheAskRouteGivesTheReplyAndTheListShowsIt(t *testing.T) {
 	s := load(t, StateOK)
 	h := (&api.Server{Source: s}).Handler()
-	do := func(method, path string, page bool) (int, string) {
+	answer := func(rec *httptest.ResponseRecorder) (int, string) { return rec.Code, rec.Body.String() }
+	post := func(path string, page bool) (int, string) {
 		site := ""
 		if page {
 			site = testkit.SameOrigin
 		}
-		rec := testkit.Serve(h, method, path, testkit.LoopbackHost, site)
-		return rec.Code, rec.Body.String()
+		return answer(testkit.Serve(h, http.MethodPost, path, testkit.LoopbackHost, site))
 	}
-	testkit.AskFlow(t, func(path string) (int, string) { return do(http.MethodGet, path, false) },
-		func(path string, page bool) (int, string) { return do(http.MethodPost, path, page) })
+	testkit.AskFlow(t, func(path string) (int, string) { return answer(testkit.Get(h, path)) }, post)
 }
 
 // The set alerts holds rules in each state. Their states are those that the engine gives for the findings
@@ -946,7 +942,7 @@ func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
 	if got := parsed.Names(); !slices.Equal(got, v.Channels) {
 		t.Errorf("the channels of the set are %v, and the rules name %v", v.Channels, got)
 	}
-	engine := alert.New(parsed, nil, 7*24*time.Hour, nil)
+	engine := alert.New(parsed, nil, testkit.DigestEvery, nil)
 	store := alert.NewStore()
 	recent := Reference
 	store.DigestAt = &recent

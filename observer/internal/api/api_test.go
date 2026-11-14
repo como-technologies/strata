@@ -111,9 +111,7 @@ func TestEachSummaryRouteHoldsNoSentinelAndTheDetailRouteHoldsIt(t *testing.T) {
 				if rec.Code != http.StatusOK || !strings.Contains(body, sentinelValue) {
 					t.Fatalf("status %d, body %s", rec.Code, body)
 				}
-				if strings.Contains(body, sentinelVariable) {
-					t.Errorf("the detail route holds the value of a variable: %s", body)
-				}
+				testkit.HoldsNone(t, "the body", body, sentinelVariable)
 			})
 		}
 	}

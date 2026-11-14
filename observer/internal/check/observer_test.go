@@ -77,9 +77,7 @@ func TestWorkIsEmptyAfterAVersionsCycleToo(t *testing.T) {
 func TestACycleWritesTheRecordsAfterTheUnzipAndNothingOutlivesIt(t *testing.T) {
 	r, w := edited(t)
 	seen := &fileSeer{world: w}
-	if err := r.observer(seen).RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, r.observer(seen))
 	if !seen.sawRecord || !seen.sawClearValue {
 		t.Errorf("record %v, clear value %v", seen.sawRecord, seen.sawClearValue)
 	}
@@ -110,8 +108,7 @@ func TestADirectoryThatAStoppedProcessLeftIsRemovedAtTheStart(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(stale, "raw"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	keep := filepath.Join(r.work, "other")
-	testkit.WriteFile(t, keep, "x")
+	testkit.WriteIn(t, r.work, "other", "x")
 	r.observer(&world{})
 	if got := entries(t, r.work); len(got) != 1 || got[0] != "other" {
 		t.Errorf("work holds %v", got)
@@ -183,9 +180,8 @@ func TestAStateThatCannotBeReadIsALogLineAndAnEmptyState(t *testing.T) {
 	}
 	testkit.WriteIn(t, r.state, testkit.StateFile, "{"+sentinel)
 	o := r.observer(&world{})
-	if !strings.Contains(r.log.String(), "the state cannot be read") || strings.Contains(r.log.String(), sentinel) {
-		t.Errorf("log %q", r.log.String())
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "the state cannot be read")
+	testkit.HoldsNone(t, "the log", r.log.String(), sentinel)
 	if s := o.Summary(); s.Content.FailedRuns != 0 || s.Records.StartedAt.IsZero() {
 		t.Errorf("summary %+v", s)
 	}
@@ -193,26 +189,17 @@ func TestAStateThatCannotBeReadIsALogLineAndAnEmptyState(t *testing.T) {
 
 func TestNothingThatTheObserverWritesHoldsAValueOfTheCluster(t *testing.T) {
 	r, w := edited(t)
-	s, err := r.observer(w).Once(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := once(t, r.observer(w))
 	raw := testkit.MustJSON(t, s)
 	summary := string(raw)
 	for name, text := range map[string]string{"summary": summary, "log": r.log.String()} {
-		if strings.Contains(text, sentinel) || strings.Contains(text, "OLD") {
-			t.Errorf("the %s holds a value: %s", name, text)
-		}
+		testkit.HoldsNone(t, "the "+name, text, sentinel, "OLD")
 	}
 	// A line of the log holds a command, an exit code, a duration, and an error kind.
 	for _, line := range strings.Split(strings.TrimSpace(r.log.String()), "\n") {
-		if strings.Contains(line, "record-0") || strings.Contains(line, "cluster:") {
-			t.Errorf("a log line holds an argument: %s", line)
-		}
+		testkit.HoldsNone(t, "the line", line, "record-0", "cluster:")
 	}
-	if !strings.Contains(r.log.String(), "command=verify exit=0") {
-		t.Errorf("log %s", r.log.String())
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "command=verify exit=0")
 }
 
 func TestTheWaitAddsZeroToTenPercent(t *testing.T) {
@@ -290,9 +277,7 @@ func TestACycleThatIsCanceledIsNoFailedRun(t *testing.T) {
 
 func TestASnapshotWritesOnlyIntoTheDirectoryOfTheCycle(t *testing.T) {
 	r, w := edited(t)
-	if _, err := r.observer(w).Once(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	once(t, r.observer(w))
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	snapshots := 0
@@ -352,9 +337,7 @@ func TestAContentCycleNeverWaitsForAVersionsCycleAndTheProgressShows(t *testing.
 	versions := make(chan error, 1)
 	go func() { versions <- o.RunVersions(ctx) }()
 	<-g.waiting // the versions cycle holds its slot, and its `behind` runs
-	if err := o.RunContent(ctx); err != nil {
-		t.Fatalf("the content cycle: %v", err)
-	}
+	cycle(t, o)
 	running := o.Summary().Versions.Running
 	if running == nil || running.Done != 0 || running.Total != 1 {
 		t.Fatalf("the progress of the versions cycle during its behind: %+v", running)

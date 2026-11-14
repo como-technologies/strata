@@ -960,9 +960,7 @@ func TestTheCardCheckThisYourselfHasTheRowsOfTheMockWithRealNames(t *testing.T) 
 	// A pack with no newer version shows neither, and a profile page shows neither.
 	for _, rows := range [][]termRow{termRows(t, shown(t, devdata.StateOK, reloaderHash)[0]), profile} {
 		for _, r := range rows {
-			if strings.Contains(r.command, "compare pack:") || strings.Contains(r.command, "behind") {
-				t.Errorf("a row with no move holds the command %q", r.command)
-			}
+			mustNotHold(t, "the command", r.command, "compare pack:", "behind")
 		}
 	}
 	// A profile with no drift has no row about who. An old placeholder is gone.
@@ -978,19 +976,13 @@ func TestTheCardCheckThisYourselfHasTheRowsOfTheMockWithRealNames(t *testing.T) 
 func TestTheNamesInTheCommandsOfTheCardAreRealNames(t *testing.T) {
 	deployment, namespace := string(readFile(t, "../../../deploy/observer/deployment.yaml")), string(readFile(t, "../../../deploy/observer/namespace.yaml"))
 	for i := 0; i < 4; i++ {
-		if !strings.Contains(deployment, fmt.Sprintf(recordsSecret+"%d", i)) {
-			t.Errorf("deploy/observer holds no Secret "+recordsSecret+"%d", i)
-		}
+		mustHold(t, "the deployment", deployment, fmt.Sprintf(recordsSecret+"%d", i))
 	}
-	if !strings.Contains(namespace, "name: strata-observer") {
-		t.Error("the namespace of deploy/observer is not strata-observer")
-	}
+	mustHold(t, "the namespace", namespace, "name: strata-observer")
 	script := string(readFile(t, testkit.RecordsScript))
 	mustHold(t, testkit.RecordsTool, script, []string{`"\(.source.name)_\(.source.version).json.gz"`, `tr -c 'A-Za-z0-9._\n-' _`, recordsSecret + "$i"}...)
 	app := readScripts(t)
-	if !strings.Contains(app, "replace(/[^A-Za-z0-9._-]/g, \"_\")") {
-		t.Error("the page writes the key of a record by another rule than the script of the records")
-	}
+	mustHold(t, "the scripts", app, "replace(/[^A-Za-z0-9._-]/g, \"_\")")
 	for file, flags := range map[string][]string{"help-behind.txt": {"--pin <LAYER/NAME>"}, "help-verify.txt": {"--who", "--full"}, "help-compare.txt": {"--full"}} {
 		help := string(readFile(t, "../../../docs/src/output/"+file))
 		mustHold(t, file, help, flags...)

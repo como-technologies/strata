@@ -156,9 +156,8 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t 
 	}
 	// the summary carries the flag, and never the text of the error
 	raw := testkit.MustJSON(t, s)
-	if strings.Contains(string(raw), testkit.AuditSentinel) || !strings.Contains(string(raw), `"whoUnread":true`) {
-		t.Errorf("the summary %s", raw)
-	}
+	testkit.HoldsNone(t, "the summary", string(raw), testkit.AuditSentinel)
+	testkit.HoldsAll(t, "the summary", string(raw), `"whoUnread":true`)
 }
 
 func TestAFindingWithItsWritesSaysNothingOfAnUnreadAuditLog(t *testing.T) {

@@ -172,9 +172,7 @@ func TestLicensesNamesEachFontWithItsChecksum(t *testing.T) {
 			t.Fatal(err)
 		}
 		sum := sha256.Sum256(raw)
-		if !strings.Contains(string(licenses), "`"+f+"`") || !strings.Contains(string(licenses), hex.EncodeToString(sum[:])) {
-			t.Errorf("LICENSES.md does not name %s with its checksum", f)
-		}
+		mustHold(t, "the licenses", string(licenses), "`"+f+"`", hex.EncodeToString(sum[:]))
 	}
 	mustHold(t, "LICENSES.md", string(licenses), []string{"OFL-1.1", "SIL OPEN FONT LICENSE Version 1.1", "5.3.0"}...)
 }
@@ -614,9 +612,7 @@ func TestAValueWithMarkupShowsAsTextOnEachScreen(t *testing.T) {
 				checkMarkup(t, s)
 				all.WriteString(s.HTML)
 			}
-			if strings.Contains(all.String(), "<img") {
-				t.Error("a value reached the page as an img tag")
-			}
+			mustNotHold(t, "the screens", all.String(), "<img")
 			if state != devdata.StateFirstLoad && !strings.Contains(all.String(), injection) {
 				t.Error("the injection does not show as text: the test did not reach a value")
 			}
@@ -813,13 +809,11 @@ func TestAMoveThatWasNotReadShowsNoCount(t *testing.T) {
 			for _, row := range strings.Split(s.HTML, "</tr>") {
 				switch {
 				case strings.Contains(row, ">vault<"):
-					if !strings.Contains(row, "Not read") || strings.Contains(row, "<b>0</b>") {
-						t.Errorf("the row of the move that was not read: %s", row)
-					}
+					mustHold(t, "the row", row, "Not read")
+					mustNotHold(t, "the row", row, "<b>0</b>")
 				case strings.Contains(row, ">ubuntu-aws<"):
-					if strings.Contains(row, "Not read") || !strings.Contains(row, "Repave") {
-						t.Errorf("the row of the move that was read: %s", row)
-					}
+					mustNotHold(t, "the row", row, "Not read")
+					mustHold(t, "the row", row, "Repave")
 				}
 			}
 		case s.Hash == "#k-bambam-secrets@2.0.1/addon/vault" && s.Variant == "":
@@ -1082,9 +1076,7 @@ func lackProblem(css, selector, want string) string {
 // ruleIs fails when the rule of the selector in css does not hold exactly the declarations want.
 func ruleIs(t *testing.T, css, selector, want string) {
 	t.Helper()
-	if p := ruleProblem(css, selector, want); p != "" {
-		t.Error(p)
-	}
+	noProblems(t, "the style", []string{ruleProblem(css, selector, want)})
 }
 
 // rulesHold fails when the rule of a selector in css lacks one of the declarations that the map gives it.
@@ -1257,9 +1249,7 @@ func TestEachCopyOfTheLogoIsItsSourceByteForByte(t *testing.T) {
 		{testkit.FaviconDark, dark, readPage(t, testkit.FaviconDark)},
 		{"the favicon of the book", light, readFile(t, bookFavicon)},
 	} {
-		if problem := copyProblem(c.name, c.source, c.copy); problem != "" {
-			t.Error(problem)
-		}
+		noProblems(t, c.name, []string{copyProblem(c.name, c.source, c.copy)})
 	}
 	// The nav is dark in both schemes, so the inline mark is the dark mark.
 	div := markDiv.FindSubmatch(readPage(t, "index.html"))
@@ -1463,9 +1453,7 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 	}
 	for _, scheme := range [][2]string{{"light", testkit.FaviconLight}, {"dark", testkit.FaviconDark}} {
 		icon := `<link rel="icon" type="image/svg+xml" href="` + scheme[1] + `" media="(` + schemeQuery + `: ` + scheme[0] + `)">`
-		if !strings.Contains(head, icon) {
-			t.Errorf("the head has no %s", icon)
-		}
+		mustHold(t, "the head", head, icon)
 	}
 	script := string(readPage(t, themeScript))
 	mustHold(t, themeScript, script, []string{`"strata-observer-theme"`, "localStorage.removeItem", "aria-pressed", "data-theme-choice", "catch"}...)
@@ -1708,9 +1696,7 @@ func TestTheListOfImagesMovesThePackUnderTheImageOnAPhone(t *testing.T) {
 			continue
 		}
 		rows++
-		if !strings.Contains(row, `<div class="narrow-show">`+m[1]+`</div>`) {
-			t.Errorf("the row has no block narrow-show with %q: %s", m[1], row)
-		}
+		mustHold(t, "the row", row, `<div class="narrow-show">`+m[1]+`</div>`)
 	}
 	if rows == 0 {
 		t.Error("no row of the list has a pack cell")

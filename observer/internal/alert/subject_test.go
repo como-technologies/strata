@@ -53,12 +53,8 @@ func TestAMessageHoldsNothingOfAFindingButItsProfilePacksSentenceAndFirstSight(t
 		Images: []string{"IMAGE-MARKER:1"}, Who: []docs.Who{{Actor: "ACTOR-MARKER", Action: "ACTION-MARKER"}}, FirstSeen: now}
 	s := findingSubject(f)
 	for _, text := range []string{openText("quarry-1", s), clearText("quarry-1", s, now), digestText("quarry-1", []Subject{s})} {
-		if strings.Contains(text, "MARKER") {
-			t.Errorf("the message holds a marker: %s", text)
-		}
-		if !strings.Contains(text, testkit.DexProfile) {
-			t.Errorf("the message lacks the profile: %s", text)
-		}
+		testkit.HoldsNone(t, "the text", text, "MARKER")
+		testkit.HoldsAll(t, "the text", text, testkit.DexProfile)
 	}
 	want := dexDrift + "The published version differs from its record.\nPacks: addon/dex\nFirst seen: 2026-11-04T12:00:00Z"
 	if got := openText("quarry-1", s); got != want {

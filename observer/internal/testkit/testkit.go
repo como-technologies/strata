@@ -452,11 +452,17 @@ func StateText(t *testing.T, state string) string {
 	return string(raw)
 }
 
-// OncallFile writes the file of the address of the channel oncall, which holds address, to a new directory of the
-// test, and gives its path.
+// OncallFile writes the file of the address of the channel oncall with AddressFile.
 func OncallFile(t *testing.T, address string) string {
 	t.Helper()
-	return WriteIn(t, t.TempDir(), "oncall", address)
+	return AddressFile(t, "oncall", address)
+}
+
+// AddressFile writes the file of the address of the channel, which holds address, to a new directory of the test, and
+// gives its path. The file has the name of the channel, as a Secret of the channel gives it.
+func AddressFile(t *testing.T, channel, address string) string {
+	t.Helper()
+	return WriteIn(t, t.TempDir(), channel, address)
 }
 
 // DecodeFile reads the JSON file at path into v, and fails the test on an error.

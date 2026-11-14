@@ -38,10 +38,14 @@ func podsOf(t *testing.T, containers ...kube.Container) Content {
 	return podsWith(t, rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "2026.2.0"), testkit.VendorRef)), containers...)
 }
 
-// podsWith makes a content with the record r, and the given containers that a read of the pods gave at t0.
+// podsWith makes a content with the record r, and the given containers, with withPods.
 func podsWith(t *testing.T, r Record, containers ...kube.Container) Content {
 	t.Helper()
-	c := content(t, r)
+	return withPods(content(t, r), containers...)
+}
+
+// withPods gives the content c with the given containers, which a read of the pods gave at t0.
+func withPods(c Content, containers ...kube.Container) Content {
 	c.Pods = PodRead{Containers: containers, At: t0}
 	return c
 }
@@ -188,9 +192,8 @@ func TestAnImageNamedByADigestCannotMoveAndMakesNoFinding(t *testing.T) {
 func TestAnImageMatchesByTheExactTextFirstAndThenByNameAndTag(t *testing.T) {
 	exact := rec("aws-stack", "1.0.0", docs.VerifyUnchanged, naming(pk("addon", "nginx", "1.0"), nginxFull))
 	byName := rec("other", "1.0.0", docs.VerifyUnchanged, naming(pk("addon", "web", "1.0"), "nginx:1.27"))
-	c := content(t, exact, byName)
-	c.Pods = PodRead{At: t0, Containers: []kube.Container{
-		ran("a", nginxFull, testkit.Digest1), ran("b", nginxHub, testkit.Digest1), ran("c", "nginx:1.27", testkit.Digest1), ran("d", "nginx:1.28", testkit.Digest1)}}
+	c := withPods(content(t, exact, byName),
+		ran("a", nginxFull, testkit.Digest1), ran("b", nginxHub, testkit.Digest1), ran("c", "nginx:1.27", testkit.Digest1), ran("d", "nginx:1.28", testkit.Digest1))
 	got := map[string]Image{}
 	for _, img := range imageRows(c, nil) {
 		got[img.Ref] = img
@@ -353,9 +356,7 @@ func TestNoAnswerOfThePodsCarriesAPodNameOrANamespace(t *testing.T) {
 	in := podsInput(&c, firstOf(testkit.VendorRef, testkit.Digest1))
 	for name, v := range map[string]any{"summary": Build(in), "observed": ObservedOf(in)} {
 		raw := testkit.MustJSON(t, v)
-		if strings.Contains(string(raw), "MARKER") {
-			t.Errorf("%s holds a marker: %s", name, raw)
-		}
+		testkit.HoldsNone(t, "the "+name, string(raw), "MARKER")
 	}
 	o := ObservedOf(in)
 	view, ok := o.ImageOf(testkit.VendorRef)

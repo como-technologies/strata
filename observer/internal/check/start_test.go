@@ -129,9 +129,7 @@ func TestAChangeOfTheRecordsStartsAContentCycle(t *testing.T) {
 	if n := w.count(runner.CmdBehind); n != 1 {
 		t.Errorf("the change ran %d behinds", n)
 	}
-	if !strings.Contains(r.log.String(), "records changed") {
-		t.Errorf("the log:\n%s", r.log.String())
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "records changed")
 }
 
 // The look at the records compares with the mark that Run took before the first content cycle, and not

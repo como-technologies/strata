@@ -343,9 +343,8 @@ func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.
 		switch {
 		case strings.HasPrefix(line, "behind "):
 			behind++
-			if !strings.Contains(line, " --no-impact ") || strings.Contains(line, "--pin") {
-				t.Errorf("a cycle ran %q, which asks Palette", line)
-			}
+			testkit.HoldsAll(t, "the line", line, " --no-impact ")
+			testkit.HoldsNone(t, "the line", line, "--pin")
 		case strings.HasPrefix(line, "compare "), strings.HasPrefix(line, "verify "):
 			if !strings.Contains(line, " --full ") || strings.Contains(line, "--validate") || strings.Contains(line, "--repave") {
 				t.Errorf("a cycle ran %q", line)

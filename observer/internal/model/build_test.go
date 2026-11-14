@@ -37,9 +37,7 @@ func TestTheSummaryHoldsNoOldValueAndNoNewValue(t *testing.T) {
 func TestAnEmptyListIsNeverNull(t *testing.T) {
 	out := string(testkit.MustJSON(t, Build(Input{Now: t0})))
 	for _, name := range []string{"findings", "profiles", "newer", "notChecked", "events"} {
-		if !strings.Contains(out, `"`+name+`":[]`) {
-			t.Errorf("%s is not an empty list: %s", name, out)
-		}
+		testkit.HoldsAll(t, "the output", out, `"`+name+`":[]`)
 	}
 	good := string(testkit.MustJSON(t, build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))), nil)))
 	testkit.HoldsNone(t, "the summary of a good build", good, []string{":null,\"flags\"", `"flags":null`, `"packs":null`, `"profiles":null`, `"findings":null`}...)
@@ -348,14 +346,11 @@ func TestAFindingStartsAtTheStateOrAtTheCycle(t *testing.T) {
 	c := content(t, r)
 	id := FindingID(PublishedChanged, testkit.AWSStackProfile)
 	earlier := t0.Add(-48 * time.Hour)
-	in := goodInput(&c, nil)
-	in.Files, in.FirstSeen = 1, map[string]time.Time{id: earlier}
-	f := Build(in).Findings[0]
+	f := seenAt(&c, nil, map[string]time.Time{id: earlier}).Findings[0]
 	if !f.FirstSeen.Equal(earlier) || !f.LastSeen.Equal(t0) {
 		t.Errorf("times %v %v", f.FirstSeen, f.LastSeen)
 	}
-	in.FirstSeen = nil
-	if f := Build(in).Findings[0]; !f.FirstSeen.Equal(t0) {
+	if f := seenAt(&c, nil, nil).Findings[0]; !f.FirstSeen.Equal(t0) {
 		t.Errorf("first seen %v", f.FirstSeen)
 	}
 }
@@ -398,9 +393,7 @@ func TestTheClocksShowThePeriodAndTheLastError(t *testing.T) {
 		`"content":{"checkedAt":null,"every":"15m","failedRuns":1,"lastError":{"kind":"` + docs.KindAPI + `","status":401}}`,
 		`"versions":{"readAt":"2026-11-03T14:00:00Z","every":"6h","failedRuns":0,"lastError":null}`,
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %s in %s", want, out)
-		}
+		testkit.HoldsAll(t, "the output", out, want)
 	}
 }
 

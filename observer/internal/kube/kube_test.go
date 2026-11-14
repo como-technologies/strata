@@ -142,9 +142,7 @@ func TestAFailureHasAKindAndAStatusAndNeverTheBodyOfTheAnswer(t *testing.T) {
 			if !errors.As(err, &e) || e.Kind != c.kind || e.Status != c.status {
 				t.Fatalf("error %v", err)
 			}
-			if strings.Contains(err.Error(), testkit.EnvMarker) {
-				t.Errorf("the error holds the body: %v", err)
-			}
+			testkit.HoldsNone(t, "stderr", err.Error(), testkit.EnvMarker)
 		})
 	}
 }

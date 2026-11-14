@@ -63,9 +63,8 @@ func NewKubeAPI(t *testing.T, handler func(w http.ResponseWriter, r *http.Reques
 	}))
 	t.Cleanup(a.srv.Close)
 	dir := t.TempDir()
-	a.Host, a.TokenFile, a.CAFile = a.srv.Listener.Addr().String(), filepath.Join(dir, "token"), filepath.Join(dir, "ca.crt")
-	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: a.srv.Certificate().Raw})
-	WriteFile(t, a.CAFile, string(ca))
+	a.Host, a.TokenFile = a.srv.Listener.Addr().String(), filepath.Join(dir, "token")
+	a.CAFile = WriteIn(t, dir, "ca.crt", string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: a.srv.Certificate().Raw})))
 	a.SetToken("token-1")
 	return a
 }

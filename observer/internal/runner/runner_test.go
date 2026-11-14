@@ -186,7 +186,5 @@ func TestCodeMdNamesEachVariableThatTheRunnerSets(t *testing.T) {
 	if !slices.Equal(named, want) {
 		t.Errorf("code.md names %v, want %v", named, want)
 	}
-	if !strings.Contains(rule, "`STRATA_REPORT=0`") {
-		t.Error("code.md does not give the value of STRATA_REPORT")
-	}
+	testkit.HoldsAll(t, "the rule", rule, "`STRATA_REPORT=0`")
 }

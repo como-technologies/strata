@@ -101,7 +101,5 @@ func TestServeWithoutAlertsSendsNothingAndTheRouteSaysSo(t *testing.T) {
 	if !getJSON(addr, "/v1/alerts", &view) || view.Set || len(view.Rules) != 0 {
 		t.Errorf("view %+v", view)
 	}
-	if strings.Contains(stderr.String(), "msg=alert") {
-		t.Errorf("stderr %s", stderr.String())
-	}
+	testkit.HoldsNone(t, "stderr", stderr.String(), "msg=alert")
 }
