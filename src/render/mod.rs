@@ -11,6 +11,7 @@ mod report;
 mod same_release;
 mod terminal;
 mod unified;
+mod validate;
 mod verify;
 
 use clap::ValueEnum;
@@ -35,6 +36,7 @@ pub use json::JsonRenderer;
 pub use list::{invalid_pack_warnings, secret_like_notes, set_counts_line};
 pub use markdown::MarkdownRenderer;
 pub use terminal::TerminalRenderer;
+pub use validate::{acceptance_sentence, refusal_lines};
 
 /// The output formats. On the command line, each is its name in lower case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

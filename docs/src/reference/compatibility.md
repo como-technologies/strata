@@ -309,6 +309,11 @@ After 0.33.0, `snapshot::SecretLikeVariable`, `snapshot::Snapshot::secret_like_v
 clear and whose name reads as a secret. `ops::SetRecord` has a new field for them: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `render::refusal_lines` and `render::acceptance_sentence` are new. They give the
+answer of Palette in a record of `snapshot --validate`: one line for each error, or the sentence
+of an accept. The command line prints the sentence last, after the record: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -1240,6 +1245,20 @@ field, a value, an input, or an option is in the sections above.
   - `compare --validate` prints each line as a `note` line under the `palette` lines. The
     markdown gives each one as a `**Note:**`.
   - The markdown of `behind` adds each line to the cell of the bump.
+- **`snapshot --validate` gives the answer of Palette last, in a sentence.** Before, an accept
+  was the line `palette    accepts`, before the record. On a terminal, the record on standard
+  output hid it. Now the last line comes after the record, such as
+  `strata: Palette accepts the packs of 'aws-stack@1.1.1' as an update of itself`. A refusal
+  does not change. A script that reads `palette    accepts` must read the new line, or
+  `source.paletteValidation.accepts` of the record. See
+  [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
+- **`compare --help` says that the two sides can be of different kinds.** The help of `<B>`
+  said "in the same forms as the first". The refs and the exit codes stay the same.
+- **The error of `compare --repave` and `--validate` for two records names the commands to use.**
+  It says that both sides are records. It names `strata compare cluster:<name> <record> --repave`,
+  or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
+  clusters keep the error of before. The kind stays `usage`, and a script that matches the whole
+  message must match the new text. See [Usage errors](../commands/compare/repave.md#usage-errors).
 
 ### For a user of the CI drop-ins
 
@@ -1257,6 +1276,10 @@ field, a value, an input, or an option is in the sections above.
   names and the versions of many profiles. The next run gives the new title to
   the open issue of a record that still drifts. See
   [Drift issues](../automation/drift-issues.md).
+- **`pr-comment.sh --repave` prints the new error of strata for two records.** It records each
+  ref that is not a file. So for two profile versions, the line of strata on standard error says
+  that both sides are records, and names the commands to use. The table still decides the
+  label. See [Ask Palette if the change repaves](../automation/pr-comments.md#ask-palette-if-the-change-repaves).
 
 ### For a user of the library of strata
 

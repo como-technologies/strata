@@ -90,6 +90,22 @@ impl Question {
             ),
         }
     }
+
+    /// The refusal for two record files that hold no cluster.
+    ///
+    /// A record can be the profile side, so the message gives the command with a cluster in place
+    /// of one record. Plain `compare` of the two records prints the impact.
+    fn needs_a_cluster_for_records(self) -> Error {
+        let option = self.option();
+        Error::Usage {
+            message: format!(
+                "{option} needs one side that is a cluster, and both sides are records with no \
+                 cluster. Palette answers only for a cluster, so give the cluster in place of one \
+                 record: strata compare cluster:<name> <record> {option}. Plain compare of the \
+                 two records prints the impact"
+            ),
+        }
+    }
 }
 
 /// What `compare` asks Palette about its cluster side, beyond the comparison of the two sides.
@@ -117,8 +133,10 @@ impl PaletteQuestions {
     ///
     /// A ref shows what its side is: `cluster:<c>` is a cluster, and `aws-stack@1.1.1` is a
     /// profile version. A ref to a record file shows it after strata reads the file, which makes
-    /// no request. [`palette_repave`] and [`palette_validation`](super::palette_validation) keep
-    /// the same rules for the records they get. A fault that only the reads show comes from them.
+    /// no request. For two records with no cluster, the error names the command with a cluster in
+    /// place of one record. [`palette_repave`] and
+    /// [`palette_validation`](super::palette_validation) keep the same rules for the records they
+    /// get. A fault that only the reads show comes from them.
     ///
     /// # Errors
     ///
@@ -144,9 +162,17 @@ impl PaletteQuestions {
             Role::of_ref(a, record_a.as_ref()),
             Role::of_ref(b, record_b.as_ref()),
         );
-        asked
-            .into_iter()
-            .try_for_each(|question| plan(&role_a, &role_b, question).map(drop))
+        // the plan refuses such a pair too; this error names the commands to use for two records
+        let records_with_no_cluster = record_a.is_some()
+            && record_b.is_some()
+            && role_a.holder().is_none()
+            && role_b.holder().is_none();
+        asked.into_iter().try_for_each(|question| {
+            if records_with_no_cluster {
+                return Err(question.needs_a_cluster_for_records());
+            }
+            plan(&role_a, &role_b, question).map(drop)
+        })
     }
 }
 

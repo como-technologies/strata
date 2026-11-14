@@ -76,6 +76,9 @@ the pair before any request, as `--repave` does:
 {{#include ../../output/validate-usage.txt}}
 ```
 
+For two records with no cluster, the error names the commands to use: see
+[Usage errors](repave.md#usage-errors) of `--repave`.
+
 One command can take `--repave` and `--validate`: strata prints the two
 answers.
 

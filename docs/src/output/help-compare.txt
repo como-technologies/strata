@@ -5,7 +5,7 @@ Usage: strata compare [OPTIONS] <A> <B>
 
 Arguments:
   <A>  The first side: a ref or a snapshot file
-  <B>  The second side, in the same forms as the first. Beside a profile version, cluster:<cluster> holds only the profile that the version replaces, as cluster:<cluster>/<profile> does. Beside a cluster group, it holds the profiles of the group
+  <B>  The second side: a ref or a snapshot file. The two sides can be of different kinds. Beside a profile version, cluster:<cluster> holds only the profile that the version replaces, as cluster:<cluster>/<profile> does. Beside a cluster group, it holds the profiles of the group
 
 Options:
       --full
