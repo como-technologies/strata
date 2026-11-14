@@ -2678,10 +2678,11 @@ const OBSERVER_PAGES: [&str; 3] = [
 ];
 
 /// The words and the phrases that the review of the observer pages named (#699). They add to the
-/// lists of [`wording_faults`]: "verify" in prose, phrasal verbs, and figures of speech. Each one
-/// has a plain form: "make sure" for "verify", "holds the content again" for "goes back", "is the
-/// one check" for "is the gate".
-const OBSERVER_REFUSED: [&str; 21] = [
+/// lists of [`wording_faults`]: "verify" in prose, phrasal verbs, and figures of speech. They also
+/// hold the passive and perfect forms that the second read found. Each one has a plain form, such
+/// as "make sure" for "verify", "is the one check" for "is the gate", and "immediately" for "at
+/// once".
+const OBSERVER_REFUSED: [&str; 45] = [
     "verify",
     "verifies",
     "verified",
@@ -2703,6 +2704,30 @@ const OBSERVER_REFUSED: [&str; 21] = [
     "have some fun",
     "on its way",
     "on purpose",
+    "made-up",
+    "throwaway",
+    "cannot be read",
+    "cannot be written",
+    "cannot be used",
+    "is not set",
+    "is not allowed",
+    "is not kept",
+    "is not served",
+    "is not cached",
+    "is stored",
+    "are named",
+    "is published",
+    "separated by",
+    "sorted by",
+    "at once",
+    "all day",
+    "again and again",
+    "dead observer",
+    "built-in",
+    "wins over",
+    "takes the place",
+    "plays no part",
+    "has ended",
 ];
 
 /// The six pages of the observer that keep to "The style rules" (#699). They are the pages of
@@ -3185,7 +3210,7 @@ fn the_pages_of_the_observer_no_longer_hold_the_statements_that_nothing_backs() 
     }
     for new in [
         "Palette deletes the Deployment. No run shows what happens to the namespace.",
-        "Delete the namespace with `kubectl delete namespace strata-observer`, so that the key goes.",
+        "Delete the namespace with `kubectl delete namespace strata-observer`, so that the cluster no longer holds the key.",
         "the copy that Palette holds for the cluster",
         "the next content cycle clears the finding",
         "`<name>_<version>.json.gz` file for each profile version",

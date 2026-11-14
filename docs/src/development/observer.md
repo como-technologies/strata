@@ -46,7 +46,7 @@ lists the routes.
 | Exit | Meaning |
 | --- | --- |
 | `0` | No finding exists, and the two cycles ended well. |
-| `1` | A finding exists, as with `strata verify`. The other cycle can have failed: `failedRuns` says so. |
+| `1` | A finding exists, as with `strata verify`. The exit is 1 also when the other cycle failed: `failedRuns` says so. |
 | `2` | No finding exists and a cycle failed, or a flag is wrong. |
 
 ### Options
@@ -60,7 +60,7 @@ lists the routes.
 | `--state` | required | A directory for `state.json`. It holds times and counts, and no value. |
 | `--content-every` | `15m` | The period of the content cycle. |
 | `--versions-every` | `6h` | The period of the versions cycle. |
-| `--read-pods` | off | Reads the pods of the cluster at the start of each content cycle. With no flag, the observer makes no Kubernetes call. The process exits 2 when `KUBERNETES_SERVICE_HOST` or `KUBERNETES_SERVICE_PORT` is not set. |
+| `--read-pods` | off | Reads the pods of the cluster at the start of each content cycle. With no flag, the observer makes no Kubernetes call. The process exits 2 when the environment has no `KUBERNETES_SERVICE_HOST` or no `KUBERNETES_SERVICE_PORT`. |
 | `--kube-dir` | `/var/run/secrets/kubernetes.io/serviceaccount` | Names the directory with the files `token` and `ca.crt` of the projected volume. It has an effect only with `--read-pods`. |
 | `--alerts` | off | Names the file of the alert rules. `serve` sends the alerts. `once` only checks the file and sends nothing. With no flag, nothing sends: see [Alerts](../automation/observer.md#alerts). |
 | `--digest-every` | `168h` | The period of a digest of the alerts. It has an effect only with `--alerts`. |
@@ -97,9 +97,9 @@ timer. See [The answers of Palette](#the-answers-of-palette).
 With `--read-pods`, the content cycle lists the pods before step 1: see [The read of
 the pods](#the-read-of-the-pods).
 
-- A cycle starts at the start of the process, and then after its period. Each
-  wait has a random 0 to 10 percent added.
-- The click "Check now" starts a cycle at once: see [Check
+- A cycle starts at the start of the process, and then after its period. The
+  observer adds a random 0 to 10 percent to each wait.
+- The click "Check now" starts a cycle immediately: see [Check
   now](../reference/observer-api.md#check-now). The loop of the cycle then waits a full
   period again. A click while a cycle of that kind runs joins it. The loop removes a
   click that came during a run, so no second cycle follows. A cycle that ended less
@@ -161,15 +161,16 @@ A click sends the reads of `strata behind` for one pack, and one `POST` to Palet
 
 A content cycle fails in these cases:
 
-- The directory of the records cannot be read, or a record cannot be written to
-  the directory of the cycle.
+- The observer cannot read the directory of the records, or it cannot write a
+  record to the directory of the cycle.
 - The `verify` command fails, or each row of its answer has an `error`.
 - The `snapshot` of the cluster fails.
 - The cluster runs at least one record, and each side or `compare` fails.
 
 A versions cycle fails in these cases:
 
-- The directory of the records cannot be read, or a record cannot be written.
+- The observer cannot read the directory of the records, or it cannot write a
+  record.
 - The `behind` command fails, or each pin of its answer has an `error`.
 
 In both cycles, a command fails when its exit code is no answer, when it gives no
@@ -222,9 +223,9 @@ One failed read of one part of one record is not a failed cycle. It is a
 A record file that the observer cannot read is a failed read too. The file is a
 bad gzip, or it holds another `schema`. The file gives no record in this cycle.
 
-- When the last cycle read a record from that file, this record replaces the file,
-  with both parts carried. Its findings stay with their first sights, and no clear
-  goes for them. The cause `read-error` names the profile and the file.
+- When the last cycle read a record from that file, that record replaces the file,
+  with both of its parts. Its findings stay with their first sights, and the observer
+  sends no clear for them. The cause `read-error` names the profile and the file.
 - A file with no last record gives the observer no record at all. A new process has no
   last record, and a file can be bad from the first cycle. The observer then holds each
   first sight of the state that no readable record can give, and it sends no clear for
@@ -236,9 +237,9 @@ bad gzip, or it holds another `schema`. The file gives no record in this cycle.
 `--read-pods` adds a read to the start of each content cycle. `internal/kube` lists
 the pods of the cluster, and `internal/model/images.go` builds the rows of the
 images from the list. With no flag, the observer makes no call to Kubernetes, and
-`GET /v1/images` says `off`. With the flag, the process exits 2 when
-`KUBERNETES_SERVICE_HOST` or `KUBERNETES_SERVICE_PORT` is not set. The read plays no
-part in `page`.
+`GET /v1/images` says `off`. With the flag, the process exits 2 when the environment
+has no `KUBERNETES_SERVICE_HOST` or no `KUBERNETES_SERVICE_PORT`. The read has no
+effect on `page`.
 
 ### The package `internal/kube`
 
@@ -413,7 +414,7 @@ the install runs it once.
 The seed runs once, but a cluster can run a new profile version later. So while
 `meta.json` says `first-seen`, each good content cycle records each profile version
 that the cluster runs and that no record holds. It runs the `strata snapshot` of the
-seed through the pool, and it starts the next content cycle at once. The observer keeps
+seed through the pool, and it starts the next content cycle immediately. The observer keeps
 these records in memory, and the versions cycle reads them too. A restart takes them
 again.
 
@@ -431,8 +432,8 @@ gives it. The observer never lowers a drift.
 | `kind` | When | Names |
 | --- | --- | --- |
 | `published-changed` | A `verify` row is `drifted` and has no `overwrittenBy`, `renamedTo`, or `gone`. | The profile, and each changed pack. |
-| `overwritten` | `verify.overwrittenBy` is set. | The profile. |
-| `renamed` | `verify.renamedTo` is set. | The profile. |
+| `overwritten` | `verify.overwrittenBy` has a value. | The profile. |
+| `renamed` | `verify.renamedTo` has a value. | The profile. |
 | `gone` | `verify.gone` is true. | The profile. |
 | `cluster-differs` | The compare of the record and the cluster side has `same` false and `sameContent` false. | The profile, and each changed pack. |
 | `image-id-changed` | The compare has entries in `imageIdsChanged`, also when `same` is true. | The profile, and each `key`. |
@@ -441,7 +442,7 @@ gives it. The observer never lowers a drift.
 
 - A finding holds `who` from `verify.who[]`: `time`, `actor`, `actorType`, and
   `action`.
-- When `verify.whoError` is set, strata could not read the audit log. The row
+- When `verify.whoError` has a value, strata could not read the audit log. The row
   stays `drifted`, and the finding stays a finding. It has `whoUnread` true and
   an empty `who`. The record has no `read-error` row. The summary carries the flag, and
   never the text of the error. The log of the observer holds the status only.
@@ -464,7 +465,7 @@ gives it. The observer never lowers a drift.
 ### Same content
 
 `same` false with `sameContent` true makes `compare` exit 1 and print `SAME
-CONTENT`. A tag name or a minted pack uid differs, and the content does not.
+CONTENT`. A tag name or a pack uid that Palette mints differs, and the content does not.
 The observer makes no finding. The profile stays `ok`, `clusterCopy.status` is
 `same-content`, and the page says "Same content".
 
@@ -473,7 +474,7 @@ The observer makes no finding. The profile stays `ok`, `clusterCopy.status` is
 A new version of `strata` can move a root with no change of content. A finding
 has `reBaselineNeeded` true when `tool.version` of its record is lower than the
 version of the binary. The compare reads the major number, and the minor number
-when the two major numbers are equal. The patch number plays no part. The finding
+when the two major numbers are equal. The patch number has no effect on the compare. The finding
 stays, and the observer never writes a record.
 
 This is the one compare of versions in the observer. `behind` gives the order of
@@ -489,15 +490,15 @@ severity.
 | `no-upstream-digest` | `diff.upstreamUnknown` names a pack, or a row has the status `unverified`. | Pack |
 | `older-registry-copy` | `pin.registrySync` is present. | Registry |
 | `no-record` | A profile that the cluster runs has no record. | Profile |
-| `read-error` | `records[].error` is set, a side of the cluster could not be read, or a record file cannot be read. | Record |
-| `pin-error` | `pin.error` is set, or the `compare` of the move of the pin failed. | Pin |
+| `read-error` | `records[].error` has a value, the observer could not read a side of the cluster, or it cannot read a record file. | Record |
+| `pin-error` | `pin.error` has a value, or the `compare` of the move of the pin failed. | Pin |
 | `pods-not-read` | The read of the pods failed in the newest content cycle. | The cluster: one row, with no profile, no pack, and no registry |
 
 `counts.packs` is the sum of the packs of the records that the cluster runs. A
 profile with no record adds no pack. `counts.packsInFull` is `counts.packs`
-minus the packs that a cause names. All the packs of a record that has a
-`read-error` are named. A side that was not read is not `ok`: the profile and
-its packs are `not-checked`, and `counts.packsInFull` does not count them.
+minus the packs that a cause names. The cause `read-error` names all the packs of
+its record. A side that the observer did not read is not `ok`: the profile and its
+packs are `not-checked`, and `counts.packsInFull` does not count them.
 
 ## The newer versions
 
@@ -528,11 +529,11 @@ the version of the binary. A new binary asks again. The cache in the state holds
 counts. The memory holds the changed values and the text of the diff of each move,
 and the state never holds them.
 
-A compare that fails is not cached, and it does not fail the cycle. The row of
-the pin stays in the list with no counts and no impact, and the cause
+The cache keeps no compare that fails, and such a compare does not fail the cycle.
+The row of the pin stays in the list with no counts and no impact, and the cause
 `pin-error` names its pack. The other pins keep their compare. The next cycle
-asks again for that move only. The move still counts as used in that cycle, so the
-answer of Palette about it stays: see [The answers of Palette](#the-answers-of-palette).
+asks again for that move only. The cycle still reports the move, so the answer of
+Palette about it stays: see [The answers of Palette](#the-answers-of-palette).
 
 ### The newer versions of a profile
 
@@ -566,8 +567,7 @@ Each pin that is behind also holds `carriers[]`. A carrier is for one profile ve
 of the record that has a newer version. It names the newer version that carries a
 newer version of the pack. The answer of `behind` on one record names the profile
 versions of that record. So the join of the pins keeps the carriers of each answer,
-one for each profile version. A read with no error takes the place of a read that
-failed.
+one for each profile version. A read with no error replaces a read that failed.
 
 The pack row of each profile version gets its carrier in `carried`, and the row of
 the newer versions gets each one in `carriers`. The observer adds no rule: a carrier
@@ -645,7 +645,7 @@ move again when it has the slot.
 | --- | --- |
 | `no-error` | `bump.paletteValidation` is there, and its `accepts` is true. |
 | `refuses` | `accepts` is false. `refusals` holds each error: `pack`, `code`, `message`, and `clusters`. |
-| `no-answer` | The run failed, the pin has an `error`, or `bump.paletteValidationError` is set. Or the document has no such pin, or it does not list the newest version of the page. `status` is the HTTP status of the failure, or 0. |
+| `no-answer` | The run failed, the pin has an `error`, or `bump.paletteValidationError` has a value. Or the document has no such pin, or it does not list the newest version of the page. `status` is the HTTP status of the failure, or 0. |
 
 - A pin that failed, or that is not behind any more, has no newer version in the
   document. The answer then names the newest version of the last versions cycle, the
@@ -678,12 +678,12 @@ row that matches wins.
 | `no-records` | `--records` holds no record file. |
 | `lost` | `failedRuns` is 2 or more, and the last error is `api` with the status 401 or 403, or `transport`, `not-json`, or `timeout`. |
 | `stale` | No good content cycle exists and `failedRuns` is 2 or more. Or the last good content cycle is older than two periods of `--content-every`. |
-| `first-load` | No content cycle has ended well. |
+| `first-load` | No content cycle ended well yet. |
 | `ok` | None of the rows above. |
 
-A wrong key with records goes to `lost`. A wrong `--cluster-uid` gives good
-`verify` rows. Its `snapshot` fails with the kind `unknown`, so the page is
-`stale`, and `lastError` shows the kind. A fresh install goes to `no-records`.
+With records, a wrong key gives the page state `lost`. A wrong `--cluster-uid` gives
+good `verify` rows. Its `snapshot` fails with the kind `unknown`, so the page is
+`stale`, and `lastError` shows the kind. A fresh install gives `no-records`.
 
 ## The summary
 
@@ -731,8 +731,8 @@ of the cluster. Only the detail tier sends a path. The profile row holds `scope`
 
 The limits show what a check does not cover. `imagesNamedByATag` counts the images
 that a tag names, with no `@sha256`. `helmPacks` counts the packs of the type `helm`,
-and `maskedPaths` counts the masked paths of each diff. Each of them is a place where
-`OK` says less: see [What the observer does not
+and `maskedPaths` counts the masked paths of each diff. Each of them counts a case
+where `OK` covers less: see [What the observer does not
 see](../automation/observer.md#what-the-observer-does-not-see). The summary of [Run it
 once](../automation/observer.md#run-it-once) holds the limits and the status of each
 profile:
@@ -808,7 +808,7 @@ severity.
 | `not-checked` | `OldCopy` | A pin has `registrySync`. One event for each registry. | `lastSyncedTime` of the registry. |
 
 The `object` is the profile. For `NewVersion` and `OldCopy`, it is the profiles
-that the pins name, separated by commas. For `NewProfileVersion`, it is the
+that the pins name, with a comma between two profiles. For `NewProfileVersion`, it is the
 profiles of the records that hold the version. A finding stays in `findings` when its
 event is older than 7 days.
 
@@ -824,7 +824,7 @@ The two messages of the pods are:
 section tells how the code decides. It runs only with `--alerts`. Without the flag, the
 observer has no engine, and the step does nothing.
 
-The step runs at the end of each content cycle, also after a cycle that failed. Five
+The step runs at the end of each content cycle, also after a cycle that failed. Seven
 rules decide what it queues:
 
 1. **An item is a finding, a newer version, or the loss of contact.** A finding is one
@@ -832,28 +832,25 @@ rules decide what it queues:
    pins the pack. The page state `lost` is the item `lost`. `subject.go` is the one file
    of `internal/alert` that reads the types of `internal/model`, from `alert.SubjectsOf`.
 2. **The rule of an item is the rule of the lowest level that covers it.**
-   The levels run from `pack` to `cluster`. In one level, a live mute wins over a rule
-   that sends. Among the rules that send, the first one in the file wins. A mute
-   that has ended is not live.
-
-   An item under a mute stays as it is, and queues nothing. A message of the item
-   that waits for a retry does not go. An item with no rule leaves the state.
-3. **An item that opens under a rule `now` queues one message.** An item under a rule
+   The levels run from `pack` to `cluster`. In one level, a live mute has priority over
+   a rule that sends. Among the rules that send, the first one in the file wins. An
+   item with no rule leaves the state.
+3. **An item under a live mute queues nothing.** It stays as it is. A message of the
+   item that waits for a retry does not go. A mute after its end date is not live.
+4. **An item that opens under a rule `now` queues one message.** An item under a rule
    `digest` queues none, and it waits for the digest.
-4. **An item that is gone queues one clear message.** It needs an open message that
-   went. Its channel must still be in the rules, and its rule must still send at once.
-   A clear needs a check that proves it.
-
-   A cycle clears an item only when it read the news of the item. A failed cycle clears
-   nothing. `HeldIDs` keeps the findings of a part that the cycle could not read. A cycle
-   that read no pod clears no image finding. A versions cycle that never ended well clears
-   no newer version.
-5. **A digest queues one message for each channel.** It does so when a period has
-   passed and an item is open under a digest rule. The message lists the open items.
+5. **An item that is gone queues one clear message.** It needs an open message that
+   went. Its channel must still be in the rules, and its rule must still send
+   immediately.
+6. **A clear needs a check that proves it.** A cycle clears an item only when it read
+   the news of the item. A failed cycle clears nothing. `HeldIDs` keeps the findings of
+   a part that the cycle could not read. A cycle that read no pod clears no image
+   finding. A versions cycle that never ended well clears no newer version.
+7. **A digest queues one message for each channel.** It does so at the end of a
+   period, with an open item. The message lists the open items of the digest rules.
    A digest has no clear message. When a digest did not go, the next step makes it
-   again from the items that are open then, for its channel only. So a channel that
-   works again gets one digest, and a channel that got its digest gets no second one
-   in the period.
+   again for that channel only, from the open items. So each channel gets one digest
+   in the period, also a channel that works again.
 
 The step plans under the lock of the observer, and it sends after it releases the lock.
 So a slow webhook never stops a request of the page. A channel that fails keeps its later
@@ -867,8 +864,8 @@ message the queue dropped queues it again at the next step.
 
 - `startedAt`: the first start with this directory.
 - `findings`: `firstSeen` of each finding, by `id`. A finding that a read
-  cleared leaves the file. A finding whose part could not be read stays: see
-  [A failed read](#a-failed-read).
+  cleared leaves the file. A finding stays when the observer could not read its
+  part: see [A failed read](#a-failed-read).
 - `moves`: the counts of each move.
 - `content` and `versions`: `failedRuns` and `lastError`.
 - `images`: the `revision` of the records, and `first`, which maps the id of an image

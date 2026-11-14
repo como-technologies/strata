@@ -7,10 +7,10 @@ It writes nothing to Palette. A click on the page sends one question to Palette:
 see [Ask Palette about a move](#ask-palette-about-a-move).
 
 Your pipeline runs strata at an event: a pull request, a merge, or a scheduled run.
-The observer asks the same questions all day. A person who opens the page sees the
-answer of the last content cycle. A cycle starts every 15 minutes, with a random
-delay of 10 percent at most. The observer holds no rule about a profile. Each answer
-about a profile is the answer of a `strata` command.
+The observer asks the same questions on a timer, also between those events. A person
+who opens the page sees the answer of the last content cycle. A cycle starts every 15
+minutes, with a random delay of 10 percent at most. The observer holds no rule about a
+profile. Each answer about a profile is the answer of a `strata` command.
 
 A team can also let the observer read the pods of the cluster. It then shows
 which digest each tag runs. That read is off by default: see [The pods of the
@@ -51,9 +51,9 @@ finding, and each state of the page.
   the record of each one with the newest version.
 - **A click** on "Ask Palette" runs `strata behind` for one pack. No timer starts it.
 - **A click on the pill of a cycle** opens its menu. "Check the content now" or "Read
-  the versions now" runs that cycle at once, and not at the end of its period.
-- **A change of the records** starts a content cycle at once. So the page shows the
-  records of your pipeline soon after the publish.
+  the versions now" runs that cycle immediately, and not at the end of its period.
+- **A change of the records** starts a content cycle immediately. So the page shows
+  the records of your pipeline soon after the publish.
 - Each cycle starts when the process starts. At most four `strata` processes run at
   a time.
 - A cycle writes its files to a volume in memory, and removes them at its end.
@@ -98,11 +98,13 @@ tenant role.
      --set palette.projectUid=<project uid>
    ```
 
-4. **Open the page.** Run the port-forward, then open `http://127.0.0.1:18080`.
+4. **Open the page.** Run the port-forward.
 
    ```bash
    kubectl -n strata-observer port-forward deploy/strata-observer 18080:8080
    ```
+
+   Open `http://127.0.0.1:18080` in a browser.
 
 The page says "Reading the layers" until the first check ends. [What each state
 means](../development/observer-api.md#what-each-state-means) gives the headline of each
@@ -143,10 +145,10 @@ Palette against it. Only a merge moves the baseline.
    kubectl](#install-with-kubectl).
 4. **Check.** The two cycles check Palette against the records. A difference opens a
    finding on the page.
-5. **Close the finding.** Publish a new version with the change through review, and
-   record it. Do not repair the edited version in place: that is a second edit. The
-   finding also clears when the published version holds the content of its record
-   again.
+5. **Close the finding.** Publish a new version with the change through review.
+   Then record the new version. Do not repair the edited version in place: that is
+   a second edit. The finding also clears when the published version holds the
+   content of its record again.
 
 The observer never writes a record. An edit in Palette moves no baseline: it opens a
 finding. To try the observer with no approved record, see [First-seen
@@ -359,8 +361,8 @@ cluster](../development/live-example.md#a-test-cluster).
    ```
 
    When port 8080 is in use on your machine, give another local port, such as
-   `18080:8080`, and open that port. The page gives a command that opens it again,
-   and that command keeps the port of the address that you opened.
+   `18080:8080`. Then open the page on that port. The page then gives a command that
+   opens it again on the same port.
 
 [The image and the manifests of the observer](../development/observer-deploy.md)
 gives each file, the signature check of the image, and the live runs of these steps.
@@ -389,7 +391,7 @@ yet.
 
 When you remove the profile, Palette deletes the namespace of a Helm layer. The code
 of Palette shows it; no live run shows it yet. If the namespace stays, delete it with
-`kubectl`, so that the key goes.
+`kubectl`, so that the cluster no longer holds the key.
 
 A live run applied the manifests of [Install with kubectl](#install-with-kubectl) as
 one manifest layer of a profile. It shows what Palette does with that layer:
@@ -402,7 +404,8 @@ one manifest layer of a profile. It shows what Palette does with that layer:
   checked", and it shows no finding for it.
 - **A removal deletes the Deployment.** When you remove the profile from the cluster,
   Palette deletes the Deployment. No run shows what happens to the namespace. Delete
-  the namespace with `kubectl delete namespace strata-observer`, so that the key goes.
+  the namespace with `kubectl delete namespace strata-observer`, so that the cluster
+  no longer holds the key.
 
 An edit of the profile that drops an object from the manifest does not remove the
 object from the cluster. Delete it with `kubectl`. See [An object that an edit drops
@@ -419,8 +422,12 @@ With `--read-pods`, each content cycle starts with a `list` of the pods of every
 namespace. The observer takes the image of each container from the spec of its pod,
 and the digest from the `imageID` that the node reports. It shows no other fact of a
 pod: the page holds no pod name and no namespace. The Images screen shows the number
-of pods of each digest for each image reference. A tag that runs a new digest gives
-the finding `image-moved` or `image-split`.
+of pods of each digest for each image reference.
+
+An image makes a finding only when it matches a pack and its reference names a tag.
+When the tag runs one digest that is not the first digest that the observer saw, the
+finding is `image-moved`. When the tag runs two digests or more, the finding is
+`image-split`.
 
 [The read of the pods](../development/observer.md#the-read-of-the-pods) gives the
 match with the packs, the status of each image, what the read catches, and a failed
@@ -464,7 +471,7 @@ file of the component.
 A newer version is not a fault, and the page keeps it neutral. Before a move, a team
 wants one more fact: does Palette give an error for it? The button "Ask Palette"
 answers that. It is in the table of the newer versions. It is also on the card "Move
-to" of a pack, where it reads "Ask Palette about this move".
+to" of a pack, with the label "Ask Palette about this move".
 
 A click runs `strata behind` for the record of the profile, with
 `--pin <layer>/<name>`. Strata sends one `POST /v1/clusterprofiles/{uid}/validate/packs`
@@ -557,7 +564,7 @@ the observer](#what-you-give-the-observer). The flag `--alerts-allow-http` allow
 ## What the observer does not see
 
 Each limit below is a fact of this release. The page shows the numbers of `limits`,
-and it never reads "No change" for a pack that it did not check.
+and it never shows "No change" for a pack that it did not check.
 
 1. **A tag that moves at its source.** A record names a tag, and strata reads no
    registry. So a rebuilt tag shows no change, and the profile stays `ok`. With
@@ -592,10 +599,11 @@ and it never reads "No change" for a pack that it did not check.
 2. **Never a profile variable for the key.** A profile variable is in clear in the
    copy of the cluster. So the key stays there in clear. Make the Secret with `kubectl`.
 3. **Egress to Palette** from the cluster. The network policy of the observer allows
-   DNS and HTTPS only. A team that narrows the HTTPS rule must list Palette and each
-   webhook of the alerts. With the read of the pods, it must also list the API server.
-   A pod on a cluster that Palette built reaches the API, and it ends its first cycle.
-   The read of the pods adds TCP 6443: see [Add the read](#add-the-read).
+   DNS and HTTPS only. A narrow HTTPS rule must list Palette, each webhook of the
+   alerts, and the API server for the read of the pods. A rule that names Palette
+   alone stops the alerts and the read of the pods. A pod on a cluster that Palette
+   built reaches the API, and it ends its first cycle. The read of the pods adds TCP
+   6443: see [Add the read](#add-the-read).
 4. **Requests.** A cycle sends `GET` requests and no other method. A content cycle
    reads the cluster, the profile version of each record, and the audit log for a
    record that drifted. A versions cycle reads the registries and the packs
@@ -619,17 +627,17 @@ lists each permission and each refusal.
 - **Keep the audit log in the role, to name the writer.** Cluster Viewer alone does
   not hold `audit.list`. The audit log then answers HTTP 403 with the code
   `AccessDenied`. With that role, the verdict and the finding stay, and `who`
-  is empty. The page lists an event that says the audit log could not be read. A
-  custom role needs `audit.list` beside `cluster.get`, `clusterProfile.get`,
-  `packRegistry.get`, and `packRegistry.list`.
+  is empty. The page lists the event `AuditUnread`: strata could not read the
+  audit log. A custom role needs `audit.list` beside `cluster.get`,
+  `clusterProfile.get`, `packRegistry.get`, and `packRegistry.list`.
 - **A read-only key can click.** The route that the click calls checks
-  `clusterProfile.get` on the profile, and no write permission. Four built-in roles
+  `clusterProfile.get` on the profile, and no write permission. Four predefined roles
   hold it: Cluster Profile Viewer, Cluster Viewer, Project Viewer, and Tenant Viewer.
   A key without it gets "Palette gave no answer", with the status of the refusal. A
   live run asked with Project Viewer, and Palette answered HTTP 200. The code of
   Palette shows the other three roles and the refusal; no live run shows them yet.
-- **Make the user for the observer alone.** Give it no other role, and make the key
-  in the name of that user.
+- **Make the user for the observer alone.** Give it no other role. Make the key for
+  that user.
 - **A live run used both roles.** `just live-observer-role` sent each request of the
   cycles with a second key. With Project Viewer, each request answered HTTP 200, and
   so did the request of the click "Ask Palette". With Cluster Viewer, each request
@@ -677,7 +685,7 @@ compatibility](../reference/compatibility.md) for each change that moves a root.
 - [The observer shows an edit in place](../use-cases/observer.md): the problem, the
   commands, and the fix.
 - [The API of the observer](../reference/observer-api.md): the routes, the two
-  tiers, the fields that never leave, and the alerts.
+  tiers, the fields that no answer carries, and the alerts.
 - [The checks of the observer](../development/observer.md): the command of each
   step, each finding, the summary, and the flags.
 - [The server of the observer](../development/observer-api.md): the screens of the

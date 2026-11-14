@@ -39,7 +39,7 @@ the records into the cluster as Secrets. The observer reads them as files:
 `platform-addons_1.0.0.json.gz`, with `meta.json`. See
 [Install with kubectl](../automation/observer.md#install-with-kubectl).
 
-At this time, nobody has edited a version. The page shows no finding.
+At this time, no version holds an edit. The page shows no finding.
 
 `payments` does not run `aws-stack@1.1.0`. So its page lists that record in a fold
 under the table of the profiles, as "Not on this cluster", and counts 2 profiles. See [A
@@ -48,7 +48,7 @@ version that the cluster no longer runs](../development/observer.md#a-version-th
 ## 2. A person edits the version
 
 A person changes the CSI reclaim policy of `aws-stack@1.0.0` from `Delete` to
-`Retain`, through the API. The cluster `payments` has not taken the update. The
+`Retain`, through the API. The cluster `payments` does not have the update yet. The
 next content cycle shows the edit:
 
 ```text
@@ -142,7 +142,7 @@ A pack with a newer version adds two more: "What does the move change?" and "Whi
 versions does Palette list?". The page of a profile with a newer version of the profile
 adds "What does the move to the newest version change?".
 
-The first command reads the record out of the Secrets of the observer into `record.json`.
+The first command copies the record from the Secrets of the observer to `record.json`.
 The other commands read that file. The two kinds of row need different access:
 
 - **The first row needs `kubectl` and a role that reads Secrets.** The reader role of
@@ -155,8 +155,8 @@ The other commands read that file. The two kinds of row need different access:
 
 The newer versions of step 2 are not a fault. Before a person moves a pin, one more
 fact helps: does Palette give an error for the move? The button "Ask Palette" answers
-it. It sits in the table of the newer versions. It also sits on the card "Move to" of
-a pack, where it reads "Ask Palette about this move".
+it. It is in the table of the newer versions. It is also on the card "Move to" of a
+pack, with the label "Ask Palette about this move".
 
 A click sends one `POST` to Palette. The observer runs `strata behind` with `--pin`,
 on the record of the profile, so the question is about one pack. The answer is one of
@@ -175,14 +175,14 @@ these three:
 - **Palette gave no answer.** A request failed. The page shows the HTTP status. This
   is no finding, and it raises no severity.
 
-A second click on an answered move sends nothing. The observer asks again after
+A second click on a move with an answer sends nothing. The observer asks again after
 "Palette gave no answer". Nothing asks on a timer. The column "Palette" of the table
 shows the short words "No error", "Refuses", and "No answer".
 
 The checks `ask-one-post` and `ask-words` of [observer.sh](../development/live-runs.md#observersh)
 test the click. `ask-one-post` runs the observer on the machine of the script, behind a
-request counter. `ask-words` clicks on the pod on a cluster that Palette built, through the
-port-forward.
+request counter. `ask-words` clicks the button on the page of the pod, on a cluster
+that Palette built, through the port-forward.
 
 ## 6. Read the digest of each tag
 
@@ -200,11 +200,13 @@ components:
   - deploy/observer/pods
 ```
 
-Apply the kustomization again. Then open the page as in step 4:
+Apply the kustomization again:
 
 ```bash
 kubectl apply -k .
 ```
+
+Then open the page as in step 4.
 
 The Images screen lists each image that the pods run. A row shows the reference, the
 pack that it matches, and each digest with the number of pods that run it. An image
@@ -212,9 +214,9 @@ that matches no pack, such as an agent of Palette, shows as "no pack". Two findi
 can follow:
 
 - **`image-split`.** Pods run one tag with two digests. A new node pulled the rebuilt
-  image, and the old nodes keep the old one. On cluster A, each new pod gets the policy
-  `Always`. It runs the new digest, also on an old node: see [The pods of a
-  cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
+  image, and the old nodes keep the old one. On cluster A of the live example, each
+  new pod gets the policy `Always`. It runs the new digest, also on an old node: see
+  [The pods of a cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
 - **`image-moved`.** A tag runs another digest than the first one that the observer
   saw. Each pod that started runs the rebuilt image.
 
@@ -229,7 +231,7 @@ that visit. Palette has no event for a published version that changed. So the ob
 sends a message until Palette has that event: see [Alerts](../automation/observer.md#alerts).
 The send is off until you add the alerts.
 
-Write the rules in a file in Git. This file sends a finding at once to the team on
+Write the rules in a file in Git. This file sends a finding immediately to the team on
 call, and it sends the newer versions in a weekly digest. A mute has an end date:
 
 ```json
@@ -238,7 +240,7 @@ call, and it sends the newer versions in a weekly digest. A mute has an end date
 
 Make the Secret with the address of each webhook, as in
 [Add the alerts](../automation/observer.md#add-the-alerts). Then name the component and
-the ConfigMap in the kustomization of the observer, and apply it again. Keep the line
+the ConfigMap in the kustomization of the observer. Keep the line
 `namespace: strata-observer` of that file, because the ConfigMap needs the namespace of
 the pod:
 
@@ -251,6 +253,12 @@ configMapGenerator:
       - alerts.json
 generatorOptions:
   disableNameSuffixHash: true
+```
+
+Apply the kustomization again:
+
+```bash
+kubectl apply -k .
 ```
 
 The nav item "Alerts" lists each rule with its state: Firing, Pending, Inactive, or
@@ -266,26 +274,26 @@ of the first sight. It holds no value, so a channel of your team can show it.
 ## What to do
 
 - Do not repair the edited version in place: that is a second edit. Publish a new
-  version with the change through review, and move the clusters to it. See
+  version with the change through review. Then move the clusters to it. See
   [What to do](./edited-in-place.md#what-to-do).
 - Read `who` first. It names the person and the time of the write.
 - When the version holds the content of its record again, the next content cycle
-  clears the finding. A new record, written after a review, ends the finding too.
+  clears the finding. A new record that a review approved ends the finding too.
 - A cluster that differs needs its own decision: see
   [A cluster does not run its release](./cluster-release.md).
 - For `image-split` or `image-moved`, fix the pin, not the finding. Name the digest
-  where the chart or the manifest reads it, or copy each image, by digest, to a
+  where the chart or the manifest reads it. Or copy each image, by digest, to a
   registry with immutable tags. See [What to do](./image-tag.md#what-to-do).
 - `image-moved` clears when the first digest runs again, or when you write new records.
   `image-split` clears when each pod runs one digest.
-- Give each mute an end date, and keep the file in Git. The file shows who muted what.
-  A mute that has ended counts as no mute. Write a mute beside the rule that sends,
+- Give each mute an end date. Keep the file in Git, so that Git shows who muted what.
+  A mute after its end date counts as no mute. Write a mute beside the rule that sends,
   with the same level, match, and news. The rule that sends works again when the mute
   ends.
 - Read "Palette gave no error" as one fact, not as a promise. Palette did not check
   your own values. When Palette refuses a move, pick a closer version: see [What to
   do](./behind.md#what-to-do).
-- After "Palette gave no answer", make sure that the key can read the profile, then
+- After "Palette gave no answer", make sure that the key can read the profile. Then
   click again. The role of the key does not need more than the read role: see [The
   least role of the key](../automation/observer.md#the-least-role-of-the-key).
 
@@ -294,14 +302,13 @@ of the first sight. It holds no value, so a channel of your team can show it.
 - The observer sees what Palette holds. It does not see an edit on the cluster with
   `kubectl`, or the health of a workload. See [What the observer does not see](../automation/observer.md#what-the-observer-does-not-see).
 - The read of the pods sees a rebuilt tag only after a pod pulls the image. It makes
-  no finding when the pods pull an unchanged digest from a mirror, and that is right. See
+  no finding when the pods pull an unchanged digest from a mirror, and that is correct. See
   [What the read catches and what it does not](../development/observer.md#what-the-read-catches-and-what-it-does-not).
-- A rebuilt tag makes no finding until a pod pulls the image. With `--read-pods`, the pull
-  opens a finding, and the news `image` sends it. A mirror that serves the old digest stays
-  `steady`. A dead observer sends nothing: alert on the Deployment with the monitoring of
-  your team.
+- An alert starts only from a finding. With `--read-pods`, the pull of a rebuilt tag
+  opens a finding, and the news `image` sends it. An observer that does not run sends
+  nothing. Use the monitoring of your team to make an alert for the Deployment.
 - A new pod sends the open findings again, once, because it starts with an empty state.
-  The observer chooses a second message over a missed one.
+  So a channel can get a second message for a finding, but it never misses one.
 - The check is as old as the last content cycle. The page shows the time of that
   cycle, and it shows `stale` when the cycle is more than two periods old.
 - The click asks about the newest version of a pin only. The observer keeps the

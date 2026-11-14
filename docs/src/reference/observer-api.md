@@ -105,7 +105,7 @@ plain text. The route `/` serves the page of the dashboard.
 | `405` | The method is not the method of the route. The header `Allow` names it. |
 | `421` | The `Host` header is not `localhost` or a loopback address. A person can choose the local port, so the port can be any port. |
 | `502` | The detail route asked for a compare of the `newer` side, and the compare failed. Or the click failed in the observer. The next request asks again. |
-| `503` | The detail route or the click did not end in 50 seconds. The usual cause of a click is a versions cycle that holds its slot. |
+| `503` | The detail route or the click did not end in 50 seconds. For a click, the usual cause is a versions cycle that holds its slot. |
 
 ## The images
 
@@ -130,8 +130,8 @@ segment of the path. `encodeURIComponent` does it in a browser. Without
 
 | `pods` | When |
 | --- | --- |
-| `off` | The flag `--read-pods` is not set. The observer makes no Kubernetes call. `images` is empty, and each count is 0. |
-| `not-read` | The flag is set, and no read ended well. `images` is empty, and each count is 0. `error` names the failure. |
+| `off` | The observer runs with no flag `--read-pods`. It makes no Kubernetes call. `images` is empty, and each count is 0. |
+| `not-read` | The observer runs with the flag, and no read ended well. `images` is empty, and each count is 0. `error` names the failure. |
 | `read` | A read ended well. A later read that fails keeps this state. `error` names that failure, and the rows are those of the last good read. |
 
 `counts.images` is the number of rows. `counts.matched` is the number of rows whose
@@ -185,7 +185,7 @@ answer, because that text can name an object.
 | --- | --- | --- |
 | `kube-api` | The HTTP status | The API server answered with a status other than 200, such as 401 or 403. |
 | `kube-transport` | none | A request got no answer, or the CA did not sign the certificate of the server. |
-| `kube-config` | none | The file of the token or of the CA cannot be read, is empty, or holds no certificate. |
+| `kube-config` | none | The observer cannot read the file of the token or of the CA, or the file is empty or holds no certificate. |
 | `not-json` | none | An answer is not a list of pods. |
 | `timeout` | none | A request took more than 30 seconds. |
 
@@ -227,7 +227,7 @@ of the file, so Git shows who muted what.
 | `level` | `cluster`, `profile`, or `pack`. |
 | `match` | A profile name or `name@version`, for `profile`. A pack name or `layer/name`, for `pack`. A `cluster` rule has none. |
 | `news` | The kind of news: `drift`, `image`, `lost`, or `newer`. |
-| `send` | `now` sends at once. `digest` waits for the next digest. A rule with no `send` is a mute. |
+| `send` | `now` sends immediately. `digest` waits for the next digest. A rule with no `send` is a mute. |
 | `to` | The name of a channel. A mute has none. |
 | `muteUntil` | The last day of a mute, as `YYYY-MM-DD`, in UTC. Only a mute has it. |
 
@@ -238,9 +238,10 @@ of the file, so Git shows who muted what.
 | `lost` | The page state `lost`: the observer cannot reach Palette. It is a rule of the level `cluster`. |
 | `newer` | A newer version of a pack in a profile. Each profile that pins the pack makes one item. |
 
-- **A lower level overrides a higher one.** The level `pack` wins over `profile`, and
-  `profile` wins over `cluster`. If two rules of one level cover the item, a live mute
-  wins. If no mute is live, the first rule in the file wins.
+- **A lower level overrides a higher one.** The level `pack` has priority over
+  `profile`, and `profile` has priority over `cluster`. If two rules of one level
+  cover the item, a live mute wins. If no mute is live, the first rule in the file
+  wins.
 - **A mute always has an end date.** The observer does not start with a mute that has
   no end date. A mute holds until the end of the day of its end date. After that day,
   it counts as no mute, and the rule of the next level decides.
@@ -266,7 +267,7 @@ The Alerts screen shows one state for each rule, with the words of Prometheus:
 | --- | --- |
 | Firing | An item is open, and its message went. |
 | Pending | An item is open. It waits for its digest or for a retry. |
-| Inactive | No item is open for this rule. A mute that has ended is inactive too. |
+| Inactive | No item is open for this rule. A mute after its end date is inactive too. |
 | Muted | A mute holds. |
 
 - **One message goes when a finding opens, and one when it clears.** A clear needs a
@@ -302,12 +303,12 @@ The observer sends it with `POST` to the address of the channel.
   finding. With `--read-pods`, the pull opens a finding, and the news `image` sends
   it. A mirror that serves the old digest stays `steady`, and it sends nothing. See [A
   vendor rebuilds an image under one tag](../use-cases/image-tag.md).
-- **A dead observer sends nothing.** The message comes from the pod. Alert on the
-  Deployment with the monitoring of your team. The observer sends no heartbeat, and it
-  never reads the health of a workload.
+- **An observer that does not run sends nothing.** The message comes from the pod.
+  Use the monitoring of your team to make an alert for the Deployment. The observer
+  sends no heartbeat, and it never reads the health of a workload.
 - **A new pod sends the open findings again, once.** The volume `state` is an
-  `emptyDir`, so the new pod knows nothing of the old pod. The observer chooses a
-  second message over a missed one.
+  `emptyDir`, so the new pod knows nothing of the old pod. A channel can then get a
+  second message for a finding, but it never misses one.
 
 ### The route of the alerts
 
@@ -321,7 +322,7 @@ no value. The rules are a file that no route writes.
 | `digestEvery` | text | The period of a digest, as the other periods are: `168h` for 7 days. |
 | `waiting` | number | The messages that did not go. The next content cycle sends them again. |
 | `rules` | list | The rules, in the order of the file. |
-| `sample` | text | The message of a finding for a made-up profile. It shows what a channel gets. |
+| `sample` | text | The message of a finding for a sample profile. It shows what a channel gets. |
 
 A rule of `rules` has the fields of [the file](#the-file-of-the-rules) and the field
 `state`. `match`, `send`, `to`, and `muteUntil` are absent when the rule has none.
@@ -438,7 +439,8 @@ raises no severity. The observer holds an answered move, with the verdict `no-er
 second click on that move sends nothing, and the reply is the first answer. The
 observer asks again at the next click after a `no-answer`. Nothing asks on a timer.
 
-`GET /v1/asks` lists the answers that the observer holds, sorted by profile and key.
+`GET /v1/asks` lists the answers that the observer holds, in the order of the profile
+and then of the key.
 The page reads it to show the answers again after a reload. The answer is `{"asks": [...]}`
 with the fields above, and it is an empty list when nobody asked. The list holds a
 `no-answer` until the next click replaces it, or the move goes.
@@ -464,7 +466,7 @@ statuses:
 | `202` | `running` | A cycle of that kind runs now. The click joins it, and no second cycle starts. |
 | `429` | `wait` | A cycle of that kind ended less than one minute ago. `retryAfter` and the header `Retry-After` give the seconds to wait. |
 
-So a person who clicks again and again starts at most one cycle of each kind in one
+So a person who clicks many times starts at most one cycle of each kind in one
 minute and the time of its run. The clicks cannot send many requests to Palette or to
 the registries.
 

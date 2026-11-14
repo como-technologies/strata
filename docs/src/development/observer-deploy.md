@@ -1,10 +1,10 @@
 # The image and the manifests of the observer
 
-The observer ships as a signed image with the manifests in `deploy/observer/`.
-The pipeline of a team writes the records into four Secrets with
-`scripts/ci/observer-records.sh`. This page is for a maintainer. It tells what
-each file does and how to check it. For the code, see [The checks of the
-observer](./observer.md).
+Each release of strata publishes the observer as a signed image, and
+`deploy/observer/` holds its manifests. The pipeline of a team writes the records
+into four Secrets with `scripts/ci/observer-records.sh`. This page is for a
+maintainer. It tells what each file does and how to check it. For the code, see [The
+checks of the observer](./observer.md).
 
 ## The image
 
@@ -26,7 +26,7 @@ It takes two inputs. `version` is the release of the binaries, such as
 
 | Start | `version` | `tag` |
 | --- | --- | --- |
-| The job `observer-image` of `release.yml`, after the release is published | The tag of the release | The tag of the release |
+| The job `observer-image` of `release.yml`, after the workflow publishes the release | The tag of the release | The tag of the release |
 | A pull request that changes `observer/`, `deploy/observer/`, or the workflow | `latest` | `test-` and the first seven characters of the commit |
 | A manual run (`workflow_dispatch`) | `latest`, or your value | Your value, or the tag of a pull request |
 
@@ -41,13 +41,15 @@ maintainer runs such a check on the image of the release.
 
 The workflow does these steps in order:
 
-1. Install `cosign`, and install the binaries of both platforms with
+1. It installs `cosign`.
+2. It installs the binaries of both platforms with
    `install-strata.sh --bin-only --require-signature`. The installer checks the
    signature and the checksums. The workflow has no copy of that check.
-2. Build both platforms and push the image.
-3. Make sure that the image lists both platforms.
-4. Sign the digest with `cosign sign`, and check the signature with `cosign
-   verify`. The check names the workflow that signs.
+3. It builds the image for both platforms, and it pushes the image.
+4. It makes sure that the image lists both platforms.
+5. It signs the digest with `cosign sign`.
+6. It checks the signature with `cosign verify`. The check names the workflow that
+   signs.
 
 To check a signature by hand, give the digest of the image:
 
@@ -57,11 +59,11 @@ cosign verify ghcr.io/como-technologies/strata-observer@sha256:<digest> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-> **Set the permissions of the job that calls the workflow.** A called workflow
-> cannot have more permission than the job that calls it. When the job grants
-> less, GitHub refuses the whole run at its start, and the release does not ship.
-> The job `observer-image` of `release.yml` sets `contents: read`, `packages:
-> write`, and `id-token: write`. `tests/workflows.rs` requires the three.
+> **Set the permissions of the job that calls the workflow.** A workflow that a job
+> calls cannot have more permission than that job. When the job grants less, GitHub
+> refuses the whole run at its start, and the workflow publishes no release. The job
+> `observer-image` of `release.yml` sets `contents: read`, `packages: write`, and
+> `id-token: write`. `tests/workflows.rs` requires the three.
 
 The image and the chart are public, so a pod pulls the image with no Secret. A team
 that keeps a copy of the image in a registry with a login names a pull Secret in
@@ -121,7 +123,7 @@ components:
 `just observer-manifests-pods` renders it, and makes sure that it holds six
 objects and the flag `--read-pods`. CI runs that recipe. The folder is outside
 `deploy/observer/`, because kustomize stops with a cycle when a kustomization
-that lists the base sits inside the base.
+that lists the base is inside the base.
 
 | File | What it adds |
 | --- | --- |
@@ -130,7 +132,7 @@ that lists the base sits inside the base.
 | `kustomization.yaml` | A patch of the Deployment and a patch of the NetworkPolicy. |
 
 The patch of the Deployment adds the flags `--read-pods` and `--kube-dir`. It
-adds a `projected` volume, mounted read-only at
+adds a `projected` volume, which the pod mounts read-only at
 `/var/run/secrets/kubernetes.io/serviceaccount`. The volume holds a token of the
 service account and `ca.crt` of the ConfigMap `kube-root-ca.crt`. The token
 expires in 3600 seconds, and the kubelet renews it. The observer reads both files
@@ -212,7 +214,7 @@ version is the version of strata, so `just version` sets it with the others.
 
 | File | Holds |
 | --- | --- |
-| `values.yaml` | The uids, the name of the Secret of the key, the name of the pull Secret, and the periods. `readPods`, the seed, and the block `pack` that a layer of a profile in Palette reads. |
+| `values.yaml` | The uids, the name of the Secret of the key, the name of the pull Secret, the periods, `readPods`, and the seed. It also holds the block `pack`, which a layer of a profile in Palette reads. |
 | `templates/deployment.yaml`, `networkpolicy.yaml`, `serviceaccount.yaml`, `configmap.yaml` | The objects of `deploy/observer/`, with the values. |
 | `templates/records.yaml` | The four Secrets of the records, empty. An upgrade keeps their data, because the chart names none. |
 | `templates/seed.yaml` | The job of the seed, its service account, its role on the four Secrets by name, and its network policy. Each revision of the release has its own job. |
@@ -300,7 +302,7 @@ just live-observer-images   # the observer on cluster A reads the digest of each
 sure of these facts:
 
 - The pod is Ready, runs as non-root, has a read-only root, and has no token.
-- The output of the records script applies with `--server-side`, also for
+- `kubectl apply --server-side` accepts the output of the records script, also for
   `--first-seen`.
 - The page answers through `kubectl port-forward deploy/strata-observer` for a
   user with only the reader role.
@@ -308,8 +310,8 @@ sure of these facts:
 - A mirror for `vendor.example` serves a pod, and the component lets the observer read
   the pods (stage 7).
 
-`tests/observer_deploy.rs` ties each manifest and the component to the code of the
-observer and to the records script. `tests/ci_scripts.rs` tests the script with a stand-in
+`tests/observer_deploy.rs` compares each manifest and the component with the code of
+the observer and with the records script. `tests/ci_scripts.rs` tests the script with a stand-in
 for `strata`. `tests/workflows.rs` tests the steps of the workflow.
 
 ## Check a real cluster
@@ -338,13 +340,13 @@ The script makes sure of these facts:
   A pod of another namespace cannot connect.
 - An edit in place of the add-on version gives the finding `published-changed`
   with the actor. No route and no line of the log shows the value of a variable.
-- A wrong key sends the page to `lost`, and the right key returns the page to
-  `ok`. A restart empties the state.
+- A wrong key gives the page state `lost`, and the right key gives `ok` again. A
+  restart empties the state.
 - A profile of the observer shows as `no-record` under "Not checked". It is not a
   drift, and the other profiles of the cluster stay the same.
 
 The script counts the requests of a content cycle and of a versions cycle.
-`count-requests` sits between `strata` and Palette, and writes one line for each
+`count-requests` is between `strata` and Palette, and it writes one line for each
 request. The lines hold the method and the path, and no query and no key.
 
 The undo runs at the end, also after a failed check. It reverts the edit, removes
@@ -365,21 +367,21 @@ Secret, as in [Check a real cluster](#check-a-real-cluster). The script never
 pushes that image to another registry. A pull request that changes the observer
 builds the image with the tag `test-<short sha>`.
 
-A throwaway tag on `ttl.sh` holds one image, and then another. The images on
+A temporary tag on `ttl.sh` holds one image, and then another. The images on
 `ttl.sh` are copies of public images. The script runs pods on the tag and makes
 sure of these facts:
 
 - The first pod shows the first digest, and no finding names the tag.
 - A new pod on the moved tag gives the finding `image-split`. When a new pod
   replaces the first pod, the finding is `image-moved`.
-- A container that never started reads Not checked. A container in a crash loop
+- A container that never started reads "Not checked". A container in a crash loop
   keeps its digest.
 - The images that match no pack, such as the images of the agents of Palette,
   make no finding.
 - The token of the observer gets and lists pods, and does nothing else.
 
-The check `pull-policy` shows what the cluster does with a pod made with
-`IfNotPresent`. The undo removes the pods, the observer, the role, and the
+The check `pull-policy` shows what the cluster does with a pod that has the pull
+policy `IfNotPresent`. The undo removes the pods, the observer, the role, and the
 binding, and it restores the values of the add-on.
 
 [`observer-kind.sh`](./live-runs.md#observer-kindsh) has a stage with a local
