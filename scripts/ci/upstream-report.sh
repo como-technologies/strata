@@ -14,11 +14,13 @@
 # and the next run passes them to `strata behind --since`, so the issue names each version that
 # arrived since its last update; the issue that a run opens says that this run is the first to find
 # the pack behind. A pack that strata could not check keeps its issue as it is.
-# Issues of packs that no record pins are left alone. The bump column also says whether Palette
-# accepts the move. When Palette refuses it, the column gives each error as `strata behind` writes
-# it. --no-impact skips the comparison of each pin with the newest version, and the question to
-# Palette. --save FILE keeps the report of the run. --dry-run prints each issue body and what would
-# happen, and calls no host.
+# Issues of packs that no record pins are left alone. For a pin that is behind a newer minor
+# version, the newer column names the next patch, when the pin has one. It is the newest patch of
+# the minor version of the pin, from `nextPatch` of `strata behind`. The bump column also says
+# whether Palette accepts the move. When Palette refuses it, the column gives each error as
+# `strata behind` writes it. --no-impact skips the comparison of each pin with the newest version,
+# and the question to Palette. --save FILE keeps the report of the run. --dry-run prints each issue
+# body and the change to each issue, and calls no host.
 #
 # Exit 0 when no pin is behind, 1 when one is, 2 when a pin could not be checked or strata checked
 # nothing; the issues are handled first, so a scheduled job shows the state too. Behind is a
@@ -45,16 +47,37 @@ quietly() {
 
 # The jq functions that write a text into markdown, as strata writes it. `html` is
 # `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
-# `text::markdown_cell`: `marks` puts a `\` before each mark of markdown, and `table` escapes each
-# `|` and writes a line break as a space. So a link, an emphasis, or a code span of the text shows
-# as text. A run of `_` with a letter or a digit on each side starts no emphasis, so `marks` keeps
-# it as it is. `span` is `text::code_span`: its fence is longer than each run of backticks in the
-# text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of
-# `text::code_block`, so that no line of the text ends the block.
+# `text::markdown_cell`, and `quoted` writes each word of it. `marks` puts a `\` before each mark
+# of markdown, and `mentions` puts a zero width space after each `@` that can start a mention of
+# GitHub. So a link, an emphasis, a code span, or a `@name` of the text shows as text. A run of `_`
+# with a letter or a digit on each side starts no emphasis, so `marks` keeps it as it is.
+# `address` is `text::bare_address`: a bare address that GitHub surely links stays as it is.
+# `link_end` is `text::link_end`, where GitHub ends the link. `table` escapes each `|` and writes
+# a line break as a space. `span` is `text::code_span`: its fence is longer than each run of
+# backticks in the text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is
+# the fence of `text::code_block`, so that no line of the text ends the block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
   def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
   def table: split("|") | join("\\|") | split("\n") | join(" ");
-  def cell: marks | html | table;
+  def mentions: gsub("(?<![A-Za-z0-9])@(?=[A-Za-z0-9])"; "@&#8203;");
+  def quoted: marks | html | mentions;
+  def link_end: . as $t | ([scan("[(]")] | length) as $open
+    | def cut($end; $close): $t[$end - 1:$end] as $c
+        | if $c == ")" and $close > $open then cut($end - 1; $close - 1)
+          elif $c == ";" and ($t[:$end] | test("&[A-Za-z]+;$")) then null
+          elif ($c | test("^[?!.,:*_~\\x27\";]$")) then cut($end - 1; $close)
+          else $end end;
+      cut(length; [scan("[)]")] | length);
+  def address($first): (if test("^[(\"\\x27]") then 1 else 0 end) as $s | .[$s:] as $rest
+    | (if test("^[!-~]*$") and (test("<") | not) then $rest | link_end else null end) as $e
+    | if $e == null
+        or ($rest[:$e] | test("^(https?://|www[.])[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?([.][A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+([/?#:]|$)") | not)
+        or (($rest | startswith("www.")) and (if $s == 0 then $first else (startswith("(") | not) end))
+      then null else [.[:$s], $rest[:$e], $rest[$e:]] end;
+  def word($first): address($first) as $a
+    | if $a then ($a[0] | quoted) + $a[1] + ($a[2] | gsub("[*]"; "&ast;") | gsub("_"; "&lowbar;")) else quoted end;
+  def cell: [scan("[^ \t\n\f\r]+|[ \t\n\f\r]+")] | to_entries
+    | map(.key as $k | .value | if test("^[ \t\n\f\r]") then . else word($k == 0) end) | join("") | table;
   def backticks($n): [range($n)] | map("`") | join("");
   def ticks: [scan("`+") | length] | max // 0;
   def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
@@ -291,8 +314,9 @@ while IFS= read -r group <&3; do
       def bump_cell:
         (["\(.to): \(.impact) \(.flags | join(" "))"] + [palette_lines]) | map(cell) | join("<br>");
       .pins[] | "| \(.version | code)\(if .floating then " (floating tag \(.tag | code))" else "" end) | \(
-        if .behind then [.newer[] | .version + ([(.state // empty), (.drops // [] | select(length > 0) | "drops \(join(" and "))"), (.listed // "" | select(. != "") | "listed \(.[0:10])")]
-          | if length > 0 then " (\(join(", ")))" else "" end)] | join(", ") | cell
+        if .behind then ([.newer[] | .version + ([(.state // empty), (.drops // [] | select(length > 0) | "drops \(join(" and "))"), (.listed // "" | select(. != "") | "listed \(.[0:10])")]
+          | if length > 0 then " (\(join(", ")))" else "" end)] | join(", "))
+          + (if .nextPatch then "; next patch \(.nextPatch)" else "" end) | cell
         elif .error then "not checked: \(.error.message)" | cell else "current" end) | \(
         if .bump then (.bump | bump_cell) else "-" end) | \(
         if .arrived == null then "-" elif (.arrived | length) == 0 then "none" else (.arrived | join(", ") | cell) end) | \(

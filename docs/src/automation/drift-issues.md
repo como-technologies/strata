@@ -58,7 +58,9 @@ logs.
 
 When the key cannot read the audit log, the issue keeps the verdict. It has the
 line `who: not read: <the error>` in place of the writes, and the exit status is
-that of a check without `--who`.
+that of a check without `--who`. The error gives the status, then the code and the
+message of Palette: see
+[When strata cannot read the log](../commands/verify.md#when-strata-cannot-read-the-log).
 
 ## Exit status
 
@@ -75,7 +77,8 @@ An unverified record holds a pack with no upstream digest. Its issue says that
 The issue of a record that strata could not check gives the error and the
 output of strata. The error can quote the body of an answer. The issue shows
 each tag of HTML and each mark of markdown in it as text, as
-[the markdown comment](../reference/formats.md#the-markdown-comment) does. The
+[the markdown comment](../reference/formats.md#the-markdown-comment) does. A
+`@name` in it notifies nobody, and a bare address in it keeps its link. The
 output is in a fenced block that no line of the output ends.
 
 When `verify` checks nothing, for example when no pattern matches a file, the

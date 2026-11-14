@@ -135,8 +135,9 @@ impl Options {
     }
 
     /// The readiness as each form of the report writes it, with the tiers beside it: `20% (tiers
-    /// static)`. `readiness` is the number as text. The readiness counts the checks of the tiers
-    /// that ran, so another `--tier` gives another number for one entity.
+    /// static)`. `readiness` is the number as text, or the word `readiness` for the label of the
+    /// tile of the HTML report. The readiness counts the checks of the tiers that ran, so another
+    /// `--tier` gives another number for one entity.
     pub(crate) fn readiness_text(&self, readiness: &str) -> String {
         format!("{readiness} (tiers {})", self.tiers_text())
     }

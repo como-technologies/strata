@@ -188,7 +188,7 @@ pub(crate) fn listed_since(pin: &Pin) -> Option<String> {
 /// side, such as `'pack:Public Repo/kubernetes@1.36.2'`. Strata sends no request for the
 /// line. None when the pin has no such patch: see [`Pin::next_patch`].
 pub(crate) fn next_patch_line(pin: &Pin) -> Option<String> {
-    let patch = pin.next_patch()?;
+    let patch = pin.next_patch.as_deref()?;
     let registry = name_or_uid(&pin.registry, &pin.registry_uid);
     let pack = |version: &str| {
         Ref::Pack {
@@ -198,13 +198,8 @@ pub(crate) fn next_patch_line(pin: &Pin) -> Option<String> {
         }
         .to_string()
     };
-    let command = shell_words(&[
-        "strata",
-        "compare",
-        &pack(&pin.version),
-        &pack(&patch.version),
-    ]);
-    Some(format!("next patch {}: {command}", patch.version))
+    let command = shell_words(&["strata", "compare", &pack(&pin.version), &pack(patch)]);
+    Some(format!("next patch {patch}: {command}"))
 }
 
 /// `arrived: 1.65.0, 1.66.0`: the newer versions of a pin that arrived since the time of

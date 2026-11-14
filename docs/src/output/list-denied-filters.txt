@@ -1,4 +1,4 @@
 $ strata list filters
 strata: looking up project dev
 strata: listing saved tag filters
-strata: GET /v1/filters/metadata?filterType=tag failed with HTTP 403: {"code":"AccessDenied","message":"filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant"}; the role of the key does not give the permission 'filter.list'
+strata: GET /v1/filters/metadata?filterType=tag failed with HTTP 403: AccessDenied: filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant; the role of the key does not give the permission 'filter.list'

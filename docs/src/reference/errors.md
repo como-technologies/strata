@@ -15,7 +15,7 @@ the kind.
 | Kind | Cause | Fields |
 | --- | --- | --- |
 | `missing-credential` | No API key. | `variable`, `alternate` |
-| `api` | Palette answered with an error status. The body holds no copy of the API key: strata writes `********` over it. On a 401 or a 403, the message names the key. A 403 with the code `ProjectUidIsNotEmpty` names the tenant scope in its place: the route takes no project. A denial names what Palette denied, such as a permission: see [Refusals that strata does not send again](#refusals-that-strata-does-not-send-again). | `method`, `path`, `status` |
+| `api` | Palette answered with an error status. The message gives the code and the message of Palette, not the JSON of the body. `body` holds the body as Palette sent it, with no copy of the API key: strata writes `********` over it. On a 401 or a 403, the message names the key. A 403 with the code `ProjectUidIsNotEmpty` names the tenant scope in its place: the route takes no project. A denial names what Palette denied, such as a permission: see [Refusals that strata does not send again](#refusals-that-strata-does-not-send-again). | `method`, `path`, `status`, `body` |
 | `retry-after-too-long` | Palette asked for a longer wait than `STRATA_MAX_RETRY_AFTER`. | `method`, `path`, `status`, `retryAfter`, `limit` |
 | `invalid-setting` | A variable has a value that strata cannot read. | `variable`, `value` |
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |
@@ -62,6 +62,14 @@ the kind.
 | `file-not-json` | A file in a `--from-raw` directory is not JSON. | `path` |
 | `serialize` | Strata could not write a document. | |
 
+The `message` of `api` gives the code and the message of Palette. `body`
+holds the body as Palette sent it. Here the role of the key does not give
+`filter.list`:
+
+```text
+{{#include ../output/list-denied-filters-json.txt}}
+```
+
 A record that is empty or is not JSON is `not-snapshot`.
 
 The error `snapshot-schema` names the field that does not match. Here a person
@@ -92,9 +100,16 @@ A `usage` error comes before any request in these cases:
 A record file shows its side when strata reads the file. That read is no
 request, so these errors come before any request too.
 
-One `usage` error can come after a request. `compare --repave cluster:<a>
-cluster:<b>@pending` gives it when `a` and `b` name two clusters. A name and a
-uid can name one cluster, so only the reads show that they name two.
+Two `usage` errors can come after a request:
+
+- `compare --repave cluster:<a> cluster:<b>@pending` gives one when `a` and `b`
+  name two clusters. A name and a uid can name one cluster, so only the reads
+  show that they name two.
+- A ref with no version, such as `aws-stack`, gives one when it is the name of
+  a profile. Strata reads such a ref as a uid, and Palette answers HTTP `404`.
+  The listing of the scope then shows the name. The message lists each version
+  of the name, and names `<name>@latest`. See
+  [A name with no version](./refs.md#a-name-with-no-version).
 
 `snapshot` takes `--json` only with `--dir`. Without `--dir`, a `usage` error
 of `snapshot` prints as a `strata:` line.
@@ -267,15 +282,62 @@ does not send its refusal again, and `palette-validate` reports it. See
 
 | Code | Palette refuses |
 | --- | --- |
+| `ControlPlanePoolRequired` | For AWS, Azure, MAAS, vSphere, and Edge: no pool of the control plane. |
+| `AwsWorkerPoolAzsValidate` | For AWS: a worker pool with a zone that the control plane does not have. |
+| `AwsDynamicWorkerPoolAzsRequired` | For AWS with no VPC: a worker pool with no zone. |
+| `RequiredParam` | For AWS with a VPC, a machine pool with no subnet. |
+| `InvalidName` | A name of the cluster, of a machine pool, of a manifest pack, or of a manifest that is not valid. |
+| `DuplicatePacksForbidden` | One pack two times in a profile. |
+| `DuplicatePackManifestsForbidden` | One manifest two times in a pack. |
+| `MultiPackVersionsForbidden` | Two versions of one pack across the profiles. |
+| `ClusterProfileDeleted` | A profile that is deleted. |
+| `ClusterProfileIsNotValid` | A profile with a pack tag that the registry deleted. |
+| `ClusterProfileIsNotPublished` | A profile that is a draft. |
+| `MissingClusterInfraProfile` | A body with no infrastructure profile. |
 | `ClusterProfilesNotSupported` | A profile of another cloud type than the route, and not of the cloud type `all`. |
+| `ClusterDashboardPacksMutuallyExclusive` | Two dashboard packs that exclude each other. |
+| `DuplicateClusterPacksForbidden` | One pack in two profiles of one workload scope. |
+| `PackValuesYamlInvalid` | Pack values that are not YAML. |
+| `PackManifestYamlInvalid` | A manifest of a pack that is not YAML. |
+| `InvalidPackVariable` | A macro of a variable with no name in the values of a pack. |
+| `PackSpectroIntegrationNotSupported` | An integration pack that the cloud does not support. |
+| `ClusterProfileOidcNotConfigured` | An integration pack that needs an OIDC identity provider that no pack or organization gives. |
+| `DisabledPacksForbidden` | A pack that is disabled. |
+| `SubResourceLimitValidationFailure` | More packs, or more manifests, across the profiles than the limit of a cluster. |
+| `PackForbidden` | When Palette runs in FIPS mode, a pack that is not FIPS compliant. |
 | `InvalidDropDownVariable` | A value of a dropdown variable that is not the label of an option. |
 | `InvalidVariable` | A value that the format or the pattern of its variable refuses, or no value for a required variable. |
+| `ClusterVariablesNotFound` | Variables for a profile that has no variables. |
+| `ClusterVariableCreateFailure` | A value of an immutable or hidden variable that is not its default value. |
+| `NoRegionSpecified` | An empty region. |
+| `InstanceTypeNotFound` | An instance type that Palette does not list for the region. |
+| `CustomInstanceTypeNotFound` | For GCP and GKE: an instance type that Palette does not list, and that no custom type of the region matches. |
+| `ReservedTags` | For Azure: a label key `microsoft`, `azure`, or `windows`. |
+| `GcpTagValidationFailure` | For GCP: a label key that GCP refuses. |
+| `SshKeyValidationFailure` | For vSphere and Edge: an SSH key that is not a public key. |
 | `K8SCidrOverlap` | For AWS with a VPC, a pod CIDR or a service CIDR of the Kubernetes pack that overlaps the CIDR of the VPC. |
 | `CidrParseError` | For AWS with a VPC, a pod CIDR or a service CIDR of the Kubernetes pack that is not a CIDR. |
-| `RequiredParam` | For AWS with a VPC, a machine pool with no subnet. |
+
+The route refuses four more faults of the body with HTTP `403`, and not `500`. It
+also refuses a create in a tenant at three of its limits with HTTP `403`.
+`palette-validate` reads each one as the answer of the route too:
+
+| Code | Palette refuses |
+| --- | --- |
+| `MultipleSystemProfilesNotSupported` | Two system profiles. |
+| `ClusterOperationNotAllowedInvalidPackState` | A pack in the state `deleted`. |
+| `PackValuesOverrideForbidden` | A pack that an integration pack names as a read-only dependency, with values other than its defaults. |
+| `ClusterFipsNotSupported` | When Palette runs in FIPS mode, a cloud that does not support FIPS. |
+| `FreemiumLimitExceeded` | A create in a trial tenant over its usage. |
+| `FreemiumActiveClusterLimitExceeded` | A create in a trial tenant over its limit of active clusters. |
+| `MarketplaceUsageLimitExceeded` | A create in a tenant of the AWS Marketplace over its usage. |
+
+Each other `403` of the route, such as `AccessDenied` for the role of the key,
+is an error of the check. A refusal of the body with HTTP `400`, `404`, or `409`
+is an answer of the route.
 
 A live run shows `ClusterProfilesNotSupported` and `RequiredParam`. The code of
-Palette shows the other four, and no live run shows them yet.
+Palette shows the other codes, and no live run shows them yet.
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.

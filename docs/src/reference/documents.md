@@ -132,6 +132,13 @@ profile, or pack version.
         error. `fields` then does not hold the field, so the hash does not
         cover it. `errors` is not part of the hash either. A record of strata
         0.19 holds `null` for the field.
+      - `systemRbacs`, only in `policy` of a cluster: each role binding of the
+        system that the key reads, in the form of `rbacs`. Palette gives such a
+        binding only with the subject that is the user of the key. So `fields`
+        does not hold it, the hash does not cover it, and `compare` and `verify`
+        do not compare it. A record of strata 0.33.0 and before holds such a
+        binding in `rbacs` of `fields`. See
+        [A role binding of the system](../commands/snapshot/cluster.md#a-role-binding-of-the-system).
       - The schema lists the keys of `fields` for each of these four tiers. It
         also takes the name of a tier of a later release, with any `fields`.
     - The `fields` of `policy` are in
@@ -172,6 +179,13 @@ profile, or pack version.
   empty text for the rest. A variable with no `name` has an empty `name`. The
   schema requires `name` alone, so a candidate can give a variable with a
   `name` and a `defaultValue`.
+  - `options[].default`, only when it is `true`: the option is the default of
+    the variable. Palette accepts an update that gives no value to a required
+    dropdown variable with such an option. A record of strata 0.33 and before
+    does not have the field.
+    It is outside the root, so the root of such a record stays. `behind` and
+    `compare --validate` read it: see
+    [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
 - `packs[]`: one entry for each pack, in the order the profile holds them. The
   diff document sorts its packs by layer and then by name; the snapshot does
   not.
@@ -367,7 +381,9 @@ A comparison of two sides, `a` and `b`.
   update, and no validate route checks them. Absent when strata finds nothing.
   See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
   - `requiredVariables`: the required variables with no default value that the
-    profile side adds. It has `code`, the code of the refusal of Palette,
+    profile side adds. A dropdown variable counts only when no option has the
+    mark `default`, and its default value is not the label of an option. It
+    has `code`, the code of the refusal of Palette,
     `InvalidVariable`, and `names[]`, the name of each variable. Palette refuses
     an update that gives such a variable no value.
   - `skippedMinor`: the move of the pack of the `k8s` layer, when it skips a
@@ -753,6 +769,12 @@ of the secret does not show, because the two sides hold the mask: see
     - `drops[]`, the architectures of the pinned version that it does not
       support.
   - `behind`: `true` when `newer` is not empty.
+  - `nextPatch`, for a pin that is behind a newer minor version: the newest
+    version in `newer` of the minor version of the pin. It is absent when the
+    newest version is of the minor version of the pin, and when the version of
+    the pin does not parse. It is also absent when `newer` has no version of the
+    minor version of the pin. See
+    [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
     version, `impact`, the impact level, and `flags[]`. `flags[]` holds
     `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, or `CHARTS` for each change.

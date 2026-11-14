@@ -39,7 +39,7 @@ observer-contract *args: build stand-in
 observer-playground chapter="observer-2": build observer-build
     scripts/observer-playground.sh {{chapter}}
 
-# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error, images, images-split, images-off, images-unread, asks, text-too-large, alerts, alerts-unset
+# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error, images, images-split, images-off, images-unread, asks, text-too-large, alerts, alerts-unset, moved-drift
 [group('observer')]
 observer-dev state="ok":
     go -C observer run ./internal/web/devserver -state {{state}}
@@ -673,6 +673,11 @@ live-tiers-narrow: build
 [group('live checks')]
 live-tiers-unknown-key: build
     examples/live/tiers.sh 9
+
+# The second user test (#838): what Palette answers to the keys of two users for a role binding of the system of cluster A, and compare of a record with each key. Needs live-up and STRATA_LIVE_SECOND_KEY; reads only.
+[group('live checks')]
+live-tiers-second-key: build
+    examples/live/tiers.sh 10
 
 # What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
 [group('live')]

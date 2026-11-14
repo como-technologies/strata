@@ -314,7 +314,7 @@ if [ "$stage" = 6 ]; then
       check cluster-route-tag 0 "#453: the route of the cluster answers a body with the tag $absent_tag for kubernetes" -- \
         "$live/api.sh" post-status "/v1/spectroclusters/$cluster_uid/validate/packs" cluster-route-body.json
       check cluster-route-tag-says 0 '#453: the answer is HTTP 200 with no error: the route does not check the sent tag' -- \
-        bash -c "head -n 1 cluster-route-tag.out | grep -qx 'HTTP 200' && sed 1d cluster-route-tag.out | jq -e '(.profiles // []) | length == 0'"
+        answer_is 200 cluster-route-tag.out '(.profiles // []) | length == 0'
     fi
   fi
 fi
@@ -349,7 +349,7 @@ if [ "$stage" = 7 ]; then
         jq -e '.updateChecks.skippedMinor.code != null' skip-validate.out
       # the update refuses the move with the code that strata names
       check skip-refused 0 '#623: Palette refuses the update with HTTP 400 and K8sUpgradeNotSupported' -- \
-        bash -c "head -n 1 skip-update.out | grep -qx 'HTTP 400' && sed 1d skip-update.out | jq -e --slurpfile d skip-validate.out '.code == \$d[0].updateChecks.skippedMinor.code'"
+        answer_is 400 skip-update.out '.code == $d[0].updateChecks.skippedMinor.code' --slurpfile d skip-validate.out
     fi
     if [ -n "${VARIABLES:-}" ]; then
       echo "== a move that adds a required variable with no default value: $VARIABLES on $CLUSTER (#623)" | tee -a steps.log
@@ -361,7 +361,9 @@ if [ "$stage" = 7 ]; then
       # the update refuses the move with the code that strata names, and the message names a
       # variable that strata names
       check variables-refused 0 '#623: Palette refuses the update with HTTP 500 and InvalidVariable' -- \
-        bash -c "head -n 1 variables-update.out | grep -qx 'HTTP 500' && sed 1d variables-update.out | jq -e --slurpfile d variables-validate.out '\$d[0].updateChecks.requiredVariables as \$r | .code == \$r.code and (.message as \$m | any(\$r.names[]; . as \$v | \$m | contains(\$v)))'"
+        answer_is 500 variables-update.out '$d[0].updateChecks.requiredVariables as $r
+          | .code == $r.code and (.message as $m | any($r.names[]; . as $v | $m | contains($v)))' \
+          --slurpfile d variables-validate.out
     fi
   fi
 fi

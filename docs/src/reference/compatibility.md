@@ -413,6 +413,12 @@ a note. A new id breaks each reader of the document, and the sum of `failed`, `p
 `warned` is the old value. [Release 0.34.0](#release-0340-changes-that-need-action) gives the
 action.
 
+One value changes after 0.33.0 with no new id. In `strata-snapshot/1`, the policy tier of a
+cluster names each role binding of the system in the new field `systemRbacs`, and not in `rbacs`.
+So the `hash` of the tier changes for a cluster with such a binding. The tier is not part of the root, so no root changes. A new id breaks each reader of
+the record, and the change touches only a cluster with such a binding.
+[Release 0.34.0](#release-0340-changes-that-need-action) gives the action.
+
 After 0.33.0, `strata-preflight/1` has four new fields: `sections[].probeFailed`,
 `sections[].warned`, `summary.counted`, and `checks[].failedRequest`. The id stays, and a
 reader that ignores unknown fields reads them.
@@ -428,11 +434,22 @@ clear whose name reads as a secret. The id stays, and a reader that ignores
 unknown fields reads it. The exit does not change: see
 [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
+After 0.33.0, a pin of `strata-behind/1` can have the new field `nextPatch`: the newest patch of
+the minor version of the pin. Only a pin that is behind a newer minor version can have it. A pin
+with no newer patch of its own minor version does not have it. The id stays, and `--since` reads
+a report of 0.33.0 and before. See
+[The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
+
 After 0.33.0, a bump of `strata-behind/1` can have the new field `updateChecks`, and so can a
 comparison of `strata-diff/1` with `compare --validate`. The field holds the rules that Palette
 checks only at the update: `requiredVariables` and `skippedMinor`. The ids stay, and
 `--since` reads a report of 0.33.0 and before. See
 [The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
+
+After 0.33.0, an option of a variable of `strata-snapshot/1` can have the new field `default`,
+only when it is `true`. The mark is outside the root, so no root changes, and the id stays. A
+record of 0.33.0 and before has no mark, and strata reads each option of it as an option with no
+mark. [Release 0.34.0](#release-0340-changes-that-need-action) gives the action.
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -1125,6 +1142,15 @@ field, a value, an input, or an option is in the sections above.
 - **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
+- **A record of a version that the cluster does not run is `not-on-this-cluster`.** Before,
+  it had a status such as `ok` or `newer`. A finding still wins, and the record then stays a
+  `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,
+  and no event or alert of a newer version, names the record. `counts.profiles` of `/v1/cluster`
+  does not count a record with the new status. See
+  [A version that the cluster no longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+  - A program that reads `status` of `/v1/profiles` must know the new value.
+  - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
+    `counts.profiles`.
 - **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
   `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
   request comment shows a tag in a message of Palette as text. The reason of
@@ -1150,6 +1176,20 @@ field, a value, an input, or an option is in the sections above.
     each of these lines as one text.
   - `strata-preflight` writes its markdown in the same way. A message of a rule shows its
     backticks as text, as the terminal form does.
+- **The markdown form writes a zero width space after each `@` of a mention in a text.** It
+  writes the entity `&#8203;`, so `@name` reads `@&#8203;name`. GitHub shows the same text, and
+  the mention notifies nobody. Before, a `@name` in a message of Palette notified the person or
+  the team in an issue or a pull request comment. See
+  [The markdown comment](./formats.md#the-markdown-comment).
+  - A script that reads the markdown as text reads `@&#8203;name` in place of `@name`. A `@`
+    after a letter or a digit of ASCII does not change, as in `kubernetes@1.30.1` or an address
+    of mail.
+  - `strata-preflight` writes its markdown in the same way.
+- **A bare address that GitHub surely links keeps its form.** It gets no entity, no `\`, and no
+  zero width space, as in 0.33.0. So the link that GitHub makes of it goes to the target of the
+  text. A `*` or a `_` that GitHub cuts from the end of the link reads `&ast;` or `&lowbar;`.
+  [The markdown comment](./formats.md#the-markdown-comment) gives the forms of such an address.
+  - `strata-preflight` writes its markdown in the same way.
 - **A pack whose only difference is a pack uid that Palette mints has no impact.**
   `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
   `impact` is `none` with no text, and `compare` prints no `impact:` line under
@@ -1268,7 +1308,8 @@ field, a value, an input, or an option is in the sections above.
 - **A pin that is behind a newer minor version can have the line `next patch`.** It names the
   newest patch of its minor version. It also gives the command `strata compare` of the two pack
   versions. The markdown adds the line to the cell of the status. A script that reads the lines
-  under a pin must skip it. The JSON does not change.
+  under a pin must skip it. The JSON gives the patch in the new field `nextPatch`: see
+  [The documents](#the-documents).
 - **`<name>@latest` and `appprofile:<name>@latest` write the version that they take.** Five
   commands write a note on standard error, such as `strata: @latest is barney@1.0.0`. They are
   `snapshot`, `compare`, `same-release`, `candidate`, and `consumers`, also with
@@ -1302,11 +1343,59 @@ field, a value, an input, or an option is in the sections above.
   [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 - **`compare --help` says that the two sides can be of different kinds.** The help of `<B>`
   said "in the same forms as the first". The refs and the exit codes stay the same.
+- **`palette-validate` reads each refusal of the body of the cluster validate route as
+  `FAILED`.** It reads more codes, such as `ControlPlanePoolRequired`. Before, the rule was
+  `ERROR` for such a refusal with HTTP 500 or 403, with exit `2`. Now it is `FAILED` with the
+  message of Palette, with exit `1`. Strata does not send such a 500 again, on any route. A
+  script that reads `ERROR` for these faults must read `FAILED`. See
+  [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
+- **`behind` and `compare --validate` name a required dropdown variable with no default
+  option.** Before, strata named no required variable that has options. Now it names a
+  required dropdown variable with no option with the mark `default`, when its default value is
+  not the label of an option. It also names a required variable of another input type with a
+  default option and no default value. Palette refuses each one. The line and
+  `requiredVariables` keep their form. See
+  [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
+- **A record keeps the `default` mark of an option of a variable.** The default option has
+  `variables[].options[].default: true`, and another option has no field. The root does not
+  cover the mark, so each root and each `variablesHash` stay. A record of strata 0.33 and before
+  holds no mark. With such a record on the profile side, `compare --validate` names each
+  required dropdown variable with no default value. Record the version again to read its marks.
+- **`snapshot --from-candidate --validate` sends the mark `default` of each option to
+  Palette.** Before, it dropped the mark from the body. See [The documents](./documents.md).
 - **The error of `compare --repave` and `--validate` for two records names the commands to use.**
   It says that both sides are records. It names `strata compare cluster:<name> <record> --repave`,
   or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
   clusters keep the error of before. The kind stays `usage`, and a script that matches the whole
   message must match the new text. See [Usage errors](../commands/compare/repave.md#usage-errors).
+- **The message of the error `api` gives the code and the message of Palette.** It read the
+  JSON of the body. Now it reads `failed with HTTP 404: ResourceNotFound: <message>`, and a
+  body with no code keeps its text. A script that matches the JSON in the message must read the
+  new key `body` of the error document. It holds the body as Palette sent it. A line `not read`
+  of `list` gives the same words. See [Errors](./errors.md).
+- **A text of a read that failed gives the words of Palette.** It reads
+  `HTTP 403: AccessDenied: <message>`, as the error `api` does. Before, it gave the JSON of the
+  body. A script that reads the text must read the new words, or read `--json`. See
+  [When strata cannot read the log](../commands/verify.md#when-strata-cannot-read-the-log).
+  - The line `who: not read` of `verify --who`, and the note `the audit log is unavailable`.
+  - The note `the sync status of registry <uid> is unavailable` of `verify` and `behind`.
+  - The notes of `compare` and `verify` for a part of a cluster or the reasons of a repave that
+    strata could not read.
+  - The documents do not change. `verify.whoError`, `errors` of a cluster record and of its
+    tiers, and `registrySyncError` keep `HTTP <status>: <body>`, with the body as Palette sent it.
+- **A ref with no version that names a profile gives the error `usage`.** Before, it was `api`.
+  Strata reads such a ref as a uid, Palette answers HTTP 404, and strata then reads the listing
+  of the scope. The message lists each version of the name and names `<name>@latest`. A name
+  that no profile has keeps the error `api`. `snapshot`, `compare`, `same-release`, `candidate`,
+  and `consumers` give it. See [A name with no version](./refs.md#a-name-with-no-version).
+- **A role binding of the system leaves the hash of the policy tier.** Its subjects depend on the
+  user of the key. So before, the keys of two users gave two hashes of the tier for one cluster. Now `rbacs` of `fields` does not
+  hold the binding, and the new field `systemRbacs` of the tier names it. `compare` and `verify`
+  do not compare it. See
+  [A role binding of the system](../commands/snapshot/cluster.md#a-role-binding-of-the-system).
+  - For a cluster with such a binding, `verify` of a record of 0.33.0 and before reports the
+    policy tier at the binding. The exit does not change. Record the cluster again.
+  - A script that reads the bindings of the system from `rbacs` must read `systemRbacs`.
 - **`same-release --allow renumber` gives a reason for a missing pack file.**
   Before, strata refused the download with the error `not-archive`, and the command exited `2`.
   Now strata reads the other packs of the download. A renumber of the pack of that file gets
@@ -1316,9 +1405,18 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the CI drop-ins
 
+- **`verify-report.sh` and `upstream-report.sh` quote the new message of the error `api`.** It
+  names the code and the message of Palette. Before, it quoted the JSON of the body.
+- **The line `who: not read` in an issue of `verify-report.sh --who` gives the words of
+  Palette.** It names the status, the code, and the message. Before, it quoted the JSON of the
+  body.
 - **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor
   version.** The bump column gives this line of `behind`. A script that reads the cell must
   read the new line.
+- **The issue of `upstream-report.sh` names the next patch of a pin.** The newer column ends
+  with `; next patch <version>`. Only a pin that is behind a newer minor version has it. The
+  version comes from `nextPatch` of `strata behind`. A script that reads the cell must read the
+  new text. See [Upstream issues](../automation/upstream-issues.md).
 - **`verify-report.sh` and `upstream-report.sh` write a quoted text as the markdown form does.**
   An issue shows a tag of HTML in it as text.
   - The state line of an issue of `upstream-report.sh` writes each `<`, `>`, and `&` of its
@@ -1335,6 +1433,12 @@ field, a value, an input, or an option is in the sections above.
 - **`verify-report.sh` and `upstream-report.sh` write a `\` before each mark of markdown in a
   quoted text.** They do it as the markdown form does. So an issue shows a link, an emphasis, or
   a code span in a message of Palette as text.
+- **`verify-report.sh` and `upstream-report.sh` write a zero width space after each `@` of a
+  mention in a quoted text.** They do it as the markdown form does. So a `@name` in a message of
+  Palette notifies nobody.
+- **`verify-report.sh` and `upstream-report.sh` keep a bare address that GitHub surely links as it
+  is.** They do it as the markdown form does. So the link of the address in an issue goes to its
+  target.
 - **`observer-propose.sh` counts the backticks in each code span of its body.** Each span has a
   fence longer than each run of backticks in its value. The body names the cluster and the path
   of each record in such a span. A name and a path with no backtick do not change.
@@ -1382,11 +1486,18 @@ field, a value, an input, or an option is in the sections above.
 - `text::markdown_cell` also writes a `\` before each mark of markdown, such as a backtick. A
   caller that puts a code span of its own in the text must write the span outside the cell. The
   cell shows the backticks of the span as text.
+- `text::markdown_cell` also writes the entity `&#8203;` after each `@` that can start a mention
+  of GitHub. A caller that compares the cell with a text must read `@&#8203;name` in place of
+  `@name`.
+- `text::markdown_cell` keeps a bare address that GitHub surely links as it is, with no entity,
+  no `\`, and no zero width space in it.
 - `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
   pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
   the report of 0.33.0. The JSON renderer does not read it.
 - `ops::PinnedBy` has the new field `owner: Option<String>`. A struct literal must set it.
+- `ops::Pin` has the new field `next_patch: Option<String>`, the patch of `nextPatch`. A struct
+  literal must set it, and a pattern with no `..` must name it.
 - `ops::SetRecord` has the new field `secret_like_variables`. A struct literal must set it, and
   a pattern with no `..` must name it.
 - `ops::Bump` and `diff::Diff` have the new field `update_checks: model::update::UpdateChecks`. A
@@ -1395,6 +1506,26 @@ field, a value, an input, or an option is in the sections above.
   `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
   `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
   `INVALID_VARIABLE_CODE`.
+- `api::codes::ValidateRoute::ClusterCreate.refusal_codes()` gives 29 more codes, and
+  `is_refusal_code` is true for each of them. `Error::class` gives `Terminal` to a 5xx with one of
+  them, from each route. `ValidateRoute::refuses_answer` and `ValidateRoute::refuses_request` are
+  true for the cluster validate route with HTTP 403 and a code of the new consts
+  `api::codes::CLUSTER_CREATE_FORBIDDEN_CODES` and `api::codes::CLUSTER_CREATE_LIMIT_CODES`, or
+  `PACK_FORBIDDEN_CODE`.
+- `snapshot::VariableOption` has the new field `default: bool`. A struct literal must set it, and
+  a pattern with no `..` must name it. `RequiredVariables` of `UpdateChecks` counts a required
+  dropdown variable with no default option, when its default value is not the label of an
+  option.
+- The `Display` of `Error::Api` gives the code and the message of the body, and not its JSON.
+  `Error::to_json` writes the body as `body`. The field `body` of the variant stays the whole
+  body.
+- `ops::snapshot_for`, `ops::snapshot_object`, `ops::snapshot_for_candidate`, and
+  `ops::consumers_with` give `Error::Usage` for a profile name in a ref with no version. Such a
+  ref is `Ref::Uid`, or `Ref::Draft` with no version. Before, they gave the `Error::Api` of the
+  404.
+- `snapshot::ClusterTier` has the new field `system_rbacs`, the role bindings of the system of
+  the policy tier. A struct literal must set it, and a pattern with no `..` must name it.
+  `snapshot::cluster_tiers` keeps these bindings out of `fields` and out of `hash`.
 - `api::Palette::profile_download` gives a download, and no `Error::NotArchive`, when the list
   of the download names a file that the download does not hold. The pack of that file has
   `api::PackFile::NotReadable`, with the reason `the download does not hold <path>`.

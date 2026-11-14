@@ -132,7 +132,7 @@ fn profile(r: &mut Runner) {
             "format": "string", "inputType": "text", "regex": "^[a-z]+$",
             "required": true, "hidden": false, "immutable": false, "isSensitive": false,
             "options": [{"label": "Platform", "value": "platform",
-                "description": "The platform team"}],
+                "description": "The platform team", "default": true}],
         }]}),
     );
 }

@@ -691,6 +691,58 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
 }
 
 #[test]
+fn the_move_names_a_required_dropdown_variable_with_no_default_option_and_not_one_with_a_default_option()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
+    let api = serve_packs_with(
+        api,
+        (HELD, "1.3.1"),
+        BARNEY,
+        &packs_held(),
+        json!({"variables": []}),
+    );
+    // 1.4.0 adds two required dropdown variables with no default value. Palette gives the mark
+    // `default` on each option, and only zone has an option with the mark
+    let dropdown = |name: &str, default: bool| {
+        let mut v = common::variable(name, name, "", false);
+        v["inputType"] = json!("dropdown");
+        v["options"] = json!([
+            {"label": "a", "value": "1", "description": "", "default": false},
+            {"label": "b", "value": "2", "description": "", "default": default},
+        ]);
+        v
+    };
+    let variables = json!({"variables": [dropdown("size", false), dropdown("zone", true)]});
+    let api = serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &packs_newest(), variables);
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let r = behind_of(&api, &[record], &WITH_IMPACT);
+    let bump = r.profiles[0].bump.as_ref().expect("1.3.1 is behind 1.4.0");
+    let required = bump.update_checks.required_variables.as_ref();
+    assert_eq!(required.map(|r| r.names.clone()), Some(vec!["size".into()]));
+
+    // a record of 1.4.0 keeps the mark of the default option, and no mark of another option
+    let newest = record_of(&api, NEWEST, dir.path(), "newest.json");
+    let doc: Value = serde_json::from_str(&std::fs::read_to_string(newest).unwrap()).unwrap();
+    let marks = |name: &str| -> Vec<Value> {
+        let v = doc["variables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"] == name)
+            .unwrap();
+        v["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["default"].clone())
+            .collect()
+    };
+    assert_eq!(marks("zone"), [Value::Null, json!(true)]);
+    assert_eq!(marks("size"), [Value::Null, Value::Null]);
+}
+
+#[test]
 fn a_move_that_strata_cannot_compare_makes_the_profile_version_not_checked() {
     let dir = tempfile::tempdir().unwrap();
     let api = serve_move();
@@ -999,6 +1051,7 @@ fn two_profile_cluster(record: &Path, running: bool, dir: &Path) -> PathBuf {
             hash: String::new(),
             fields,
             errors: BTreeMap::new(),
+            system_rbacs: Vec::new(),
         };
         let cluster = snap.source.cluster.as_mut().unwrap();
         cluster.tiers.insert(Tier::Running.into(), tier);
@@ -1261,18 +1314,20 @@ fn behind_only_omits_the_rows_that_are_current_and_keeps_the_heading_and_the_jso
     );
 }
 
+/// The line `next patch` comes from `nextPatch` of the pin. A unit test of `ops::behind` gives the
+/// rule of the patch.
 #[test]
-fn a_pin_behind_a_newer_minor_version_names_the_newest_patch_of_its_own_and_the_command() {
+fn a_pin_with_a_next_patch_names_the_patch_and_the_command_under_its_line() {
+    let mut patched = pin_doc("kubernetes", "1.36.2", &["1.37.0", "1.36.4", "1.36.3"]);
+    patched["nextPatch"] = json!("1.36.4");
     let mut no_name = pin_doc("cert-manager", "1.21.1", &["1.22.0", "1.21.3"]);
     no_name["registry"] = json!("");
+    no_name["nextPatch"] = json!("1.21.3");
     let pins = vec![
-        pin_doc("kubernetes", "1.36.2", &["1.37.0", "1.36.4", "1.36.3"]),
-        // the newest version is of the minor version of the pin: the bump names it
+        patched,
+        // a pin with no next patch has no line
         pin_doc("kubernetes", "1.36.3", &["1.36.4"]),
-        // no newer version of the minor version of the pin
         pin_doc("csi-aws-ebs", "1.63.1", &["1.65.0", "1.64.0"]),
-        // a version that does not parse has no minor version
-        pin_doc("ubuntu-aws", "LTS__20.4.x", &["24.04"]),
         no_name,
     ];
     let r = report_of(pins, Vec::new());
@@ -1310,7 +1365,8 @@ fn a_pin_behind_a_newer_minor_version_names_the_newest_patch_of_its_own_and_the_
         ),
         "{markdown}"
     );
-    // the line is a hint of the report: the JSON holds the newer versions, and no other field
+    // the JSON gives the patch, and not the line: a script makes its own text
     let doc = serde_json::to_value(&r).unwrap();
+    assert_eq!(doc["pins"][0]["nextPatch"], "1.36.4");
     assert!(!doc.to_string().contains("next patch"), "{doc}");
 }
