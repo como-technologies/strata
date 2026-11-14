@@ -1273,6 +1273,34 @@ fn a_check_with_one_request_keeps_its_ran_and_answer_and_has_no_requests() {
     );
 }
 
+/// The criterion of #832: a message from an answer shows each tag of HTML as text in the markdown,
+/// in the row of a check that failed and in the line of the checks that did not run.
+#[test]
+fn the_markdown_shows_each_tag_of_a_message_from_an_answer_as_text() {
+    let tags = "<a href=\"https://example.com\">x</a> <Code>AccessDenied</Code>";
+    let message = format!("HTTP 403: {tags}");
+    let escaped = format!("HTTP 403: {}", strata::text::html_text(tags));
+    let failed = Outcome {
+        verdict: Verdict::Failed,
+        messages: vec![message.clone()],
+        elapsed: Duration::from_millis(3),
+        ran: Ran::Request(Call::get("/v1/edgehosts/h2", Some("HTTP 403"))),
+    };
+    let not_run = Outcome::not_run(Verdict::NotRun, message);
+    for (outcome, line) in [
+        (failed, format!("<br>{escaped} |")),
+        (not_run, format!("\n1 check did not run: {escaped} (1)\n")),
+    ] {
+        let md = markdown(&report_of_edge_host_in_use(
+            None,
+            "/v1/edgehosts/h2",
+            outcome,
+        ));
+        assert!(md.contains(&line), "{line:?} in\n{md}");
+        assert!(!md.contains("<a ") && !md.contains("<Code>"), "{md}");
+    }
+}
+
 /// A noun of the summary agrees with its count, also when the count is 1 or 0 (#589): the rules,
 /// the checks, and the verb of the rules.
 #[test]

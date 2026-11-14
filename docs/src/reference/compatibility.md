@@ -1118,6 +1118,16 @@ field, a value, an input, or an option is in the sections above.
 - **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
+- **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
+  `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
+  request comment shows a tag in a message of Palette as text. The reason of
+  `archivesNotReadable` also shows the answer of the host of a chart as text. Before, GitHub read
+  such a tag as HTML, and kept a link in it.
+  - A script that reads the markdown as text reads `-&gt;` in place of `->`.
+  - A value in a code span, such as a pack name or a uid, shows as before. A backtick in such a
+    value does not end the span now.
+  - `strata-preflight` writes its markdown in the same way. Its terminal form, its HTML form,
+    and the JSON documents of both tools do not change.
 - **A pack whose only difference is a pack uid that Palette mints has no impact.**
   `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
   `impact` is `none` with no text, and `compare` prints no `impact:` line under
@@ -1268,6 +1278,11 @@ field, a value, an input, or an option is in the sections above.
   the error of that request. `ops::list` reads it with `packs` or `pack`.
 - `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
   writes that file.
+- `text::html_text` is new. It writes each `&`, `<`, and `>` of a text as an entity.
+- `text::markdown_cell` also writes each `&`, `<`, and `>` as an entity. A caller that puts the
+  cell in a code span calls `text::code_cell` in its place, because a code span shows an entity as
+  it is.
+- `text::code_cell` writes no entity. It escapes a `|` and a line break, as before.
 - `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
   pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get

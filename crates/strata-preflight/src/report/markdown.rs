@@ -36,7 +36,10 @@ pub fn markdown(r: &Report) -> String {
     out.push_str(&failed_request_section(&r.failed_requests()));
     out.push_str(&reproduce_section(&r.checks));
     if s.not_run > 0 {
-        out.push_str(&format!("\n{}\n", not_run_text(&s.not_run_reasons)));
+        out.push_str(&format!(
+            "\n{}\n",
+            markdown_cell(&not_run_text(&s.not_run_reasons))
+        ));
     }
     out.push_str(&format!("\n{}\n", written_text(&r.options)));
     out.push_str(&scorecard_table(&r.sections));

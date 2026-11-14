@@ -18011,3 +18011,165 @@ fn a_behind_report_with_values_of_a_later_release_reads_with_no_error_and_writes
     assert_eq!(bump.flags[1].as_str(), "PROVENANCE");
     assert_eq!(serde_json::to_value(&report).unwrap(), doc);
 }
+
+// ---- a text of an answer in the markdown -----------------------------------------------------
+
+/// The criterion of #832: a message of Palette in a note of a diff, and in a verdict, shows each
+/// tag of HTML as text in the markdown of a pull request comment.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the note of a cluster whose repave strata could not read
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending").failing(
+        repave_route(),
+        403,
+        common::ANSWER_TAGS,
+    );
+    let recorded = snapshot_cluster(&api, None).unwrap();
+    let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    let md = common::markdown()
+        .render(&v.diff, &recorded, &v.live, false)
+        .unwrap();
+    assert!(
+        md.contains("(strata could not read its reasons: HTTP 403: &lt;a href="),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+
+    // the verdict of a record whose audit log Palette refuses
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
+        profile_audits("t0"),
+        403,
+        common::ANSWER_TAGS,
+    );
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &who_options(),
+        &Progress::silent(),
+    )
+    .unwrap();
+    let md = common::markdown().verdict(&v.diff).unwrap();
+    assert!(
+        md.contains("\n\nwho: not read: HTTP 403: &lt;a href="),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+
+    // the verdict also names the message of the last sync of a registry
+    let mut doc = serde_json::to_value(&v.diff).unwrap();
+    doc["verify"]["registrySync"] = serde_json::json!({
+        "lastSyncedTime": "", "status": "Failed", "message": common::ANSWER_TAGS
+    });
+    let synced: strata::diff::Diff = serde_json::from_value(doc).unwrap();
+    let md = common::markdown().verdict(&synced).unwrap();
+    assert!(
+        md.contains("; the last sync of the registry failed: &lt;a href="),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+}
+
+/// The criterion of #832: the error of a search of the edge hosts shows each tag of HTML as text
+/// in the markdown of `consumers`.
+#[test]
+fn the_markdown_of_consumers_shows_the_error_of_the_edge_hosts_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(CLUSTER_LISTING, serde_json::json!([]))
+        .failing(post(EDGE_HOST_SEARCH), 500, common::ANSWER_TAGS);
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
+    assert!(md.contains("Edge hosts: not read ("), "{md}");
+    common::assert_answer_tags_as_text(&md);
+}
+
+/// The criterion of #832: the error of a read in a row of `list` shows each tag of HTML as text in
+/// the markdown. The line breaks that strata writes between the packs and the profiles stay.
+#[test]
+fn the_markdown_of_list_shows_the_error_of_a_read_as_text_and_keeps_its_line_breaks() {
+    let packs = template(
+        "aws",
+        "cluster",
+        serde_json::json!([
+            {"name": "cni-cilium-oss", "layer": "cni", "type": "spectro", "tag": "1.19.6",
+             "version": "1.19.6"},
+            {"name": "csi-aws-ebs", "layer": "csi", "type": "spectro", "tag": "1.28.0",
+             "version": "1.28.0"}
+        ]),
+    );
+    let api = MemoryApi::new()
+        .with(
+            PROFILE_LISTING,
+            serde_json::json!({"items": [
+                listed_profile("lab-profile", "1.0.0", "u-p1"),
+                listed_profile("lab-profile", "1.1.0", "u-p2"),
+            ]}),
+        )
+        .with(
+            profile_route("u-p1"),
+            profile_document("u-p1", "lab-profile", "1.0.0", packs, None),
+        )
+        .failing(profile_route("u-p2"), 403, common::ANSWER_TAGS);
+    let l = listing(
+        &api,
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            packs: true,
+            ..ListOptions::default()
+        },
+    )
+    .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
+    assert!(
+        md.contains("cni/cni-cilium-oss 1.19.6<br>csi/csi-aws-ebs 1.28.0 |"),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            CLUSTER_LISTING,
+            serde_json::json!([
+                typed_cluster("shared", "c5", "AlloyAssist"),
+                typed_cluster("gone", "c6", "AlloyMonitor"),
+            ]),
+        )
+        .with(
+            cluster_route("c5"),
+            cluster_document(
+                "c5",
+                &[
+                    ("lab-profile", "1.0.0", UID_A, "cluster"),
+                    ("lab-addons", "2.0.0", UID_ADDONS, "add-on"),
+                ],
+            ),
+        )
+        .failing(cluster_route("c6"), 403, common::ANSWER_TAGS);
+    let l = listing(
+        &api,
+        &ListOptions {
+            kinds: vec![ListKind::Clusters],
+            applied: true,
+            ..ListOptions::default()
+        },
+    )
+    .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
+    assert!(
+        md.contains("lab-profile@1.0.0 (cluster)<br>lab-addons@2.0.0 (add-on) |"),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+}
