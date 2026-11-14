@@ -234,6 +234,26 @@ impl ClusterSource {
         self.tiers.get(&Open::Known(tier))
     }
 
+    /// The profiles of the record that hold a pack of the name `pack`, in the order of
+    /// `profiles`. Empty when the record carries no tier `running`, or the tier does not name the
+    /// pack.
+    ///
+    /// Palette gives the profile of each pack that the cluster reconciled, and the tier keeps it.
+    pub(crate) fn profiles_holding(&self, pack: &str) -> Vec<&AppliedProfile> {
+        let Some(tier) = self.tier(Tier::Running) else {
+            return Vec::new();
+        };
+        let running = arr(&tier.fields, "");
+        self.profiles
+            .iter()
+            .filter(|p| {
+                running
+                    .iter()
+                    .any(|r| str_at(r, "/name") == pack && str_at(r, "/profileUid") == p.uid)
+            })
+            .collect()
+    }
+
     /// Why strata could not read the notifications, when `updates_pending` is absent for that
     /// reason.
     pub fn updates_pending_error(&self) -> Option<&str> {
@@ -554,6 +574,51 @@ impl ClusterVariable {
         }
         out
     }
+
+    /// True when the record holds the value of the variable in clear, and its name reads as a
+    /// secret: see [`name_reads_as_secret`]. A value counts when it is not empty and holds no
+    /// template, `{{`. The name is only a guess, so this blocks nothing.
+    pub(crate) fn reads_as_secret(&self) -> bool {
+        self.value
+            .as_deref()
+            .is_some_and(|v| !v.is_empty() && !v.contains("{{"))
+            && name_reads_as_secret(&self.name)
+    }
+}
+
+/// The words that make a variable name read as a secret, with no case.
+const SECRET_WORDS: [&str; 4] = ["secret", "password", "passwd", "token"];
+
+/// The pairs of words that make a variable name read as a secret, with no case, with one
+/// character or none between them: `apikey`, `api_key`, `private-key`.
+const SECRET_PAIRS: [(&str, &str); 2] = [("api", "key"), ("private", "key")];
+
+/// True when `name` matches `secret|password|passwd|token|api.?key|private.?key` with no case.
+///
+/// The pattern comes from #626. On the variables of a real project, it named one variable, and
+/// that variable held a credential. Each index is in the lower case text, so each slice is at a
+/// `char` boundary.
+fn name_reads_as_secret(name: &str) -> bool {
+    let name = name.to_lowercase();
+    SECRET_WORDS.iter().any(|w| name.contains(w))
+        || SECRET_PAIRS.iter().any(|(first, last)| {
+            name.match_indices(first).any(|(i, _)| {
+                let rest = &name[i + first.len()..];
+                let after_one = rest.chars().next().map_or("", |c| &rest[c.len_utf8()..]);
+                rest.starts_with(last) || after_one.starts_with(last)
+            })
+        })
+}
+
+/// A variable of a cluster record whose name reads as a secret, and whose value the record holds
+/// in clear. It names the variable, and holds no value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SecretLikeVariable {
+    /// The name of the profile that declares the variable.
+    pub profile: String,
+    /// The name of the variable.
+    pub name: String,
 }
 
 /// One cluster profile version as applied to a cluster.

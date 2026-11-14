@@ -124,7 +124,7 @@ facts:
     stand_in:
       - v1/spectroclusters/{uid}/config/namespaces
     live: []
-    unchecked: No script reads the namespaces of a cluster. A read by hand shows the empty list of a deleted cluster.
+    unchecked: No script reads the namespaces of a cluster with a key that can read them. A read by hand shows the empty list of a deleted cluster.
     pages:
       - reference/palette-api.md#a-cluster
       - internals/palette/clusters.md#cluster-tiers
@@ -1165,6 +1165,19 @@ facts:
       - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
     code:
       - src/snapshot/cluster.rs
+
+  - id: cluster-profile-order-append
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterProfileTemplates[].uid
+    stand_in: []
+    live: []
+    unchecked: The code of Palette shows it. The checks added-last, upgraded-last, summary-first, summary-addon, and control-kept of order.sh stage 4 have no result yet.
+    pages:
+      - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
+    rules:
+      - position-zero
 
   - id: profile-pack-order
     kind: behavior

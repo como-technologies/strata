@@ -116,6 +116,28 @@ palette-cli, and the SDK for cloud clusters do not. The create path of the API
 runs the checks of the name and the limits, not those of the packs and the
 machines.
 
+### The permission of the route
+
+The route checks the role of the key before it reads the body. It needs
+`cluster.create` in the project or in the tenant, also for a body that creates
+nothing. So a key with a viewer role cannot ask the route. A key whose role does
+not give `cluster.create` gets HTTP `403` and the code `AccessDenied`:
+
+```text
+cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system
+```
+
+The order of the scopes in the message can change from one answer to the next.
+The code of Palette shows it, and a field test with a read-only key got the
+refusal. No live run of the example shows it yet: the check
+`preflight-role-validate` of [observer-role.sh](../../development/live-runs.md#observer-rolesh)
+asks the route with the key of a role. [The role that a key
+needs](./clusters.md#the-role-that-a-key-needs) names the roles that give the
+permission.
+
+The route then reads each profile of the body. A role that does not give
+`clusterProfile.get` gets HTTP `500` and the code `OperationForbidden`.
+
 ### The variables of the body
 
 The route reads `variables[]` of each profile of the body. Each variable must

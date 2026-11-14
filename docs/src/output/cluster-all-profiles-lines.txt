@@ -1,0 +1,12 @@
+$ strata snapshot cluster:payments -o runs/payments-all.json
+...
+strata: wrote runs/payments-all.json (root b18fc230c0b9)
+$ strata compare runs/payments-all.json cluster:payments
+4 profiles on cluster payments (uid 64f1000000000000000000e1)  ->  4 profiles on cluster payments (uid 64f1000000000000000000e1)
+root       b18fc230c0b9 -> b18fc230c0b9   IDENTICAL
+...
+$ strata verify runs/payments-all.json
+4 profiles on cluster payments (uid 64f1000000000000000000e1)  ->  4 profiles on cluster payments (uid 64f1000000000000000000e1)
+root       b18fc230c0b9 -> b18fc230c0b9   IDENTICAL
+...
+OK: cluster payments running 4 profiles is unchanged since 2026-09-17T09:30:00Z

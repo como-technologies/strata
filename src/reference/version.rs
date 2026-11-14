@@ -170,6 +170,27 @@ pub fn pick<T>(
         .max_by(|a, b| compare(version_of(a), version_of(b)))
 }
 
+/// The highest version of `versions` above `picked` that [`pick`] skips for [`LATEST`]. None
+/// when it skips no version above `picked`.
+///
+/// `picked` is the version that [`pick`] gives for [`LATEST`]. Of `1.0.0`, `1.0.1-rc.1`, and
+/// `1.0.2-rc.1`, it is `1.0.0`, and the version above it is `1.0.2-rc.1`. A string with no
+/// version is below each version, so each version above a version that is not a pre-release is
+/// a pre-release. When `picked` is a pre-release, no version of `versions` is a final version,
+/// and [`pick`] skips none.
+pub(crate) fn skipped_above<'a>(
+    versions: impl IntoIterator<Item = &'a str>,
+    picked: &str,
+) -> Option<&'a str> {
+    if !is_final(picked) {
+        return None;
+    }
+    versions
+        .into_iter()
+        .filter(|v| !is_final(v) && compare(v, picked).is_gt())
+        .max_by(|a, b| compare(a, b))
+}
+
 /// True when `v` holds a version that is not a pre-release. [`LATEST`] takes such a version first.
 fn is_final(v: &str) -> bool {
     Version::read(v).is_some_and(|s| !s.is_pre_release())

@@ -19,6 +19,18 @@ lower bound of each rate. The summary and the section scorecard:
 {{#include ../../output/preflight-json-summary.txt}}
 ```
 
+A check that gave `error` at a request has `failedRequest`, the request to
+Palette that failed. One denial of the key stops each check that sends the
+same request. So the terminal, the markdown, and the HTML form show the error
+once, under `Requests that failed`, with the checks that it stopped. The JSON
+keeps the messages of each check. See [The key of the live
+tier](./tiers.md#the-key-of-the-live-tier).
+
+The summary puts each result in one count. `failed` is the counted failures, `probeFailed` the probes
+that failed, and `warned` the warnings. Each line of the scorecard has the same three counts, and
+the counts of the sections add to the counts of the summary. `counted` is the number of counted
+checks that ran: `0` gives the verdict `NOT COUNTED`.
+
 [JSON documents](../../reference/documents.md#strata-preflight1) lists each field.
 `strata preflight --schema report` prints the JSON Schema.
 

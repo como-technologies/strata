@@ -607,3 +607,35 @@ fn text_runs_compare_as_text() {
     gt("b", "a");
     gt("1.2b", "1.2a");
 }
+
+/// Issue #625. `@latest` names the highest pre-release above the version that it takes, so the
+/// skip is no longer silent. A pre-release below that version, such as `2.2.8-hotfix` below
+/// `2.2.8`, gives none.
+#[test]
+fn skipped_above_gives_the_highest_pre_release_above_the_pick_of_latest() {
+    let cases: [(&[&str], Option<&str>); 8] = [
+        (&["1.0.0", "1.0.1-mr2.770685"], Some("1.0.1-mr2.770685")),
+        (
+            &["1.0.0", "1.0.1-rc.1", "1.0.2-rc.1", "0.9.0-rc.1"],
+            Some("1.0.2-rc.1"),
+        ),
+        (&["2.2.7", "2.2.8-hotfix"], Some("2.2.8-hotfix")),
+        (&["2.2.8", "2.2.8-hotfix"], None),
+        (
+            &["1.1.8", "1.1.8.develop", "1.1.10", "1.2.develop"],
+            Some("1.2.develop"),
+        ),
+        (&["1.2.3.4", "1.2.3.4-rc1"], Some("1.2.3.4-rc1")),
+        // a pick of a pre-release skips none, and a text with no version is below each version
+        (&["1.0.2-rc.2", "1.0.2-rc.1"], None),
+        (&["develop", "1.0.0"], None),
+    ];
+    for (versions, skipped) in cases {
+        let picked = pick(versions.iter().copied(), |v| *v, LATEST).unwrap();
+        assert_eq!(
+            skipped_above(versions.iter().copied(), picked),
+            skipped,
+            "{versions:?}"
+        );
+    }
+}

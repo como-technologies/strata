@@ -294,6 +294,21 @@ After 0.32.2, `ops::SideProjects` is new. It gives the project of each side of `
 two. `ops::snapshot_pair` gives its `connect` the side that it reads: see
 [Release 0.33.0](#release-0330-changes-that-need-action).
 
+After 0.33.0, `diff::Impact` implements `Default`: the level `none` with no text. A pack whose
+only difference is a pack uid that Palette mints has it: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `render::RowState` is new: the state of a pin or of a profile version in the report
+of `behind`. `text::shell_words` is public: a command as a person types it in a shell.
+`shell_words` of `strata-preflight` calls it, and its rule of the quotes does not change.
+`render::Renderer::render_behind` and `ops::PinnedBy` change: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `snapshot::SecretLikeVariable`, `snapshot::Snapshot::secret_like_variables`, and
+`render::secret_like_notes` are new. They name each variable that a cluster record holds in
+clear and whose name reads as a secret. `ops::SetRecord` has a new field for them: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -379,6 +394,32 @@ and `registry`, and the ids stay. `registryName` is outside the root, so no root
 record of 0.33.0 and before has no `registryName`, and strata reads it as before. Take the
 record again to name the registries: see
 [The registry of each pack](../commands/snapshot/profile-version.md#the-registry-of-each-pack).
+
+After 0.33.0, each row of `strata-verify-summary/1` has the new field `subject`.
+It names the record in the words of the heading of `compare`, such as
+`4 profiles on cluster payments`. The row keeps `name` and `version`, and the id
+stays. See [Check many records](../commands/verify.md#check-many-records).
+
+One value changes after 0.33.0 with no new id. In `strata-preflight/1`, `sections[].failed`
+counts the counted failures alone, as `summary.failed` does. Before, it counted each failure but
+a note. A new id breaks each reader of the document, and the sum of `failed`, `probeFailed`, and
+`warned` is the old value. [Release 0.34.0](#release-0340-changes-that-need-action) gives the
+action.
+
+After 0.33.0, `strata-preflight/1` has four new fields: `sections[].probeFailed`,
+`sections[].warned`, `summary.counted`, and `checks[].failedRequest`. The id stays, and a
+reader that ignores unknown fields reads them.
+
+After 0.33.0, an entry of `pinnedBy[]` of `strata-behind/1` can have the new field `owner`. A
+record of more than one profile, such as a cluster, gives it. It is the title of the record with
+only the profile that holds the entry. The id stays, and `subject` keeps the title of the record.
+`--since` reads a report of 0.33.0 and before.
+
+After 0.33.0, each entry of `records[]` of `strata-set/1` has the new field
+`secretLikeVariables`. An entry has it only when its record holds a variable in
+clear whose name reads as a secret. The id stays, and a reader that ignores
+unknown fields reads it. The exit does not change: see
+[What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -966,6 +1007,21 @@ After 0.32.2, each command that reads Palette takes `--project <uid>` and `--pro
 with three refs or more, it gives the error `usage` and exit `2`, before any request. See
 [Environments in the projects of one tenant](../use-cases/projects.md).
 
+After 0.33.0, `list` takes the singular of each kind: `profile`, `cluster`, `project`, and
+`filter`. Each one sends the requests and prints the output of its plural, so it only adds.
+Before, strata refused it with a usage error of the command line and exit `2`, before any
+request. See [What to expect](../commands/list.md#what-to-expect).
+
+After 0.33.0, `behind --behind-only` is new, and it only adds. The terminal report and the
+markdown omit each pin and each profile version that is current. The first line, the exit, and
+the JSON do not change. See
+[Only the rows that are behind](../commands/behind.md#only-the-rows-that-are-behind).
+
+After 0.33.0, `snapshot` of a cluster or of a set can write a new note on standard error. It
+names each variable in clear whose name reads as a secret, and never gives its value. `-q`
+hides it, and the exit and the root do not change. `snapshot --help` says it after the options.
+See [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
@@ -1064,6 +1120,130 @@ field, a value, an input, or an option is in the sections above.
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
     `counts.profiles`.
+- **A pack whose only difference is a pack uid that Palette mints has no impact.**
+  `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
+  `impact` is `none` with no text, and `compare` prints no `impact:` line under
+  it. Before, it had the level of its layer, such as `in-place addon upgrade` on
+  the add-on layer. So `summary.maxImpact` of two copies of one profile with a
+  manifest pack is `none`. The exit code stays `1`. See
+  [One manifest in two profiles](../use-cases/manifest-pack.md).
+- **A report names a record of two or more profiles by their count.** The heading
+  of `compare` reads `4 profiles on cluster payments`. Before, it joined the
+  names and the versions, such as
+  `aws-stack+observability@1.1.0+1.0.0 on cluster payments`. The markdown
+  heading, the verdict of `verify`, and the progress notes use the same words.
+  So does `pinnedBy[].subject` of `strata-behind/1`. The record keeps the joined
+  `source.name` and `source.version`. See
+  [A side with many profiles](../commands/compare/clusters.md#a-side-with-many-profiles).
+- **A row of `verify --summary` names the record as the heading of `compare`
+  does.** Before, it gave `name@version` alone. A record of a cluster now reads
+  `aws-stack@1.1.1 on cluster payments`, and a record of an edge host names the
+  host. A record of two or more profiles reads `4 profiles on cluster payments`,
+  where the row joined the names and the versions. The markdown table gives the
+  same words. A script that reads the text of a row must match the new words, or
+  read `subject` of `--json`. See
+  [Check many records](../commands/verify.md#check-many-records).
+- **`compare --help` gives the exit codes, and what does not change them.** The
+  codes stay the same. See [What to expect](../commands/compare.md#what-to-expect).
+- **A preflight run with no counted check says `NOT COUNTED`, not `OK`.** See
+  [The static tier](../commands/preflight/tiers.md#the-static-tier-no-key-no-network).
+  - Only a counted check can fail a run: a preflight check of severity `fail`, or a probe with
+    `--strict`.
+  - For such a run, the last line was `OK: each counted check passed`. It is
+    `NOT COUNTED: no check counted on aws` now.
+  - A run in which no check ran gave `OK: no check ran`. It gives
+    `NOT COUNTED: no check ran on aws` now.
+  - A watch of a deleted cluster with no counted check gave
+    `OK: the cluster is gone; no counted check failed`. It gives
+    `NOT COUNTED: the cluster is gone; no check counted on aws` now.
+  - The exit code does not change: it is `0`. The markdown report starts with
+    `**NOT COUNTED: ...**`, and the HTML page shows the verdict in the color of a warning.
+  - `legend.exit` of `strata-preflight/1` has a new text for `0`. `summary.counted` gives the
+    number of counted checks that ran.
+  - A script that reads a line that starts with `OK:` must also read `NOT COUNTED:`, or read
+    `summary.exitCode`.
+- **The scorecard counts a warning and a failed probe apart.** Before, its `fail` held each
+  failure but a note, and the summary did not.
+  - `sections[].failed` counts the counted failures alone, as `summary.failed` does.
+    `sections[].probeFailed` and `sections[].warned` are new. A script that reads the old count
+    adds the three.
+  - The table of the terminal has the new columns `probe fail` and `warn`. The tables of the
+    markdown and the HTML have `probes failed` and `warnings`.
+  - The tile `failed` of the HTML page counted the failed probes too. It counts the counted
+    failures, and the tile `probes failed` is new. The summary of the markdown names the
+    warnings.
+- **The readiness names the tiers that ran.** The number depends on `--tier`, so each form of the
+  report writes the tiers beside it.
+  - The summary line was `readiness 59%: 19 of 32 checks passed`. It is
+    `readiness 59% (tiers static, palette, cloud): 19 of 32 checks passed` now.
+  - The markdown was `readiness **20%** (4 of 20 checks passed).` It is
+    `readiness **20%** (tiers static, offline): 4 of 20 checks passed.` now.
+  - The verdict under `--ready` is `NOT READY: readiness 50% (tiers static) is under 80%`. The
+    tile of the HTML page is `readiness (tiers static)`.
+- **A request to Palette that failed shows once, with the checks that it stopped.** See
+  [The key of the live tier](../commands/preflight/tiers.md#the-key-of-the-live-tier).
+  - The row of each check that a request stopped shows
+    `stopped by a request that failed: <request>`. It shows no message, no `ran:` line, and no
+    reproduce line.
+  - The new block `Requests that failed` shows the error, `stopped <count> checks: <ids>`, and
+    the reproduce lines that the checks share. The markdown has the section
+    `### Requests that failed`, and the HTML page has it before the results.
+  - `checks[].messages` of the JSON keep the error of each check, and `checks[].failedRequest`
+    names the request.
+- **A request that Palette refused with HTTP 401 or 403 goes one time.** The next check that
+  sends it gets the same error. Before, each check asked again.
+- **`position-zero` says when each effect applies, and what a person can do.** It gives up to six
+  messages. They name the fault, each effect, and the way forward. Before, it gave one message.
+  The message of the way forward also says that a new version of the infrastructure profile goes
+  to the end of the stored order.
+- **The first line of `behind` counts each pin one time.** The counts after the colon add up to
+  the pins. They are `behind`, `current`, and `not checked`, and a count in parentheses gives the
+  pins with a floating tag. An example is
+  `4 pins (1 with a floating tag) from 1 record: 3 behind, 1 current`. Before, the line was
+  `4 pins from 1 record: 3 behind, 1 floating`. The floating pin was one of the 3, and the line
+  did not count the current pin: see
+  [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
+  - A pin whose comparison failed counts as `not checked` alone. Before, the line also counted it
+    as behind.
+  - The profile versions count `current` and `gone` too, as in
+    `2 profile versions: 1 behind, 1 current`.
+  - The heading of the markdown changes in the same way. A script that reads the line must read
+    the new form. `summary` of the JSON does not change.
+- **The line `pinned by` of a cluster with many profiles names the profile of the pack.** An
+  example is `aws-stack@1.0.0 on cluster payments`. Before, the line gave the title of the record,
+  with each profile. The line of a profile version names that version. The cell of the markdown
+  changes in the same way. `subject` of the JSON keeps the title of the record, and `owner` is
+  new. See [A cluster with many profiles](../commands/behind.md#a-cluster-with-many-profiles).
+- **A pin that is behind a newer minor version can have the line `next patch`.** It names the
+  newest patch of its minor version. It also gives the command `strata compare` of the two pack
+  versions. The markdown adds the line to the cell of the status. A script that reads the lines
+  under a pin must skip it. The JSON does not change.
+- **`<name>@latest` and `appprofile:<name>@latest` write the version that they take.** Five
+  commands write a note on standard error, such as `strata: @latest is barney@1.0.0`. They are
+  `snapshot`, `compare`, `same-release`, `candidate`, and `consumers`, also with
+  `@latest@draft`. An app profile gets its ref, such as `@latest is appprofile:shop@1.0.0`. When
+  `@latest` skips a pre-release above that version, the note names the highest one:
+  `; it skips 1.0.1-mr2.770685, a pre-release by SemVer`. A script that reads the whole
+  standard error must accept the note, or pass `-q`. See
+  [Record the newest version](../commands/snapshot/profile-version.md#record-the-newest-version).
+- **The note of `pack:<name>@latest` names the skipped pre-release.** Its note
+  `recording pack` ends with `; it skips 1.22.0-rc.1, a pre-release by SemVer`. A script that
+  matches the whole note must match the new text. Standard output and the exit code of both
+  changes stay. See [Which version is the newest](../commands/packs.md#which-version-is-the-newest).
+
+### For a user of the CI drop-ins
+
+- **`pr-comment.sh` adds no label of an impact for a pack uid that Palette
+  mints.** The script reads `summary.maxImpact` of `compare`. Two copies of one
+  profile with a manifest pack have the maximum impact `none`. So a threshold of
+  `in-place` adds no label for such a pair.
+- **`verify-report.sh` names a record as the heading of `compare` does.** It
+  reads `subject`. The title of the issue of a drift reads
+  `strata verify: 4 profiles on cluster payments drifted`. The comment of its
+  close uses the same words. Before, they gave `name@version`, and joined the
+  names and the versions of many profiles. The next run gives the new title to
+  the open issue of a record that still drifts. See
+  [Drift issues](../automation/drift-issues.md).
 
 ### For a user of the library of strata
 
@@ -1075,6 +1255,24 @@ field, a value, an input, or an option is in the sections above.
   the error of that request. `ops::list` reads it with `packs` or `pack`.
 - `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
   writes that file.
+- `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
+  pattern with no `..` must name it.
+- `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
+  the report of 0.33.0. The JSON renderer does not read it.
+- `ops::PinnedBy` has the new field `owner: Option<String>`. A struct literal must set it.
+- `ops::SetRecord` has the new field `secret_like_variables`. A struct literal must set it, and
+  a pattern with no `..` must name it.
+
+### For a user of the library of strata-preflight
+
+- `report::CheckResult` has the new field `failed_request: Option<probe::Call>`. A literal must
+  set it. `report::assemble` sets it from `probe::Ran::failed_request`.
+- `report::SectionScore` has the new fields `probe_failed: u32` and `warned: u32`. A literal must
+  set them. `failed` counts the counted failures alone.
+- `report::Summary` has the new field `counted: u32`. A literal must set it.
+  `Summary::not_counted` is true when the verdict is `NOT COUNTED`.
+- `probe::LiveBackend` keeps a 401 and a 403 for the run, and gives the same error to each check
+  that sends the request.
 
 ## Release 0.33.0: changes that need action
 

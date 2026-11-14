@@ -31,7 +31,9 @@ A cluster in the state `Error` ends the watch too. This run has no `--limit`:
 ```
 
 A failed rule or an error keeps its own words, also for a deleted cluster. A cluster that is not
-gone gives `OK: each counted check passed`.
+gone gives `OK: each counted check passed` when a counted rule ran. The watch rules of these
+outputs are probes, so no counted rule ran, and the last line starts with `NOT COUNTED`. See
+[The static tier](tiers.md#the-static-tier-no-key-no-network).
 
 With `--out` and `--world`, `world.json` holds the last reading: the conditions
 and the events the rules saw. A build that cannot finish stops in minutes, not

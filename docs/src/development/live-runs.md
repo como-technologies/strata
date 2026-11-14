@@ -442,14 +442,29 @@ place.
 
 ## order.sh
 
-Read-write. It needs the example at its baseline with cluster A. It sends a
-`PUT` of two published versions with their packs in the other order. It also
-sends a `PUT` of the cluster's profiles in the other order. It reads what
-Palette stores, what it audits, and what `verify` says.
+Read-write. Each stage needs the example at its baseline with cluster A. Stages
+1 to 3 send a `PUT` of two published versions with their packs in the other
+order. They also send a `PUT` of the cluster's profiles in the other order. They
+read what Palette stores, what it audits, and what `verify` says.
 
-It leaves the two versions edited, so
-`live-down` follows it. A second run reverses them again, and passes the same
+They leave the two versions edited, so
+`live-down` follows them. A second run reverses them again, and passes the same
 way.
+
+Stage 4 runs only when you give its number: `just live-order-append`. It builds
+cluster B from the same definition, as the control. It makes the release
+version 1.0.2, with a new uid and the content of 1.0.0. It adds an add-on
+profile of one ConfigMap to cluster A, with a `PUT` that gives that profile
+first. Then it sends the `PATCH` of an upgrade of cluster A to 1.0.2, in the
+form of the provider: one entry with `replaceWithProfile`.
+
+After each step, stage 4 reads `spec.clusterProfileTemplates` of each cluster,
+and `spec.clusterProfileTemplate` of the summary of each cluster. Then it
+returns cluster A to its baseline profiles, deletes the added profile, and
+removes cluster B and 1.0.2. The release profile of cluster A then stays last
+in the stored order. When it stops early, run `just live-down`. The checks
+state what each read must show, from [The order of the profiles of a
+cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -460,6 +475,16 @@ way.
 | `release-verify`, `release-verify-says` | 1, 0 | #66: the record from before reports `DRIFT`, and the report says `pack order changed` |
 | `reorder-cluster`, `cluster-order-kept`, `cluster-audited` | 0 | #66: Palette accepts a `PUT` of the cluster's profiles in the other order. The document keeps the stored order. The audit log still has an update of the cluster |
 | `cluster-verify` | 0 | #66: the cluster record verifies: strata orders the profiles itself, so a stored order is never a change |
+| `append-release` | 0 | #844: the release version 1.0.0. Version 1.0.2 pins the OS pack under the tag of 1.0.0, so it has the content of 1.0.0 |
+| `order-a-<step>`, `summary-a-<step>`, `order-b-<step>`, `summary-b-<step>` | 0 | #844: the document and the summary of cluster A and of cluster B. The step is `before`, `added` after the add, or `upgraded` after the upgrade |
+| `append-profile`, `append-add` | 0 | #844: an add-on profile of one ConfigMap, and the `PUT` of the profiles of cluster A that gives it first. Palette takes the `PUT`. No result yet: the check is new, and no live window ran it |
+| `added-last` | 0 | #844: the stored order of cluster A is the order from before, with the new profile last. No result yet: the check is new, and no live window ran it |
+| `append-upgrade` | 0 | #844: Palette takes the `PATCH` of the upgrade of cluster A from 1.0.0 to 1.0.2. No result yet: the check is new, and no live window ran it |
+| `upgraded-last` | 0 | #844: the stored order drops 1.0.0, keeps the other profiles in their order, and puts 1.0.2 last. So an add-on profile is at position 0. No result yet: the check is new, and no live window ran it |
+| `summary-first` | 0 | #844: in each read of each cluster, `spec.clusterProfileTemplate` of the summary is the profile at position 0 of the document. No result yet: the check is new, and no live window ran it |
+| `summary-addon` | 0 | #844: after the upgrade, `spec.clusterProfileTemplate` of the summary of cluster A has the type `add-on`. No result yet: the check is new, and no live window ran it |
+| `control-kept` | 0 | #844: cluster B, with no change, gives the order and the `spec.clusterProfileTemplate` of its first read in each read. No result yet: the check is new, and no live window ran it |
+| `append-back`, `append-detach`, `append-delete`, `append-baseline` | 0 | #844: cluster A gets 1.0.0 again and loses the added profile, and the profile is deleted. The example is at its baseline: no cluster B and no 1.0.2 |
 
 ## who.sh
 
@@ -1189,6 +1214,10 @@ API, and removes it. It needs the example at its baseline with cluster A.
 - Stage 7 sets both overrides on the worker pool of cluster A through the API,
   and then restores the pool. Each override is a YAML comment, so no machine
   changes. It needs no cluster B. It runs only as `tiers.sh 7`.
+- Stage 8 only reads. It needs a third key in `STRATA_LIVE_NARROW_KEY`. Its
+  user has a role in the project that does not give `cluster.get`, such as
+  Cluster Profile Viewer. It runs only as `tiers.sh 8`. With no key set, it
+  says `could not check` and exits `2`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1221,6 +1250,10 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `pool-verify`, `pool-verify-says` | 0 | #515: `verify` of the record from before exits `0` and names `shape CHANGED`. |
 | `pool-undo`, `pool-after-read`, `pool-undone` | 0 | #515: the PUT of the worker pool as before the stage. The cloud config then holds neither override. |
 | `pool-restored`, `pool-restored-says` | 0 | #515: `compare` of the record from before with cluster A exits `0` and names no change of the `shape` tier. |
+| `narrow-control` | 0 | #665: the key of the example reads the role bindings of cluster A. No result yet: no live window ran stage 8. |
+| `narrow-rbacs`, `narrow-namespaces`, `narrow-repave` | 0 | #665: the third key reads `config/rbacs`, `config/namespaces`, and `repave/status` of cluster A. `api.sh get-status` prints the status and the body of each answer, and exits `0`. No result yet: no live window ran stage 8. |
+| `narrow-rbacs-code`, `narrow-namespaces-code`, `narrow-repave-code` | ? | #665: the error code of each answer. No result yet: no live window ran stage 8. |
+| `narrow-rbacs-says`, `narrow-namespaces-says`, `narrow-repave-says` | 0 | #665: each answer is HTTP 500 with the code `OperationForbidden`, and its message names `'cluster.get'`. The code of Palette shows this answer, and the stand-in gives it. No result yet: no live window ran stage 8. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
@@ -1231,8 +1264,9 @@ of the timezone and the labels changed the `spcHash` of B.
 No run makes a cluster run another pack version than its profile declares; the
 book shows it on the stand-in.
 
-Stage 5 reads the role bindings of cluster A, and no script reads the
-namespaces of a cluster. Read-only requests to the tenant show the other facts
+Stage 5 reads the role bindings of cluster A. No script reads the namespaces
+of a cluster with a key that can read them: stage 8 reads them only with a key
+that cannot. Read-only requests to the tenant show the other facts
 in [Cluster tiers](../internals/palette/clusters.md#cluster-tiers). A deleted
 cluster of the live example gives `{"items": []}` for each route. A uid that is
 not a cluster of the project gives HTTP 404 `ResourceNotFound`. The edit of the
@@ -1420,7 +1454,7 @@ needs the example at its baseline with cluster A.
 | `ask-repave-plain`, `ask-repave-plain-says` | 1, 0 | #615: `compare cluster:<uid> <next> --repave` asks Palette about the move of the release. The cluster side is `cluster:<uid>/<release>`, and the report names no pack of the add-on. |
 | `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move. For the move of the CSI pack, Palette answers no repave. The comment holds `**Palette:** no repave`, and the note on standard error says `label repave: Palette says no repave; would remove label repave if present`. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request. It finds none in the tier of Palette, which calls the validate routes and creates nothing. |
-| `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier, `**OK: each counted check passed**`. |
+| `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier. On aws, no rule of the static tier is a preflight check, so the verdict is `**NOT COUNTED: no check counted on aws**` (#619). |
 | `preflight-job`, `preflight-job-says` | 0 | #618: `preflight.sh --offline` runs the static tier of the body, as the job of a pull request. The first line of its log is `preflight: the run is offline, so it reads nothing from Palette: --offline`. The report says `tiers static, offline`. |
 | `preflight-job-key`, `preflight-job-key-says` | 0 | #618: with the key of the lab where strata finds it, `preflight.sh` reads Palette. The log has no line that says that the run is offline, and the report says `tiers static, palette`. |
 | `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it |
@@ -1696,7 +1730,11 @@ It also sends the request of the click "Ask Palette" of the observer:
 `POST /v1/clusterprofiles/{uid}/validate/packs` for the add-on version. That route
 changes nothing.
 
-The script then runs `verify --who`, a record of cluster A, and `behind` with both keys. It needs the example at its baseline with cluster A,
+The script then runs `verify --who`, a record of cluster A, and `behind` with both keys.
+Stage 3 runs the rules of the validate route of the create on cluster A with both keys:
+`palette-validate`, `worker-cpu-floor`, and `pack-dependency`. That route needs `cluster.create`:
+see [The permission of the route](../internals/palette/validate-routes.md#the-permission-of-the-route).
+It needs the example at its baseline with cluster A,
 `OBSERVER_ROLE_KEY`, and `OBSERVER_ROLE`, the name of the role. With no key, it says
 `could not check` and exits `2`.
 
@@ -1718,6 +1756,8 @@ needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 | `validate-body` | 0 | #647: the body of the validate request, made from the record of the add-on version |
 | `control-validate-packs` | 0 | #647: the key of the example sends the validate request, and Palette answers 2xx |
 | `role-validate-packs` | ? | #647: the status and the error code of the same request with the key of the role under test. The click of the observer sends this request. The check records the answer and does not judge it. With Project Viewer, the request answered HTTP 200 |
+| `preflight-control-validate` | 0 | #619: with the key of the example, the rules of the validate route of the create give no `error` on cluster A. No result yet: the check is new, and no live window ran it |
+| `preflight-role-validate` | ? | #619: the verdict and the first message of the same rules with the key of the role under test. With Project Viewer, each rule must give `error`, with HTTP 403, the code `AccessDenied`, and a message that names `cluster.create`. No result yet: the check is new, and no live window ran it |
 
 ## observer-chart.sh
 
@@ -2371,8 +2411,8 @@ create itself breaks it. The two new rules find the risk before the create. See
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`,
   `cluster.sh`, and `tag-only.sh` have run under OpenTofu, with the same
   provider that Terraform used, and give the same answers. `drift-report.sh` has
-  run under Terraform only. `order.sh` reads the OpenTofu outputs and applies
-  nothing.
+  run under Terraform only. Stages 1 to 3 of `order.sh` read the OpenTofu
+  outputs and apply nothing. No live window ran stage 4.
 - On GCP, the scripts in [A second cloud: GCP](#a-second-cloud-gcp) have run.
   `drift-report.sh`, `merge-gate.sh`, `pack-states.sh`, `registry.sh`,
   `template.sh`, `cluster.sh`, `order.sh`, `who.sh`, `macros.sh`, and

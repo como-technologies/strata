@@ -1,4 +1,4 @@
 $ strata preflight cluster:64f1000000000000000000e1 --watch --quiet | tail -n 3
-7 rules apply; 7 ran: 7 passed, 0 failed, no probes failed, no warnings, no notes; 0 did not run, 0 not checked, 0 do not apply, no errors; readiness 100%: 7 of 7 checks passed
+7 rules apply; 7 ran: 7 passed, 0 failed, no probes failed, no warnings, no notes; 0 did not run, 0 not checked, 0 do not apply, no errors; readiness 100% (tiers watch): 7 of 7 checks passed
 No file written; --out DIR writes report.html, report.md, and report.json, and --world adds world.json and entity.json, which the reproduce lines read there ($OUT).
-OK: the cluster is gone; no counted check failed
+NOT COUNTED: the cluster is gone; no check counted on aws

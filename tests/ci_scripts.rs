@@ -814,6 +814,10 @@ const PASSES: [Passes; 4] = [
                 flags: &["--pre-release"],
                 why: "an issue opens for a final version, and a pipeline would open one for each build",
             },
+            Left {
+                flags: &["--behind-only"],
+                why: "the script reads the JSON, and the JSON keeps each pin",
+            },
         ],
     },
     Passes {
@@ -2255,7 +2259,8 @@ fn pr_comment_preflight_posts_and_updates_one_marked_note_on_gitlab() {
 
 /// A `curl` for the release API of a code host: the release document, and each asset by its id.
 /// The page of the release gives each asset by its name. The log has each address, with the header
-/// `Authorization` when the request has one.
+/// `Authorization` when the request has one. With no `-o`, the file takes the last segment of
+/// the address, as `-O` does.
 const FAKE_RELEASE_CURL: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 out=""; url=""; auth=""
@@ -2267,6 +2272,7 @@ while [ $# -gt 0 ]; do
     *) url=$1; shift ;;
   esac
 done
+[ -n "$out" ] || out=${url##*/}
 echo "$url$auth" >> "$FAKE_REL/curl.log"
 case "$url" in
   */releases/tags/*|*/releases/latest) cp "$FAKE_REL/release.json" "$out" ;;
@@ -2587,6 +2593,83 @@ fn install_strata_installs_nothing_when_a_file_does_not_match_the_checksums() {
     assert!(
         !d.join("here/strata").exists(),
         "the check comes before anything is installed"
+    );
+}
+
+/// The installer gives the binaries short names, and `SHA256SUMS` names them by their release
+/// names. So `--ignore-missing` in the folder of an install checks no binary, and passes on a
+/// binary that changed. The check of "Check an install" in `install.md` gives the lines of the
+/// target the short names. It fails on a changed binary and on a missing binary.
+#[test]
+fn the_check_of_an_install_in_the_book_covers_the_two_binaries_that_ignore_missing_skips() {
+    let r = release();
+    let d = r.path();
+    let home = d.join("home");
+    let dir = home.join(".local/bin");
+    let target = "x86_64-unknown-linux-musl";
+    let o = install(
+        d,
+        &[
+            "--version",
+            "v9.9.9",
+            "--dir",
+            dir.to_str().unwrap(),
+            "--target",
+            target,
+        ],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let section = page_section("docs/src/install.md", "## Check an install");
+    let check = block_with(&section, "bash", "sha256sum --check");
+    let work = d.join("work");
+    std::fs::create_dir(&work).unwrap();
+    // the block of the page, with `$v`, `$t`, and `$url` of "One file by hand"
+    let run_check = || {
+        bash_for_install(d)
+            .args(["-c", &check])
+            .current_dir(&work)
+            .env("HOME", &home)
+            .env("v", "v9.9.9")
+            .env("t", target)
+            .env("url", "https://github.com/o/r/releases/download/v9.9.9")
+            .output_locked()
+            .unwrap()
+    };
+    let (strata, preflight) = (dir.join("strata"), dir.join("strata-preflight"));
+    let o = run_check();
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        format!("{}: OK\n{}: OK\n", strata.display(), preflight.display()),
+        "the check covers each binary of the install"
+    );
+
+    std::fs::write(&strata, "#!/bin/sh\necho another build\n").unwrap();
+    let skipped = bash_for_install(d)
+        .args(["-c", "sha256sum --check --ignore-missing SHA256SUMS"])
+        .current_dir(&dir)
+        .output_locked()
+        .unwrap();
+    assert!(
+        skipped.status.success(),
+        "--ignore-missing skips the binary that changed: {}",
+        text(&skipped.stderr)
+    );
+    let o = run_check();
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains(&format!("{}: FAILED\n", strata.display())),
+        "{}",
+        text(&o.stdout)
+    );
+
+    std::fs::remove_file(&preflight).unwrap();
+    let o = run_check();
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains(&format!("{}: FAILED open or read\n", preflight.display())),
+        "a missing binary fails the check: {}",
+        text(&o.stdout)
     );
 }
 
@@ -3660,13 +3743,19 @@ impl Report {
     }
 
     /// The summary that strata prints for verify-report.sh, from (path, status, name, version)
-    /// per record.
+    /// per record. Each record is of a profile version, so its subject is `name@version`.
     fn summary(&self, exit: i32, records: &[(&str, &str, &str, &str)]) {
         let records: Vec<serde_json::Value> = records
             .iter()
             .map(|(path, status, name, version)| {
+                let subject = if name.is_empty() {
+                    String::new()
+                } else {
+                    format!("{name}@{version}")
+                };
                 let mut r = serde_json::json!({"path": path, "status": status, "name": name,
-                    "version": version, "uid": UID_A, "recordedAt": "2026-09-16T01:56:23Z"});
+                    "version": version, "subject": subject, "uid": UID_A,
+                    "recordedAt": "2026-09-16T01:56:23Z"});
                 if *status == "error" {
                     r["error"] = serde_json::json!({"kind": "api", "message": "GET /v1/clusterprofiles/64f0 failed with HTTP 404"});
                 }
@@ -3923,6 +4012,72 @@ fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_on
     let o = d.run(&["releases/a.json", "--repo", "o/r"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert_eq!(d.log("gh.log").len(), 1);
+}
+
+/// The title of an issue and the comment of its close name a record of four profiles by their
+/// count (#851). These are the words of the heading of `compare`. The script reads `subject` of
+/// the summary that strata writes, and not the joined names and versions.
+#[test]
+fn verify_report_names_a_record_of_four_profiles_by_their_count_in_the_title_and_the_close() {
+    let raw = tempfile::tempdir().unwrap();
+    make_fixtures(raw.path());
+    let api = serve_four_profiles(raw.path());
+    let record = snapshot_of_ref(&api, &cluster_ref(CLUSTER_UID, None, false), "t0").unwrap();
+    let heading = "4 profiles on cluster lab-cluster";
+    assert_eq!(record.source.title(), heading);
+    let d = Report::verify();
+    // the summary that strata writes for the record, and the path of the record in it
+    let summary = |s: strata::ops::VerifySummary| -> String {
+        d.put("summary.json", &serde_json::to_string(&s).unwrap());
+        d.put("summary.exit", &s.exit_code().to_string());
+        s.records[0].path.clone()
+    };
+
+    // the cluster runs two of the four profiles now, so the record drifts
+    let moved = serve_cluster(strata::api::MemoryApi::new(), raw.path(), "cluster-merged");
+    let path = summary(verify_summary(&record, &moved));
+    d.record(
+        "record",
+        1,
+        &format!("## {heading}\n\n**Result:** CHANGED\n"),
+        "",
+    );
+    d.put("issues.json", "[]");
+    let o = d.run(&["runs/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = d.log("gh.log");
+    assert!(
+        calls.iter().any(|c| c.starts_with(&format!(
+            "issue create --repo o/r --title strata verify: {heading} drifted ({path})"
+        ))),
+        "{calls:#?}"
+    );
+
+    // the cluster runs the four profiles again, so the record verifies and its issue closes
+    let path = summary(verify_summary(&record, &api));
+    d.put(
+        "issues.json",
+        &serde_json::json!([{"number": 7, "title": "t",
+            "body": format!("<!-- strata-verify: {path} -->\nold")}])
+        .to_string(),
+    );
+    let o = d.run(&["runs/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = d.log("gh.log");
+    assert!(
+        calls[1].starts_with("issue close 7 --repo o/r --comment"),
+        "{calls:#?}"
+    );
+    let comment = d.handed("comment", 2);
+    assert!(
+        comment.contains(&format!(
+            "`{path}` verifies again: {heading} is unchanged since t0"
+        )),
+        "{comment}"
+    );
+    for out in [calls.join("\n"), comment] {
+        assert!(!out.contains("lab-profile+lab-addons"), "{out}");
+    }
 }
 
 #[test]
@@ -4681,7 +4836,7 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
         // the cell is the bump line of `behind --format markdown` without its "bump to", and then
         // the same lines under it
         let behind: strata::ops::BehindReport = serde_json::from_value(report).unwrap();
-        let md = common::markdown().render_behind(&behind).unwrap();
+        let md = common::markdown().render_behind(&behind, false).unwrap();
         let row = md
             .lines()
             .find(|l| l.starts_with("| `csi-aws-ebs`"))

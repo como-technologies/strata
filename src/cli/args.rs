@@ -39,6 +39,20 @@ impl Cli {
     }
 }
 
+/// The exit codes of `strata compare`, after its options. Two clusters on one release can have
+/// other values, tiers, and labels, so a difference there does not fail a compare.
+const COMPARE_EXIT_CODES: &str = "\
+Exit codes:
+  0  The roots are equal, and no macro value or imageId differs
+  1  The roots differ, or a macro value or an imageId differs. SAME CONTENT also exits 1
+  2  Strata could not answer
+The cluster values, the cluster tiers, the labels, an INVALID pack, and the answers of --repave and --validate do not change the exit code.";
+
+/// The values that a cluster record holds in clear, after the options of `strata snapshot`.
+/// Palette gives the value of each variable that nobody marked sensitive.
+const SNAPSHOT_CLEAR_VALUES: &str = "\
+A cluster record holds the value of each variable that nobody marked sensitive, in clear. A note names each such variable whose name reads as a secret, and never gives its value. The note changes no exit.";
+
 #[derive(Subcommand)]
 // In alphabetical order, which is the order `strata --help` lists them in.
 pub(crate) enum Cmd {
@@ -48,6 +62,7 @@ pub(crate) enum Cmd {
     Candidate(CandidateArgs),
     /// Compare two profile versions, records, clusters, edge hosts, cluster groups, app profiles,
     /// or pack versions
+    #[command(after_help = COMPARE_EXIT_CODES)]
     Compare(CompareArgs),
     /// List the clusters, edge hosts, cluster templates, and app deployments that use a profile
     /// version
@@ -70,6 +85,7 @@ pub(crate) enum Cmd {
     },
     /// Record a profile version, a cluster, an edge host, a cluster group, an app profile, or a
     /// pack version in a snapshot file, or each cluster of a tag: or filter: set in a directory
+    #[command(after_help = SNAPSHOT_CLEAR_VALUES)]
     Snapshot(SnapshotArgs),
     /// Make sure that each record agrees with Palette now
     Verify(VerifyArgs),
@@ -446,6 +462,10 @@ pub(crate) struct BehindArgs {
     /// Name a pre-release as a newer version of a pin or a profile version that is not a pre-release
     #[arg(long)]
     pub(crate) pre_release: bool,
+    /// Show only the pins and the profile versions that are behind, or that strata could not
+    /// check. The JSON keeps each one
+    #[arg(long)]
+    pub(crate) behind_only: bool,
     #[command(flatten)]
     pub(crate) project: ProjectArgs,
     #[command(flatten)]

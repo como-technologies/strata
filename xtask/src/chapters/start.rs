@@ -35,6 +35,12 @@ fn help(r: &mut Runner) {
             &format!("strata {c} --help"),
         );
     }
+    // the page of compare states its exit codes from the help, so the two cannot differ (#624)
+    r.excerpt(
+        "help-compare-exit",
+        "help-compare",
+        r"^(Exit codes:|  [0-9]  |.* do not change the exit code)",
+    );
 }
 
 /// The chapter `quickstart`: the first compare, snapshot, and verify of a new reader.

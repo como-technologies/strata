@@ -2,8 +2,12 @@
 //! that a record holds. The document of a version gives the published versions of its profile in
 //! `spec.versions[]`, in no order, and strata orders them. With the impact, `behind` also compares
 //! each profile version that is behind with the newest version (#708). For a pin that is behind,
-//! it names the newer profile version that carries a newer version of the pack (#709).
+//! it names the newer profile version that carries a newer version of the pack (#709). On a cluster
+//! with many profiles, each row names the profile that holds its pack, the counts of the heading
+//! add up, `--behind-only` omits the rows that are current, and a pin names the newest patch of
+//! its own minor version (#622).
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
@@ -12,7 +16,8 @@ use strata::closed_set::ClosedSet;
 use strata::diff::{ChangeFlag, Status};
 use strata::model::scope::ProfileScope;
 use strata::ops;
-use strata::snapshot::{AppliedProfile, ClusterSource, Snapshot};
+use strata::render::RowState;
+use strata::snapshot::{AppliedProfile, ClusterSource, ClusterTier, Snapshot, Tier};
 
 use crate::common::{
     self, PROFILE_LISTING, PUBLIC_REGISTRY, PackFixture, REGISTRY_LISTING, WITH_IMPACT, behind_of,
@@ -117,7 +122,7 @@ fn behind_names_the_newer_published_version_of_a_profile_and_a_pre_release_only_
     // no pack
     assert!(r.pins.is_empty());
     assert_eq!(r.exit_code(), 1);
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.starts_with("no pins from 1 record: 0 behind; 1 profile version: 1 behind\n"),
         "{text}"
@@ -276,9 +281,10 @@ fn behind_on_a_record_of_a_cluster_names_the_newer_versions_of_each_profile_that
             ("barney-base", "2.0.0", vec!["2.1.0"]),
         ]
     );
+    // the record covers two profiles, so its title gives their count (#624)
     for p in &r.profiles {
         let subjects: Vec<&str> = p.pinned_by.iter().map(|b| b.subject.as_str()).collect();
-        assert_eq!(subjects, ["barney-addons@1.3.1 on cluster payments"]);
+        assert_eq!(subjects, ["2 profiles on cluster payments"]);
     }
 
     // the record of the version and the record of the cluster hold one version: one entry, with
@@ -306,7 +312,7 @@ fn a_version_that_palette_no_longer_holds_is_gone_and_a_failed_read_is_not_check
     );
     assert!(r.profiles[0].gone && !r.profiles[0].behind && r.profiles[0].error.is_none());
     assert_eq!(r.exit_code(), 0);
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains("  [profile] barney-addons  1.3.1  -  gone\n"),
         "{text}"
@@ -318,7 +324,7 @@ fn a_version_that_palette_no_longer_holds_is_gone_and_a_failed_read_is_not_check
     assert!(r.profiles[0].error.is_some() && r.profiles[0].newer.is_empty());
     assert_eq!(r.summary.profile_errors, 1);
     assert_eq!(r.exit_code(), 2);
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.starts_with(
             "no pins from 1 record: 0 behind; 1 profile version: 0 behind, 1 not checked\n"
@@ -359,7 +365,7 @@ fn the_json_and_the_markdown_of_behind_hold_the_profile_versions() {
     let back: ops::BehindReport = serde_json::from_value(doc).unwrap();
     assert_eq!(back.profiles[0].newer[0].version, "1.4.0");
 
-    let markdown = common::markdown().render_behind(&r).unwrap();
+    let markdown = common::markdown().render_behind(&r, false).unwrap();
     assert!(
         markdown.contains(&format!(
             "| profile | version | scope | status | bump | pinned by |\n|---|---|---|---|---|---|\n\
@@ -513,7 +519,7 @@ fn behind_names_what_the_move_to_the_newest_profile_version_does_as_compare_give
     let keys: Vec<&str> = bump.packs.iter().map(|p| p.key.as_str()).collect();
     assert_eq!(keys, compared);
 
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     let line = format!(
         "      bump to 1.4.0: {} IDENTITY UPSTREAM AUTHORED\n",
         bump.impact
@@ -522,7 +528,7 @@ fn behind_names_what_the_move_to_the_newest_profile_version_does_as_compare_give
         text.contains(&format!("      1.4.0 created {CREATED}\n{line}")),
         "the line comes under the time of the create: {text}"
     );
-    let markdown = common::markdown().render_behind(&r).unwrap();
+    let markdown = common::markdown().render_behind(&r, false).unwrap();
     assert!(
         markdown.contains(&format!(
             "| bump to 1.4.0: {} IDENTITY UPSTREAM AUTHORED |",
@@ -561,7 +567,7 @@ fn a_profile_version_with_no_newer_version_and_a_run_with_no_impact_show_no_move
     // the newest version is current, so it has no move, and strata compares nothing
     let r = behind_of(&api, std::slice::from_ref(&newest), &WITH_IMPACT);
     assert!(!r.profiles[0].behind && r.profiles[0].bump.is_none());
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(!text.contains("bump to"), "{text}");
 
     // --no-impact names the newer version, and compares nothing
@@ -571,7 +577,7 @@ fn a_profile_version_with_no_newer_version_and_a_run_with_no_impact_show_no_move
         &ops::BehindOptions::default(),
     );
     assert!(r.profiles[0].behind && r.profiles[0].bump.is_none());
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(!text.contains("bump to"), "{text}");
     assert_eq!((manifests(HELD), manifests(NEWEST)), before);
 }
@@ -589,7 +595,7 @@ fn a_move_that_strata_cannot_compare_makes_the_profile_version_not_checked() {
         "{held:?}"
     );
     assert_eq!(r.exit_code(), 2);
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains("~ [profile] barney-addons  1.3.1  project  not checked\n"),
         "{text}"
@@ -702,14 +708,14 @@ fn behind_names_the_newer_profile_version_that_carries_the_newer_pack() {
     // the carrier is a fact beside the pin: the pin and the version stay behind, with exit 1
     assert_eq!(r.exit_code(), 1);
 
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(
             "      barney-addons@1.4.0 carries fred-compositions@0.2.0\n      pinned by "
         ),
         "the line comes before the records that pin the pack: {text}"
     );
-    let markdown = common::markdown().render_behind(&r).unwrap();
+    let markdown = common::markdown().render_behind(&r, false).unwrap();
     assert!(
         markdown.contains("; barney-addons@1.4.0 carries fred-compositions@0.2.0 |"),
         "{markdown}"
@@ -745,7 +751,7 @@ fn behind_says_that_no_newer_profile_version_carries_a_newer_pack() {
         "{:?}",
         pin.carriers
     );
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(
             "      no newer version of barney-addons@1.3.1 carries a newer fred-compositions\n"
@@ -773,7 +779,7 @@ fn a_newer_profile_version_that_pins_a_version_between_the_pin_and_the_newest_is
         (carrier.version.as_str(), carrier.pack_version.as_str()),
         ("1.4.0", "0.1.5")
     );
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains("      barney-addons@1.4.0 carries fred-compositions@0.1.5\n"),
         "{text}"
@@ -850,11 +856,353 @@ fn a_newer_profile_version_that_strata_cannot_read_gives_its_error_and_keeps_the
     let held = &fred_pin(&r).carriers[0];
     assert!(held.carrier.is_none() && held.error.is_some(), "{held:?}");
     assert_eq!(r.exit_code(), 1);
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(
             "      strata could not read which newer version of barney-addons@1.3.1 carries a newer fred-compositions ("
         ),
         "{text}"
     );
+}
+
+// ---- the rows of a cluster with many profiles (#622) ----------------------------------------------
+
+/// The uid of `barney-base@2.0.0`, the other profile of the cluster of the owner tests.
+const BASE: &str = "64f0000000000000000000e0";
+
+/// The record of the cluster `payments`, which runs `barney-base@2.0.0` and the version of
+/// `record`. Its title names the two profiles, as a record of a cluster does. With `running`, the
+/// record holds the tier `running`, which names the profile of each pack.
+fn two_profile_cluster(record: &Path, running: bool, dir: &Path) -> PathBuf {
+    let profiles = [
+        (BASE, "barney-base", "2.0.0"),
+        (HELD, "barney-addons", "1.3.1"),
+    ];
+    let path = cluster_record(record, &profiles, dir);
+    let mut snap = Snapshot::load(&path).unwrap();
+    snap.source.name = "barney-base+barney-addons".to_string();
+    snap.source.version = "2.0.0+1.3.1".to_string();
+    if running {
+        let fields = json!([
+            {"name": "namespaces", "version": "1.0.0", "profileUid": BASE},
+            {"name": "fred-compositions", "version": "0.1.0", "profileUid": HELD},
+        ]);
+        let tier = ClusterTier {
+            hash: String::new(),
+            fields,
+            errors: BTreeMap::new(),
+        };
+        let cluster = snap.source.cluster.as_mut().unwrap();
+        cluster.tiers.insert(Tier::Running.into(), tier);
+    }
+    common::write_snapshot(&path, &snap, false);
+    path
+}
+
+/// The titles that the records of `by` show: [`ops::PinnedBy::owner`], else the subject.
+fn titles(by: &[ops::PinnedBy]) -> Vec<&str> {
+    by.iter()
+        .map(|b| b.owner.as_deref().unwrap_or(&b.subject))
+        .collect()
+}
+
+#[test]
+fn each_row_of_a_cluster_with_many_profiles_names_the_profile_that_holds_the_pack() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_versions(
+        serve_chain("0.1.0", "0.2.0"),
+        "barney-base",
+        &[(BASE, "2.0.0")],
+    );
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let cluster = two_profile_cluster(&record, true, dir.path());
+    let r = behind_of(
+        &api,
+        std::slice::from_ref(&cluster),
+        &ops::BehindOptions::default(),
+    );
+    let by = &fred_pin(&r).pinned_by[0];
+    assert_eq!(by.subject, "2 profiles on cluster payments");
+    assert_eq!(
+        by.owner.as_deref(),
+        Some("barney-addons@1.3.1 on cluster payments"),
+        "the tier running names the profile of the pack"
+    );
+    // each profile version that the cluster runs names itself
+    let rows: Vec<(&str, Vec<&str>)> = r
+        .profiles
+        .iter()
+        .map(|p| (p.name.as_str(), titles(&p.pinned_by)))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                "barney-addons",
+                vec!["barney-addons@1.3.1 on cluster payments"]
+            ),
+            ("barney-base", vec!["barney-base@2.0.0 on cluster payments"]),
+        ]
+    );
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    let path = cluster.display();
+    assert!(
+        text.contains(&format!(
+            "      pinned by {path} (barney-addons@1.3.1 on cluster payments)\n"
+        )) && text.contains(&format!(
+            "      pinned by {path} (barney-base@2.0.0 on cluster payments)\n"
+        )),
+        "{text}"
+    );
+    assert!(!text.contains("2 profiles on cluster"), "{text}");
+    let markdown = common::markdown().render_behind(&r, false).unwrap();
+    assert!(
+        markdown.contains(&format!(
+            "| `{path}` (barney-addons@1.3.1 on cluster payments) |\n"
+        )),
+        "{markdown}"
+    );
+    // the JSON keeps the title of the record for a script, and adds the owner
+    let doc = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        doc["pins"][0]["pinnedBy"],
+        json!([{"path": path.to_string(),
+            "subject": "2 profiles on cluster payments",
+            "owner": "barney-addons@1.3.1 on cluster payments"}])
+    );
+    let back: ops::BehindReport = serde_json::from_value(doc).unwrap();
+    assert_eq!(back.pins[0].pinned_by[0].owner, by.owner);
+
+    // a record with no tier running does not say which profile holds the pack: the line keeps
+    // the title of the record. The profile versions still name themselves
+    let cluster = two_profile_cluster(&record, false, dir.path());
+    let r = behind_of(&api, &[cluster], &ops::BehindOptions::default());
+    assert_eq!(fred_pin(&r).pinned_by[0].owner, None);
+    assert_eq!(
+        titles(&r.profiles[0].pinned_by),
+        ["barney-addons@1.3.1 on cluster payments"]
+    );
+
+    // a record of one profile names that profile in its title, and has no owner
+    let r = behind_of(&api, &[record], &ops::BehindOptions::default());
+    assert!(fred_pin(&r).pinned_by.iter().all(|b| b.owner.is_none()));
+    assert!(r.profiles[0].pinned_by.iter().all(|b| b.owner.is_none()));
+}
+
+/// A pin of `name` at `version` from the Public Repo, with the newer versions `newer`, newest
+/// first, as `strata-behind/1` holds it.
+fn pin_doc(name: &str, version: &str, newer: &[&str]) -> Value {
+    json!({"name": name, "layer": "addon", "registry": "Public Repo", "registryUid": PUBLIC_REGISTRY,
+        "version": version, "tag": version,
+        "pinnedBy": [{"path": "dev.json", "subject": "aws-stack@1.0.0"}],
+        "newer": newer.iter().map(|v| json!({"version": v})).collect::<Vec<_>>(),
+        "behind": !newer.is_empty()})
+}
+
+/// A profile version `aws-stack@<version>`, as `strata-behind/1` holds it, with the fields
+/// `fields` over it.
+fn profile_doc(version: &str, fields: Value) -> Value {
+    let mut doc = json!({"name": "aws-stack", "version": version, "uid": format!("u{version}"),
+        "pinnedBy": [{"path": "dev.json", "subject": format!("aws-stack@{version}")}],
+        "newer": [], "behind": false});
+    for (key, value) in fields.as_object().unwrap() {
+        doc[key] = value.clone();
+    }
+    doc
+}
+
+/// The report of `behind` on the record `dev.json` with `pins` and `profiles`, and the counts of
+/// its summary.
+fn report_of(pins: Vec<Value>, profiles: Vec<Value>) -> ops::BehindReport {
+    let count = |list: &[Value], field: &str| {
+        list.iter()
+            .filter(|p| p.get(field).is_some_and(|v| v != &json!(false)))
+            .count()
+    };
+    let summary = json!({"pins": pins.len(), "behind": count(&pins, "behind"),
+        "floating": count(&pins, "floating"), "errors": count(&pins, "error"), "arrived": 0,
+        "profiles": profiles.len(), "profilesBehind": count(&profiles, "behind"),
+        "profileErrors": count(&profiles, "error")});
+    serde_json::from_value(json!({"schema": ops::BEHIND_SCHEMA,
+        "tool": {"name": "strata", "version": "0.34.0"}, "generatedAt": "2026-11-13T09:30:00Z",
+        "records": ["dev.json"], "pins": pins, "profiles": profiles, "summary": summary}))
+    .unwrap()
+}
+
+/// A report with a pin and a profile version of each state. Two pins have a floating tag, and the
+/// bump of `csi-aws-ebs` failed, so that pin is behind and not checked.
+fn report_of_each_state() -> ops::BehindReport {
+    let error = json!({"kind": "api", "message": "HTTP 500: boom"});
+    let mut floating_behind = pin_doc("ubuntu-aws", "20.04", &["24.04", "22.04"]);
+    floating_behind["tag"] = json!("LTS__20.4.x");
+    floating_behind["floating"] = json!(true);
+    let mut floating_current = pin_doc("ubuntu-aws", "24.04", &[]);
+    floating_current["tag"] = json!("LTS__24.x");
+    floating_current["floating"] = json!(true);
+    let mut failed_bump = pin_doc("csi-aws-ebs", "1.63.1", &["1.65.0"]);
+    failed_bump["error"] = error.clone();
+    let mut failed_read = pin_doc("loki", "2.10.2", &[]);
+    failed_read["error"] = error.clone();
+    let pins = vec![
+        pin_doc("cert-manager", "1.21.1", &[]),
+        pin_doc("kubernetes", "1.36.2", &["1.37.0", "1.36.4", "1.36.3"]),
+        floating_behind,
+        floating_current,
+        failed_bump,
+        failed_read,
+    ];
+    let profiles = vec![
+        profile_doc(
+            "1.0.0",
+            json!({"newer": [{"version": "1.1.0", "uid": "u1.1.0"}], "behind": true}),
+        ),
+        profile_doc("1.1.0", json!({})),
+        profile_doc("0.9.0", json!({"gone": true})),
+        profile_doc("0.8.0", json!({"error": error})),
+    ];
+    report_of(pins, profiles)
+}
+
+#[test]
+fn the_counts_of_the_heading_of_behind_add_up_to_the_pins_and_to_the_profile_versions() {
+    let r = report_of_each_state();
+    let states: Vec<RowState> = r.pins.iter().map(RowState::of_pin).collect();
+    assert_eq!(
+        states,
+        [
+            RowState::Current,
+            RowState::Behind,
+            RowState::Behind,
+            RowState::Current,
+            RowState::NotChecked,
+            RowState::NotChecked,
+        ]
+    );
+    let heading = "6 pins (2 with a floating tag) from 1 record: 2 behind, 2 current, 2 not \
+                   checked; 4 profile versions: 1 behind, 1 current, 1 gone, 1 not checked\n";
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    assert!(text.starts_with(heading), "{text}");
+    let markdown = common::markdown().render_behind(&r, false).unwrap();
+    assert!(
+        markdown.starts_with(&format!("### behind: {heading}")),
+        "{markdown}"
+    );
+    // each state has its word in the status of the row
+    for state in RowState::ALL {
+        assert_eq!(RowState::from_text(state.as_str()), Some(*state));
+    }
+    assert!(
+        text.contains("  [addon] loki          2.10.2  Public Repo  not checked\n"),
+        "{text}"
+    );
+}
+
+#[test]
+fn behind_only_omits_the_rows_that_are_current_and_keeps_the_heading_and_the_json() {
+    let r = report_of_each_state();
+    let all = common::terminal().render_behind(&r, false).unwrap();
+    let text = common::terminal().render_behind(&r, true).unwrap();
+    let first = |t: &str| t.lines().next().unwrap_or_default().to_string();
+    assert_eq!(first(&text), first(&all), "the heading counts each row");
+    let rows: Vec<&str> = text
+        .lines()
+        .filter(|l| l.contains(" [") && !l.starts_with("      "))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            "~ [addon] kubernetes   1.36.2  Public Repo  behind: 1.37.0, 1.36.4, 1.36.3",
+            "~ [addon] ubuntu-aws   20.04   Public Repo  behind: 24.04, 22.04 (floating tag LTS__20.4.x)",
+            "~ [addon] csi-aws-ebs  1.63.1  Public Repo  not checked",
+            "  [addon] loki         2.10.2  Public Repo  not checked",
+            "~ [profile] aws-stack  1.0.0  -  behind: 1.1.0",
+            "  [profile] aws-stack  0.9.0  -  gone",
+            "  [profile] aws-stack  0.8.0  -  not checked",
+        ],
+        "{text}"
+    );
+    let markdown = common::markdown().render_behind(&r, true).unwrap();
+    assert!(
+        !markdown.contains("| `cert-manager` |") && !markdown.contains("| `1.1.0` |"),
+        "{markdown}"
+    );
+    assert!(
+        markdown.contains("| `loki` |") && markdown.contains("| `0.9.0` |"),
+        "{markdown}"
+    );
+    // the JSON holds each pin and each profile version: `--since` reads them all
+    let json = strata::render::renderer(
+        strata::render::Format::Json,
+        strata::term::color::Paint::off(),
+        false,
+    );
+    assert_eq!(
+        json.render_behind(&r, true).unwrap(),
+        json.render_behind(&r, false).unwrap()
+    );
+
+    // a report with no row that is behind shows its heading alone
+    let r = report_of(vec![pin_doc("cert-manager", "1.21.1", &[])], Vec::new());
+    assert_eq!(
+        common::terminal().render_behind(&r, true).unwrap(),
+        "1 pin from 1 record: 0 behind, 1 current\n"
+    );
+    assert_eq!(
+        common::markdown().render_behind(&r, true).unwrap(),
+        "### behind: 1 pin from 1 record: 0 behind, 1 current\n\n"
+    );
+}
+
+#[test]
+fn a_pin_behind_a_newer_minor_version_names_the_newest_patch_of_its_own_and_the_command() {
+    let mut no_name = pin_doc("cert-manager", "1.21.1", &["1.22.0", "1.21.3"]);
+    no_name["registry"] = json!("");
+    let pins = vec![
+        pin_doc("kubernetes", "1.36.2", &["1.37.0", "1.36.4", "1.36.3"]),
+        // the newest version is of the minor version of the pin: the bump names it
+        pin_doc("kubernetes", "1.36.3", &["1.36.4"]),
+        // no newer version of the minor version of the pin
+        pin_doc("csi-aws-ebs", "1.63.1", &["1.65.0", "1.64.0"]),
+        // a version that does not parse has no minor version
+        pin_doc("ubuntu-aws", "LTS__20.4.x", &["24.04"]),
+        no_name,
+    ];
+    let r = report_of(pins, Vec::new());
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    let lines: Vec<&str> = text
+        .lines()
+        .filter(|l| l.trim_start().starts_with("next patch"))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "      next patch 1.36.4: strata compare 'pack:Public Repo/kubernetes@1.36.2' \
+             'pack:Public Repo/kubernetes@1.36.4'"
+                .to_string(),
+            // a registry with no name: the ref names its uid
+            format!(
+                "      next patch 1.21.3: strata compare pack:{PUBLIC_REGISTRY}/cert-manager@1.21.1 \
+                 pack:{PUBLIC_REGISTRY}/cert-manager@1.21.3"
+            ),
+        ],
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "behind: 1.37.0, 1.36.4, 1.36.3\n      next patch 1.36.4: strata compare 'pack:Public \
+             Repo/kubernetes@1.36.2'"
+        ),
+        "the line comes under the line of the pin: {text}"
+    );
+    let markdown = common::markdown().render_behind(&r, false).unwrap();
+    assert!(
+        markdown.contains(
+            "| behind: 1.37.0, 1.36.4, 1.36.3; next patch 1.36.4: strata compare 'pack:Public \
+             Repo/kubernetes@1.36.2' 'pack:Public Repo/kubernetes@1.36.4' |"
+        ),
+        "{markdown}"
+    );
+    // the line is a hint of the report: the JSON holds the newer versions, and no other field
+    let doc = serde_json::to_value(&r).unwrap();
+    assert!(!doc.to_string().contains("next patch"), "{doc}");
 }

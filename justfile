@@ -495,6 +495,11 @@ live-cluster: build
 live-order: build
     examples/live/order.sh
 
+# The append test (#844): the stored order of the profiles of cluster A after an add and after a new version of its infrastructure profile, with cluster B as the control. Needs live-up; builds and removes cluster B, and returns the example to its baseline.
+[group('live checks')]
+live-order-append: build
+    examples/live/order.sh 4
+
 # The audit log test: who made an edit through the API, and an update a cluster accepted (#69). Needs live-profiles; the cluster stage needs live-up; the stage of the key with no audit permission needs STRATA_LIVE_NO_AUDIT_KEY (#664). Undoes each edit.
 [group('live checks')]
 live-who: build
@@ -658,6 +663,11 @@ live-tiers-limited: build
 [group('live checks')]
 live-tiers-pool: build
     examples/live/tiers.sh 7
+
+# The narrow key test (#665): what Palette answers on three routes of cluster A to a key whose role does not give cluster.get. Needs live-up and STRATA_LIVE_NARROW_KEY; reads only.
+[group('live checks')]
+live-tiers-narrow: build
+    examples/live/tiers.sh 8
 
 # What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
 [group('live')]

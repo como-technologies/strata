@@ -249,8 +249,10 @@ profile, or pack version.
 
 A cluster record that covers two or more profiles joins their names and versions
 with `+`, for example `aws-stack+platform-addons@1.1.0+1.0.0`, and its `source.uid`
-is empty. A record of one profile keeps the name, version, and uid of that
-profile.
+is empty. A report names such a record by the count of its profiles: see
+[A side with many profiles](../commands/compare/clusters.md#a-side-with-many-profiles).
+`source.cluster.profiles` names each profile with its version. A record of one
+profile keeps the name, version, and uid of that profile.
 
 ## strata-diff/1
 
@@ -470,9 +472,14 @@ of the secret does not show, because the two sides hold the mask: see
   the exit status in words. `unverified`, only when it is not `0`: the records
   whose content is the same and that hold a pack with no upstream digest.
 - `records[]`: one entry for each file, in the order given. An entry has
-  `path`, `status`, `name`, `version`, `uid`, `projectUid`, `recordedAt`,
-  `rootRecorded`, and `rootLive`. `rootLive` is there when strata read the live
-  profile. `recordedAt` is empty when strata could not read the file.
+  `path`, `status`, `name`, `version`, `subject`, `uid`, `projectUid`,
+  `recordedAt`, `rootRecorded`, and `rootLive`. `rootLive` is there when strata
+  read the live profile. `recordedAt` and `subject` are empty when strata could
+  not read the file.
+  - `subject` names the record in the words of the heading of `compare`, such
+    as `aws-stack@1.1.1 on cluster payments`. A record of two or more profiles
+    joins their names in `name` and their versions in `version`. Its `subject`
+    gives their count, such as `4 profiles on cluster payments`.
   - A drifted record adds `maxImpact`, `packsChanged`, and the full `diff`. An
     unverified record adds the `diff`, which names the packs. With `--full`, the
     `diff` of each such record holds `unified`: see
@@ -712,7 +719,11 @@ of the secret does not show, because the two sides hold the mask: see
   - `pinnedState`: `deprecated`, `disabled`, or `deleted`, as `state` of
     `strata-packs/1`. It is `absent` when the registry no longer lists the
     pinned version, or does not serve it in this tenant.
-  - `pinnedBy[]`: `path` and `subject` of each record that pins it.
+  - `pinnedBy[]`: `path` and `subject` of each record that pins it. `subject` is the
+    title of the record. A record of more than one profile, such as a cluster, also
+    gives `owner`. It is the title with only the profile that holds the pack, as
+    `aws-stack@1.0.0 on cluster payments`. It comes from the tier `running` of the
+    record, so it is absent when that tier does not name the pack.
   - `newer[]`: the newer versions that a person can move to, newest first, by
     the order of Semantic Versioning. A pre-release is a newer version of a pin that
     is not a pre-release only with `--pre-release`. Each has:
@@ -776,7 +787,9 @@ of the secret does not show, because the two sides hold the mask: see
   - `name`, `version`, and `uid`.
   - `scope`: `project`, `tenant`, or `system`, from the document of the version.
     Absent when strata could not read the document, or the document does not give it.
-  - `pinnedBy[]`: `path` and `subject` of each record that holds it.
+  - `pinnedBy[]`: `path` and `subject` of each record that holds it. `owner` is
+    there for a record of more than one profile: the title with only this profile
+    version.
   - `newer[]`: the newer published versions of the profile, newest first, by the
     order of the pins. Palette lists the versions of the same name in the scope
     of the version. Each has `version`, `uid`, and `created` on the newest one:
@@ -802,7 +815,10 @@ of the secret does not show, because the two sides hold the mask: see
     move.
 - `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`. Also
   `profiles`, `profilesBehind`, and `profileErrors`, the counts of `profiles[]`.
-  Each of these three is absent when it is 0.
+  Each of these three is absent when it is 0. `behind` counts each pin with a newer
+  version, also a pin in `errors` whose comparison failed. The first line of the
+  report counts such a pin as `not checked` alone: see
+  [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
 
 ## strata-set/1
 
@@ -819,6 +835,10 @@ The report of `snapshot tag:<key>=<value> --dir DIR` or
   - `path`: the file of its record.
   - `root`: the root of the record that strata wrote. `error`, in place of
     `root`: why strata could not record the cluster. See [Errors](./errors.md).
+  - `secretLikeVariables`, only when the record has one: each variable that the
+    record holds in clear and whose name reads as a secret. An item gives the
+    `profile` and the `name`, and no value. See
+    [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 - `removed[]`: with `--prune`, each record file that strata removed.
 
 ## strata-report/1
@@ -886,12 +906,22 @@ what it answered.
     of older releases, and of runs with no release, that the counts omit. It is
     `0` when the run names no `--release`.
   - `countsAsFailure`: true when this entry makes the exit code `1`.
+  - `failedRequest`, for a check that gave `error` at a request: the request to
+    Palette that failed, with `method` and `path`. The messages give the error.
+    The text forms show the error of one request once, with the checks that it
+    stopped. Added in 0.34.0.
 - `sections[]`: the scorecard, one line for each section with a row for the
   engine. A line has `rows`, `seen`, `withCheck`, `preflight`, `withRuns`,
-  `weakestBound`, `ran`, `passed`, `failed`, `notRun`, `notChecked`, and
-  `readiness`.
+  `weakestBound`, `ran`, `passed`, `failed`, `probeFailed`, `warned`, `notRun`,
+  `notChecked`, and `readiness`. `failed` is the counted failures,
+  `probeFailed` the probes that failed and do not count, and `warned` the
+  warnings, as in `summary`. The counts of the sections add to the counts of
+  `summary`. Before 0.34.0, `failed` counted all three.
 - `summary`: the counts, `notRunReasons` (each reason with its count),
-  `readiness`, `exitCode`, and one line, `verdict`.
+  `readiness`, `exitCode`, and one line, `verdict`. `counted` is the number of
+  counted checks that ran: a preflight check of severity `fail`, or a probe of
+  severity `fail` with `--strict`. When it is `0`, the verdict starts with
+  `NOT COUNTED`, and not with `OK`. Added in 0.34.0.
 - `options`: `tiers`, `strict`, `offline`, `ready`, `outDir` when `--out` was given, and
   `outWorld`, true when `--world` wrote `world.json` and `entity.json` into `outDir`.
 - `legend`: what each verdict, level, tier, and exit code means.

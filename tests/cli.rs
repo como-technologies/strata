@@ -9,8 +9,9 @@ use strata::ops::{CHAIN_SCHEMA, VERIFY_SUMMARY_SCHEMA};
 use strata::snapshot::{SNAPSHOT_SCHEMA, Tier};
 
 use common::{
-    PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, isolate_palette,
-    read_json, schema, schema_values, snapshot_from_raw, strata_command, write_record,
+    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, Run, Stand, UID_A, UID_B,
+    against_closed_port, isolate_palette, listed, project_listing, read_json, schema,
+    schema_values, snapshot_from_raw, strata_command, write_record,
 };
 
 const ESC: char = '\x1b';
@@ -212,6 +213,78 @@ fn cluster_record(fx: &Fx) -> (PathBuf, serde_json::Value) {
     snapshot_from_raw(&fx.raw, "cluster-a", &path);
     let record = read_json(&path);
     (path, record)
+}
+
+#[test]
+fn snapshot_of_a_cluster_notes_a_clear_value_of_a_secret_like_name_by_name_and_keeps_exit_and_root()
+{
+    let fx = fixtures();
+    let dir = fx.raw.join("cluster-a");
+    let out = fx.raw.join("cluster.json");
+    let record = |clear: &[&str]| {
+        let args = [
+            "snapshot",
+            "--from-raw",
+            dir.to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+        ];
+        let r = run_in(&args, &[], clear);
+        assert_eq!(
+            r.code, 0,
+            "a name is only a guess, so it blocks nothing: {}",
+            r.err
+        );
+        (r.err, read_json(&out))
+    };
+    // the fixture marks grafana_password sensitive, so the record holds no value of it
+    let (err, _) = record(&["STRATA_QUIET"]);
+    assert!(!err.contains("note:"), "{err}");
+
+    let not_a_secret = "example-only-not-a-secret";
+    common::clear_cluster_variable(&dir, "grafana_password", not_a_secret);
+    let (err, clear) = record(&["STRATA_QUIET"]);
+    assert!(
+        err.contains(
+            "strata: note: variable lab-profile.grafana_password has a value in clear in this \
+             record (its name reads as a secret, which is a guess)"
+        ),
+        "{err}"
+    );
+    assert!(
+        !err.contains(not_a_secret),
+        "the note never gives the value: {err}"
+    );
+    assert!(
+        !err.contains("cluster_env"),
+        "cluster_env reads as no secret: {err}"
+    );
+    assert!(
+        clear.to_string().contains(not_a_secret),
+        "the record holds the value"
+    );
+    let (err, _) = record(&[]);
+    assert!(!err.contains("note:"), "STRATA_QUIET hides the note: {err}");
+
+    for value in ["", "{{.spectro.macro.grafana}}"] {
+        common::clear_cluster_variable(&dir, "grafana_password", value);
+        let (err, other) = record(&["STRATA_QUIET"]);
+        assert!(
+            !err.contains("note:"),
+            "{value:?} is no value in clear: {err}"
+        );
+        assert_eq!(other["root"], clear["root"], "the note changes no root");
+    }
+
+    let help = run(&["snapshot", "--help"]);
+    assert!(
+        help.out.contains(
+            "A cluster record holds the value of each variable that nobody marked sensitive, in \
+             clear. A note names each such variable whose name reads as a secret"
+        ),
+        "{}",
+        help.out
+    );
 }
 
 #[test]
@@ -1065,6 +1138,52 @@ fn list_needs_credentials_and_takes_only_known_kinds() {
         "{}",
         r.err
     );
+}
+
+/// A field test typed `strata list project`, and strata refused it before it read Palette. Each
+/// kind also takes its singular, which sends the requests and prints the output of the plural.
+#[test]
+fn list_takes_the_singular_of_each_kind_and_does_what_the_plural_does() {
+    let routes = std::collections::BTreeMap::from([
+        (
+            PROJECT_LISTING.to_string(),
+            project_listing(&[("dev", "p-dev"), ("prod", "p-prod")]),
+        ),
+        (
+            PROFILE_LISTING.to_string(),
+            serde_json::json!({"items": [listed("aws-stack", UID_A)]}),
+        ),
+        (
+            CLUSTER_LISTING.to_string(),
+            serde_json::json!({"items": []}),
+        ),
+    ]);
+    let stand = Stand::new(routes, "p-dev");
+    // the exit code, the document with no time stamp, the error, and each request
+    let list = |kind: &str| {
+        let r = stand.run(&["list", kind, "--json"]);
+        (r.code, r.document_without_time(), r.err, stand.requests())
+    };
+    for (singular, plural) in [
+        ("profile", "profiles"),
+        ("cluster", "clusters"),
+        ("project", "projects"),
+        ("filter", "filters"),
+    ] {
+        let one = list(singular);
+        let all = list(plural);
+        assert!(!all.3.is_empty(), "list {plural} reads Palette");
+        assert_eq!(one, all, "list {singular} does what list {plural} does");
+    }
+    let (code, document, err, _) = list("project");
+    assert_eq!(code, 0, "{err}");
+    let names: Vec<&str> = document["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p["name"].as_str())
+        .collect();
+    assert_eq!(names, ["dev", "prod"], "{document}");
 }
 
 #[test]
@@ -2144,6 +2263,33 @@ fn the_help_of_repave_says_what_palette_saves_at_the_request() {
     );
 }
 
+/// Two clusters on one release can print `CHANGED` for their values and exit 0. So the help
+/// states each exit code, and what does not change it (#624).
+#[test]
+fn the_help_of_compare_states_the_exit_codes_and_what_does_not_change_them() {
+    let help = run(&["compare", "--help"]);
+    assert_eq!(help.code, 0, "{}", help.err);
+    let exits = help
+        .out
+        .split_once("\nExit codes:\n")
+        .map(|(_, tail)| tail)
+        .unwrap_or_else(|| panic!("no exit codes: {}", help.out));
+    let codes: Vec<&str> = exits
+        .lines()
+        .map_while(|l| l.strip_prefix("  "))
+        .filter_map(|l| l.split_once("  ").map(|(code, _)| code))
+        .collect();
+    assert_eq!(codes, ["0", "1", "2"], "{exits}");
+    assert!(exits.contains("SAME CONTENT also exits 1"), "{exits}");
+    assert!(
+        exits.contains(
+            "The cluster values, the cluster tiers, the labels, an INVALID pack, and the answers \
+             of --repave and --validate do not change the exit code."
+        ),
+        "{exits}"
+    );
+}
+
 #[test]
 fn snapshot_of_a_set_with_no_dir_says_what_records_each_cluster_before_any_request() {
     let home = tempfile::tempdir().unwrap();
@@ -2247,4 +2393,132 @@ fn snapshot_of_a_version_whose_pack_palette_marks_invalid_warns_on_standard_erro
     );
     assert_eq!(r.code, 0, "{}", r.err);
     assert!(!r.err.contains("invalid"), "{}", r.err);
+}
+
+/// The documents of a tenant with two versions of `barney`, by route: `1.0.0`, and the
+/// pre-release `1.0.1-mr2.770685` above it. Each version has a draft, so `@draft` reads one too.
+fn barney_tenant() -> std::collections::BTreeMap<String, serde_json::Value> {
+    let versions = [(UID_A, "1.0.0"), (UID_B, "1.0.1-mr2.770685")];
+    let mut routes = std::collections::BTreeMap::new();
+    let listed: Vec<serde_json::Value> = versions
+        .iter()
+        .map(|(uid, version)| {
+            serde_json::json!({"metadata": {"name": "barney", "uid": uid},
+                "spec": {"cloudType": "aws", "version": version}})
+        })
+        .collect();
+    routes.insert(
+        PROFILE_LISTING.to_string(),
+        serde_json::json!({"items": listed}),
+    );
+    for (uid, version) in versions {
+        let published = common::template("aws", "add-on", common::packs());
+        let draft = Some(published.clone());
+        routes.insert(
+            common::profile_route(uid),
+            common::profile_document(uid, "barney", version, published, draft),
+        );
+        routes.insert(common::manifests_route(uid), common::no_manifests());
+    }
+    routes
+}
+
+/// The documents of a tenant with two versions of the app profile `shop`, by route. They are
+/// `1.0.0` at `ap1`, and the pre-release `1.0.1-rc.1` above it at `ap2`. Each version has one
+/// helm tier.
+fn shop_tenant() -> std::collections::BTreeMap<String, serde_json::Value> {
+    let versions = [("ap1", "1.0.0"), ("ap2", "1.0.1-rc.1")];
+    let mut routes = std::collections::BTreeMap::new();
+    let listed: Vec<serde_json::Value> = versions
+        .iter()
+        .map(|(uid, version)| {
+            serde_json::json!({"metadata": {"name": "shop", "uid": uid}, "spec": {"version": version}})
+        })
+        .collect();
+    routes.insert(
+        common::APP_PROFILE_LISTING.to_string(),
+        serde_json::json!({"appProfiles": listed}),
+    );
+    for (uid, version) in versions {
+        routes.insert(
+            common::app_profile_route(uid),
+            serde_json::json!({"metadata": {"name": "shop", "uid": uid},
+                "spec": {"version": version, "template": {"appTiers": [
+                    {"name": "web", "uid": "t1", "type": "helm", "version": "2.1.0"}]}}}),
+        );
+        routes.insert(
+            common::app_tiers_route(uid),
+            serde_json::json!({"spec": {"appTiers": [{"metadata": {"name": "web", "uid": "t1"},
+                "spec": {"type": "helm", "version": "2.1.0", "registryUid": "r1",
+                    "sourceAppTierUid": "s1", "values": "replicaCount: 2\n"}}]}}),
+        );
+    }
+    routes
+}
+
+/// Issue #625. A ref `<name>@latest` names the version that it takes, and the highest pre-release
+/// above that version, which it skips. The draft of the version and `consumers` print the same
+/// note. A quiet run writes no note, as for each other progress note.
+#[test]
+fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
+    let stand = Stand::new(barney_tenant(), "p-dev");
+    let strata = |args: &[&str]| stand.run_loud(args);
+    let out = "latest.json";
+    let note =
+        "strata: @latest is barney@1.0.0; it skips 1.0.1-mr2.770685, a pre-release by SemVer\n";
+    for reference in ["barney@latest", "barney@latest@draft"] {
+        let r = strata(&["snapshot", reference, "-o", out]);
+        assert_eq!(r.code, 0, "{reference}: {}", r.err);
+        assert_eq!(r.err.matches(note).count(), 1, "{reference}: {}", r.err);
+        assert!(
+            r.err
+                .contains(&format!("strata: fetching profile {UID_A}\n")),
+            "{reference}: {}",
+            r.err
+        );
+        let record = read_json(&stand.home.path().join(out));
+        assert_eq!(record["source"]["version"], "1.0.0");
+        let r = strata(&["snapshot", reference, "-o", out, "-q"]);
+        assert_eq!((r.code, r.err.as_str()), (0, ""), "{reference}");
+    }
+    let r = strata(&["consumers", "barney@latest", "--list-only"]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(r.err.matches(note).count(), 1, "{}", r.err);
+    assert!(
+        r.err.contains(&format!("consumers of profile {UID_A}")),
+        "{}",
+        r.err
+    );
+    // an exact version names its version already, so it writes no note
+    let r = strata(&["snapshot", "barney@1.0.0", "-o", out]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(!r.err.contains("@latest"), "{}", r.err);
+}
+
+/// Issue #625. `appprofile:<name>@latest` writes the note of the profile form, and names the
+/// version as its ref. So does `consumers`.
+#[test]
+fn an_app_profile_at_latest_names_its_ref_and_the_pre_release_it_skips() {
+    let stand = Stand::new(shop_tenant(), "p-dev");
+    let strata = |args: &[&str]| stand.run_loud(args);
+    let out = "shop.json";
+    let note = "strata: @latest is appprofile:shop@1.0.0; it skips 1.0.1-rc.1, a pre-release by \
+                SemVer\n";
+    let r = strata(&["snapshot", "appprofile:shop@latest", "-o", out]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(r.err.matches(note).count(), 1, "{}", r.err);
+    assert!(
+        r.err.contains("strata: fetching app profile ap1\n"),
+        "{}",
+        r.err
+    );
+    let record = read_json(&stand.home.path().join(out));
+    assert_eq!(record["source"]["version"], "1.0.0");
+    let r = strata(&["consumers", "appprofile:shop@latest"]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(r.err.matches(note).count(), 1, "{}", r.err);
+    // an exact version names its version already, so it writes no note
+    let r = strata(&["snapshot", "appprofile:shop@1.0.0", "-o", out]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(!r.err.contains("@latest"), "{}", r.err);
 }

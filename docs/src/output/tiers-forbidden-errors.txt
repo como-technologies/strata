@@ -2,6 +2,6 @@ $ jq '.source.cluster.tiers.policy | {rbacsInFields: (.fields | has("rbacs")), e
 {
   "rbacsInFields": false,
   "errors": {
-    "rbacs": "HTTP 403: {\"code\":\"AccessDenied\",\"message\":\"cluster.get operation is not permitted, required permissions cluster.get\"}"
+    "rbacs": "HTTP 500: {\"code\":\"OperationForbidden\",\"message\":\"Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' permission\"}"
   }
 }

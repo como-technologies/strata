@@ -57,6 +57,8 @@ GitHub limits the requests that have no token for each address, and the runners
 of a pipeline can share one. So give a token in a pipeline. A private fork in
 `--repo` also needs a token.
 
+To check the binaries after the install, see [Check an install](#check-an-install).
+
 ### One file by hand
 
 ```bash
@@ -136,6 +138,30 @@ v0.24.0 and before has no `--require-signature`, so with such a `strata-version`
 the job stops with `unknown option`. An organization that limits the actions of
 its repositories must allow `actions/checkout` and `sigstore/cosign-installer`.
 `preflight-comment.yml` installs no binary: it runs one script from the tag.
+
+## Check an install
+
+`install-strata.sh` gives the two binaries short names: `strata` and
+`strata-preflight`. `SHA256SUMS` names them by their release names, such as
+`strata-x86_64-unknown-linux-musl`. So `sha256sum --check --ignore-missing
+SHA256SUMS` does not find them in the directory of an install. It passes, but
+it checks no binary.
+
+This check gives the two lines of the target the short names. It has no
+`--ignore-missing`, so a missing binary fails it. `$t` and `$url` are those of
+[One file by hand](#one-file-by-hand). `$v` is the tag that the last note of
+the installer names:
+
+```bash
+dir=~/.local/bin   # the --dir of the install
+curl -fsSL -O "$url/SHA256SUMS"
+sed -nE "s|  (strata(-preflight)?)-$t\$|  $dir/\1|p" SHA256SUMS | sha256sum --check   # macOS: shasum -a 256 --check
+```
+
+The check prints one line for each binary, with `OK` at the end. A binary that
+is not the file of the release, or that is missing, gives `FAILED`, and the
+check exits `1`. To check the signature of the same `SHA256SUMS`, see [Check the
+signature](#check-the-signature).
 
 ## Install with Cargo
 

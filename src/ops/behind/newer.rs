@@ -45,6 +45,26 @@ pub(super) fn newer_versions(
         .collect()
 }
 
+impl Pin {
+    /// The newest of the newer versions of the minor version of the pin, when the newest version
+    /// is of another minor version. A pin of `1.36.2` that is behind `1.37.0` and `1.36.4` gives
+    /// `1.36.4`: a team can take that patch before the move to the newest version.
+    ///
+    /// None when the pin is current, when the newest version is of the minor version of the pin,
+    /// and when the version of the pin does not parse. [`version::line`] gives the minor version.
+    pub(crate) fn next_patch(&self) -> Option<&Newer> {
+        let minor = |v: &str| version::line(v, 2);
+        let own = minor(&self.version)?;
+        let newest = self.newer.first()?;
+        if minor(&newest.version).as_ref() == Some(&own) {
+            return None;
+        }
+        self.newer
+            .iter()
+            .find(|n| minor(&n.version).as_ref() == Some(&own))
+    }
+}
+
 /// True when `candidate` is a newer version than `pin`: it is above `pin` by [`version::compare`].
 ///
 /// A pre-release is below its version, so a pin of `1.0.1` has no newer version in `1.0.1-rc.1`.

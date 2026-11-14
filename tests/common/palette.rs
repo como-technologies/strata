@@ -28,6 +28,9 @@ pub const CLUSTER_LISTING: &str = "/v1/dashboard/spectroclusters/meta";
 /// The project listing, `GET /v1/dashboard/projects/metadata`.
 pub const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
 
+/// The app profile listing, `GET /v1/dashboard/appProfiles/metadata`.
+pub const APP_PROFILE_LISTING: &str = "/v1/dashboard/appProfiles/metadata";
+
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
 pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 
@@ -125,9 +128,19 @@ pub fn app_profile_route(uid: &str) -> String {
     format!("/v1/appProfiles/{uid}")
 }
 
+/// The tiers of the app profile `uid`, `GET /v1/appProfiles/{uid}/tiers`.
+pub fn app_tiers_route(uid: &str) -> String {
+    format!("{}/tiers", app_profile_route(uid))
+}
+
 /// The document of the edge host `uid`, `GET /v1/edgehosts/{uid}`.
 pub fn edge_host_route(uid: &str) -> String {
     format!("/v1/edgehosts/{uid}")
+}
+
+/// The profiles of the cluster `uid`, which a `PUT` or a `PATCH` changes.
+pub fn cluster_profiles_route(uid: &str) -> String {
+    format!("/v1/spectroclusters/{uid}/profiles")
 }
 
 /// The pack manifests of each profile of the cluster `uid`.
@@ -138,6 +151,21 @@ pub fn cluster_manifests_route(uid: &str) -> String {
 /// The variables of the cluster `uid`.
 pub fn cluster_variables_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}/variables")
+}
+
+/// The role bindings of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/rbacs`.
+pub fn cluster_rbacs_route(uid: &str) -> String {
+    format!("{}/config/rbacs", cluster_route(uid))
+}
+
+/// The namespaces of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/namespaces`.
+pub fn cluster_namespaces_route(uid: &str) -> String {
+    format!("{}/config/namespaces", cluster_route(uid))
+}
+
+/// The last repave of the cluster `uid`, `GET /v1/spectroclusters/{uid}/repave/status`.
+pub fn cluster_repave_route(uid: &str) -> String {
+    format!("{}/repave/status", cluster_route(uid))
 }
 
 /// The pack listing of the pack `name`, as strata asks for its first page.

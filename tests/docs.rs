@@ -2838,11 +2838,12 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "observer-role.sh",
         "who.sh",
     ] {
-        // the rows of #647, #648, and #732 wait for the next live window, so they are not in this test
+        // the rows of #647, #648, #732, and #619 wait for the next live window, so they are not in
+        // this test
         let part = section(&runs, &format!("## {script}"), Some("\n## "))
             .lines()
             .filter(|line| {
-                !["#647", "#648", "#732"]
+                !["#647", "#648", "#732", "#619"]
                     .iter()
                     .any(|item| line.contains(item))
             })
@@ -5536,14 +5537,14 @@ fn the_page_of_the_watch_gives_the_exit_code_and_the_verdict_of_a_deleted_cluste
         "The last line of the report says that the cluster is gone:",
         "{{#include ../../output/preflight-watch-gone.txt}}",
         "A failed rule or an error keeps its own words, also for a deleted cluster.",
-        "A cluster that is not gone gives `OK: each counted check passed`.",
+        "A cluster that is not gone gives `OK: each counted check passed` when a counted rule ran.",
     ] {
         assert!(page.contains(needle), "{page}");
     }
     let output = read(&docs().join("output/preflight-watch-gone.txt"));
     assert_eq!(
         output.lines().last(),
-        Some("OK: the cluster is gone; no counted check failed")
+        Some("NOT COUNTED: the cluster is gone; no check counted on aws")
     );
     let compat = one_line(&read(&docs().join("reference/compatibility.md")));
     for needle in [
@@ -6359,17 +6360,17 @@ fn each_step_that_the_wave_added_to_what_a_user_sees_has_an_output_in_the_book()
         (
             "commands/preflight/watch.md",
             "preflight-watch-error",
-            "OK: each counted check passed",
+            "NOT COUNTED: no check counted on aws",
         ),
         (
             "commands/preflight/watch.md",
             "preflight-watch-is-deleted",
-            "OK: the cluster is gone; no counted check failed",
+            "NOT COUNTED: the cluster is gone; no check counted on aws",
         ),
         (
             "commands/preflight/watch.md",
             "preflight-watch-gone",
-            "OK: the cluster is gone; no counted check failed",
+            "NOT COUNTED: the cluster is gone; no check counted on aws",
         ),
         // the gate with a strata that is older than the script
         (

@@ -1,11 +1,11 @@
 //! The chapters of the fleet, the registries, and the retire of a version.
 
-use super::DEV_ENV;
 use super::edits::{OCI_CSI, RETAIN};
 use super::ids::{
     A100, A110, A110_PROD, A111, A111_PROD, A120_RC, A130_PROD, A200_TENANT, A1111, A1118,
     AWS_STANDARD, DEV, LEDGER, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
 };
+use super::{DEV_ENV, payments_addons, payments_cluster};
 use crate::book::Runner;
 use crate::tenant::{Edit, UpgradeRefusal};
 use serde_json::json;
@@ -52,6 +52,7 @@ fn behind(r: &mut Runner) {
     r.serve_here(); // state 2: the registry publishes csi-aws-ebs 1.65.0
     r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
     r.step("behind", 1, false, "strata behind 'releases/*/dev.json'");
+    behind_rows(r);
     // a pin that is current against the copy of a registry whose sync stopped before its end
     r.quiet("strata snapshot 'pack:Palette Registry/csi-aws-ebs@1.65.0' -o csi-oci.json");
     r.step("behind-stale", 0, false, "strata behind csi-oci.json");
@@ -93,6 +94,25 @@ fn behind(r: &mut Runner) {
         "scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run",
     );
     behind_refused(r);
+}
+
+/// The steps of the chapter `behind` that show the line `next patch` and the option
+/// `--behind-only` (#622).
+fn behind_rows(r: &mut Runner) {
+    // the command of the line `next patch` gives what the move to the patch does
+    r.step(
+        "behind-next-patch",
+        1,
+        false,
+        "strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.35.6'",
+    );
+    // the rows that are behind, or that strata could not check, under the heading of all the pins
+    r.step(
+        "behind-only",
+        1,
+        false,
+        "strata behind 'releases/*/dev.json' --behind-only",
+    );
 }
 
 /// The part of the chapter `behind` where Palette refuses a move on a cluster that runs the
@@ -163,7 +183,10 @@ fn behind_profiles(r: &mut Runner) {
     r.profile(DEV, A120_RC, "1.2.0-rc.1", "aws-stack@1.1.1", &[]);
     r.profile(PROD, A130_PROD, "1.3.0", "aws-stack@1.1.1", &[]);
     r.tenant_profile(A200_TENANT, "2.0.0", "aws-stack@1.1.1", &[]);
-    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A100], &[]));
+    // payments runs the release and three add-on profiles, as the clusters of a field test do
+    // (#622)
+    payments_addons(r);
+    payments_cluster(r, A100);
     // Palette accepts the move of each pin of 1.0.0 that is behind: the run with the impact asks it
     r.tenant(|t| t.profile_upgrade_answer(DEV, A100, None));
     r.quiet("strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json");
@@ -208,6 +231,20 @@ fn behind_profiles(r: &mut Runner) {
         "behind-profile-cluster-lines",
         "behind-profile-cluster",
         r"^(\$|\d+ pins|. \[profile\])",
+    );
+    // the rows that are behind, each with the profile of the cluster that holds its pack. The
+    // JSON also keeps the title of the record
+    r.step(
+        "behind-only-cluster",
+        1,
+        false,
+        "strata behind payments.json --no-impact --behind-only",
+    );
+    r.step(
+        "behind-owner-json",
+        1,
+        false,
+        "strata behind payments.json --no-impact --json | jq -c '.pins[0].pinnedBy[0]'",
     );
     behind_carriers(r);
 }
@@ -624,6 +661,13 @@ fn palette_latest(r: &mut Runner) {
         0,
         false,
         "strata packs cert-manager --latest --json | jq -c '.registries[0].versions[] | {version, latest, paletteLatest}'",
+    );
+    // the note of the record names the pre-release that `@latest` skips (#625)
+    r.step(
+        "packs-pre-release-record",
+        0,
+        true,
+        "strata snapshot 'pack:Public Repo/cert-manager@latest' -o cert-manager.json",
     );
 }
 

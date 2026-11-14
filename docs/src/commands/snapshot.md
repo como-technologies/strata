@@ -16,7 +16,7 @@ takes:
 | Page | What it holds |
 | --- | --- |
 | [A profile version or a pack version](snapshot/profile-version.md) | `<name>@<version>`, `<name>@latest`, and `pack:<name>@<version>`: the record of a release, and where to keep it. |
-| [A cluster](snapshot/cluster.md) | `cluster:<cluster>`: the profiles that a cluster runs, its tiers, whether an update waits for it, and `@pending`. `--macros` for a version, a cluster, or a cluster group. |
+| [A cluster](snapshot/cluster.md) | `cluster:<cluster>`: the profiles that a cluster runs, what its record holds, its tiers, whether an update waits for it, and `@pending`. `--macros` for a version, a cluster, or a cluster group. |
 | [Edge hosts, cluster groups, and app profiles](snapshot/other-objects.md) | `edgehost:`, `clustergroup:`, and `appprofile:`: the three other objects of Palette that hold profiles. |
 | [A set of clusters](snapshot/set.md) | `tag:` and `filter:`, with `--dir`, `--prune`, and `--json`: one record for each cluster of a set, and the report as a document. |
 | [A record with no network](snapshot/no-network.md) | `--raw-dir` and `--from-raw`, and `--from-candidate`: a record from the saved answers of Palette, or from a candidate file. |
@@ -37,6 +37,10 @@ takes:
   error `palette-refuses`, and writes no record.
 - `--format` and `--json` need `--dir`: they set the format of the report of
   a set. A record is always JSON.
+- A cluster record holds the value of each variable that nobody marked
+  sensitive, in clear. When the name of such a variable reads as a secret, a
+  note names it. The exit does not change: see
+  [What a cluster record holds](snapshot/cluster.md#what-a-cluster-record-holds).
 - Without `-o`, the snapshot goes to standard output.
 - `-o releases/1.1.0/dev.json` makes the directory that the path names, so a
   release directory needs no `mkdir` first.

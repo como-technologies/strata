@@ -3287,3 +3287,46 @@ fn a_rule_that_only_the_lab_can_reproduce_says_so_in_words() {
         );
     }
 }
+
+/// F-026: `position-zero` says when each effect applies, and what a person can do. A create can
+/// put the infrastructure profile first. A cluster keeps its order, and puts a new version of the
+/// infrastructure profile last (#844). So a reader takes the profile by its type.
+#[test]
+fn position_zero_says_when_each_effect_applies_and_what_a_person_can_do() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rules().find(|r| r.id == "position-zero").unwrap();
+    let jq = Jq::new();
+    let fault = fixture::load(&catalog::rules_dir().join("fixtures/eks/addon-first.json")).unwrap();
+    let first = "profile strata-live-profile at position 0 is of type add-on, not cluster or infra: a reader of position 0 reads strata-live-profile as the infrastructure profile";
+    let fips = "the FIPS guard of the console reads it in a FIPS tenant only";
+    let dashboard = "only a client that reads the field clusterProfileTemplate of the dashboard API gets strata-live-profile";
+    let out = outcome_of(rule, fault.clone(), &jq);
+    assert_eq!(out.verdict, Verdict::Failed);
+    assert_eq!(
+        out.messages,
+        [
+            first,
+            fips,
+            dashboard,
+            "the repave check of CNI and CSI can read the cni pack cni-aws-vpc-eks of strata-live-profile, the csi pack csi-aws-ebs of strata-live-profile",
+            "put the infrastructure profile at position 0 of spec.profiles of the create: it stays there until a new version of it goes to the end of the stored order",
+        ]
+    );
+    // a cluster that Palette holds, whose add-on profile holds no CNI and no CSI pack
+    let mut cluster = fault;
+    cluster["clusterUid"] = serde_json::json!("c1");
+    let packs = cluster["profiles"][0]["packs"].as_array_mut().unwrap();
+    packs.retain(|p| p["layer"] != "cni" && p["layer"] != "csi");
+    let out = outcome_of(rule, cluster, &jq);
+    assert_eq!(
+        out.messages,
+        [
+            first,
+            fips,
+            dashboard,
+            "no add-on profile holds a CNI or a CSI pack, so the repave check of CNI and CSI is right",
+            "a PUT of the profiles in another order keeps the stored order of the cluster, and a new version of the infrastructure profile goes to the end",
+            "read the infrastructure profile by its type in spec.clusterProfileTemplates, and the FIPS mode in status.fips.mode",
+        ]
+    );
+}

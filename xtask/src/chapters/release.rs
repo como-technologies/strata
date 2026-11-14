@@ -434,7 +434,7 @@ fn manifest_pack(r: &mut Runner) {
         false,
         "strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json",
     );
-    // the page teaches the root line, the note, and the pack line with its impact
+    // the page teaches the root line, the note, and the pack line with no impact line
     r.excerpt(
         "manifest-compare-note",
         "manifest-compare",

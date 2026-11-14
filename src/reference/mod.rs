@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 
+pub(crate) mod picked;
 pub mod version;
 
 /// The version that stands for the highest published version of a name: `<name>@latest`.

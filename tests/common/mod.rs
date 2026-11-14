@@ -261,6 +261,22 @@ fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &st
     }
 }
 
+/// Give the variable `name` of the raw cluster fixture in `dir` the value `value` in clear, with
+/// `isSensitive: false`. Palette serves a variable in this form when nobody marked it sensitive.
+pub fn clear_cluster_variable(dir: &Path, name: &str, value: &str) {
+    let path = dir.join("variables.json");
+    let mut doc = read_json(&path);
+    for profile in doc.as_array_mut().unwrap() {
+        for v in profile["variables"].as_array_mut().unwrap() {
+            if v["name"] == name {
+                v["isSensitive"] = json!(false);
+                v["value"] = json!(value);
+            }
+        }
+    }
+    fs::write(&path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+}
+
 /// Copy the three raw files from `from` to `to`, and apply each text replacement to each file.
 pub fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
     fs::create_dir_all(to).unwrap();
@@ -1105,6 +1121,87 @@ pub fn serve_fixture(
     )
 }
 
+/// An API that serves the cluster fixture `dir` under `CLUSTER_UID`.
+pub fn serve_cluster(
+    api: strata::api::MemoryApi,
+    raw_root: &Path,
+    dir: &str,
+) -> strata::api::MemoryApi {
+    let d = raw_root.join(dir);
+    // the profile documents of the profiles the cluster runs, as they are published: verify of a
+    // cluster record reads them for their current version
+    let mut api = api;
+    for template in read_json(&d.join("cluster.json"))["spec"]["clusterProfileTemplates"]
+        .as_array()
+        .unwrap()
+    {
+        let uid = template["uid"].as_str().unwrap();
+        for fixture in ["a", "b", "addons"] {
+            let profile = read_json(&raw_root.join(fixture).join("profile.json"));
+            if profile["metadata"]["uid"] == uid {
+                api = api.with(profile_route(uid), profile);
+                break;
+            }
+        }
+    }
+    api.with(
+        cluster_route(CLUSTER_UID),
+        read_json(&d.join("cluster.json")),
+    )
+    .with(
+        cluster_manifests_route(CLUSTER_UID),
+        read_json(&d.join("manifests.json")),
+    )
+    .with(
+        cluster_variables_route(CLUSTER_UID),
+        read_json(&d.join("variables.json")),
+    )
+}
+
+/// An API that serves the cluster `lab-cluster` on four profiles, under `CLUSTER_UID`.
+///
+/// The profiles are the fixtures `b` and `addons`, and two more add-on profiles, `lab-logging` and
+/// `lab-quota`, each with a pack of its own. The fixtures are under `root`, and the cluster is the
+/// fixture `cluster-four`.
+pub fn serve_four_profiles(root: &Path) -> strata::api::MemoryApi {
+    let mut api = strata::api::MemoryApi::new();
+    for (fixture, uid, name, pack) in [
+        (
+            "logging",
+            "64f0000000000000000000d7",
+            "lab-logging",
+            "log-shipper",
+        ),
+        (
+            "quota",
+            "64f0000000000000000000d8",
+            "lab-quota",
+            "payments-quota",
+        ),
+    ] {
+        let d = root.join(fixture);
+        let pack_uid = format!("pk-{pack}");
+        rewrite(
+            &root.join("addons"),
+            &d,
+            &[
+                (UID_ADDONS, uid),
+                ("lab-addons", name),
+                ("nginx-ingress", pack),
+                ("pk-ngx-4100", &pack_uid),
+            ],
+        );
+        api = api.with(profile_route(uid), read_json(&d.join("profile.json")));
+    }
+    write_cluster(
+        root,
+        "cluster-four",
+        &["b", "addons", "logging", "quota"],
+        &[],
+    );
+    serve_cluster(api, root, "cluster-four")
+}
+
 /// The digest that Palette gives a manifest content, as the tests make one: none for no content.
 pub fn manifest_digest(content: &str) -> String {
     if content.is_empty() {
@@ -1444,6 +1541,16 @@ impl Run {
             out: text(&o.stdout),
             err: text(&o.stderr),
         }
+    }
+
+    /// The JSON document of the output with no `generatedAt`, the one field that two runs do not
+    /// share. An output that is not JSON gives `null`.
+    pub fn document_without_time(&self) -> Value {
+        let mut document: Value = serde_json::from_str(&self.out).unwrap_or(Value::Null);
+        if let Some(fields) = document.as_object_mut() {
+            fields.remove("generatedAt");
+        }
+        document
     }
 }
 

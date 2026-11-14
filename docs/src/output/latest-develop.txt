@@ -1,4 +1,5 @@
 $ strata snapshot aws-stack@latest -o latest.json
 strata: looking up project dev
+strata: @latest is aws-stack@1.1.10; it skips 1.2.develop, a pre-release
 strata: fetching profile 64e000000000000000000108
 strata: wrote latest.json (root 088136c929bd)

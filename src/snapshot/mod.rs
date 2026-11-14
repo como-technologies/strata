@@ -20,7 +20,8 @@ use crate::model::profile_type::ProfileType;
 pub use crate::model::repave::PendingRepave;
 pub use crate::model::validation::ProfileValidation;
 use crate::reference::name_version;
-use crate::text::name_or_uid;
+use crate::render::count_of;
+use crate::text::{and_list, name_or_uid};
 use crate::timestamp::Rfc3339;
 
 mod build;
@@ -34,7 +35,7 @@ mod variable;
 
 pub use cluster::{
     AppliedProfile, ClusterRead, ClusterSource, ClusterTier, ClusterVariable, GroupMember,
-    PendingUpdate, Tier, cluster_tiers, macro_digests,
+    PendingUpdate, SecretLikeVariable, Tier, cluster_tiers, macro_digests,
 };
 pub use pack::{Manifest, Pack, PackChart, PackHash, PresetOption, UpstreamSource, pack_content};
 pub use variable::{Variable, VariableOption};
@@ -283,7 +284,8 @@ impl Source {
     }
 
     /// `name@version`, and `on cluster <name>` for a snapshot of a cluster, or `pending for cluster
-    /// <name>` for the update that waits for it.
+    /// <name>` for the update that waits for it. A snapshot of two or more profiles gives their
+    /// count in place of `name@version`, such as `3 profiles on cluster <name>`.
     pub fn title(&self) -> String {
         self.named(Naming::Side)
     }
@@ -297,7 +299,7 @@ impl Source {
     /// that runs a
     /// profile has other words in a verdict.
     pub(crate) fn named(&self, naming: Naming) -> String {
-        let profile = name_version(&self.name, &self.version);
+        let profile = self.profile_words();
         if let Some(p) = &self.pack {
             return match naming {
                 Naming::Side => format!("pack {profile}"),
@@ -313,27 +315,45 @@ impl Source {
                 Naming::Verdict => format!("published version {profile}"),
             };
         };
-        match c.kind.known() {
-            _ if self.name.is_empty() && !c.kind.is_cluster() => {
-                format!("{} {}", c.kind.noun(), c.name)
-            }
-            // a kind that a later release wrote: the name of the kind in the documents
-            None => format!("{profile} on {} {}", c.kind.noun(), c.name),
-            Some(SubjectKind::EdgeHost) => format!("{profile} on edge host {}", c.name),
-            Some(SubjectKind::ClusterGroup) => {
-                format!("{profile} pinned by cluster group {}", c.name)
-            }
-            Some(SubjectKind::Cluster) if self.name.is_empty() && c.pending => {
-                format!("cluster {} pending", c.name)
-            }
-            Some(SubjectKind::Cluster) if self.name.is_empty() => format!("cluster {}", c.name),
-            Some(SubjectKind::Cluster) if c.pending => {
-                format!("{profile} pending for cluster {}", c.name)
-            }
-            Some(SubjectKind::Cluster) => match naming {
-                Naming::Side => format!("{profile} on cluster {}", c.name),
-                Naming::Verdict => format!("cluster {} running {profile}", c.name),
-            },
+        let covered = (!self.name.is_empty()).then_some(profile.as_str());
+        cluster_named(c, covered, naming)
+    }
+
+    /// The title of the record with `profile` in the place of the profiles that it covers, such as
+    /// `monitoring@1.4.0 on cluster payments`. None for a record that covers one profile or none.
+    ///
+    /// The title of a record of two or more profiles gives their count. So it does not say which
+    /// of them holds a pack.
+    pub(crate) fn title_of_profile(&self, profile: &str) -> Option<String> {
+        let c = self.cluster.as_ref().filter(|c| c.profiles.len() > 1)?;
+        Some(cluster_named(c, Some(profile), Naming::Side))
+    }
+
+    /// The title of the record with only the profiles that hold the pack `name`: see
+    /// [`Source::title_of_profile`] and [`ClusterSource::profiles_holding`]. None when the record
+    /// does not say which profile holds the pack.
+    pub(crate) fn title_of_pack(&self, name: &str) -> Option<String> {
+        let holding: Vec<String> = self
+            .cluster
+            .iter()
+            .flat_map(|c| c.profiles_holding(name))
+            .map(|p| name_version(&p.name, &p.version))
+            .collect();
+        if holding.is_empty() {
+            return None;
+        }
+        self.title_of_profile(&and_list(&holding))
+    }
+
+    /// `name@version` of the profile of the record, or the count of the profiles for a record of
+    /// two or more, such as `3 profiles`.
+    ///
+    /// Such a record joins the names and the versions with `+`, and a reader cannot pair each
+    /// name with its version. `cluster.profiles` names each profile with its version.
+    fn profile_words(&self) -> String {
+        match self.cluster.as_ref().map(|c| c.profiles.len()) {
+            Some(n) if n > 1 => count_of(n, "profile"),
+            _ => name_version(&self.name, &self.version),
         }
     }
 
@@ -353,6 +373,32 @@ impl Source {
             (None, Some(c)) => &c.uid,
             (None, None) => &self.uid,
         }
+    }
+}
+
+/// The object of a record of the cluster `c` in the words of `naming`: see [`Source::named`].
+/// `profile` is the part of the title that names the profiles, as `name@version`. It is `None`
+/// when the record covers no profile.
+fn cluster_named(c: &ClusterSource, profile: Option<&str>, naming: Naming) -> String {
+    let Some(profile) = profile else {
+        return match c.kind.known() {
+            Some(SubjectKind::Cluster) if c.pending => format!("cluster {} pending", c.name),
+            Some(SubjectKind::Cluster) => format!("cluster {}", c.name),
+            _ => format!("{} {}", c.kind.noun(), c.name),
+        };
+    };
+    match c.kind.known() {
+        // a kind that a later release wrote: the name of the kind in the documents
+        None => format!("{profile} on {} {}", c.kind.noun(), c.name),
+        Some(SubjectKind::EdgeHost) => format!("{profile} on edge host {}", c.name),
+        Some(SubjectKind::ClusterGroup) => format!("{profile} pinned by cluster group {}", c.name),
+        Some(SubjectKind::Cluster) if c.pending => {
+            format!("{profile} pending for cluster {}", c.name)
+        }
+        Some(SubjectKind::Cluster) => match naming {
+            Naming::Side => format!("{profile} on cluster {}", c.name),
+            Naming::Verdict => format!("cluster {} running {profile}", c.name),
+        },
     }
 }
 
@@ -473,6 +519,23 @@ impl Snapshot {
     /// The packs of the record by their key.
     pub(crate) fn packs_by_key(&self) -> BTreeMap<&str, &Pack> {
         self.packs.iter().map(|p| (p.key.as_str(), p)).collect()
+    }
+
+    /// Each variable that the record holds in clear and whose name reads as a secret, in the
+    /// order of `source.cluster.variables`.
+    ///
+    /// The name holds `secret`, `password`, `passwd`, `token`, `api.?key`, or `private.?key`,
+    /// with no case. The value is not empty and holds no template, `{{`. A name is only a guess.
+    /// A profile record holds no value of a cluster, so it gives none.
+    pub fn secret_like_variables(&self) -> Vec<SecretLikeVariable> {
+        let variables = self.source.cluster.iter().flat_map(|c| &c.variables);
+        variables
+            .filter(|v| v.reads_as_secret())
+            .map(|v| SecretLikeVariable {
+                profile: v.profile.clone(),
+                name: v.name.clone(),
+            })
+            .collect()
     }
 
     /// The key of each pack whose upstream is unknown, in pack order: see

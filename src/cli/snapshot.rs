@@ -29,6 +29,11 @@ pub(crate) fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             // the lines of a set have no color, so the report takes no --color
             let renderer = render::renderer(a.format(), Paint::off(), a.compact.compact);
             print!("{}", renderer.render_set(&report)?);
+            for r in &report.records {
+                for note in render::secret_like_notes(&r.secret_like_variables, Some(&r.path)) {
+                    progress.note(&note);
+                }
+            }
             progress.note(&render::set_counts_line(&report));
             Ok(ExitCode::from(report.exit_code()))
         }
@@ -68,6 +73,9 @@ fn record_object(
             ));
         }
         None => print!("{text}"),
+    }
+    for note in render::secret_like_notes(&snap.secret_like_variables(), None) {
+        progress.note(&note);
     }
     Ok(ExitCode::SUCCESS)
 }

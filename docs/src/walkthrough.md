@@ -234,6 +234,10 @@ request can run it:
 {{#include output/loop-preflight-static.txt}}
 ```
 
+No rule of the static tier is a preflight check on aws yet, so no check counted.
+The exit is `0`, and the last line says `NOT COUNTED`, not `OK`. `--strict`
+counts each probe: the live tier below uses it.
+
 A pipeline runs the same command through `preflight.sh`, which reads its options
 from variables. See [On another host](./automation/preflight.md#on-another-host).
 The script looks for the key where strata looks for it. With no key, the job
