@@ -230,10 +230,14 @@ function valuesPanel(d, id, command) {
   return h`${lead}${s.length ? settingsTable(s, jump) : ""}${masked}${text}${follows}${repeats}`;
 }
 
-/* A comparison of a pack has one card, and one dropdown "Compare" in its head: the record against the published version, the
-   record against the copy of this cluster, the pack against its newer version, and the record against the newest version of
-   its profile. The card opens on the first side that holds a change. A side with no change sends no request, and it shows the
-   facts of the three sides. */
+/* A comparison of a pack has one card, with one dropdown "Compare" in its head. The dropdown has four sides:
+   - the record against the published version
+   - the record against the copy of this cluster
+   - the pack against its newer version
+   - the record against the newest version of its profile
+
+   The card opens on the first side that holds a change. A side with no change sends no request, and it shows the facts of the
+   three sides. */
 
 // The commands of the card "Check this yourself" and of the splash for a text above the cap. record.json is the file that
 // the first row of the card writes. Each value from the data goes through shq(), so a command pastes as the arguments it means.
@@ -431,7 +435,7 @@ function moveCard(subject, p, row) {
 
 /* ---- The card "Check this yourself" ----
    Each row is a question, the command that answers it, and what the page says now. The names are real, and the rows change with
-   the page: a pack with a newer version adds the move and the question about the newer versions. */
+   the page. A pack with a newer version adds the move and the question about the newer versions. */
 const copyBadge = (cp, carried) => carried && COPY_KEPT.includes(cp.status) ? statusBadge(STATUS.NOT_CHECKED) : badgeOf(COPY_BADGE, COPY_BADGE[cp.status] ? cp.status : COPY.NOT_READ);
 const publishedBadge = (pub, carried) => pub.status === VERIFY.DRIFTED ? statusBadge(STATUS.DRIFT) : pub.status === VERIFY.UNCHANGED && !carried ? statusBadge(STATUS.OK) : statusBadge(STATUS.NOT_CHECKED);
 

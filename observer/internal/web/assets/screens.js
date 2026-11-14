@@ -227,9 +227,9 @@ function eventFrom(q) {
 }
 
 /* ---- The stack of the packs ----
-   A profile shows its packs as a stack of layers, as Palette builds a cluster: the add-ons on top, the OS at the bottom. The color on
-   the left of a slab is the status of the pack. The page of a pack shows the same stack, small, with its own slab lit, so a person
-   sees one picture of a pack on both pages and steps from one pack to the next. */
+   A profile shows its packs as a stack of layers, as Palette builds a cluster. The add-ons are on top, and the OS is at the bottom.
+   The color on the left of a slab is the status of the pack. The page of a pack shows the same stack, small, with its own slab lit.
+   So a person sees one picture of a pack on both pages, and steps from one pack to the next. */
 // newerWords tells what strata found about a newer version of the pack p of the profile x. A pack that strata does not look for gets no
 // word.
 function newerWords(x, p) {

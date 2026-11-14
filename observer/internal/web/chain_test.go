@@ -8,9 +8,9 @@ import (
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
-/* The tests below show the chain of a pack that is behind (#709): the pack, the newer profile version that carries a newer version of
-it, and the record of the cluster. In the set ok, traefik of wilma-gateway@3.1.2 is behind 38.1.0, and wilma-gateway@3.2.0 carries
-that version. They need node, like the other tests of the page. */
+/* The tests below show the chain of a pack that is behind (#709). The chain is the pack, the newer profile version that carries a
+newer version of it, and the record of the cluster. In the set ok, traefik of wilma-gateway@3.1.2 is behind 38.1.0, and
+wilma-gateway@3.2.0 carries that version. They need node, like the other tests of the page. */
 
 const (
 	carriedByWilma = `carried by <span class="m">wilma-gateway<span class="ver">@3.2.0</span></span>`
