@@ -584,11 +584,11 @@ of the secret does not show, because the two sides hold the mask: see
 - `profile`: `uid`, `name`, and `version`. `type`, only for an app profile:
   `app`. The schema gives `type` the six profile types: `cluster`, `infra`,
   `add-on`, `system`, `app`, and `pack`.
-  - `scope`, for a cluster profile when its document gives it: `project`,
-    `tenant`, or `system`.
+  - `scope`, when the document of the profile or of the app profile gives it:
+    `project`, `tenant`, or `system`.
   - `projectUid` and `projectName`, only for a profile of a project: the one
-    project whose clusters can use it. `projectName` is there when strata could
-    read the project listing.
+    project whose clusters or app deployments can use it. `projectName` is there
+    when strata could read the project listing.
 - `count`: the number of consumers. Exit `1` when it is not `0`. Exit `0` when
   it is `0` and each reading succeeded. Exit `2` when it is `0` and a reading
   failed. A failed reading is `error`, `groupsError`, or an `unread` that is not
@@ -603,7 +603,8 @@ of the secret does not show, because the two sides hold the mask: see
   name too. The names and the projects come from `status.inUseClusters` of the
   profile, from `status.inUseClusterTemplates` for a cluster template, and from
   `status.inUseApps` of an app profile. `unlisted`, only when true: the
-  profile did not list the cluster, and the second reading found it.
+  profile did not list the consumer, and the second reading or an app
+  deployment listing found it.
   - `state`: `status.state` of the cluster, as Palette gives it in
     `v1ClusterState`, or `unknown` when strata cannot read the cluster. A
     cluster template has an empty `state` and an empty `version`.
@@ -629,24 +630,32 @@ of the secret does not show, because the two sides hold the mask: see
     them.
   - `skipped`, only when true: `--list-only` asked for no second reading, or
     the profile is an app profile.
-  - `reason`, only for an app profile: why strata did no second reading.
+  - `reason`, only for an app profile: why strata listed no app deployment
+    beside the consumer list. It is empty with `--list-only`, and when strata
+    listed them: the listings are in `projectsRead`.
 - `edgeHostsRead`: `read`, the edge hosts that the searches listed, each one
   time, and `error`, why strata could not list them. Then no edge host counts.
   `skipped` and `reason`, only for an app profile: strata reads no edge host,
   and why.
 - `projectsRead`: the projects of the tenant listing that strata searched one by
-  one. It is there for a profile of the tenant or of the system, and not with
-  `--list-only`. See
+  one. It is there for a profile of the tenant or of the system. For an app
+  profile, it names each project whose app deployments strata listed. It is not
+  there with `--list-only`. See
   [A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant).
-  - `read`: the projects that strata searched.
+  - `read`: the projects of the listing, each one that strata searched or
+    could not search.
   - `unread`, only when not empty: each project whose search failed, with
     `uid`, `name`, `denied`, and `error`. `denied` is `true` when Palette
-    answered with a denial, such as `ResourceAccessDenied`.
+    answered with a denial, such as `ResourceAccessDenied`. When the cluster
+    search at tenant scope failed with an error that is not a denial, strata
+    searched no project. Then each project of the listing is here, with that
+    error.
   - `tenantError`: why Palette refused the cluster search at tenant scope. Then
     the listing holds only the projects of the roles of the key, so a project
     outside it is not checked.
   - `error`: why strata could not read the project listing of the tenant. Then
-    strata searched no project one by one.
+    strata searched no project one by one. For a library caller whose
+    `connect` gives no client of the tenant, it is the error of `connect`.
 
 ## strata-list/1
 

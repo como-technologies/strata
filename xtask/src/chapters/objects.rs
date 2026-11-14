@@ -18,6 +18,7 @@ pub(super) fn run(r: &mut Runner) {
     edge_hosts(r);
     cluster_groups(r);
     app_profiles(r);
+    app_profiles_reach(r);
 }
 
 /// The chapter `cluster-tiers`: the tiers that Palette reports of a cluster beside its release.
@@ -570,6 +571,34 @@ fn app_profiles(r: &mut Runner) {
         1,
         false,
         "strata consumers runs/shop.json --json | jq -c '.consumers[]'",
+    );
+}
+
+/// The chapter `app-profiles-reach`: the consumer list of an app profile of a project, for a key
+/// that cannot read the app deployments of the project.
+fn app_profiles_reach(r: &mut Runner) {
+    r.chapter("app-profiles-reach", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.app_profile(DEV, SHOP, "1.0.0", "2", 0));
+    r.tenant(|t| t.app_deployment(DEV, SHOP_DEV, "shop-dev", SHOP));
+    // a key with no cluster.get in dev gets an empty consumer list, and the app deployment
+    // listing of dev names shop-dev
+    r.tenant(|t| t.deny_cluster_get(DEV, SHOP));
+    r.serve_here(); // state 1: the consumer list of shop@1.0.0 is empty for the key
+    r.step(
+        "app-consumers-unlisted",
+        1,
+        false,
+        "strata consumers appprofile:shop@1.0.0",
+    );
+    // the key cannot list the app deployments of dev either
+    r.tenant(|t| t.deny_app_deployments(DEV, "dev"));
+    r.serve_here(); // state 2: the key cannot list the app deployments of dev
+    r.step(
+        "app-consumers-not-checked",
+        2,
+        false,
+        "strata consumers appprofile:shop@1.0.0",
     );
 }
 

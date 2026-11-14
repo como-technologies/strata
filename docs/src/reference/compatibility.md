@@ -319,6 +319,10 @@ After 0.33.0, `ops::ProjectsRead`, `ops::UnreadProject`, and `render::Reading` a
 `render::Reading` names each row of the block `searched:` of `consumers`. Three structs of
 `consumers` have new fields: see [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `api::Palette::app_deployments` is new. `consumers` of an app profile lists the app
+deployments of each project that can use the version with it: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -457,6 +461,11 @@ mark. [Release 0.34.0](#release-0340-changes-that-need-action) gives the action.
 After 0.33.0, `strata-consumers/1` has the new fields `profile.scope`, `profile.projectUid`,
 `profile.projectName`, `clustersRead.membersFound`, and `projectsRead`. The id stays, and a reader
 that ignores unknown fields reads it. A profile of the tenant can exit `2` now: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `strata-consumers/1` of an app profile has `profile.scope` and `projectsRead`. An app
+deployment that the consumer list does not name has `unlisted`. The id stays. An app profile can
+exit `2` now: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
@@ -1456,6 +1465,36 @@ field, a value, an input, or an option is in the sections above.
   - The markdown has a table of the rows in place of the two sentences, a
     sentence for the scope, and `NOT CHECKED` in bold. A script that reads the
     text must read the new rows, or read `--json`.
+- **`consumers` of an app profile gives its scope, and lists the app deployments of
+  each project that can use the version.** See [App profiles](../commands/consumers.md#app-profiles).
+  - The line `scope:` and `profile.scope` are there for an app profile too, with
+    `profile.projectUid` and `profile.projectName` for an app profile of a project.
+  - Strata lists the app deployments of the project of an app profile of a
+    project. For an app profile of the tenant or of the system, it lists them in
+    each project of the tenant listing. That is one more request for each 50 app
+    deployments of a project, and one for the project listing.
+  - An app deployment that runs the version and that the consumer list does not
+    name joins the answer with `unlisted`, and the exit is `1`. The row
+    `app deployments` counts them. Before, it said `not searched (an app profile:
+    the app deployment listing filters no profile)`.
+  - When Palette refuses a listing, the line `NOT CHECKED` names the project,
+    and `projectsRead` names it. With no consumer, the exit is `2`. Before,
+    such a run exited `0`.
+- **`consumers` of a profile of a project also searches the edge hosts of its
+  project.** That is one more request for each 50 edge hosts. When that search
+  fails, the row `edge hosts` says `not read`, and with no consumer the exit is
+  `2`. Before, such a run exited `0`.
+- **`consumers` of a profile of a project stops when its project denies the
+  search.** Before, it sent the search in the scope of the key. That search
+  omits the project. The row `cluster search` now says `not done`, and with no
+  consumer the exit is `2`. Before, such a run exited `0`.
+- **A failed search at tenant scope names each project.** This is for a profile
+  of the tenant, and an error that is not a denial. The line ends with
+  `(the cluster search failed)`, and `projectsRead.unread` names each project.
+  The line `scope:` gives `0 of 3 projects searched`, where it gave
+  `0 of 0 projects searched`. The exit stays `2`.
+- **The line `scope:` gives no count of the projects when strata could not read
+  the project listing.** Before, it gave `0 of 0 projects searched`.
 
 ### For a user of the CI drop-ins
 
@@ -1598,6 +1637,17 @@ field, a value, an input, or an option is in the sections above.
   strata could not search, so `ConsumersReport::exit_code` gives `2` for it.
 - `ops::consumers` and `ops::consumers_with` search each project of the tenant listing for a
   profile of the tenant or of the system. They call `connect` with the uid of each project.
+- `connect` can give no client of the tenant. Then for a profile of the tenant or of the system,
+  `ops::consumers_with` puts the error of `connect` in `ProjectsRead::error`. So
+  `ConsumersReport::exit_code` gives `2` with no consumer. Before, the project listing of the
+  scope of the profile read as the listing of the tenant.
+- `ops::consumers_with` reads the scope of an app profile into `ConsumedProfile::scope`,
+  `project_uid`, and `project_name`. It lists the app deployments of each project that can use
+  the version, and `ConsumersReport::projects_read` names the projects. `ConsumersOptions::list_only`
+  stops the listing.
+- `ops::APP_NO_SECOND_READING` has a new text: it is the reason for an app profile whose document
+  names no scope.
+- `api::Palette::app_deployments` is new: the app deployment listing of the scope.
 
 ### For a user of the library of strata-preflight
 

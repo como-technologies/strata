@@ -12,6 +12,9 @@ pub const PROJECT_LISTING: &str = "v1/dashboard/projects/metadata";
 ///
 /// The server keeps the items of the scope that the body names.
 pub const PROFILE_SEARCH_PATH: &str = "v1/dashboard/clusterprofiles";
+/// The app deployment listing of a project, `POST /v1/dashboard/appDeployments`. The items of a
+/// page are in `appDeployments`.
+pub(super) const APP_DEPLOYMENT_LISTING: &str = "v1/dashboard/appDeployments";
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search`.
 ///
 /// The server keeps the clusters that the body selects.

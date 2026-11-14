@@ -6,15 +6,16 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 
 use super::{
-    AUDIT_PAGE, AUDITS, CLUSTER_GROUP_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH,
-    CLUSTER_SEARCH_SCHEMA, EDGE_HOST_SEARCH, PACK_LISTING_PAGE, PACKS, PROFILE_LISTING,
-    PROJECT_LISTING, Palette, REGISTRIES, REGISTRY_METADATA, RegistryKind, SEARCH_ENVIRONMENT,
-    SEARCH_STRING, SearchedClusters, TAG_FILTER_LISTING, TAG_FILTERS, named_entries, query_value,
-    route, search_all, sorted_names, uids_named, with_limit, with_nested,
+    APP_DEPLOYMENT_ITEMS, APP_DEPLOYMENT_LISTING, AUDIT_PAGE, AUDITS, CLUSTER_GROUP_LISTING,
+    CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, EDGE_HOST_SEARCH, PACK_LISTING_PAGE,
+    PACKS, PROFILE_LISTING, PROJECT_LISTING, Palette, REGISTRIES, REGISTRY_METADATA, RegistryKind,
+    SEARCH_ENVIRONMENT, SEARCH_STRING, SearchedClusters, TAG_FILTER_LISTING, TAG_FILTERS,
+    named_entries, query_value, route, search_all, sorted_names, uids_named, with_limit,
+    with_nested,
 };
 use crate::api::{AuditKind, PaletteApi};
 use crate::error::{Error, Result, served};
-use crate::json::{arr, items, opt_text, str_at, text};
+use crate::json::{arr, items, opt_text, str_at, take_array, text};
 use crate::reference::one_named;
 
 impl<A: PaletteApi> Palette<A> {
@@ -133,6 +134,23 @@ impl<A: PaletteApi> Palette<A> {
     /// The error of the first request that fails.
     pub fn edge_hosts(&self) -> Result<Vec<Value>> {
         self.searched(&with_limit(EDGE_HOST_SEARCH), &search_all())
+    }
+
+    /// Every app deployment of the scope, `POST /v1/dashboard/appDeployments`, every page. Each
+    /// item names the app profile version that it runs in `spec.profile.metadata`: `uid`,
+    /// `name`, and `version`. The filter of the listing takes no profile.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails. In a project where no role of the key gives
+    /// the listing, Palette answers HTTP 500 with the code `ResourceAccessDenied`.
+    pub fn app_deployments(&self) -> Result<Vec<Value>> {
+        let body = search_all();
+        self.each_continue_page(
+            &with_limit(APP_DEPLOYMENT_LISTING),
+            |page| take_array(page, APP_DEPLOYMENT_ITEMS),
+            |path| self.api.post_json(path, &body),
+        )
     }
 
     /// The clusters that a search filter selects, `POST /v1/dashboard/spectroclusters/search`,

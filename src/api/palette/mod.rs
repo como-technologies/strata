@@ -41,6 +41,11 @@ const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
 const EDGE_HOST_SEARCH: &str = "/v1/dashboard/edgehosts/search";
 const CLUSTER_GROUP_LISTING: &str = "/v1/clustergroups/hostCluster/metadata";
 const APP_PROFILE_LISTING: &str = "/v1/dashboard/appProfiles/metadata";
+/// The app deployment listing of a scope. It pages by `continue`, and its filter takes no
+/// profile.
+const APP_DEPLOYMENT_LISTING: &str = "/v1/dashboard/appDeployments";
+/// The key of the array of a page of [`APP_DEPLOYMENT_LISTING`], in place of `items`.
+const APP_DEPLOYMENT_ITEMS: &str = "appDeployments";
 /// The cluster search. It pages by `continue`.
 const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search";
 const CLUSTER_SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/schema";
@@ -390,12 +395,14 @@ impl<A: PaletteApi> Palette<A> {
     /// Every item of a listing that Palette pages by `continue`, every page.
     ///
     /// `path` is the first page, with its query when it has one, and `fetch` reads one page at a
-    /// path. `listmeta.continue` names the next page, and is empty on the last one. A page with no
-    /// items ends the listing too, and `items: null` is such a page. So does a page that names
-    /// the page that it is: Palette gives it again, and the listing never ends.
+    /// path. `take` takes the items out of a page: its `items`, or the array of another key.
+    /// `listmeta.continue` names the next page, and is empty on the last one. A page with no items
+    /// ends the listing too, and `items: null` is such a page. So does a page that names the page
+    /// that it is: Palette gives it again, and the listing never ends.
     fn each_continue_page(
         &self,
         path: &str,
+        take: impl Fn(Value) -> Vec<Value>,
         fetch: impl Fn(&str) -> Result<Value>,
     ) -> Result<Vec<Value>> {
         let mut items = Vec::new();
@@ -403,7 +410,7 @@ impl<A: PaletteApi> Palette<A> {
         loop {
             let page = fetch(&page_after(path, &next))?;
             let after = text(&page, "/listmeta/continue");
-            let got = take_items(page);
+            let got = take(page);
             let done = got.is_empty() || after == next;
             items.extend(got);
             next = after;
@@ -415,12 +422,12 @@ impl<A: PaletteApi> Palette<A> {
 
     /// Every item of a search of the dashboard, a POST of `body` to `search`, every page.
     fn searched(&self, search: &str, body: &Value) -> Result<Vec<Value>> {
-        self.each_continue_page(search, |path| self.api.post_json(path, body))
+        self.each_continue_page(search, take_items, |path| self.api.post_json(path, body))
     }
 
     /// Every item of the listing at `path`, a GET, every page.
     fn listed(&self, path: &str) -> Result<Vec<Value>> {
-        self.each_continue_page(path, |path| self.api.get_json(path))
+        self.each_continue_page(path, take_items, |path| self.api.get_json(path))
     }
 }
 

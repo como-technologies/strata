@@ -2,5 +2,6 @@ $ strata consumers appprofile:shop@1.0.0
 shop@1.0.0 (uid 64f6000000000000000000a1): no consumers
   searched:
     consumer list    no app deployments
-    app deployments  not searched (an app profile: the app deployment listing filters no profile)
+    app deployments  no other app deployment on this version
     edge hosts       not read (an app profile: no edge host binds one)
+  scope: project profile, so only project dev can use it

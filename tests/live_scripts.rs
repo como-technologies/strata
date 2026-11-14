@@ -4798,6 +4798,33 @@ fn tiers_sh_stage_7_fails_the_checks_of_the_override_when_palette_drops_it() {
     passed(&steps, &["pool-set", "pool-undone"]);
 }
 
+/// Issue #892. Stage 1 asks `consumers` of the app profile, which lists the app deployments of its
+/// project. The checks fail when strata could not list them.
+#[test]
+fn app_profile_sh_stage_1_checks_that_consumers_lists_the_app_deployments_of_the_project() {
+    for (code, unread) in [
+        (0, ""),
+        (2, r#","unread":[{"uid":"p-1","name":"lab","denied":true}]"#),
+    ] {
+        let mut stage = Stage::new(serde_json::json!({"project_uid": "p-1"}));
+        stage.strata(
+            "consumers appprofile:strata-live-app@1.0.0 --json",
+            code,
+            &format!(
+                r#"{{"profile":{{"uid":"ap-1","type":"app","scope":"project","projectUid":"p-1",
+                    "projectName":"lab"}},"count":0,"projectsRead":{{"read":1{unread}}}}}"#
+            ),
+        );
+        let (_, steps) = stage.run("app-profile.sh", &["1"]);
+        let checks = ["consumers-project", "consumers-scope"];
+        if code == 0 {
+            passed(&steps, &checks);
+        } else {
+            failed(&steps, &checks);
+        }
+    }
+}
+
 #[test]
 fn app_profile_sh_stage_3_makes_two_app_profiles_whose_tiers_differ_in_the_install_order() {
     let mut stage = Stage::new(serde_json::json!({"project_uid": "p-1"}));
@@ -7395,6 +7422,7 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
             "tenant-consumers",
             "tenant-consumers-projects",
             "release-consumers",
+            "release-consumers-edge-hosts",
             "tenant-delete",
         ],
     );
@@ -7450,8 +7478,9 @@ fn scope_sh_fails_the_versions_check_when_the_tenant_version_lists_the_project_v
     assert_ne!(o.status.code(), Some(0));
 }
 
-/// Issue #621. The check of the projects fails when strata could not read a project of the
-/// tenant. The check of the release fails when strata searched each project for it.
+/// Issues #621 and #892. The check of the projects fails when strata could not read a project of
+/// the tenant. The checks of the release fail when strata searched each project for it. They also
+/// fail when strata could not search the edge hosts of the project of the release.
 #[test]
 fn scope_sh_fails_the_consumers_checks_when_a_project_is_not_read() {
     let mut stage = scope_stage("tenant");
@@ -7461,7 +7490,7 @@ fn scope_sh_fails_the_consumers_checks_when_a_project_is_not_read() {
         r#"{"profile":{"uid":"t-1","scope":"tenant"},"count":0,
             "projectsRead":{"read":2,"unread":[{"uid":"p-2","name":"prod","denied":true}]}}"#,
         r#"{"profile":{"uid":"r-1","scope":"project","projectUid":"p-1"},"count":0,
-            "projectsRead":{"read":2}}"#,
+            "projectsRead":{"read":2},"edgeHostsRead":{"read":0,"error":{"kind":"api"}}}"#,
     );
     let (o, steps) = stage.run("scope.sh", &[]);
     failed(
@@ -7470,6 +7499,7 @@ fn scope_sh_fails_the_consumers_checks_when_a_project_is_not_read() {
             "tenant-consumers",
             "tenant-consumers-projects",
             "release-consumers",
+            "release-consumers-edge-hosts",
         ],
     );
     passed(&steps, &["by-uid", "tenant-delete"]);
