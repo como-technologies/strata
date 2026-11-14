@@ -2759,14 +2759,14 @@ fn the_read_of_a_table_row_keeps_the_mark_of_a_column_in_its_cell() {
     assert_eq!(cells("| a | |"), ["a", ""]);
 }
 
-/// A code span is the text between a pair of backticks. The two reads of a text give its code
-/// spans and the text outside them, from one rule. A backtick with no pair starts a code span that
-/// continues to the end of the text.
+/// A code span is the text between two runs of backticks of one length, as GitHub reads it. The two
+/// reads of a text give its code spans and the text outside them, from one rule. A run of
+/// backticks that no run of the same length closes is text.
 #[test]
 fn the_read_of_a_text_gives_its_code_spans_and_the_text_outside_them() {
-    let text = "Use `strata diff` with `--full`, and read `the rest";
-    assert_eq!(code_spans(text), ["strata diff", "--full", "the rest"]);
-    assert_eq!(without_code(text), "Use   with  , and read ");
+    let text = "Use `strata diff` with ``a`b`` and `` `--full` ``, and read `the rest";
+    assert_eq!(code_spans(text), ["strata diff", "a`b", "`--full`"]);
+    assert_eq!(without_code(text), "Use   with   and  , and read `the rest");
     assert!(code_spans("no span").is_empty());
     assert_eq!(without_code("no span"), "no span");
 }
