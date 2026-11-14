@@ -1,0 +1,8 @@
+$ strata behind skip/dev.json --pin k8s/kubernetes
+1 pin from 1 record: 1 behind
+~ [k8s  ] kubernetes  1.34.9  Public Repo  behind: 1.36.2 (drops arm64), 1.35.6, 1.35.3, 1.35.2
+      1.36.2 listed since 2026-07-30T22:45:47.109Z
+      bump to 1.36.2: repave IDENTITY UPSTREAM AUTHORED IMAGES
+      palette accepts
+      kubernetes 1.34.9 -> 1.36.2 skips a minor version: Palette refuses the update with K8sUpgradeNotSupported; move to 1.35.6 first
+      pinned by skip/dev.json (aws-stack@1.1.20)

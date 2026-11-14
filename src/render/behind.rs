@@ -277,6 +277,12 @@ pub(crate) fn palette_lines(pin: &Pin) -> Vec<String> {
     answer.chain(failed).collect()
 }
 
+/// What strata checks about a bump beside the answer of Palette, one line each: see
+/// [`UpdateChecks::lines`](crate::model::update::UpdateChecks::lines). Empty with no bump.
+pub(crate) fn update_check_lines(bump: Option<&crate::ops::Bump>) -> Vec<String> {
+    bump.map(|b| b.update_checks.lines()).unwrap_or_default()
+}
+
 /// `bump to 1.65.0: in-place IDENTITY UPSTREAM AUTHORED`, for a pin with a bump. When Palette
 /// calls a different newer version the latest, the line ends with `; Palette calls 1.30.0 the
 /// latest`.

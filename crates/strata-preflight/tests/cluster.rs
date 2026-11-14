@@ -3,7 +3,7 @@
 //! Palette quotes in a refusal.
 
 use serde_json::json;
-use strata::api::codes::Denial;
+use strata::api::codes::{Denial, INVALID_VARIABLE_CODE};
 use strata::api::{MemoryApi, Palette};
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
@@ -314,12 +314,13 @@ fn reports(mut report: Report) -> [(&'static str, String); 3] {
 #[test]
 fn a_refusal_of_a_variable_or_a_cidr_fails_palette_validate_with_the_message_of_palette_at_http_500_and_400()
  {
-    let required = format!("Palette refused the entity: InvalidVariable: {REQUIRED_VARIABLE}");
+    let required =
+        format!("Palette refused the entity: {INVALID_VARIABLE_CODE}: {REQUIRED_VARIABLE}");
     let cases = REFUSALS
         .iter()
         .zip(SAID)
         .map(|((code, _, message), said)| (*code, *message, said))
-        .chain([("InvalidVariable", REQUIRED_VARIABLE, required.as_str())]);
+        .chain([(INVALID_VARIABLE_CODE, REQUIRED_VARIABLE, required.as_str())]);
     for (code, message, said) in cases {
         for status in [500, 400] {
             let api = refusing(&QUOTED, status, code, message);

@@ -1,0 +1,2 @@
+$ strata behind skip/dev.json --pin k8s/kubernetes --json | jq -c '.pins[] | select(.behind) | .bump.updateChecks'
+{"skippedMinor":{"code":"K8sUpgradeNotSupported","pack":"kubernetes","from":"1.34.9","to":"1.36.2","nextMinor":"1.35","nextStep":"1.35.6"}}

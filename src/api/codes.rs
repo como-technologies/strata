@@ -143,6 +143,16 @@ pub const PROJECT_SCOPE_CODE: &str = "ProjectUidIsNotEmpty";
 /// it. `behind` prints it under the bump, and strata decides nothing from it.
 pub const UPGRADE_NOT_SUPPORTED_CODE: &str = "DependencyPackUpgradeNotSupported";
 
+/// The code of the refusal of an update that moves the Kubernetes pack of a cluster more than one
+/// minor version.
+///
+/// Palette refuses it with HTTP 400, on each cloud. It refuses it at the update of the profiles of
+/// a cluster or of a cluster template. It also refuses it at an update or a publish of a profile
+/// version that a cluster runs. No validate route checks the rule, so strata checks it: see
+/// [`MinorSkip`](crate::model::update::MinorSkip). The code of Palette shows it; no live run shows
+/// it yet.
+pub const K8S_UPGRADE_NOT_SUPPORTED_CODE: &str = "K8sUpgradeNotSupported";
+
 /// The codes of the errors that the import validate route gives with HTTP 500 when it matches no
 /// pack of the body to a registry.
 ///
@@ -246,7 +256,16 @@ const PROFILE_CLOUD: Check = &["ClusterProfilesNotSupported"];
 /// of a dropdown variable is `InvalidDropDownVariable`. A value that the format or the pattern of
 /// its variable refuses is `InvalidVariable`. The route refuses each one with HTTP 500. The code of
 /// Palette shows it; no live run shows it yet.
-const BODY_VARIABLES: Check = &["InvalidDropDownVariable", "InvalidVariable"];
+const BODY_VARIABLES: Check = &["InvalidDropDownVariable", INVALID_VARIABLE_CODE];
+
+/// The code of the refusal of a value of a variable.
+///
+/// The cluster validate route gives it for a value of the body that the format or the pattern of
+/// its variable refuses. The update of the profiles of a cluster gives it with HTTP 500 for a
+/// required variable with no value and no default value. No validate route checks that, so strata
+/// names such a variable: see [`UpdateChecks`](crate::model::update::UpdateChecks). The code of
+/// Palette shows it; no live run shows it yet.
+pub const INVALID_VARIABLE_CODE: &str = "InvalidVariable";
 
 /// For AWS with a VPC, the pod CIDR and the service CIDR of the Kubernetes pack are CIDRs. Neither
 /// one overlaps the CIDR of the VPC.

@@ -73,6 +73,11 @@
 #       and resolveNotification=true. The entry has each pack's values and manifests of NEW_UID.
 #       The Spectro Cloud provider sends a new version of a profile in this form. Palette takes
 #       OLD_UID off the cluster and puts NEW_UID on it.
+#   api.sh replace-status CLUSTER_UID OLD_UID NEW_UID
+#       The request of replace, with the status of the answer. The entry gives no variable. It
+#       prints the HTTP status as `HTTP <code>` on the first line and the answer after it, and
+#       exits 0 for each status. A refusal of Palette changes nothing. When Palette accepts, the
+#       cluster moves to NEW_UID: give a cluster of the lab only.
 #   api.sh delete PROFILE_UID
 #       Delete a profile version; a missing one is not an error.
 #   api.sh delete-named NAME...
@@ -494,15 +499,31 @@ detach() {
   echo "detached profile $profile from cluster $cluster"
 }
 
+# replace_patch CLUSTER_UID OLD_UID NEW_UID DIR: DIR/patch, the body of replace
+replace_patch() {
+  local cluster=$1 old=$2 new=$3 dir=$4
+  profiles_body "$cluster" "$dir" "$old" "$new"
+  jq --arg old "$old" --arg new "$new" \
+    '{profiles: [.profiles[] | select(.uid == $new) | . + {replaceWithProfile: $old}]}' "$dir/body" > "$dir/patch"
+}
+
 replace() {
   local cluster=${1:-} old=${2:-} new=${3:-} tmp
   [ -n "$old" ] && [ -n "$new" ] || die "usage: api.sh replace CLUSTER_UID OLD_UID NEW_UID"
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
-  profiles_body "$cluster" "$tmp" "$old" "$new"
-  jq --arg old "$old" --arg new "$new" \
-    '{profiles: [.profiles[] | select(.uid == $new) | . + {replaceWithProfile: $old}]}' "$tmp/body" > "$tmp/patch"
+  replace_patch "$cluster" "$old" "$new" "$tmp"
   call PATCH "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/patch" > /dev/null || exit 2
   echo "replaced profile $old with $new on cluster $cluster"
+}
+
+# replace-status CLUSTER_UID OLD_UID NEW_UID: the request of replace, and print `HTTP <code>`, then
+# the answer, for each status
+replace_status() {
+  local cluster=${1:-} old=${2:-} new=${3:-} tmp
+  [ -n "$new" ] && [ $# -eq 3 ] || die "usage: api.sh replace-status CLUSTER_UID OLD_UID NEW_UID"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  replace_patch "$cluster" "$old" "$new" "$tmp"
+  SHOW_STATUS=1 call PATCH "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/patch" || return 2
 }
 
 delete() {
@@ -960,6 +981,7 @@ case "${1:-}" in
   attach) shift; attach "$@" ;;
   detach) shift; detach "$@" ;;
   replace) shift; replace "$@" ;;
+  replace-status) shift; replace_status "$@" ;;
   override) shift; override "$@" ;;
   delete) shift; delete "$@" ;;
   delete-named) shift; delete_named "$@" ;;

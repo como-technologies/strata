@@ -1147,6 +1147,50 @@ facts:
       - src/candidate/gaps.rs
       - src/api/codes.rs
 
+  # The update of a cluster refuses a move of Kubernetes of more than one minor version, and no
+  # validate route checks it. behind and compare --validate check the move (#623).
+  - id: gap-kubernetes-minor-step
+    kind: gap
+    reads:
+      codes:
+        - K8sUpgradeNotSupported
+    stand_in: []
+    live:
+      - validate-packs.sh:bump-text-skip
+      - validate-packs.sh:skip-says
+      - validate-packs.sh:skip-refused
+    pages:
+      - internals/palette/validate-routes.md#what-the-update-checks
+      - internals/palette/profiles.md#the-checks-of-an-update
+      - commands/behind.md#a-move-that-skips-a-minor-version
+      - commands/compare/validate.md#what-the-route-does-not-check
+      - reference/errors.md#refusals-of-the-update-that-strata-names-first
+    code:
+      - src/model/update.rs
+      - src/api/codes.rs
+      - src/reference/version.rs
+
+  # The update of a cluster refuses a required variable with no value and no default value, and no
+  # validate route checks it. behind and compare --validate name each such variable that a move
+  # adds (#623).
+  - id: gap-required-variable
+    kind: gap
+    reads:
+      codes:
+        - InvalidVariable
+    stand_in: []
+    live:
+      - validate-packs.sh:variables-says
+      - validate-packs.sh:variables-refused
+    pages:
+      - internals/palette/validate-routes.md#what-the-update-checks
+      - internals/palette/profiles.md#the-checks-of-an-update
+      - commands/compare/validate.md#what-the-route-does-not-check
+      - reference/errors.md#refusals-of-the-update-that-strata-names-first
+    code:
+      - src/model/update.rs
+      - src/api/codes.rs
+
   # No route says that a newer version of a profile exists. Palette lists the published versions
   # of the profile in no order, and strata orders them (#707).
   - id: gap-newer-profile-version

@@ -421,6 +421,12 @@ clear whose name reads as a secret. The id stays, and a reader that ignores
 unknown fields reads it. The exit does not change: see
 [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
+After 0.33.0, a bump of `strata-behind/1` can have the new field `updateChecks`, and so can a
+comparison of `strata-diff/1` with `compare --validate`. The field holds the rules that Palette
+checks only at the update: `requiredVariables` and `skippedMinor`. The ids stay, and
+`--since` reads a report of 0.33.0 and before. See
+[The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
+
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
 `GET`, stay. A rule file reads the same, and the id stays.
@@ -1243,9 +1249,24 @@ field, a value, an input, or an option is in the sections above.
   `recording pack` ends with `; it skips 1.22.0-rc.1, a pre-release by SemVer`. A script that
   matches the whole note must match the new text. Standard output and the exit code of both
   changes stay. See [Which version is the newest](../commands/packs.md#which-version-is-the-newest).
+- **`behind` and `compare --validate` name two rules of the update that no validate route
+  checks.** A line can follow the answer of Palette. A script that reads these lines must skip
+  it, or read `updateChecks` of the JSON. The exit does not change. See
+  [The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
+  - A pin of the `k8s` layer can have a line under its bump, such as
+    `kubernetes 1.34.9 -> 1.36.2 skips a minor version`. The line names
+    `K8sUpgradeNotSupported` and the next step.
+  - A profile version can have that line under its bump. It can also have a line that
+    starts with `the move adds the required variable`. That line names `InvalidVariable`.
+  - `compare --validate` prints each line as a `note` line under the `palette` lines. The
+    markdown gives each one as a `**Note:**`.
+  - The markdown of `behind` adds each line to the cell of the bump.
 
 ### For a user of the CI drop-ins
 
+- **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor
+  version.** The bump column gives this line of `behind`. A script that reads the cell must
+  read the new line.
 - **`pr-comment.sh` adds no label of an impact for a pack uid that Palette
   mints.** The script reads `summary.maxImpact` of `compare`. Two copies of one
   profile with a manifest pack have the maximum impact `none`. So a threshold of
@@ -1283,6 +1304,12 @@ field, a value, an input, or an option is in the sections above.
 - `ops::PinnedBy` has the new field `owner: Option<String>`. A struct literal must set it.
 - `ops::SetRecord` has the new field `secret_like_variables`. A struct literal must set it, and
   a pattern with no `..` must name it.
+- `ops::Bump` and `diff::Diff` have the new field `update_checks: model::update::UpdateChecks`. A
+  struct literal must set it. `ops::update_checks` is new: the checks of `compare --validate`.
+  The module `model::update` is new, with `UpdateChecks`, `RequiredVariables`, and
+  `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
+  `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
+  `INVALID_VARIABLE_CODE`.
 
 ### For a user of the library of strata-preflight
 

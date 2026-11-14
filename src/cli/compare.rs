@@ -44,6 +44,7 @@ pub(crate) fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
         }
         if a.validate {
             d.palette_validation = Some(ops::palette_validation(&palette, &sa, &sb)?);
+            d.update_checks = ops::update_checks(&sa, &sb)?;
         }
     }
     print!("{}", a.out.renderer().render(&d, &sa, &sb, a.full)?);
