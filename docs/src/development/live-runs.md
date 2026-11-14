@@ -1240,7 +1240,7 @@ state what it shows.
 | `slash-sync` | 0 | Palette reads the registry `strata-live/packs`. No result yet: no live window ran this check. |
 | `slash-several`, `slash-several-uid` | 2, 0 | #853: a ref of the pack with no registry is `pack-in-several-registries`. The field `registries` gives `strata-live/packs` by its uid, and never by its name. No result yet: no live window ran these checks. |
 | `slash-record`, `slash-named` | 0 | #853: the ref `pack:<uid>/strata-live-pack@1.0.0` records the pack, and the record names the registry `strata-live/packs` and its uid. No result yet: no live window ran these checks. |
-| `slash-delete` | 0 | the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack |
+| `slash-delete` | 0 | #853: the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack. No result yet: no live window ran this check. |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
 | `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it. The record has no pack uid and no digest. It has the layer `addon`, the type `helm`, and the tag as the version |
 | `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`. The error says that Palette does not sync the registry, and lists a pack of such a registry only while a profile pins the pack |

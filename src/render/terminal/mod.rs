@@ -6,7 +6,7 @@ use super::consumers::{
     consumers_heading, consumers_sentence, not_checked_line, scope_line, searched_rows,
 };
 use super::list::{
-    applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_registry,
+    applied_ref, cluster_count, list_count, list_scope, listed_registry, no_version_sentence,
     pack_version, profile_marks, project_label, registry_heading, side_projects, version_note,
     virtual_line, virtual_note,
 };
@@ -475,7 +475,7 @@ fn list_profiles(out: &mut String, p: &Paint, l: &Listing, profiles: &[ListedPro
             .map(|pk| {
                 let mut row = vec![pk.layer.clone(), pk.name.clone(), pack_version(pk)];
                 // a pack with no registry ends at its version, with no space after it
-                row.extend(pack_registry(pk).map(str::to_string));
+                row.extend(listed_registry(pk).map(str::to_string));
                 row
             })
             .collect();

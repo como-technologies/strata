@@ -10,7 +10,7 @@ use super::changes::{
 };
 use super::consumers::{consumer_count, consumer_counts, consumers_sentence};
 use super::list::{
-    applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_registry,
+    applied_ref, cluster_count, list_count, list_scope, listed_registry, no_version_sentence,
     pack_version, profile_marks, project_label, registry_heading, side_projects, version_note,
     virtual_group, virtual_line,
 };
@@ -492,7 +492,7 @@ fn profile_row(l: &Listing, pr: &ListedProfile, with_packs: bool) -> String {
         let packs = match entry_error(pr.error.as_ref()) {
             Some(msg) => markdown_cell(&format!("error: {msg}")),
             None => lines_cell(pr.packs.iter().flatten().map(|pk| {
-                let registry = pack_registry(pk)
+                let registry = listed_registry(pk)
                     .map(|r| format!(" in {r}"))
                     .unwrap_or_default();
                 format!("{}/{} {}{registry}", pk.layer, pk.name, pack_version(pk))

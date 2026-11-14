@@ -1149,8 +1149,9 @@ field, a value, an input, or an option is in the sections above.
 ### For a user of the command line or of a document
 
 - **A pack row of `list --packs` and `list --pack` ends with its registry.** The name of the
-  registry follows the version. When the key cannot see the registry, the row gives its uid. A
-  script that reads the text of a row must read one more column, or read `--json`. With
+  registry follows the version. When the key cannot see the registry, or when its name holds a
+  `/`, the row gives its uid. A `pack:` ref takes that text. A script that reads the text of a
+  row must read one more column, or read `--json`. With
   `--format markdown`, the pack ends with `in` and the registry. See
   [The registry of each pack](../commands/list.md#the-registry-of-each-pack).
 - **A record, `compare`, `same-release`, and `list --packs` read the registry listing.** This

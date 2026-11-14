@@ -228,8 +228,10 @@ Registry`, and `aws-stack@1.1.1` takes it from `Public Repo`:
 
 The pack ref of a profile names its registry by the uid alone. So strata reads
 the names from the registry listing of Palette, with one more request for the
-command. A registry that the key cannot see shows its uid. A `pack:` ref takes
-the uid too: see [Refs](../reference/refs.md). A pack with no registry, such as
+command. A registry that the key cannot see shows its uid. A registry whose
+name holds a `/` shows its uid too, because a `pack:` ref cannot take that
+name. A `pack:` ref takes the text of the row: see
+[Refs](../reference/refs.md). A pack with no registry, such as
 a manifest pack, ends at its version. The JSON gives `registryUid` and
 `registry` on each pack. With `--format markdown`, the pack ends with `in`
 and the registry.

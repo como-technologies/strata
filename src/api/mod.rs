@@ -42,13 +42,14 @@ pub(crate) use palette::{
     is_download_limit, named_entries, profile_versions, search_condition, search_filter,
     search_group,
 };
-// the unit tests build the route of a download with the one function that builds it
-#[cfg(test)]
-pub(crate) use palette::download_path;
 pub use palette::{
     Palette, VariablesRead, cloud_account_path, cloud_config_path, cluster_events_path,
     cluster_summary_path, subject_path,
 };
+// the unit tests build the route of a download with the one function that builds it, and serve the
+// registry listing at the one const of its route
+#[cfg(test)]
+pub(crate) use palette::{REGISTRY_METADATA, download_path};
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft, profile_variables};
 pub(crate) use raw::{recorded_packs, recorded_template, save_registries, saved_registries};
 pub use retry::{Retry, RetryPolicy};

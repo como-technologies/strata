@@ -2,7 +2,7 @@
 //! tag requests.
 
 use super::*;
-use crate::api::MemoryApi;
+use crate::api::{MemoryApi, REGISTRY_METADATA};
 use crate::model::cloud::CLOUD_ALL;
 
 fn version(uid: &str, version: &str, clouds: &[&str]) -> Value {
@@ -39,7 +39,7 @@ fn read_with(
         .collect();
     let api = MemoryApi::new()
         .with(
-            "/v1/registries/metadata",
+            REGISTRY_METADATA,
             serde_json::json!({"items": [
                 {"name": "strata-live-registry", "uid": "reg-own", "kind": "oci"},
             ]}),
@@ -552,7 +552,7 @@ fn tag(uid: &str, version: &str, tag: &str) -> Value {
 fn nginx_api(versions: Vec<Value>, plain: &[Value], retired: &[Value]) -> MemoryApi {
     let mut api = MemoryApi::new()
         .with(
-            "/v1/registries/metadata",
+            REGISTRY_METADATA,
             serde_json::json!({"items": [
                 {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
             ]}),

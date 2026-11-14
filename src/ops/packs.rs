@@ -241,7 +241,7 @@ pub(super) fn registry_packs_in<A: PaletteApi>(
         }
         had_the_pack = true;
         let (copy, listed) =
-            pack_registry(palette, name, options, (registry, uid), mine, progress)?;
+            registry_copy(palette, name, options, (registry, uid), mine, progress)?;
         registries.extend(copy);
         if !listed.is_empty() {
             architectures.entry(uid.clone()).or_default().extend(listed);
@@ -297,7 +297,7 @@ fn missing_pack<A: PaletteApi>(
 /// The copy of the pack in one registry, and the architectures of its versions. `mine` holds the
 /// listing entries of the registry, and at least one. The copy is `None` when no version is left
 /// after the flags of `options`.
-fn pack_registry<A: PaletteApi>(
+fn registry_copy<A: PaletteApi>(
     palette: &Palette<A>,
     name: &str,
     options: &PackOptions,

@@ -88,7 +88,7 @@ const CLOUD_CONFIGS: &str = "/v1/cloudconfigs";
 /// The registries: the summary listing of a kind is under it.
 const REGISTRIES: &str = "/v1/registries";
 /// The registries that the key can see.
-const REGISTRY_METADATA: &str = "/v1/registries/metadata";
+pub(crate) const REGISTRY_METADATA: &str = "/v1/registries/metadata";
 /// The dashboard summary of a cluster: `/v1/dashboard/spectroclusters/{uid}`.
 const CLUSTER_SUMMARIES: &str = "/v1/dashboard/spectroclusters";
 /// The events of a cluster: `/v1/events/components/spectrocluster/{uid}`.

@@ -13,7 +13,7 @@ use crate::error::{Error, Result};
 use crate::json::{str_at, text};
 use crate::model::profile_type::ProfileType;
 use crate::reference::picked::Picked;
-use crate::reference::{LATEST, name_version, pack_registry};
+use crate::reference::{LATEST, name_version, registry_in_ref};
 use crate::snapshot::{PackSource, Snapshot, Template};
 use crate::term::progress::Progress;
 use crate::text::name_or_uid;
@@ -236,7 +236,7 @@ fn holding_registry<A: PaletteApi>(
             // lists the registries in the order it likes, and a live run saw both orders
             let mut registries: Vec<String> = several
                 .iter()
-                .map(|(registry, uid, _)| pack_registry(registry, uid).to_string())
+                .map(|(registry, uid, _)| registry_in_ref(registry, uid).to_string())
                 .collect();
             registries.sort();
             Err(Error::PackInSeveralRegistries {

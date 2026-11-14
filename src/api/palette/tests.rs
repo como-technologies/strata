@@ -92,7 +92,7 @@ fn a_pack_name_and_a_registry_uid_go_into_the_path_of_the_tags_escaped() {
 fn the_registry_listings_read_the_metadata_and_the_summary_of_a_kind() {
     let p = Palette::new(
         MemoryApi::new()
-            .with("/v1/registries/metadata", json!({"items": [1]}))
+            .with(REGISTRY_METADATA, json!({"items": [1]}))
             .with("/v1/registries/pack/summary", json!({"items": [2]}))
             .with(OCI_SUMMARY_TEMPLATE, json!({"items": [3]})),
     );
