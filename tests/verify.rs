@@ -19,6 +19,7 @@ use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::closed_set::{ClosedSet, Open};
 use strata::diff::{ChangeFlag, Side, VerifyStatus, VersionMove};
 use strata::error::{Error, FailureClass};
+use strata::json::str_at;
 use strata::model::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::model::profile_type::ProfileType;
 use strata::model::update::MinorSkip;
@@ -1825,6 +1826,54 @@ fn a_cluster_running_the_recorded_version_is_identical_to_the_record() {
     );
     assert!(recorded_b.source.cluster.is_none());
     assert_eq!(recorded_b.source.title(), "lab-profile@1.3.0");
+}
+
+/// For a sensitive variable that is not a dropdown, the cluster route gives `********` as the
+/// default value. It does so also when the profile has no default value. The profile route then
+/// gives `""` (#884).
+#[test]
+fn a_cluster_copy_with_a_sensitive_variable_with_no_default_value_is_the_release_of_the_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let served = read_json(&dir.path().join("cluster-b").join("variables.json"));
+    let mut defaults: Vec<(String, String)> = strata::api::profile_variables(&served, UID_B)
+        .filter(|v| v["isSensitive"] == true)
+        .map(|v| {
+            (
+                str_at(v, "/name").to_string(),
+                str_at(v, "/defaultValue").to_string(),
+            )
+        })
+        .collect();
+    defaults.sort();
+    let masked = |name: &str| (name.to_string(), strata::api::MASKED.to_string());
+    assert_eq!(
+        defaults,
+        [masked("db_password"), masked("grafana_password")]
+    );
+    assert!(
+        recorded_b
+            .variables
+            .iter()
+            .all(|v| v.default_value.is_empty() || !v.is_sensitive)
+    );
+
+    let on_b = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(on_b.variables_hash, recorded_b.variables_hash);
+    let d = ops::compare(&recorded_b, &on_b, "t1");
+    assert!(d.same && !d.variables.changed);
+    let records = [
+        ("b".to_string(), recorded_b),
+        ("cluster-b".to_string(), on_b),
+    ];
+    let chain = ops::same_release(&records, Policy::Exact, "t1");
+    assert_eq!(chain.pairs[0].status, PairStatus::Identical);
+    assert!(chain.same);
 }
 
 #[test]

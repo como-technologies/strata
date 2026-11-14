@@ -6,6 +6,7 @@ use super::{DEV_ENV, payments_addons, payments_cluster};
 use crate::book::Runner;
 use crate::tenant::{Edit, variables_route};
 use serde_json::json;
+use strata::model::input_type::InputType;
 
 /// Run the chapters of the drift of a version, and of the clusters that run one.
 pub(super) fn run(r: &mut Runner) {
@@ -619,8 +620,8 @@ fn cluster_secret(r: &mut Runner) {
     r.profile(DEV, A1119, "1.1.19", "aws-stack@1.1.1", &[]);
     let variable = |name: &str, display: &str| {
         json!({"name": name, "displayName": display, "defaultValue": "", "format": "string",
-            "inputType": "text", "required": true, "hidden": false, "immutable": false,
-            "isSensitive": false, "options": []})
+            "inputType": InputType::Text.as_str(), "required": true, "hidden": false,
+            "immutable": false, "isSensitive": false, "options": []})
     };
     let variables = [
         variable("client_secret", "Client secret"),

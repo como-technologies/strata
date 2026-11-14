@@ -323,16 +323,13 @@ fn packs_mut(doc: &mut Value) -> impl Iterator<Item = &mut Value> {
 
 #[cfg(test)]
 mod tests {
-    use strata::api::{MemoryApi, Palette};
     use strata::diff::ChangeFlag;
-    use strata::ops::{self, SnapshotOptions};
-    use strata::reference::Ref;
+    use strata::ops;
     use strata::snapshot::Snapshot;
-    use strata::term::progress::Progress;
 
-    use super::super::Tenant;
     use super::super::registries::PUBLIC_REPO;
-    use super::super::routes::{manifests_route, profile_route, variables_route};
+    use super::super::routes::{manifests_route, profile_route};
+    use super::super::{Tenant, profile_record};
     use super::*;
     use crate::variants::one_of_each;
 
@@ -487,25 +484,10 @@ mod tests {
         (doc, manifests)
     }
 
-    /// The record that `strata snapshot` writes of the profile `doc`, with the pack summaries
-    /// `manifests`.
+    /// The record that `strata snapshot` writes of the profile `doc`, which has no variable, with
+    /// the pack summaries `manifests`.
     fn record(doc: &Value, manifests: &Value) -> Snapshot {
-        let uid = doc["metadata"]["uid"].as_str().expect("a uid");
-        let api = MemoryApi::new()
-            .with(format!("/{}", profile_route(uid)), doc.clone())
-            .with(format!("/{}", manifests_route(uid)), manifests.clone())
-            .with(
-                format!("/{}", variables_route(uid)),
-                json!({"variables": []}),
-            );
-        ops::snapshot_for(
-            &Ref::Uid(uid.to_string()),
-            &SnapshotOptions::default(),
-            || Ok(Palette::new(api)),
-            "2026-09-17T09:30:00Z",
-            &Progress::silent(),
-        )
-        .expect("the record builds")
+        profile_record(doc, manifests, &json!({"variables": []}))
     }
 
     #[test]

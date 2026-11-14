@@ -156,6 +156,24 @@ facts:
       - src/api/palette/profiles.rs
       - src/snapshot/variable.rs
 
+  - id: profile-variables-masked
+    kind: behavior
+    reads:
+      fields:
+        - variables[].defaultValue
+        - variables[].inputType
+        - variables[].isSensitive
+        - variables[].options[].value
+    stand_in:
+      - v1/clusterprofiles/{uid}/variables
+    live: []
+    unchecked: The code of Palette shows it. No run gives a profile a sensitive variable.
+    pages:
+      - internals/palette/profiles.md#the-variables-route
+      - internals/hashes.md#the-node-hash-and-the-root
+    code:
+      - src/snapshot/variable.rs
+
   - id: pack-of-draft
     kind: request
     request: GET /v1/packs/{uid}

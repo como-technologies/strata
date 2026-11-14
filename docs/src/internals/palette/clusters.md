@@ -173,9 +173,23 @@ A copy has the variables of its profile too. `GET
 /v1/spectroclusters/<uid>/variables` is an array with one entry for each applied
 profile that declares a variable: the profile uid, and each variable with the
 fields that the profile endpoint serves, plus `value`, the value the cluster
-gives it. So the copy of a profile with a variable has the variables hash of the
-profile, and its root equals the root of the profile. The value that a cluster
-gives is in the record, under `source.cluster.variables`, and not in the root.
+gives it. The value that a cluster gives is in the record, under
+`source.cluster.variables`, and not in the root.
+
+The two endpoints mask one field in two ways. For a sensitive variable that is
+not a dropdown, the cluster endpoint gives `defaultValue: "********"`, also when
+the profile has no default value. For no default value, the profile endpoint
+gives `defaultValue: ""`: see
+[The variables route](./profiles.md#the-variables-route). Both endpoints give
+`********` for the value of each option of a sensitive dropdown variable. The
+code of Palette shows it; no live run shows it yet.
+
+For a sensitive variable that is not a dropdown, the variables hash reads
+`********` as an empty default value. See
+[The node hash and the root](../hashes.md#the-node-hash-and-the-root). So the
+copy of a profile with a variable has the variables hash of the profile, and its
+root equals the root of the profile. The record of the copy holds the default
+value as the cluster endpoint gives it.
 
 The endpoint gives `********` in place of the value of a sensitive variable,
 when the value is not empty and the variable is not a dropdown. The value of a

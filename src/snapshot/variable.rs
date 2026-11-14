@@ -5,6 +5,7 @@ use serde::de;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
+use crate::api::mask::MASKED;
 use crate::content::canon::{canonical_json, sha256_hex};
 use crate::json::{arr, flag, text, text_or};
 use crate::model::input_type::InputType;
@@ -213,8 +214,20 @@ impl Variable {
     ///
     /// The document holds no default mark of an option. A record of strata 0.33 and before does
     /// not hold the mark. If the hash covers it, the root of such a record moves.
+    ///
+    /// The document holds an empty default in place of [`MASKED`] for a sensitive variable that
+    /// is not a dropdown. The variables route of a cluster gives the mask also for an empty
+    /// default. The variables route of a profile gives it only for a default that is not empty.
+    /// So a copy on a cluster keeps the variables hash of its profile.
     pub(crate) fn to_value(&self) -> Value {
+        let masked_default =
+            self.is_sensitive && !self.is_dropdown() && self.default_value == MASKED;
         let hashed = Variable {
+            default_value: if masked_default {
+                String::new()
+            } else {
+                self.default_value.clone()
+            },
             options: self
                 .options
                 .iter()
@@ -227,6 +240,11 @@ impl Variable {
         };
         // a variable holds text, flags, and a list of those, so it always serializes
         serde_json::to_value(hashed).expect("a variable serializes")
+    }
+
+    /// True when the UI asks for the value with the options of the variable.
+    pub(crate) fn is_dropdown(&self) -> bool {
+        InputType::from_text(&self.input_type) == Some(InputType::Dropdown)
     }
 }
 
@@ -261,7 +279,7 @@ mod tests {
         let given = json!({
             "name": "tier", "displayName": "Tier", "description": "The tier.", "format": "string",
             "defaultValue": "gold", "regex": "^[a-z]+$", "required": true, "immutable": true,
-            "hidden": true, "isSensitive": true, "inputType": "dropdown",
+            "hidden": true, "isSensitive": true, "inputType": InputType::Dropdown.as_str(),
             "options": [
                 {"label": "Gold", "value": "gold", "description": "Best", "default": true},
                 {"label": "Silver", "value": "silver", "description": "Good"},
@@ -285,7 +303,7 @@ mod tests {
         let v: Variable =
             serde_json::from_value(json!({"name": "a", "defaultValue": "1"})).unwrap();
         assert_eq!(v.format, "string");
-        assert_eq!(v.input_type, "text");
+        assert_eq!(v.input_type, InputType::Text.as_str());
         assert_eq!(v.default_value, "1");
         assert!(serde_json::from_value::<Variable>(json!({"defaultValue": "1"})).is_err());
     }
@@ -335,11 +353,45 @@ mod tests {
             "options": [{"label": "Small", "value": "s", "description": ""}],
         }]);
         let now = [Variable::from_palette(&json!({
-            "name": "size", "required": true, "inputType": "dropdown",
+            "name": "size", "required": true, "inputType": InputType::Dropdown.as_str(),
             "options": [{"label": "Small", "value": "s", "default": true}],
         }))];
         assert!(now[0].options[0].default);
         assert_eq!(hash_of(&now), sha256_hex(&canonical_json(&older)));
         assert_eq!(now[0].to_value(), older[0]);
+    }
+
+    /// For a sensitive variable that is not a dropdown, the variables route of a cluster gives the
+    /// mask as the default (#884). It does so also for an empty default.
+    #[test]
+    fn the_hash_reads_the_mask_of_the_default_of_a_sensitive_variable_that_is_not_a_dropdown_as_empty()
+     {
+        let of = |sensitive: bool, input_type: InputType, default: &str| {
+            hash_of(&[Variable::from_palette(&json!({
+                "name": "db_password", "isSensitive": sensitive,
+                "inputType": input_type.as_str(), "defaultValue": default,
+            }))])
+        };
+        for input_type in [InputType::Text, InputType::Multiline] {
+            assert_eq!(of(true, input_type, MASKED), of(true, input_type, ""));
+            assert_ne!(of(true, input_type, "x"), of(true, input_type, ""));
+            assert_ne!(of(false, input_type, MASKED), of(false, input_type, ""));
+        }
+        // the default of a dropdown variable is the label of an option, and no route masks it
+        assert_ne!(
+            of(true, InputType::Dropdown, MASKED),
+            of(true, InputType::Dropdown, "")
+        );
+        // a record of an older release keeps its root when its sensitive variable has no
+        // default. The JSON is the text of such a record, on purpose
+        let older = json!([{
+            "name": "db_password", "displayName": "", "description": "", "format": "string",
+            "defaultValue": "", "regex": "", "required": false, "immutable": false,
+            "hidden": false, "isSensitive": true, "inputType": "text", "options": [],
+        }]);
+        assert_eq!(
+            of(true, InputType::Text, MASKED),
+            sha256_hex(&canonical_json(&older))
+        );
     }
 }

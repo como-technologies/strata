@@ -11,7 +11,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE};
-use crate::model::input_type::InputType;
 use crate::model::layer::Layer;
 use crate::reference::version;
 use crate::snapshot::{Pack, Snapshot, Variable};
@@ -92,7 +91,7 @@ impl RequiredVariables {
 /// of strata 0.33 and before holds no default mark, so a dropdown variable of such a record has no
 /// default option here.
 fn takes_a_default(v: &Variable) -> bool {
-    if InputType::from_text(&v.input_type) != Some(InputType::Dropdown) {
+    if !v.is_dropdown() {
         return !v.default_value.is_empty();
     }
     let is_label =
@@ -217,6 +216,8 @@ impl UpdateChecks {
 mod tests {
     use serde_json::json;
 
+    use crate::model::input_type::InputType;
+
     use super::*;
 
     fn pack(layer: &str, name: &str, version: &str) -> Pack {
@@ -271,7 +272,7 @@ mod tests {
             variable(json!({"name": "tier", "required": true, "defaultValue": "gold"})),
             variable(json!({"name": "note"})),
             variable(
-                json!({"name": "size", "required": true, "inputType": "dropdown",
+                json!({"name": "size", "required": true, "inputType": InputType::Dropdown.as_str(),
                 "options": [{"label": "small", "value": "s", "default": true}]}),
             ),
         ];
@@ -310,7 +311,7 @@ mod tests {
         };
         let dropdown = |name: &str, default: bool| {
             variable(
-                json!({"name": name, "required": true, "inputType": "dropdown",
+                json!({"name": name, "required": true, "inputType": InputType::Dropdown.as_str(),
                 "options": options(default)}),
             )
         };
@@ -321,7 +322,7 @@ mod tests {
             variable(json!({"name": "label", "required": true, "options": options(true)})),
             // a dropdown variable with a default value takes it
             variable(
-                json!({"name": "tier", "required": true, "inputType": "dropdown",
+                json!({"name": "tier", "required": true, "inputType": InputType::Dropdown.as_str(),
                 "defaultValue": "small", "options": options(false)}),
             ),
         ];
@@ -334,7 +335,7 @@ mod tests {
      {
         let dropdown = |name: &str, default_value: &str, default: bool| {
             variable(
-                json!({"name": name, "required": true, "inputType": "dropdown",
+                json!({"name": name, "required": true, "inputType": InputType::Dropdown.as_str(),
                 "defaultValue": default_value,
                 "options": [{"label": "small", "value": "s"},
                     {"label": "large", "value": "l", "default": default}]}),

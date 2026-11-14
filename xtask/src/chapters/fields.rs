@@ -14,6 +14,7 @@ use serde_json::json;
 use strata::closed_set::ClosedSet;
 use strata::json::set_at;
 use strata::model::cluster_state::ClusterState;
+use strata::model::input_type::InputType;
 use strata::model::scope::ProfileScope;
 
 use super::ids::{
@@ -127,7 +128,7 @@ fn profile(r: &mut Runner) {
         &json!({"variables": [{
             "name": "owner", "displayName": "Owner",
             "description": "The team that owns the cluster", "defaultValue": "platform",
-            "format": "string", "inputType": "text", "regex": "^[a-z]+$",
+            "format": "string", "inputType": InputType::Text.as_str(), "regex": "^[a-z]+$",
             "required": true, "hidden": false, "immutable": false, "isSensitive": false,
             "options": [{"label": "Platform", "value": "platform",
                 "description": "The platform team", "default": true}],

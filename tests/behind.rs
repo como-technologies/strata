@@ -17,6 +17,7 @@ use strata::api::MemoryApi;
 use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE};
 use strata::closed_set::ClosedSet;
 use strata::diff::{ChangeFlag, Status};
+use strata::model::input_type::InputType;
 use strata::model::scope::ProfileScope;
 use strata::ops;
 use strata::reference::Ref;
@@ -708,7 +709,7 @@ fn the_move_names_a_required_dropdown_variable_with_no_default_option_and_not_on
     // `default` on each option, and only zone has an option with the mark
     let dropdown = |name: &str, default: bool| {
         let mut v = common::variable(name, name, "", false);
-        v["inputType"] = json!("dropdown");
+        v["inputType"] = json!(InputType::Dropdown.as_str());
         v["options"] = json!([
             {"label": "a", "value": "1", "description": "", "default": false},
             {"label": "b", "value": "2", "description": "", "default": default},
