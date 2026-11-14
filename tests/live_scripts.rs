@@ -6739,9 +6739,24 @@ fn scope_stage(tenant_scope: &str) -> Stage {
     stage
 }
 
+/// The answers of `consumers` in `scope.sh`: for the tenant version `t-1`, its exit `code` and
+/// `tenant`, and for the release `release`.
+fn scope_consumers(stage: &mut Stage, code: i32, tenant: &str, release: &str) {
+    stage.strata("consumers t-1 --json", code, tenant);
+    stage.strata("consumers r-1 --json", 0, release);
+}
+
 #[test]
 fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_it() {
-    let stage = scope_stage("tenant");
+    let mut stage = scope_stage("tenant");
+    // consumers searched both projects of the tenant for the tenant version, and the release names
+    // its project
+    scope_consumers(
+        &mut stage,
+        0,
+        r#"{"profile":{"uid":"t-1","scope":"tenant"},"count":0,"projectsRead":{"read":2}}"#,
+        r#"{"profile":{"uid":"r-1","scope":"project","projectUid":"p-1","projectName":"lab"},"count":0}"#,
+    );
     let (o, steps) = stage.run("scope.sh", &[]);
     passed(
         &steps,
@@ -6761,6 +6776,9 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
             "by-uid",
             "tenant-list",
             "tenant-list-no-mark",
+            "tenant-consumers",
+            "tenant-consumers-projects",
+            "release-consumers",
             "tenant-delete",
         ],
     );
@@ -6813,6 +6831,32 @@ fn scope_sh_fails_the_versions_check_when_the_tenant_version_lists_the_project_v
     let (o, steps) = stage.run("scope.sh", &[]);
     failed(&steps, &["versions-tenant"]);
     passed(&steps, &["versions-project", "annotation-tenant"]);
+    assert_ne!(o.status.code(), Some(0));
+}
+
+/// Issue #621. The check of the projects fails when strata could not read a project of the
+/// tenant. The check of the release fails when strata searched each project for it.
+#[test]
+fn scope_sh_fails_the_consumers_checks_when_a_project_is_not_read() {
+    let mut stage = scope_stage("tenant");
+    scope_consumers(
+        &mut stage,
+        2,
+        r#"{"profile":{"uid":"t-1","scope":"tenant"},"count":0,
+            "projectsRead":{"read":2,"unread":[{"uid":"p-2","name":"prod","denied":true}]}}"#,
+        r#"{"profile":{"uid":"r-1","scope":"project","projectUid":"p-1"},"count":0,
+            "projectsRead":{"read":2}}"#,
+    );
+    let (o, steps) = stage.run("scope.sh", &[]);
+    failed(
+        &steps,
+        &[
+            "tenant-consumers",
+            "tenant-consumers-projects",
+            "release-consumers",
+        ],
+    );
+    passed(&steps, &["by-uid", "tenant-delete"]);
     assert_ne!(o.status.code(), Some(0));
 }
 

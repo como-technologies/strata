@@ -568,17 +568,24 @@ of the secret does not show, because the two sides hold the mask: see
 - `profile`: `uid`, `name`, and `version`. `type`, only for an app profile:
   `app`. The schema gives `type` the six profile types: `cluster`, `infra`,
   `add-on`, `system`, `app`, and `pack`.
+  - `scope`, for a cluster profile when its document gives it: `project`,
+    `tenant`, or `system`.
+  - `projectUid` and `projectName`, only for a profile of a project: the one
+    project whose clusters can use it. `projectName` is there when strata could
+    read the project listing.
 - `count`: the number of consumers. Exit `1` when it is not `0`. Exit `0` when
   it is `0` and each reading succeeded. Exit `2` when it is `0` and a reading
-  failed: `error`, `groupsError`, or an `unread` that is not `0` in
-  `clustersRead`, or `error` in `edgeHostsRead`.
+  failed. A failed reading is `error`, `groupsError`, or an `unread` that is not
+  `0` in `clustersRead`, or `error` in `edgeHostsRead`. It is also a project that
+  `projectsRead` did not check.
 - `overwritten`: the number of consumers whose copy names another version.
 - `consumers[]`: `kind`, `uid`, `name`, `projectUid`, `state`, `version`, and
   `error` when strata cannot read the cluster or the app deployment. `kind` is
   `cluster`, `edgehost`, `template`, or `app` for an app deployment.
-  `projectName` joins them when strata could read the project listing. The
-  names and the projects come from `status.inUseClusters` of the profile, from
-  `status.inUseClusterTemplates` for a cluster template, and from
+  `projectName` joins them when strata could read the project listing. Strata
+  reads the listing of the tenant first, so a consumer in another project has a
+  name too. The names and the projects come from `status.inUseClusters` of the
+  profile, from `status.inUseClusterTemplates` for a cluster template, and from
   `status.inUseApps` of an app profile. `unlisted`, only when true: the
   profile did not list the cluster, and the second reading found it.
   - `state`: `status.state` of the cluster, as Palette gives it in
@@ -600,14 +607,30 @@ of the secret does not show, because the two sides hold the mask: see
     strata read, which also count in `read` or `unread`.
   - `membersUnread`, only when not zero: the virtual clusters of `members` that
     strata could not read, which also count in `unread`.
+  - `membersFound`, only when not zero: the virtual clusters of `members` that
+    run the version. Each one is in `consumers[]` with `unlisted`.
   - `groupsError`: why strata could not read the cluster groups, or one of
     them.
   - `skipped`, only when true: `--list-only` asked for no second reading, or
     the profile is an app profile.
   - `reason`, only for an app profile: why strata did no second reading.
-- `edgeHostsRead`: `read`, the edge hosts listed, and `error`, why strata could
-  not list them. Then no edge host counts. `skipped` and `reason`, only for an
-  app profile: strata reads no edge host, and why.
+- `edgeHostsRead`: `read`, the edge hosts that the searches listed, each one
+  time, and `error`, why strata could not list them. Then no edge host counts.
+  `skipped` and `reason`, only for an app profile: strata reads no edge host,
+  and why.
+- `projectsRead`: the projects of the tenant listing that strata searched one by
+  one. It is there for a profile of the tenant or of the system, and not with
+  `--list-only`. See
+  [A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant).
+  - `read`: the projects that strata searched.
+  - `unread`, only when not empty: each project whose search failed, with
+    `uid`, `name`, `denied`, and `error`. `denied` is `true` when Palette
+    answered with a denial, such as `ResourceAccessDenied`.
+  - `tenantError`: why Palette refused the cluster search at tenant scope. Then
+    the listing holds only the projects of the roles of the key, so a project
+    outside it is not checked.
+  - `error`: why strata could not read the project listing of the tenant. Then
+    strata searched no project one by one.
 
 ## strata-list/1
 

@@ -553,7 +553,9 @@ Read-write. It needs the profiles and no cluster. It creates a profile of the
 tenant with the name, the version, and the packs of the release profile,
 through the API with no project. It deletes the profile at its end. This is the
 source for
-[The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version).
+[The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version) and
+for the search of each project in
+[A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -567,6 +569,9 @@ source for
 | `ambiguous`, `ambiguous-says` | 2, 0 | #113: `snapshot <name>@<version>` exits `2` with `profile-name-ambiguous`. The error names each uid with its scope, and tells you to give the uid |
 | `by-uid` | 0 | #113: `snapshot <uid>` records the tenant version |
 | `tenant-list`, `tenant-list-no-mark` | 0 | #113: at tenant scope, `list --json` gives `scope` `tenant` for the version, and its row has no mark |
+| `tenant-consumers` | 0 | #621: `consumers` of the tenant version exits `0`: no cluster runs it, and the key reads each project. No result yet: no live window ran this check. |
+| `tenant-consumers-projects` | 0 | #621: its `profile.scope` is `tenant`, and `projectsRead` counts one project or more, with none in `unread`. So strata searched each project of the tenant listing. No result yet: no live window ran this check. |
+| `release-consumers` | 0 | #621: `consumers` of the release gives `profile.scope` `project` and the name of its project, and has no `projectsRead`. No result yet: no live window ran this check. |
 | `tenant-delete` | 0 | #113: the delete of the tenant profile, with no `ProjectUid` |
 
 ## projects.sh

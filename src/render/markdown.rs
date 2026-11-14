@@ -1,16 +1,14 @@
 //! The pull request comment.
 
 mod behind;
+mod consumers;
 
 use super::changes::{
     OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, moved, plain_flags,
     status_mark, status_word, tier_op_lines, traits_suffix, upstream_line, values_changed,
     values_summary, values_unparsed_sentence, variable_lines, version_display,
 };
-use super::consumers::{
-    NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
-    consumers_sentence, edge_hosts_line, second_reading_line,
-};
+use super::consumers::{consumer_count, consumer_counts, consumers_sentence};
 use super::list::{
     applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_registry,
     pack_version, profile_marks, project_label, registry_heading, side_projects, version_note,
@@ -31,10 +29,9 @@ use crate::closed_set::ClosedSet;
 use crate::closed_set::unknown::report::Report;
 use crate::diff::{Diff, Leaf, Op, PackDiff, Status};
 use crate::error::Result;
-use crate::model::profile_type::ProfileType;
 use crate::ops::{
-    Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing,
-    PackListing, RecordStatus, SavedFilter, VerifySummary,
+    Chain, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing, PackListing,
+    RecordStatus, SavedFilter, VerifySummary,
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
@@ -396,71 +393,7 @@ impl Renderer for MarkdownRenderer {
     }
 
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {
-        let mut o = format!(
-            "### consumers: {}\n\n",
-            markdown_cell(&consumers_heading(r))
-        );
-        let second = format!(
-            "{}.",
-            capitalized(&markdown_cell(&second_reading_line(&r.clusters_read)))
-        );
-        let edge = format!("{}.", capitalized(&markdown_cell(&edge_hosts_line(r))));
-        if r.consumers.is_empty() {
-            o.push_str(&second);
-            o.push_str("\n\n");
-            o.push_str(&edge);
-            o.push('\n');
-            return Ok(o);
-        }
-        let subject = if r.profile.kind == Some(ProfileType::App) {
-            ConsumerKind::App.noun()
-        } else {
-            ConsumerKind::Cluster.noun()
-        };
-        o.push_str(&format!(
-            "| {subject} | uid | project | state | runs |\n|---|---|---|---|---|\n"
-        ));
-        for c in &r.consumers {
-            // a cluster template keeps no copy of the version, so its cell names the kind alone
-            let version = if c.kind == ConsumerKind::Template {
-                format!("({})", c.kind.noun())
-            } else if let Some(runs) = consumer_runs(c, r, code_cell) {
-                runs
-            } else if c.version.is_empty() {
-                String::new()
-            } else {
-                code_cell(&c.version)
-            };
-            // an empty version means two things: the cluster named none, or strata could not read
-            // the cluster at all. `-` states the first, so the error takes the place of the dash
-            let error = entry_error(c.error.as_ref())
-                .map(|msg| format!("not read: {}", markdown_cell(msg)));
-            let mut runs = match (version.is_empty(), error) {
-                (true, None) => "-".to_string(),
-                (true, Some(error)) => error,
-                (false, None) => version,
-                (false, Some(error)) => format!("{version} ({error})"),
-            };
-            if c.unlisted {
-                runs.push_str(&format!(" ({NOT_LISTED})"));
-            }
-            if matches!(c.kind, ConsumerKind::EdgeHost | ConsumerKind::App) {
-                runs.push_str(&format!(" ({})", c.kind.noun()));
-            }
-            o.push_str(&format!(
-                "| {} | {} | {} | {} | {runs} |\n",
-                code_cell(dash(&c.name)),
-                code_cell(&c.uid),
-                code_cell(&project_label(&c.project_uid, &c.project_name)),
-                markdown_cell(dash(&c.state))
-            ));
-        }
-        o.push('\n');
-        o.push_str(&second);
-        o.push_str("\n\n");
-        o.push_str(&edge);
-        o.push('\n');
-        Ok(o)
+        Ok(consumers::markdown_consumers(r))
     }
 
     fn render_packs(&self, l: &PackListing) -> Result<String> {

@@ -5,9 +5,12 @@ use strata::api::codes::Denial;
 
 use super::Tenant;
 use super::routes::{
-    CLUSTERS, PROFILES, cluster_route, cluster_validate_route, profile_route, repave_route,
+    CLUSTER_SEARCH_PATH, CLUSTERS, PROFILES, cluster_route, cluster_validate_route, paged,
+    profile_route, repave_route,
 };
-use crate::common_palette::{access_denied_message, error_body, operation_forbidden_message};
+use crate::common_palette::{
+    access_denied_message, error_body, operation_forbidden_message, project_denied_message,
+};
 
 /// One entry of `packs.results` in the answer of a validate route: the pack `pack`, and one
 /// error with its `code` and its `message`.
@@ -172,6 +175,23 @@ impl Tenant {
             project,
             &cluster_validate_route(cloud),
             Denial::Route,
+            &message,
+        );
+    }
+
+    /// Make Palette refuse the cluster search of `project` to a key that has no role there that
+    /// gives `cluster.list`. `name` is the name of the project.
+    ///
+    /// The code of Palette shows the answer: HTTP 500 with the code of [`Denial::Project`], and
+    /// a message that names the project by its name. The search at tenant scope then omits the
+    /// clusters of the project. So the chapter that calls it puts no cluster there. No live run
+    /// shows it yet.
+    pub fn deny_project(&self, project: &str, name: &str) {
+        let message = project_denied_message(name);
+        self.deny(
+            project,
+            &paged(CLUSTER_SEARCH_PATH),
+            Denial::Project,
             &message,
         );
     }

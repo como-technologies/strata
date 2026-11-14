@@ -49,6 +49,13 @@ impl ProfileScope {
         Self::parse(str_at(doc, "/metadata/annotations/scope"))
     }
 
+    /// True when each project of the tenant can use a version of this scope: a profile of the
+    /// tenant, or of the system. Only the clusters of its own project can use a profile of a
+    /// project.
+    pub(crate) fn is_shared(self) -> bool {
+        matches!(self, Self::Tenant | Self::System)
+    }
+
     /// The scopes whose versions a listing of `self` holds beside its own. A project lists the
     /// profiles of the tenant and of the system too. Tenant scope lists the profiles of the
     /// system too. `list` asks the profile search for the versions of each one.

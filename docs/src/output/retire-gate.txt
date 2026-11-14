@@ -1,5 +1,9 @@
 $ strata consumers aws-stack@1.0.0 && echo "no cluster uses aws-stack@1.0.0"
 aws-stack@1.0.0 (uid 64e0000000000000000000a1): no consumers
-  second reading: the cluster search names 2 other clusters with the profile, 2 read
-  edge hosts: 0 read
+  searched:
+    consumer list    no clusters, no cluster templates
+    cluster search   2 other clusters with the profile: 0 on this version, 2 on other versions
+    cluster groups   none pins the version
+    edge hosts       none found
+  scope: project profile, so only project dev can use it
 no cluster uses aws-stack@1.0.0
