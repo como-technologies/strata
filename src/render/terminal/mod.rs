@@ -316,7 +316,7 @@ impl Renderer for TerminalRenderer {
             }
             // a ref names the kind, so a row with none names its kind in words
             if reference.is_none() {
-                out.push_str(&format!("  {}", p.cyan(c.kind.noun())));
+                out.push_str(&format!("  {}", p.dim(c.kind.noun())));
             }
             if let Some(runs) = consumer_runs(c, r, str::to_string) {
                 out.push_str(&format!("  {}", p.byellow(&runs)));
