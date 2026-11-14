@@ -1,4 +1,8 @@
 $ strata consumers aws-stack@1.1.2-g0123456789ab
 aws-stack@1.1.2-g0123456789ab (uid 64e00000000000000000010a): no consumers
-  second reading: the cluster search names 1 other cluster with the profile, 1 read
-  edge hosts: 0 read
+  searched:
+    consumer list    no clusters, no cluster templates
+    cluster search   1 other cluster with the profile: 0 on this version, 1 on other versions
+    cluster groups   none pins the version
+    edge hosts       none found
+  scope: project profile, so only project dev can use it

@@ -7,26 +7,31 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::client_for;
 use super::consumer_list::consumer_uids;
 use super::fleet::Resolved;
 use super::list::{ProjectListings, TENANT_SCOPE, name_projects_of};
-use super::{client_for, scope_of};
 use crate::api::{Palette, PaletteApi};
-use crate::error::{Error, ErrorDocument, Result};
+use crate::error::{ErrorDocument, Result};
 use crate::json::{arr, first_nonempty, is_zero, str_at, text};
 use crate::model::cluster_template::ClusterTemplateRef;
 use crate::model::profile_type::ProfileType;
 use crate::model::scope::ProfileScope;
 use crate::reference::Ref;
-use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind, Tool};
+use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
-use reads::{edge_hosts_bound, second_reading};
+use reach::{joined_hosts, search_each_project};
+use reads::{candidate_clusters, edge_host_search, edge_hosts_bound, second_reading};
 
 mod app;
+mod reach;
 mod reads;
+mod target;
 
 use app::app_consumers;
+pub use reach::{ProjectsRead, UnreadProject};
+use target::{Target, target_of, uid_of_ref};
 
 /// Schema id of the document `consumers` writes.
 pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";
@@ -81,6 +86,7 @@ pub const APP_NO_EDGE_HOSTS: &str = "an app profile: no edge host binds one";
 
 /// The profile version whose consumers are listed.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ConsumedProfile {
     /// Profile uid.
     pub uid: String,
@@ -91,6 +97,17 @@ pub struct ConsumedProfile {
     /// `app` for an app profile; absent for a cluster profile.
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<ProfileType>,
+    /// `project`, `tenant`, or `system`, from `metadata.annotations.scope` of the profile. Only
+    /// the clusters of its project can use a profile of a project. Each project can use a profile
+    /// of the tenant or of the system. Absent when the document does not give it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ProfileScope>,
+    /// The project of a profile of a project. Empty for each other scope.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project_uid: String,
+    /// That project's name, when strata could read the project listing.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project_name: String,
 }
 
 /// One cluster, edge host, cluster template, or app deployment that uses the profile version.
@@ -234,6 +251,10 @@ pub struct ClustersRead {
     /// The virtual clusters of `members` that strata could not read. They also count in `unread`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub members_unread: usize,
+    /// The virtual clusters of `members` that run the version. Each one is in `consumers`, marked
+    /// `unlisted`. The other consumers marked `unlisted` come from the search or the listing.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub members_found: usize,
     /// Why strata could not read the cluster groups, or one of them, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<ErrorDocument>")]
@@ -316,13 +337,24 @@ pub struct ConsumersReport {
     /// The edge hosts read for the profiles bound to them.
     #[serde(default)]
     pub edge_hosts_read: EdgeHostsRead,
+    /// The projects that strata searched one by one, and those that it could not. Strata searches
+    /// them for a profile of the tenant or of the system, which each project can use. Absent for
+    /// a profile of a project, for an app profile, and with `--list-only`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projects_read: Option<ProjectsRead>,
 }
 
 impl ConsumersReport {
     /// True when a reading failed, so a consumer can be missing from the answer: see
-    /// [`ClustersRead::incomplete`] and [`EdgeHostsRead::incomplete`].
+    /// [`ClustersRead::incomplete`], [`EdgeHostsRead::incomplete`], and
+    /// [`ProjectsRead::incomplete`].
     pub fn incomplete(&self) -> bool {
-        self.clusters_read.incomplete() || self.edge_hosts_read.incomplete()
+        self.clusters_read.incomplete()
+            || self.edge_hosts_read.incomplete()
+            || self
+                .projects_read
+                .as_ref()
+                .is_some_and(ProjectsRead::incomplete)
     }
 
     /// The exit status, so that a delete step can branch on it. 1 when something uses the
@@ -384,16 +416,21 @@ where
 /// second reading costs one request per cluster of the fleet. But `list_only` does not find a
 /// consumer that the list omits.
 ///
+/// Each project can use a profile of the tenant or of the system. So for such a profile, strata
+/// also searches each project of the tenant listing, through `connect` with the uid of the project.
+/// [`ConsumersReport::projects_read`] names each project that it could not search.
+///
 /// An app profile, by ref or by record, gives its app deployments.
 ///
 /// # Errors
 ///
-/// [`Error::ProfileRefRequired`] for a ref that names no profile, and for a record of a cluster
-/// or of a pack. [`Error::NoUid`] for a record with no uid. The error of `connect` for the scope
-/// of the profile, and the error of the read of the profile: [`Error::ProfileNotFound`] and
-/// [`Error::ProfileNameAmbiguous`] for a name. A cluster that cannot be read stays in the report
-/// with its error. A tenant client that `connect` cannot give is no error: the second reading then
-/// uses the client of the profile.
+/// [`ProfileRefRequired`](crate::Error::ProfileRefRequired) for a ref that names no profile, and for
+/// a record of a cluster or of a pack. [`NoUid`](crate::Error::NoUid) for a record with no uid.
+/// The error of `connect` for the scope of the profile, and the error of the read of the profile:
+/// [`ProfileNotFound`](crate::Error::ProfileNotFound) and
+/// [`ProfileNameAmbiguous`](crate::Error::ProfileNameAmbiguous) for a name. A cluster that cannot be
+/// read stays in the report with its error. A tenant client that `connect` cannot give is no error:
+/// the second reading then uses the client of the profile.
 pub fn consumers_with<A, F>(
     reference: &Ref,
     options: &ConsumersOptions,
@@ -433,148 +470,148 @@ where
     // cluster that runs a profile of a project is in that project
     let tenant = connect(Some(TENANT_SCOPE)).ok();
     let wide = tenant.as_ref().unwrap_or(&home);
-    let clusters_read = if options.list_only {
-        ClustersRead {
+    let mut listings = ProjectListings::default();
+    let readings = readings(
+        &mut list,
+        &doc,
+        &uid,
+        options,
+        Scopes { wide, home: &home },
+        &mut clients,
+        &mut connect,
+        &mut listings,
+        progress,
+    );
+    link_and_name(&mut list, &doc, wide, &home, &mut listings);
+    let mut r = report(&doc, None, list, readings, generated_at);
+    name_profile_project(&mut r.profile, wide, &home, &mut listings);
+    Ok(r)
+}
+
+/// The client of the tenant, `wide`, and the client of the scope of the profile, `home`. `wide`
+/// is `home` when strata cannot connect to the tenant.
+struct Scopes<'a, A: PaletteApi> {
+    wide: &'a Palette<A>,
+    home: &'a Palette<A>,
+}
+
+/// What strata reads beside the consumer list: the second reading, the edge hosts, and the
+/// projects that it searches one by one.
+///
+/// Each project can use a version of the tenant or of the system. So strata searches each project
+/// of the tenant listing for it: see [`search_each_project`]. `--list-only` asks for none of it
+/// but the edge hosts.
+#[allow(clippy::too_many_arguments)]
+fn readings<A, F>(
+    list: &mut Vec<Consumer>,
+    doc: &Value,
+    uid: &str,
+    options: &ConsumersOptions,
+    scopes: Scopes<'_, A>,
+    clients: &mut HashMap<Option<String>, Palette<A>>,
+    connect: &mut F,
+    listings: &mut ProjectListings,
+    progress: &Progress,
+) -> Readings
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let Scopes { wide, home } = scopes;
+    let (name, project) = search_scope(doc);
+    let shared = ProfileScope::of_document(doc).is_some_and(ProfileScope::is_shared);
+    let (clusters, more_hosts, projects) = if options.list_only {
+        let skipped = ClustersRead {
             skipped: true,
             ..ClustersRead::default()
-        }
-    } else {
-        let (name, project) = search_scope(&doc);
-        second_reading(
-            &mut list,
-            &uid,
-            &name,
-            &project,
+        };
+        (skipped, Vec::new(), None)
+    } else if shared {
+        let each = search_each_project(&name, wide, home, clients, connect, listings, progress);
+        let read = second_reading(
+            list,
+            uid,
+            each.candidates,
             wide,
-            &home,
-            &mut clients,
-            &mut connect,
+            home,
+            clients,
+            connect,
             progress,
-        )
+        );
+        (read, each.hosts, Some(each.projects))
+    } else {
+        let candidates =
+            candidate_clusters(&name, &project, wide, home, clients, connect, progress);
+        let read = second_reading(
+            list, uid, candidates, wide, home, clients, connect, progress,
+        );
+        (read, Vec::new(), None)
     };
     // the consumer list names no edge host, and the search of the edge hosts is one request a
     // page, so it is done also with --list-only
-    let edge_hosts_read = edge_hosts_bound(&mut list, &uid, wide, &home, progress);
-    link_and_name(&mut list, &doc, &home);
-
-    Ok(report(
-        &doc,
-        None,
-        list,
-        clusters_read,
-        edge_hosts_read,
-        generated_at,
-    ))
-}
-
-/// The uid of the profile that `reference` names. `hint` is the uid that the ref holds, when it
-/// holds one. The other refs name the profile by name and version, which `home` resolves.
-fn uid_of_ref<A: PaletteApi>(
-    reference: &Ref,
-    hint: Option<String>,
-    home: &Palette<A>,
-    progress: &Progress,
-) -> Result<String> {
-    match (hint, reference) {
-        (Some(uid), _) => Ok(uid),
-        (None, Ref::NameVersion { name, version }) => {
-            home.profile_uid(name, Some(version), progress)
-        }
-        (None, Ref::Draft { id, version }) => home.profile_uid(id, version.as_deref(), progress),
-        (None, _) => unreachable!("every other ref carries a uid"),
+    let hosts = joined_hosts(edge_host_search(wide, home, progress), more_hosts);
+    Readings {
+        clusters,
+        edge_hosts: edge_hosts_bound(list, uid, hosts),
+        projects,
     }
 }
 
 /// Mark the consumers that link a cluster template, and give each one the name of its project.
-fn link_and_name<A: PaletteApi>(list: &mut Vec<Consumer>, doc: &Value, home: &Palette<A>) {
+///
+/// `wide` and `home` give the project listings: see [`name_consumer_projects`].
+fn link_and_name<A: PaletteApi>(
+    list: &mut Vec<Consumer>,
+    doc: &Value,
+    wide: &Palette<A>,
+    home: &Palette<A>,
+    listings: &mut ProjectListings,
+) {
     // Palette refuses the delete of a version that a cluster template links, in any project. The
     // profile document names each such template, so they cost no request (#147)
     linked_templates(list, doc);
     // a uid names no project to a reader, so give each row the project's name as well
-    name_consumer_projects(list, home);
+    name_consumer_projects(list, wide, home, listings);
 }
 
-/// Give each consumer the name of its project, from the project listing of `home`: see
-/// [`name_projects_of`].
-pub(super) fn name_consumer_projects<A: PaletteApi>(list: &mut [Consumer], home: &Palette<A>) {
-    name_projects_of(
+/// Give each consumer the name of its project: see [`name_wide_then_home`].
+pub(super) fn name_consumer_projects<A: PaletteApi>(
+    list: &mut [Consumer],
+    wide: &Palette<A>,
+    home: &Palette<A>,
+    listings: &mut ProjectListings,
+) {
+    name_wide_then_home(
         list,
         |c| &c.project_uid,
         |c| &mut c.project_name,
-        home,
-        &mut ProjectListings::default(),
+        [wide, home],
+        listings,
     );
 }
 
-/// What a ref names for `consumers`.
-enum Target {
-    /// A profile version. `scope` is the scope of its record, when the ref is a record. `uid` is
-    /// its uid, when the ref holds one.
-    Profile {
-        scope: Option<String>,
-        uid: Option<String>,
-    },
-    /// An app profile, in the scope of its record when the ref is a record.
-    App {
-        scope: Option<String>,
-        id: String,
-        version: Option<String>,
-    },
-}
-
-/// What `reference` names, and the scope to read it in.
+/// Give each row the name of its project, from the project listing of each scope of `scopes`.
 ///
-/// # Errors
+/// The scopes are the tenant, and then the scope of the profile. See [`name_projects_of`].
 ///
-/// [`Error::ProfileRefRequired`] for a ref that names no profile, and for a record of a cluster
-/// or of a pack. [`Error::NoUid`] for a record with no uid. Each error of the read of a record.
-fn target_of(reference: &Ref) -> Result<Target> {
-    let refused = || Error::ProfileRefRequired {
-        reference: reference.to_string(),
-    };
-    match reference {
-        Ref::Cluster { .. }
-        | Ref::EdgeHost { .. }
-        | Ref::ClusterGroup { .. }
-        | Ref::ClusterSet { .. }
-        | Ref::Pack { .. } => Err(refused()),
-        Ref::AppProfile { id, version } => Ok(Target::App {
-            scope: None,
-            id: id.clone(),
-            version: version.clone(),
-        }),
-        Ref::Snapshot(path) => {
-            let recorded = Snapshot::load(path)?;
-            // a record of a cluster or of a pack has no consumers. Refuse it here: the NoUid below
-            // names `verify`, a command that does not run. An app profile has its app deployments
-            if !(recorded.source.is_profile_version() || recorded.source.is_app()) {
-                return Err(refused());
-            }
-            if recorded.source.uid.is_empty() {
-                return Err(Error::NoUid);
-            }
-            let scope = scope_of(&recorded.source.project_uid).map(str::to_string);
-            if recorded.source.is_app() {
-                return Ok(Target::App {
-                    scope,
-                    id: recorded.source.uid,
-                    version: None,
-                });
-            }
-            Ok(Target::Profile {
-                scope,
-                uid: Some(recorded.source.uid),
-            })
+/// In a project, Palette lists that project alone, so a row in another project gets its name only
+/// from the listing of the tenant. A row that still has no name takes it from the next listing.
+/// Strata reads no more listings when each row that names a project has a name.
+fn name_wide_then_home<T, A: PaletteApi>(
+    rows: &mut [T],
+    uid_of: impl Fn(&T) -> &String,
+    name_of: impl Fn(&mut T) -> &mut String,
+    scopes: [&Palette<A>; 2],
+    listings: &mut ProjectListings,
+) {
+    for palette in scopes {
+        if rows
+            .iter_mut()
+            .all(|r| uid_of(r).is_empty() || !name_of(r).is_empty())
+        {
+            return;
         }
-        Ref::Uid(uid) => Ok(Target::Profile {
-            scope: None,
-            uid: Some(uid.clone()),
-        }),
-        // a draft has the consumers of its version: a cluster runs a published template
-        Ref::NameVersion { .. } | Ref::Draft { .. } => Ok(Target::Profile {
-            scope: None,
-            uid: None,
-        }),
+        name_projects_of(rows, &uid_of, &name_of, palette, listings);
     }
 }
 
@@ -632,16 +669,26 @@ fn search_scope(doc: &Value) -> (String, String) {
     (text(doc, "/metadata/name"), project)
 }
 
+/// What strata read beside the consumer list, for [`report`].
+pub(super) struct Readings {
+    /// The second reading.
+    pub(super) clusters: ClustersRead,
+    /// The edge hosts.
+    pub(super) edge_hosts: EdgeHostsRead,
+    /// The projects that strata searched one by one, for a version that each project can use.
+    pub(super) projects: Option<ProjectsRead>,
+}
+
 /// The document of `consumers` for the profile `doc`, with the consumers `consumers`.
 ///
 /// `kind` is the type of an app profile. The document holds the count, how many copies name another
-/// version than the profile, and the two readings.
+/// version than the profile, and the readings `readings`. A cluster profile has the scope that
+/// `doc` names, and the project of a profile of a project, with no name yet.
 fn report(
     doc: &Value,
     kind: Option<ProfileType>,
     consumers: Vec<Consumer>,
-    clusters_read: ClustersRead,
-    edge_hosts_read: EdgeHostsRead,
+    readings: Readings,
     generated_at: &str,
 ) -> ConsumersReport {
     let version = text(doc, "/spec/version");
@@ -649,6 +696,17 @@ fn report(
         .iter()
         .filter(|c| !c.version.is_empty() && c.version != version)
         .count();
+    // strata reads the scope of a cluster profile only: no fact of Palette gives the scope of an
+    // app profile
+    let scope = kind
+        .is_none()
+        .then(|| ProfileScope::of_document(doc))
+        .flatten();
+    let project_uid = if scope == Some(ProfileScope::Project) {
+        text(doc, "/metadata/annotations/projectUid")
+    } else {
+        String::new()
+    };
     ConsumersReport {
         schema: CONSUMERS_SCHEMA.to_string(),
         tool: Tool::current(),
@@ -658,13 +716,34 @@ fn report(
             name: text(doc, "/metadata/name"),
             version,
             kind,
+            scope,
+            project_uid,
+            project_name: String::new(),
         },
         count: consumers.len(),
         overwritten,
         consumers,
-        clusters_read,
-        edge_hosts_read,
+        clusters_read: readings.clusters,
+        edge_hosts_read: readings.edge_hosts,
+        projects_read: readings.projects,
     }
+}
+
+/// Give the profile of a project the name of its project, as [`name_consumer_projects`] names
+/// the project of a consumer.
+pub(super) fn name_profile_project<A: PaletteApi>(
+    profile: &mut ConsumedProfile,
+    wide: &Palette<A>,
+    home: &Palette<A>,
+    listings: &mut ProjectListings,
+) {
+    name_wide_then_home(
+        std::slice::from_mut(profile),
+        |p| &p.project_uid,
+        |p| &mut p.project_name,
+        [wide, home],
+        listings,
+    );
 }
 
 /// Add each cluster template that `status.inUseClusterTemplates` of the profile document names. A
@@ -679,74 +758,4 @@ fn linked_templates(list: &mut Vec<Consumer>, doc: &Value) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_consumer_kind_is_named_in_the_documents_and_in_the_reports() {
-        for (kind, name, noun) in [
-            (ConsumerKind::Cluster, "cluster", "cluster"),
-            (ConsumerKind::EdgeHost, "edgehost", "edge host"),
-            (ConsumerKind::Template, "template", "cluster template"),
-            (ConsumerKind::App, "app", "app deployment"),
-        ] {
-            assert_eq!(serde_json::to_value(kind).unwrap(), Value::from(name));
-            assert_eq!(kind.noun(), noun);
-        }
-        // a consumer with no kind is a cluster, as each older document names one
-        let c: Consumer = serde_json::from_value(serde_json::json!({
-            "uid": "c1", "name": "lab", "projectUid": "p1", "state": "Running"
-        }))
-        .unwrap();
-        assert_eq!(c.kind, ConsumerKind::Cluster);
-    }
-
-    /// Read the consumer `c` in the home scope. `read` gives its document.
-    fn read_with(c: &mut Consumer, read: Result<Value>) {
-        let home = Palette::new(crate::api::MemoryApi::new());
-        let mut clients = HashMap::new();
-        let mut connect = |_: Option<&str>| Ok(Palette::new(crate::api::MemoryApi::new()));
-        c.read(
-            &mut clients,
-            &home,
-            &mut connect,
-            |_, _| read,
-            |d| text(d, "/spec/profile/metadata/version"),
-        );
-    }
-
-    #[test]
-    fn a_consumer_that_is_read_takes_the_fields_of_its_document_and_keeps_those_it_lacks() {
-        let mut c = Consumer::unread(ConsumerKind::App, "a1".into(), "shop".into(), "p1".into());
-        read_with(
-            &mut c,
-            Ok(serde_json::json!({
-                "status": {"state": "Running"},
-                "spec": {"profile": {"metadata": {"version": "1.2.0"}}},
-            })),
-        );
-        assert_eq!(
-            (c.name.as_str(), c.project_uid.as_str(), c.state.as_str()),
-            ("shop", "p1", "Running"),
-            "a field that the document does not give keeps the value of the list"
-        );
-        assert_eq!(c.version, "1.2.0");
-        assert!(c.error.is_none());
-    }
-
-    #[test]
-    fn a_consumer_whose_document_cannot_be_read_keeps_the_list_and_records_the_error() {
-        let mut c = Consumer::unread(ConsumerKind::Cluster, "c1".into(), "lab".into(), "".into());
-        read_with(
-            &mut c,
-            Err(Error::Usage {
-                message: "no such cluster".to_string(),
-            }),
-        );
-        assert_eq!(c.state, UNKNOWN_STATE);
-        assert_eq!(c.version, "");
-        assert_eq!(c.name, "lab");
-        let message = c.error.as_ref().and_then(|e| e.get("message")?.as_str());
-        assert_eq!(message, Some("no such cluster"));
-    }
-}
+mod tests;

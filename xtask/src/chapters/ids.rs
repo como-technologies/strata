@@ -6,6 +6,7 @@
 
 pub(super) const DEV: &str = "64f20000000000000000a0d1";
 pub(super) const PROD: &str = "64f20000000000000000a0f1";
+pub(super) const STAGING: &str = "64f20000000000000000a0c1";
 
 // the profile uids of the examples, in dev
 pub(super) const A100: &str = "64e0000000000000000000a1";
@@ -61,6 +62,7 @@ pub(super) const SEARCH: &str = "64f1000000000000000000e2";
 pub(super) const LEDGER: &str = "64f1000000000000000000e3";
 pub(super) const LEGACY: &str = "64f1000000000000000000e7";
 pub(super) const PAYMENTS_PROD: &str = "64f1000000000000000000f1";
+pub(super) const CHECKOUT_PROD: &str = "64f1000000000000000000f2";
 // a cluster on vSphere, for the shape tier of another cloud
 pub(super) const LAB: &str = "64f1000000000000000000e6";
 // the virtual clusters of a cluster group

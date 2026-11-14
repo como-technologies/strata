@@ -1,0 +1,9 @@
+$ strata consumers aws-stack@2.0.0
+aws-stack@2.0.0 (uid 64e400000000000000000111): no consumer found, and a reading failed
+  searched:
+    consumer list    no clusters, no cluster templates
+    cluster search   2 other clusters with the profile: 0 on this version, 2 on other versions
+    cluster groups   none pins the version
+    edge hosts       none found
+  scope: tenant profile, usable in every project; 2 of 3 projects searched
+  NOT CHECKED: staging (this key cannot read it)

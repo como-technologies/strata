@@ -511,6 +511,34 @@ keeps the clusters that run the version. The checks `search-profile-runs`,
 `group-virtual-clusters` of `cluster-group.sh` show it on a live tenant: see
 [cluster-group.sh](../../development/live-runs.md#cluster-groupsh).
 
+## The reach of a search
+
+The code of Palette shows these facts; no live run shows the refusal yet:
+
+- The cluster search and the edge host search at tenant scope need `project.list`
+  in the tenant. Without it, Palette answers HTTP 403 with `AccessDenied`.
+- With it, each search gives the projects where a role of the key gives the
+  listing. The cluster search needs `cluster.list`, and the edge host search
+  needs `edgehost.list`. It omits each other project, with no error. A role of the tenant, such
+  as Tenant Viewer, gives the listing in each project.
+- The search of one project, with its `ProjectUid`, answers HTTP 500 with the
+  code `ResourceAccessDenied` when no role of the key there gives the listing.
+  The message names the project by its name, as in `Project 'staging' access
+  denied`.
+- At tenant scope, the project listing holds each project of the tenant only for
+  a key whose role gives `project.list` in the tenant. For another key, it holds
+  the projects of its roles.
+- A profile of a project is for the clusters of its project. Each project of
+  the tenant can use a profile of the tenant. The profile document names the
+  project of a profile of a project in `metadata.annotations.projectUid`.
+
+So [`strata consumers`](../../commands/consumers.md#a-profile-of-the-tenant)
+searches each project of the tenant listing for a profile of the tenant or of
+the system. It names each project whose search Palette refuses. The checks
+`tenant-consumers` and `tenant-consumers-projects` of
+[scope.sh](../../development/live-runs.md#scopesh) search each project with a
+key that reads each one.
+
 ## A deleted cluster
 
 A deleted cluster leaves this listing and keeps its document:

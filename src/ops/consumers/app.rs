@@ -4,12 +4,13 @@ use std::collections::HashMap;
 
 use super::{
     APP_NO_EDGE_HOSTS, APP_NO_SECOND_READING, ClustersRead, Consumer, ConsumerKind,
-    ConsumersReport, EdgeHostsRead, name_consumer_projects, report,
+    ConsumersReport, EdgeHostsRead, Readings, name_consumer_projects, report,
 };
 use crate::api::{Palette, PaletteApi};
 use crate::error::Result;
 use crate::json::{arr, text};
 use crate::model::profile_type::ProfileType;
+use crate::ops::list::{ProjectListings, TENANT_SCOPE};
 use crate::term::progress::Progress;
 
 /// The app deployments that use an app profile version.
@@ -69,21 +70,28 @@ where
         );
         list.push(c);
     }
-    name_consumer_projects(&mut list, &home);
-    Ok(report(
-        &doc,
-        Some(ProfileType::App),
-        list,
-        ClustersRead {
+    // the project listing of the tenant names a deployment in another project
+    let tenant = connect(Some(TENANT_SCOPE)).ok();
+    let wide = tenant.as_ref().unwrap_or(&home);
+    name_consumer_projects(&mut list, wide, &home, &mut ProjectListings::default());
+    let readings = Readings {
+        clusters: ClustersRead {
             skipped: true,
             reason: APP_NO_SECOND_READING.to_string(),
             ..ClustersRead::default()
         },
-        EdgeHostsRead {
+        edge_hosts: EdgeHostsRead {
             skipped: true,
             reason: APP_NO_EDGE_HOSTS.to_string(),
             ..EdgeHostsRead::default()
         },
+        projects: None,
+    };
+    Ok(report(
+        &doc,
+        Some(ProfileType::App),
+        list,
+        readings,
         generated_at,
     ))
 }

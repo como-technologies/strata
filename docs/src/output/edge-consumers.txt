@@ -1,7 +1,11 @@
 $ strata consumers platform-addons@1.0.0
 platform-addons@1.0.0 (uid 64e2000000000000000000a1): 3 consumers
-  payments  64f1000000000000000000e1  project dev (uid 64f20000000000000000a0d1)  Running
-  store-1   64f4000000000000000000e1  project dev (uid 64f20000000000000000a0d1)  ready  edge host
-  store-2   64f4000000000000000000e2  project dev (uid 64f20000000000000000a0d1)  ready  edge host
-  second reading: the cluster search names no other cluster with the profile
-  edge hosts: 2 read
+  payments  64f1000000000000000000e1  project dev  Running
+  store-1   64f4000000000000000000e1  project dev  ready  edge host
+  store-2   64f4000000000000000000e2  project dev  ready  edge host
+  searched:
+    consumer list    1 cluster, no cluster templates
+    cluster search   no other cluster with the profile
+    cluster groups   none pins the version
+    edge hosts       2 of 2 bound to the version
+  scope: project profile, so only project dev can use it

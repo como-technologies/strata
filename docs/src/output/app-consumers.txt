@@ -1,5 +1,7 @@
 $ strata consumers appprofile:shop@1.0.0
 shop@1.0.0 (uid 64f6000000000000000000a1): 1 consumer
-  shop-dev  64f7000000000000000000a1  project dev (uid 64f20000000000000000a0d1)  Deployed  app deployment
-  second reading: not done (an app profile: the app deployment listing filters no profile)
-  edge hosts: not read (an app profile: no edge host binds one)
+  shop-dev  64f7000000000000000000a1  project dev  Deployed  app deployment
+  searched:
+    consumer list    1 app deployment
+    app deployments  not searched (an app profile: the app deployment listing filters no profile)
+    edge hosts       not read (an app profile: no edge host binds one)

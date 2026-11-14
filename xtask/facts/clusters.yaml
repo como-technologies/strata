@@ -392,6 +392,7 @@ facts:
       - src/ops/list.rs
       - src/ops/fleet.rs
       - src/ops/consumers/reads.rs
+      - src/ops/consumers/reach.rs
     rules: []
 
   - id: tag-filter-listing
@@ -510,6 +511,7 @@ facts:
     code:
       - src/api/palette/listings.rs
       - src/ops/consumers/reads.rs
+      - src/ops/consumers/reach.rs
     rules: []
 
   - id: cluster-group-document
@@ -1302,6 +1304,22 @@ facts:
       - src/ops/consumers/mod.rs
     rules:
       - consumers-empty-on-error
+
+  - id: search-reach-of-the-key
+    kind: behavior
+    reads:
+      codes: [ResourceAccessDenied]
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/dashboard/spectroclusters/search
+    unchecked: The code of Palette shows that the cluster search and the edge host search at tenant scope give only the projects where a role of the key gives the listing. In a project where no role gives it, the search of that project answers HTTP 500 with the code ResourceAccessDenied, and the message names the project by its name. The project listing at tenant scope holds each project of the tenant only for a key whose role gives project.list in the tenant. The checks tenant-consumers and tenant-consumers-projects of scope.sh search each project with a key that reads each one, and have no result yet.
+    pages:
+      - internals/palette/clusters.md#the-reach-of-a-search
+      - commands/consumers.md#a-profile-of-the-tenant
+    code:
+      - src/ops/consumers/reach.rs
 
   - id: virtual-omitted-listing
     kind: behavior

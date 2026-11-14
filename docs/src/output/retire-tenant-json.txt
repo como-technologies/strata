@@ -1,0 +1,3 @@
+$ strata consumers aws-stack@2.0.0 --json | jq -c '.profile, (.projectsRead | {read, unread: [.unread[] | {name, denied}]})'
+{"uid":"64e400000000000000000111","name":"aws-stack","version":"2.0.0","scope":"tenant"}
+{"read":3,"unread":[{"name":"staging","denied":true}]}

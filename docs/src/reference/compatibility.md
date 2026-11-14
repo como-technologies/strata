@@ -314,6 +314,11 @@ answer of Palette in a record of `snapshot --validate`: one line for each error,
 of an accept. The command line prints the sentence last, after the record: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `ops::ProjectsRead`, `ops::UnreadProject`, and `render::Reading` are new.
+`ops::ProjectsRead` names the projects that `consumers` searched one by one, and
+`render::Reading` names each row of the block `searched:` of `consumers`. Three structs of
+`consumers` have new fields: see [Release 0.34.0](#release-0340-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -437,6 +442,11 @@ comparison of `strata-diff/1` with `compare --validate`. The field holds the rul
 checks only at the update: `requiredVariables` and `skippedMinor`. The ids stay, and
 `--since` reads a report of 0.33.0 and before. See
 [The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
+
+After 0.33.0, `strata-consumers/1` has the new fields `profile.scope`, `profile.projectUid`,
+`profile.projectName`, `clustersRead.membersFound`, and `projectsRead`. The id stays, and a reader
+that ignores unknown fields reads it. A profile of the tenant can exit `2` now: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -1149,9 +1159,9 @@ field, a value, an input, or an option is in the sections above.
   See [The markdown comment](./formats.md#the-markdown-comment).
   - A script that reads the markdown as text reads `\*` in place of `*`. A run of `_` with a
     letter or a digit on each side does not change, as in `aws_stack`.
-  - The verdict of a gone record writes the uid as plain text, as the terminal does. The line
-    `Second reading:` of `consumers` writes `--list-only` as plain text. The markdown escapes
-    each of these lines as one text.
+  - The verdict of a gone record writes the uid as plain text, as the terminal does. The rows
+    of `searched:` of `consumers` write `--list-only` as plain text. The markdown escapes each
+    of these lines as one text.
   - `strata-preflight` writes its markdown in the same way. A message of a rule shows its
     backticks as text, as the terminal form does.
 - **A pack whose only difference is a pack uid that Palette mints has no impact.**
@@ -1312,6 +1322,37 @@ field, a value, an input, or an option is in the sections above.
   or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
   clusters keep the error of before. The kind stays `usage`, and a script that matches the whole
   message must match the new text. See [Usage errors](../commands/compare/repave.md#usage-errors).
+- **`consumers` says what it searched, and where its answer stops.** See
+  [What strata searched](../commands/consumers.md#what-strata-searched).
+  - The lines `second reading: ...` and `edge hosts: ... read` are gone. The
+    block `searched:` gives one row for each reading: `consumer list`,
+    `cluster search` or `cluster listing`, `cluster groups`, and `edge hosts`.
+    An app profile has the rows `consumer list`, `app deployments`, and
+    `edge hosts`. Each row gives counts and no name of a cluster. A search that
+    names other clusters says how many run this version and how many run other
+    versions.
+  - The row of the edge hosts reads `none found` in place of
+    `edge hosts: 0 read`. It reads `1 of 3 bound to the version` in place of
+    `edge hosts: 3 read`.
+  - The line `scope:` follows the block, for a cluster profile whose document
+    gives the scope. Then the line `NOT CHECKED:` names each project that strata
+    could not search.
+  - A consumer row names its project by its name alone, such as `project dev`.
+    Before, it gave `project dev (uid ...)`. The row gives the uid when strata
+    cannot read the project listing. The markdown cell changes in the same way.
+    Strata reads the project listing of the tenant first, so a consumer in
+    another project has its name too. `projectUid` of the JSON stays.
+  - For a profile of the tenant or of the system, strata also searches each
+    project of the tenant listing. That is one more request for the project
+    listing, and two or three for each project. See
+    [A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant).
+  - The exit is `2` when strata finds no consumer and could not search a project
+    that can use the version. Before, such a run exited `0`. A gate before a
+    delete then does not run the delete. Give the gate a key that reads each
+    project of the tenant.
+  - The markdown has a table of the rows in place of the two sentences, a
+    sentence for the scope, and `NOT CHECKED` in bold. A script that reads the
+    text must read the new rows, or read `--json`.
 
 ### For a user of the CI drop-ins
 
@@ -1400,6 +1441,13 @@ field, a value, an input, or an option is in the sections above.
   `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
   `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
   `INVALID_VARIABLE_CODE`.
+- `ops::ConsumedProfile` has the new fields `scope`, `project_uid`, and `project_name`.
+  `ops::ConsumersReport` has the new field `projects_read`, and `ops::ClustersRead` has the new
+  field `members_found`. A struct literal must set them, and a pattern with no `..` must name
+  them. `ConsumersReport::incomplete` is also `true` when `projects_read` names a project that
+  strata could not search, so `ConsumersReport::exit_code` gives `2` for it.
+- `ops::consumers` and `ops::consumers_with` search each project of the tenant listing for a
+  profile of the tenant or of the system. They call `connect` with the uid of each project.
 
 ### For a user of the library of strata-preflight
 
