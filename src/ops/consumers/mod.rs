@@ -12,7 +12,7 @@ use super::consumer_list::consumer_uids;
 use super::fleet::Resolved;
 use super::list::{ProjectListings, TENANT_SCOPE, name_projects_of};
 use crate::api::{Palette, PaletteApi};
-use crate::error::{ErrorDocument, Result};
+use crate::error::{Error, ErrorDocument, Result};
 use crate::json::{arr, first_nonempty, is_zero, str_at, text};
 use crate::model::cluster_template::ClusterTemplateRef;
 use crate::model::profile_type::ProfileType;
@@ -22,7 +22,9 @@ use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 use reach::{joined_hosts, search_each_project};
-use reads::{candidate_clusters, edge_host_search, edge_hosts_bound, second_reading};
+use reads::{
+    candidate_clusters, edge_host_search, edge_hosts_bound, project_edge_hosts, second_reading,
+};
 
 mod app;
 mod reach;
@@ -75,10 +77,11 @@ impl ConsumerKind {
     }
 }
 
-/// Why an app profile has no second reading: Palette lists app deployments by name, cluster, and
-/// tag, and not by profile.
-pub const APP_NO_SECOND_READING: &str =
-    "an app profile: the app deployment listing filters no profile";
+/// Why strata lists no app deployment beside the consumer list of an app profile with no scope.
+///
+/// Strata lists the app deployments of each project that can use the version, and the scope in
+/// the document of the app profile gives those projects.
+pub const APP_NO_SECOND_READING: &str = "the app profile names no project that can use it";
 
 /// Why an app profile has no edge hosts: Palette binds a cluster profile to an edge host, and
 /// never an app profile.
@@ -227,16 +230,20 @@ pub struct ClustersRead {
     /// consumer.
     pub unread: usize,
     /// Why the search or the listing could not be read, when it could not. Then `read` is 0, and
-    /// the consumer list of the profile stands alone.
+    /// the consumer list of the profile stands alone. For an app profile of the tenant or of the
+    /// system, it is the error of the page of the search at tenant scope. Then strata listed no
+    /// project.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
     /// True when the second reading was not done, as `--list-only` asks, or for an app profile.
     /// Then the consumer list of the profile stands alone, and an empty list can be an error of
-    /// Palette.
+    /// Palette. For an app profile, [`ConsumersReport::projects_read`] gives the listings of the app
+    /// deployments of each project that can use the version.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub skipped: bool,
-    /// Why the second reading was not done, when `--list-only` did not ask: for an app profile.
+    /// Why strata listed no app deployment beside the consumer list of an app profile, when
+    /// `--list-only` did not ask: [`APP_NO_SECOND_READING`].
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub reason: String,
     /// The cluster groups that pin the version (#184). The cluster search does not name a virtual
@@ -338,8 +345,9 @@ pub struct ConsumersReport {
     #[serde(default)]
     pub edge_hosts_read: EdgeHostsRead,
     /// The projects that strata searched one by one, and those that it could not. Strata searches
-    /// them for a profile of the tenant or of the system, which each project can use. Absent for
-    /// a profile of a project, for an app profile, and with `--list-only`.
+    /// them for a profile of the tenant or of the system, which each project can use. For an app
+    /// profile, strata lists the app deployments of each project that can use the version. Absent
+    /// for a profile of a project, and with `--list-only`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub projects_read: Option<ProjectsRead>,
 }
@@ -420,7 +428,8 @@ where
 /// also searches each project of the tenant listing, through `connect` with the uid of the project.
 /// [`ConsumersReport::projects_read`] names each project that it could not search.
 ///
-/// An app profile, by ref or by record, gives its app deployments.
+/// An app profile, by ref or by record, gives its app deployments. Strata also lists the app
+/// deployments of each project that can use the version, except with `list_only`.
 ///
 /// # Errors
 ///
@@ -431,7 +440,8 @@ where
 /// [`ProfileNameAmbiguous`](crate::Error::ProfileNameAmbiguous) for a name, and `Usage` for a uid
 /// that is the name of a profile with no version. A cluster that cannot be read stays in the report
 /// with its error. A tenant client that `connect` cannot give is no error: the second reading then
-/// uses the client of the profile.
+/// uses the client of the profile. For a profile of the tenant, strata then has no project listing
+/// of the tenant, and [`ProjectsRead::error`] holds the error of `connect`.
 pub fn consumers_with<A, F>(
     reference: &Ref,
     options: &ConsumersOptions,
@@ -449,6 +459,7 @@ where
                 scope.as_deref(),
                 &id,
                 version.as_deref(),
+                options,
                 connect,
                 generated_at,
                 progress,
@@ -469,15 +480,20 @@ where
     // host in each project that the key can read. A key that cannot read the tenant reads
     // `home`, the scope of the profile, and not the configured scope as `tenant_of` does. A
     // cluster that runs a profile of a project is in that project
-    let tenant = connect(Some(TENANT_SCOPE)).ok();
+    let tenant = connect(Some(TENANT_SCOPE));
     let wide = tenant.as_ref().unwrap_or(&home);
     let mut listings = ProjectListings::default();
+    let scopes = Scopes {
+        wide,
+        home: &home,
+        no_tenant: tenant.as_ref().err(),
+    };
     let readings = readings(
         &mut list,
         &doc,
         &uid,
         options,
-        Scopes { wide, home: &home },
+        &scopes,
         &mut clients,
         &mut connect,
         &mut listings,
@@ -490,10 +506,11 @@ where
 }
 
 /// The client of the tenant, `wide`, and the client of the scope of the profile, `home`. `wide`
-/// is `home` when strata cannot connect to the tenant.
+/// is `home` when strata cannot connect to the tenant, and `no_tenant` then holds the error.
 struct Scopes<'a, A: PaletteApi> {
     wide: &'a Palette<A>,
     home: &'a Palette<A>,
+    no_tenant: Option<&'a Error>,
 }
 
 /// What strata reads beside the consumer list: the second reading, the edge hosts, and the
@@ -508,7 +525,7 @@ fn readings<A, F>(
     doc: &Value,
     uid: &str,
     options: &ConsumersOptions,
-    scopes: Scopes<'_, A>,
+    scopes: &Scopes<'_, A>,
     clients: &mut HashMap<Option<String>, Palette<A>>,
     connect: &mut F,
     listings: &mut ProjectListings,
@@ -518,7 +535,7 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let Scopes { wide, home } = scopes;
+    let Scopes { wide, home, .. } = *scopes;
     let (name, project) = search_scope(doc);
     let shared = ProfileScope::of_document(doc).is_some_and(ProfileScope::is_shared);
     let (clusters, more_hosts, projects) = if options.list_only {
@@ -528,7 +545,7 @@ where
         };
         (skipped, Vec::new(), None)
     } else if shared {
-        let each = search_each_project(&name, wide, home, clients, connect, listings, progress);
+        let each = search_each_project(&name, scopes, clients, connect, listings, progress);
         let read = second_reading(
             list,
             uid,
@@ -549,8 +566,20 @@ where
         (read, Vec::new(), None)
     };
     // the consumer list names no edge host, and the search of the edge hosts is one request a
-    // page, so it is done also with --list-only
-    let hosts = joined_hosts(edge_host_search(wide, home, progress), more_hosts);
+    // page, so it is done also with --list-only. The searches of each project above give the edge
+    // hosts of a profile of the tenant, and the search of its project those of a profile of a
+    // project
+    let own = if shared {
+        Ok(Vec::new())
+    } else {
+        project_edge_hosts(&project, home, clients, connect)
+    };
+    let hosts = own.and_then(|own| {
+        joined_hosts(
+            edge_host_search(wide, home, progress),
+            [more_hosts, own].concat(),
+        )
+    });
     Readings {
         clusters,
         edge_hosts: edge_hosts_bound(list, uid, hosts),
@@ -683,8 +712,8 @@ pub(super) struct Readings {
 /// The document of `consumers` for the profile `doc`, with the consumers `consumers`.
 ///
 /// `kind` is the type of an app profile. The document holds the count, how many copies name another
-/// version than the profile, and the readings `readings`. A cluster profile has the scope that
-/// `doc` names, and the project of a profile of a project, with no name yet.
+/// version than the profile, and the readings `readings`. The profile has the scope that `doc`
+/// names, and the project of a profile of a project, with no name yet.
 fn report(
     doc: &Value,
     kind: Option<ProfileType>,
@@ -697,12 +726,8 @@ fn report(
         .iter()
         .filter(|c| !c.version.is_empty() && c.version != version)
         .count();
-    // strata reads the scope of a cluster profile only: no fact of Palette gives the scope of an
-    // app profile
-    let scope = kind
-        .is_none()
-        .then(|| ProfileScope::of_document(doc))
-        .flatten();
+    // the document of an app profile gives its scope in the same annotations
+    let scope = ProfileScope::of_document(doc);
     let project_uid = if scope == Some(ProfileScope::Project) {
         text(doc, "/metadata/annotations/projectUid")
     } else {

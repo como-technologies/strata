@@ -9,8 +9,9 @@ use super::macros::Pinner;
 use super::profiles::template_of;
 use super::registries::PUBLIC_REPO;
 use super::routes::{
-    EDGE_HOSTS, app_profile_route, app_tier_manifest_route, app_tiers_route, cluster_route,
-    group_route, manifest_route, manifests_route, paged, profile_route, virtual_clusters_file,
+    APP_DEPLOYMENT_LISTING, EDGE_HOSTS, app_profile_route, app_tier_manifest_route,
+    app_tiers_route, cluster_route, group_route, manifest_route, manifests_route, paged,
+    profile_route, virtual_clusters_file,
 };
 use super::{TENANT, Tenant};
 
@@ -146,6 +147,9 @@ impl Tenant {
     /// and a manifest tier `config`. A second call for the same uid is a plain update, as
     /// Palette takes one: the uid and the version stay. `web_order` is the install order of
     /// `web`. Palette gives no `installOrder` for a tier whose order is 0, as for `config`.
+    ///
+    /// The app profile is of the project `project`, as its annotations say. The app deployment
+    /// listing of the project starts empty.
     pub fn app_profile(
         &self,
         project: &str,
@@ -172,7 +176,8 @@ impl Tenant {
             project,
             &app_profile_route(uid),
             &json!({
-                "metadata": {"name": "shop", "uid": uid},
+                "metadata": {"name": "shop", "uid": uid, "annotations": {
+                    "scope": ProfileScope::Project.as_str(), "projectUid": project}},
                 "spec": {"version": version,
                     "versions": [{"uid": uid, "version": version}],
                     "template": {"appTiers": [
@@ -201,10 +206,19 @@ impl Tenant {
                 "spec": {"published": {
                     "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shop\ndata:\n  mode: live\n"}}}),
         );
+        let listing = paged(APP_DEPLOYMENT_LISTING);
+        if !self.doc(project, &listing).is_file() {
+            self.write(
+                project,
+                &listing,
+                &json!({"appDeployments": [], "listmeta": {"continue": ""}}),
+            );
+        }
     }
 
     /// The app deployment `name`, `uid`, of the app profile `profile` at its version now, in the
-    /// state `Deployed`. Palette names it in `status.inUseApps` of the app profile.
+    /// state `Deployed`. Palette names it in `status.inUseApps` of the app profile, and in the app
+    /// deployment listing of the project, with the app profile version that it runs.
     pub fn app_deployment(&self, project: &str, uid: &str, name: &str, profile: &str) {
         let path = app_profile_route(profile);
         let mut doc = self.read(project, &path);
@@ -215,17 +229,32 @@ impl Tenant {
             .push(json!({"kind": "appdeployment", "uid": uid, "name": name,
                 "projectUid": project}));
         self.write(project, &path, &doc);
-        self.write(
-            project,
-            &format!("v1/appDeployments/{uid}"),
-            &json!({
-                "metadata": {"name": name, "uid": uid,
-                    "annotations": {"projectUid": project}},
-                "spec": {"profile": {"metadata": {"name": doc["metadata"]["name"],
-                    "uid": profile, "version": version}}},
-                "status": {"state": "Deployed"},
-            }),
-        );
+        let deployment = json!({
+            "metadata": {"name": name, "uid": uid,
+                "annotations": {"projectUid": project}},
+            "spec": {"profile": {"metadata": {"name": doc["metadata"]["name"],
+                "uid": profile, "version": version}}},
+            "status": {"state": "Deployed"},
+        });
+        self.write(project, &format!("v1/appDeployments/{uid}"), &deployment);
+        let listing = paged(APP_DEPLOYMENT_LISTING);
+        let mut page = self.read(project, &listing);
+        page["appDeployments"]
+            .as_array_mut()
+            .expect("the app deployment listing of an app profile")
+            .push(deployment);
+        self.write(project, &listing, &page);
+    }
+
+    /// Make Palette omit each app deployment from the consumer list of the app profile
+    /// `profile` in `project`, as it does for a key with no role there that gives `cluster.get`.
+    /// The list is then empty, with no error. The code of Palette shows it; no live run shows it
+    /// yet.
+    pub fn deny_cluster_get(&self, project: &str, profile: &str) {
+        let path = app_profile_route(profile);
+        let mut doc = self.read(project, &path);
+        doc["status"]["inUseApps"] = json!([]);
+        self.write(project, &path, &doc);
     }
 
     /// The templates of an object that holds profiles and is not a cluster: an edge host or a

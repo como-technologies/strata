@@ -574,6 +574,7 @@ for the search of each project in
 | `tenant-consumers` | 0 | #621: `consumers` of the tenant version exits `0`: no cluster runs it, and the key reads each project. No result yet: no live window ran this check. |
 | `tenant-consumers-projects` | 0 | #621: its `profile.scope` is `tenant`, and `projectsRead` counts one project or more, with none in `unread`. So strata searched each project of the tenant listing. No result yet: no live window ran this check. |
 | `release-consumers` | 0 | #621: `consumers` of the release gives `profile.scope` `project` and the name of its project, and has no `projectsRead`. No result yet: no live window ran this check. |
+| `release-consumers-edge-hosts` | 0 | #892: `consumers` of the release has no `edgeHostsRead.error`. So the edge host search of the project of the release answers, beside the search at tenant scope. No result yet: no live window ran this check. |
 | `tenant-delete` | 0 | #113: the delete of the tenant profile, with no `ProjectUid` |
 
 ## projects.sh
@@ -1486,6 +1487,7 @@ cluster, and costs nothing.
 | `record-by-uid` | 0 | #78: `appprofile:<uid>` gives the same root |
 | `record-unknown` | 2 | #78: a name and version that no app profile has is `app-profile-not-found` |
 | `verify` | 0 | #78: `verify` of the record |
+| `consumers-project`, `consumers-scope` | 0 | #892: `consumers` of the app profile exits `0`. Its `profile.scope` is `project`, with the name of the project. `projectsRead` counts one project, with none in `unread`: strata listed the app deployments of the project, and Palette answered. No result yet: no live window ran this check. |
 | `edit`, `edit-same-version` | 0 | #78: a plain update of the manifest keeps the uid and the version, and makes no new version |
 | `edit-verify`, `edit-verify-says` | 1, 0 | #78: `verify` of the record reports drift, with the tier `AUTHORED` and the manifest named |
 | `edit-who`, `edit-who-appprofile` | 1, 0 | #140: `verify --who` reads the log of the kind `appprofile`, and its entries name the app profile as their object. |

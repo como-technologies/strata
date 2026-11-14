@@ -105,6 +105,9 @@ pub const CLUSTER_SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/sc
 /// The edge host search, `POST /v1/dashboard/edgehosts/search?limit=50`.
 pub const EDGE_HOST_SEARCH: &str = "/v1/dashboard/edgehosts/search?limit=50";
 
+/// The app deployment listing, `POST /v1/dashboard/appDeployments?limit=50`.
+pub const APP_DEPLOYMENT_LISTING: &str = "/v1/dashboard/appDeployments?limit=50";
+
 /// The key of a POST to `route` in the in-memory Palette, for one answer to each body.
 pub fn post(route: &str) -> String {
     format!("POST {route}")

@@ -147,10 +147,7 @@ pub(crate) fn searched_rows(r: &ConsumersReport) -> Vec<(Reading, String)> {
     if r.profile.kind == Some(ProfileType::App) {
         return vec![
             (Reading::ConsumerList, listed(ConsumerKind::App)),
-            (
-                Reading::AppDeployments,
-                format!("not searched ({})", r.clusters_read.reason),
-            ),
+            (Reading::AppDeployments, apps_found(r)),
             (Reading::EdgeHosts, edge_hosts_found(r)),
         ];
     }
@@ -183,7 +180,7 @@ pub(crate) fn searched_rows(r: &ConsumersReport) -> Vec<(Reading, String)> {
 fn clusters_found(read: &ClustersRead, found: usize) -> (Reading, String) {
     let reading = cluster_reading(read);
     if read.skipped {
-        return (reading, "not done (--list-only)".to_string());
+        return (reading, NOT_DONE_LIST_ONLY.to_string());
     }
     if let Some(e) = &read.error {
         return (reading, format!("not done ({})", error_message(e)));
@@ -207,6 +204,41 @@ fn clusters_found(read: &ClustersRead, found: usize) -> (Reading, String) {
     (reading, text)
 }
 
+/// What a row of a reading says when `--list-only` asked for none of it.
+const NOT_DONE_LIST_ONLY: &str = "not done (--list-only)";
+
+/// The row of the app deployments of an app profile: the app deployments of the listings of the
+/// projects that run the version and that the consumer list does not name. Or why strata listed
+/// none. The line `NOT CHECKED` names each project whose listing failed.
+fn apps_found(r: &ConsumersReport) -> String {
+    let Some(projects) = &r.projects_read else {
+        return match r.clusters_read.reason.as_str() {
+            "" => NOT_DONE_LIST_ONLY.to_string(),
+            reason => format!("not searched ({reason})"),
+        };
+    };
+    let failed = match (&projects.error, projects.unread.first()) {
+        (Some(e), _) => Some(e),
+        (None, Some(p)) if projects.unread.len() == projects.read => Some(&p.error),
+        _ => None,
+    };
+    if let Some(e) = failed {
+        return format!("not done ({})", error_message(e));
+    }
+    let found = r
+        .consumers
+        .iter()
+        .filter(|c| c.kind == ConsumerKind::App && c.unlisted)
+        .count();
+    match found {
+        0 => "no other app deployment on this version".to_string(),
+        n => format!(
+            "{n} other {} on this version",
+            plural(n, "app deployment", "app deployments")
+        ),
+    }
+}
+
 /// The reading that named the clusters beside the consumer list: the search, or the listing when
 /// the search of Palette takes no profile.
 fn cluster_reading(read: &ClustersRead) -> Reading {
@@ -214,6 +246,12 @@ fn cluster_reading(read: &ClustersRead) -> Reading {
         Some(Resolved::Listing) => Reading::ClusterListing,
         _ => Reading::ClusterSearch,
     }
+}
+
+/// `the cluster search failed`: why strata did not do a reading after the search or the listing.
+/// The second reading stops at a failed search, before it lists the groups or searches a project.
+fn search_failed(read: &ClustersRead) -> String {
+    format!("the {} failed", cluster_reading(read).as_str())
 }
 
 /// `, 2 not read`, or nothing when strata read each one.
@@ -233,8 +271,7 @@ fn groups_found(read: &ClustersRead) -> String {
         return "not read (--list-only)".to_string();
     }
     if read.error.is_some() {
-        // the second reading stops at a failed search, before it lists the groups
-        return format!("not read (the {} failed)", cluster_reading(read).as_str());
+        return format!("not read ({})", search_failed(read));
     }
     let failed = read
         .groups_error
@@ -302,8 +339,8 @@ pub(crate) fn consumers_heading(r: &ConsumersReport) -> String {
 /// `scope: project profile, so only project dev can use it`. A profile of the tenant or of the
 /// system gives `scope: tenant profile, usable in every project; 3 of 3 projects searched`.
 ///
-/// The count is there when strata searched each project of the tenant listing. None when the
-/// profile document names no scope.
+/// The count is there when strata read the project listing of the tenant, to search each project
+/// of it. None when the profile document names no scope.
 pub(crate) fn scope_line(r: &ConsumersReport) -> Option<String> {
     let scope = r.profile.scope?;
     if !scope.is_shared() {
@@ -317,13 +354,13 @@ pub(crate) fn scope_line(r: &ConsumersReport) -> Option<String> {
     }
     let line = format!("scope: {scope} profile, usable in every project");
     Some(match &r.projects_read {
-        Some(p) => format!(
+        Some(p) if p.error.is_none() => format!(
             "{line}; {} of {} {} searched",
             p.read.saturating_sub(p.unread.len()),
             p.read,
             plural(p.read, "project", "projects")
         ),
-        None => line,
+        _ => line,
     })
 }
 
@@ -332,28 +369,39 @@ pub(crate) fn scope_line(r: &ConsumersReport) -> Option<String> {
 /// knows of, or searched no project one by one.
 ///
 /// A project that Palette refused with a denial is one that the key cannot read. A project whose
-/// search failed in another way gives the message of the error. A key that cannot search at
-/// tenant scope gets only the projects of its roles in the listing. So the line then also names
-/// each project outside the listing.
+/// search failed in another way gives the message of the error. When the search at tenant scope
+/// failed, strata searched no project, and the line names each project of the listing. A key that
+/// cannot search at tenant scope gets only the projects of its roles in the listing. So the line
+/// then also names each project outside the listing.
 pub(crate) fn not_checked_line(r: &ConsumersReport) -> Option<String> {
     let read = r.projects_read.as_ref()?;
     let (denied, failed): (Vec<&UnreadProject>, Vec<&UnreadProject>) =
         read.unread.iter().partition(|p| p.denied);
+    let names = |projects: &[&UnreadProject]| -> Vec<String> {
+        projects
+            .iter()
+            .map(|p| name_or_uid(&p.name, &p.uid).to_string())
+            .collect()
+    };
     let mut parts = Vec::new();
     if !denied.is_empty() {
-        let names: Vec<&str> = denied
-            .iter()
-            .map(|p| name_or_uid(&p.name, &p.uid))
-            .collect();
         parts.push(format!(
             "{} (this key cannot read {})",
-            and_list(&names),
-            plural(names.len(), "it", "them")
+            and_list(&names(&denied)),
+            plural(denied.len(), "it", "them")
         ));
     }
-    for p in failed {
-        let name = name_or_uid(&p.name, &p.uid);
-        parts.push(format!("{name} ({})", error_message(&p.error)));
+    if r.clusters_read.error.is_some() && !failed.is_empty() {
+        parts.push(format!(
+            "{} ({})",
+            and_list(&names(&failed)),
+            search_failed(&r.clusters_read)
+        ));
+    } else {
+        for p in failed {
+            let name = name_or_uid(&p.name, &p.uid);
+            parts.push(format!("{name} ({})", error_message(&p.error)));
+        }
     }
     if read.tenant_error.is_some() {
         parts.push("each project that this key cannot list".to_string());
