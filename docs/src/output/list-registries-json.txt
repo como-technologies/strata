@@ -1,0 +1,3 @@
+$ strata list registries --json | jq -c '.registries[]'
+{"name":"Palette Registry","uid":"64ec000000000000000000a1","kind":"oci"}
+{"name":"Public Repo","uid":"5eecc89d0b150045ae661cef","kind":"pack"}

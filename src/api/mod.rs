@@ -37,7 +37,7 @@ pub use mask::MASKED;
 pub use memory::MemoryApi;
 pub(crate) use palette::{
     CLUSTER_TEMPLATE, DOWNLOAD_INTERVAL_SECONDS, OCI_SUMMARY_TEMPLATE, PACK_LISTING_PAGE, PACKS,
-    PROFILE_TEMPLATE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,
+    PROFILE_TEMPLATE, REGISTRY_METADATA, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,
     is_download_limit, named_entries, profile_versions, search_condition, search_filter,
     search_group,
 };
@@ -45,10 +45,9 @@ pub use palette::{
     Palette, VariablesRead, cloud_account_path, cloud_config_path, cluster_events_path,
     cluster_summary_path, subject_path,
 };
-// the unit tests build the route of a download with the one function that builds it, and serve the
-// registry listing at the one const of its route
+// the unit tests build the route of a download with the one function that builds it
 #[cfg(test)]
-pub(crate) use palette::{REGISTRY_METADATA, download_path};
+pub(crate) use palette::download_path;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft, profile_variables};
 pub(crate) use raw::{recorded_packs, recorded_template, save_registries, saved_registries};
 pub use retry::{Retry, RetryPolicy};

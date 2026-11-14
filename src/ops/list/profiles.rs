@@ -1,4 +1,4 @@
-//! The profile versions of a listing: the scope of each one, and with `--packs`, its packs and
+//! The profile versions of a listing: the scope of each one, and with `--detail`, its packs and
 //! the registry of each pack.
 
 use std::collections::BTreeMap;
@@ -16,10 +16,11 @@ use crate::term::progress::Progress;
 use super::{ConsumerCounts, ListOptions, ListedPack, ListedProfile};
 
 /// The profile versions that `palette` lists, sorted by name and then by version, with what
-/// `options` asks for.
+/// `options` asks for. The names of the registries of the packs come from `registries`.
 pub(super) fn list_profiles<A: PaletteApi>(
     palette: &Palette<A>,
     options: &ListOptions,
+    registries: &mut Registries<'_, A>,
     progress: &Progress,
 ) -> Result<Vec<ListedProfile>> {
     let mut profiles: Vec<ListedProfile> = profile_versions(&palette.profile_listing()?)
@@ -90,7 +91,7 @@ pub(super) fn list_profiles<A: PaletteApi>(
             None => p.error.is_some(),
         });
     }
-    name_registries(palette, &mut profiles)?;
+    name_registries(registries, &mut profiles)?;
     Ok(profiles)
 }
 
@@ -99,7 +100,7 @@ pub(super) fn list_profiles<A: PaletteApi>(
 /// Strata asks only when a pack names a registry. A Palette with no such listing gives no names.
 /// Each other error of the listing returns, as the error of a listing does.
 fn name_registries<A: PaletteApi>(
-    palette: &Palette<A>,
+    listings: &mut Registries<'_, A>,
     profiles: &mut [ListedProfile],
 ) -> Result<()> {
     let mut packs: Vec<&mut ListedPack> = profiles
@@ -110,7 +111,6 @@ fn name_registries<A: PaletteApi>(
     if packs.is_empty() {
         return Ok(());
     }
-    let mut listings = Registries::new(palette);
     let Some(registries) = listings.listed()? else {
         return Ok(());
     };

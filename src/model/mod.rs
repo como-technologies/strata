@@ -11,6 +11,7 @@
 //! - [`pack_state`] and [`pack_type`]: the state of a pack version in a registry, and the type
 //!   of a pack.
 //! - [`profile_type`]: the type of a profile.
+//! - [`registry_kind`]: the kind of a registry.
 //! - [`repave`]: the reasons of Palette for a repave, and a repave that waits for approval.
 //! - [`scope`]: the scope of a profile version.
 //! - [`update`]: the rules of Palette for the update of a cluster that no validate route checks.
@@ -26,6 +27,7 @@ pub mod oci_provider;
 pub mod pack_state;
 pub mod pack_type;
 pub mod profile_type;
+pub mod registry_kind;
 pub mod repave;
 pub mod scope;
 pub mod update;

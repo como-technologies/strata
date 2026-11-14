@@ -1,0 +1,2 @@
+$ strata list packs
+strata: `list` does not list packs, because a list of the packs of a registry is a catalog. `strata list --detail` gives the packs of each profile version. `strata packs <name>` gives the versions of one pack

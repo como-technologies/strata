@@ -435,6 +435,7 @@ fn the_binary_never_panics_on_junk_arguments() {
         "--no-color",
         "--full",
         "--applied",
+        "--detail",
         "--packs",
         "--project",
         "--cluster",

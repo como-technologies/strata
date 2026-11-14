@@ -40,7 +40,7 @@ flowchart LR
 
 | Task | Command | Page |
 | --- | --- | --- |
-| Find a ref, a project, the profiles with a pack, the clusters with a label, or the saved tag filters | `strata list` | [list](./list.md) |
+| Find a ref, a project, the profiles with a pack, the clusters with a label, the saved tag filters, or the registries | `strata list` | [list](./list.md) |
 | Find the versions a registry offers for a pack | `strata packs` | [packs](./packs.md) |
 | Record a profile version, a cluster, an edge host, a cluster group, an app profile, a pack version, or each cluster of a set | `strata snapshot` | [snapshot](./snapshot.md) |
 | Write a candidate file for a review | `strata candidate` | [candidate](./candidate.md) |
