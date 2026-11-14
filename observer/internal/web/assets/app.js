@@ -338,8 +338,9 @@ const natural = (a, b) => String(a).localeCompare(String(b), undefined, {numeric
    one of strata and one of this page, sort them. A change of one order fails the test of the other.
    1. A version reads as its three numbers, and the numbers decide first. A text that does not parse gives its first three numbers,
       or the one or two numbers at its start. One "v" in front does not count. A number above the largest u64 holds no version.
-   2. For one set of numbers, text before the numbers is the lowest, in its natural order. Then the forms go up: one or two numbers
-      and a tail, a tail after a dot after the three numbers, a pre-release, the version, and a fourth number.
+   2. For one set of numbers, text before the numbers is the lowest, in its natural order. Higher forms follow, from low to high:
+      one or two numbers and a tail, and a tail after a dot after the three numbers. Next are a pre-release, the version, and a
+      fourth number.
    3. Then the tails decide, part by part, and then a pre-release after "-" is above no pre-release.
    4. A text with no version sorts below each version, in the natural order of its runs. The empty text is the lowest. */
 const DIGITS = /^\d+$/;

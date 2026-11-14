@@ -43,7 +43,7 @@ book_opens() {
 }
 
 # install_no_token: the install command of the README as it is, with the folder of the run in place
-# of ~/.local/bin, and with no token in the environment. A failed download gives bash no input, and
+# of ~/.local/bin. No token is in the environment. A failed download gives bash no input, and
 # bash then exits with 0. So the pipe fails when curl fails.
 install_no_token() {
   local command

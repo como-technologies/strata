@@ -272,7 +272,7 @@ while IFS= read -r group <&3; do
   if ! jq -e '.pins | any(.behind)' <<<"$group" > /dev/null; then
     current=$((current + 1))
     if [ -n "$dry" ]; then
-      note "would close the open issue for $what, if any"
+      note "a run with no --dry-run closes the open issue for $what, if one is open"
       continue
     fi
     number=$(issue_for "$name" "$uid")
@@ -331,7 +331,7 @@ while IFS= read -r group <&3; do
   if [ -n "$dry" ]; then
     cat "$body"
     echo
-    note "would open or update the issue for $what: $title"
+    note "a run with no --dry-run opens or updates the issue for $what: $title"
     continue
   fi
   number=$(issue_for "$name" "$uid")

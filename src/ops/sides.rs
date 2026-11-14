@@ -30,7 +30,7 @@ impl<T> SideProjects<T> {
         .or(self.both.as_ref())
     }
 
-    /// The project of the ref at `index` of `same-release`: the first ref is side A, the second
+    /// The project of the ref at `index` of `same-release`. The first ref is side A, the second
     /// is side B, and each later ref has the flag of both sides.
     pub fn of_ref(&self, index: usize) -> Option<&T> {
         match index {

@@ -38,7 +38,7 @@ const stepsOf = r => r.steps && r.steps.length ? r.steps : [{version: r.newest, 
 // buildOnly says that a move changes no value, manifest, image, or chart: only the build of the pack moves.
 const buildOnly = r => r.fold.settings + r.fold.followsTheVersion + r.fold.repeatsTheLists === 0 && !r.images && !r.charts && !(r.flags || []).includes("AUTHORED");
 
-// newerGroups groups the rows by profile, and keeps what the filter matches: a whole group when its profile matches, and else the
+// newerGroups groups the rows by profile. It keeps what the filter matches: a whole group when its profile matches, and else the
 // rows whose pack matches.
 function newerGroups(rows) {
   const groups = [];
@@ -86,8 +86,8 @@ function newerTable(groups) {
   }) : none}</tbody></table></div>`;
 }
 
-// newerTimeline draws one lane for each pack: the pinned version, each version that the registry listed after it, and the newest,
-// with the day of each. The lane links to the page of the pack.
+// newerTimeline draws one lane for each pack: the pinned version, each version that the registry listed after it, and the newest.
+// The lane gives the day of each. The lane links to the page of the pack.
 function newerTimeline(groups) {
   if (!groups.length) return h`<div class="body">${inline(TONE.OFF, h`No pack or profile matches <span class="m">${S.qs.newer}</span>.`)}</div>`;
   return h`<div class="lanes">${groups.map(g => {
@@ -196,9 +196,9 @@ function viewProfile(subject) {
 // The words of a pack in the move of a profile, by its status in the compare.
 const MOVE_WORDS = {changed: "Changed", added: "Added", removed: "Removed"};
 
-// profileMoveCard draws the move of a profile to its newest published version: the impact, the flags of its packs, and each pack that
-// the move changes, adds, or removes, with its versions and whether its values change. A pack of the record links to its page, where
-// the Compare menu shows the full diff of the move. It is "" for a profile with no newer version.
+// profileMoveCard draws the move of a profile to its newest published version. It shows the impact, the flags of its packs, and each
+// pack that the move changes, adds, or removes. For each pack, it shows the versions and whether the values change. A pack of the
+// record links to its page, where the Compare menu shows the full diff of the move. It is "" for a profile with no newer version.
 function profileMoveCard(subject, x) {
   const n = x.newerVersion;
   if (!n) return "";
@@ -227,9 +227,9 @@ function eventFrom(q) {
 }
 
 /* ---- The stack of the packs ----
-   A profile shows its packs as a stack of layers, as Palette builds a cluster: the add-ons on top, the OS at the bottom. The color on
-   the left of a slab is the status of the pack. The page of a pack shows the same stack, small, with its own slab lit, so a person
-   sees one picture of a pack on both pages and steps from one pack to the next. */
+   A profile shows its packs as a stack of layers, as Palette builds a cluster. The add-ons are on top, and the OS is at the bottom.
+   The color on the left of a slab is the status of the pack. The page of a pack shows the same stack, small, with its own slab lit.
+   So a person sees one picture of a pack on both pages, and steps from one pack to the next. */
 // newerWords tells what strata found about a newer version of the pack p of the profile x. A pack that strata does not look for gets no
 // word.
 function newerWords(x, p) {
@@ -243,9 +243,9 @@ function newerWords(x, p) {
 }
 const imagesWords = n => n ? `${n} ${plural(n, "image", "images")} listed` : h`<span title="${IMAGES_LISTED}">no image list</span>`;
 
-// carriedWords names the newer version of the profile that carries a newer version of a pack, as behind reads it for one profile
-// version: "carried by name@version", with the version of the pack before it when that is not the newest. It is "" when behind
-// names no carrier, such as for a profile with no newer version.
+// carriedWords names the newer version of the profile that carries a newer version of a pack. It names that version as behind reads
+// it for one profile version. The words are "carried by name@version", with the version of the pack before it when that is not the
+// newest. It is "" when behind names no carrier, such as for a profile with no newer version.
 function carriedWords(c, newest) {
   if (!c) return "";
   if (c.unread) return "carrier not read";

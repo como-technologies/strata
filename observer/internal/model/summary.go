@@ -161,7 +161,8 @@ type NewerVersion struct {
 }
 
 // ProfileMove is what the observer keeps of the compare of a record and the newest version of its
-// profile: the impact level, each flag of its packs, and each pack that changes. It holds no value.
+// profile. It holds the impact level, each flag of its packs, and each pack that changes. It holds no
+// value.
 type ProfileMove struct {
 	Impact string     `json:"impact"`
 	Flags  []string   `json:"flags"`

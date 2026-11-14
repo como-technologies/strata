@@ -1,0 +1,6 @@
+# The queries of strata for the Rust code. The config .github/codeql/rust.yml runs them in place of
+# the query of CodeQL with the same id. See "CodeQL" in docs/src/development/build-test.md.
+name: como-technologies/strata-rust-queries
+version: 0.0.0
+dependencies:
+  codeql/rust-all: "*"

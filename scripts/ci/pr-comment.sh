@@ -6,11 +6,13 @@
 #
 # A and B are refs strata understands: snapshot files, uids, or name@version. A ref that is not a
 # file is snapshotted once, so both renderings read files and Palette is asked once. A cluster ref
-# beside another ref is read one more time, for the profiles that `compare` holds. The comment starts
-# with the marker <!-- strata -->; a later run finds the comment by that marker and updates it, so
-# a pull request carries one strata comment that follows each push. The label (default repave) is
-# added when summary.maxImpact is at or above the threshold (default repave) and removed otherwise.
-# --dry-run prints the comment, says what it would do with the label, and calls no host.
+# beside another ref is read one more time, for the profiles that `compare` holds.
+#
+# The comment starts with the marker <!-- strata -->. A later run finds the comment by that marker
+# and updates it, so a pull request carries one strata comment that follows each push. The label
+# (default repave) is added when summary.maxImpact is at or above the threshold (default repave)
+# and removed otherwise.
+# --dry-run prints the comment and the change to the label, and calls no host.
 #
 # --repave asks Palette if the change repaves the cluster, as `strata compare --repave` does, and
 # puts the answer in the comment. One ref must be a cluster, and the other a profile version that
@@ -201,7 +203,7 @@ if [ -n "$preflight" ]; then
   { echo "$marker"; cat "$preflight"; } > "$work/comment.md"
   if [ -n "$dry" ]; then
     cat "$work/comment.md"
-    note "would post the preflight comment, or update the one that carries $marker"
+    note "a run with no --dry-run posts the preflight comment, or updates the one that carries $marker"
     exit 0
   fi
   resolve_target
@@ -295,9 +297,9 @@ says_note=${says:+; label $label: $says}
 if [ -n "$dry" ]; then
   cat "$work/comment.md"
   if [ "$want_label" = 1 ]; then
-    note "max impact: $max$says_note; would add label $label"
+    note "max impact: $max$says_note; a run with no --dry-run adds label $label"
   else
-    note "max impact: $max$says_note; would remove label $label if present"
+    note "max impact: $max$says_note; a run with no --dry-run removes label $label, if the pull request has it"
   fi
   exit 0
 fi
@@ -306,8 +308,8 @@ fi
 resolve_target
 publish_comment "$work/comment.md"
 
-# Read the listings into variables first: grep -q exits early, and under pipefail the writer's
-# broken pipe would read as "no such label".
+# Read the listings into variables first: grep -q exits early. Under pipefail, the broken pipe of
+# the writer then reads as "no such label".
 pr_labels=$(host labels)
 if grep -Fxq "$label" <<<"$pr_labels"; then have_label=1; else have_label=0; fi
 if [ "$want_label" = 1 ] && [ "$have_label" = 0 ]; then

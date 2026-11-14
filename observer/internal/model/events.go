@@ -37,10 +37,12 @@ const (
 
 // eventsOf gives the events of the last 7 days, the newest first. A finding makes a drift event at
 // its first sight. Each write of its `who` makes an info event at the time of the write. A finding
-// whose audit log strata could not read makes one info event that says so, at its last sight: the
-// event states what is true now. A newer version makes an event at its listing. A registry copy
-// that is older makes one at its last sync. A newer published version of a profile makes one at its
-// create. An event that is older than the window is not in the list.
+// whose audit log strata could not read makes one info event that says so, at its last sight. The
+// event states what is true now.
+//
+// A newer version makes an event at its listing. A registry copy that is older makes one at its last
+// sync. A newer published version of a profile makes one at its create. An event that is older than
+// the window is not in the list.
 func eventsOf(findings []Finding, versions *Versions, now time.Time) []Event {
 	out := []Event{}
 	add := func(e Event) {

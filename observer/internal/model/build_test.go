@@ -483,8 +483,9 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 }
 
 // Issue #708. The row of a profile with a newer published version holds the move from the record to
-// that version: the impact level, the flags of its packs, each pack whose version changes, each pack
-// that the move adds or removes, and each pack whose values change. It holds no value.
+// that version. The move holds the impact level and the flags of its packs. It names each pack whose
+// version changes, each pack that it adds or removes, and each pack whose values change. The row
+// holds no value.
 func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *testing.T) {
 	c := content(t, rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0"), pk("addon", "wilma-values", "1.0.0"), pk("addon", "dino-logs", "2.0.0")))
 	side := func(version string) *docs.PackSide { return &docs.PackSide{Version: version} }
@@ -532,9 +533,9 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 	}
 }
 
-// The pack row and the newer row name the newer profile version that carries a newer version of the pack (#709), as `behind`
-// names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed read says that
-// the carrier was not read. A profile that the pin does not name has no carrier on its row.
+// The pack row and the newer row name the newer profile version that carries a newer version of the pack (#709). They name it
+// as `behind` names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed
+// read says that the carrier was not read. A profile that the pin does not name has no carrier on its row.
 func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 	fred := pin("fred-compositions", "addon", "0.1.0", "0.2.0", "barney-addons@1.3.1", "barney-addons@1.3.0", "other@1.0.0")
 	fred.Carriers = []docs.PinCarrier{

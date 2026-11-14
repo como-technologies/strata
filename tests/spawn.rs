@@ -99,8 +99,8 @@ fn the_trees_that_the_scan_reads_are_the_trees_that_include_the_lock() {
     }
 }
 
-/// The two files that give git its settings: the helper of the tests and of the runner of the
-/// book, and the function of the live scripts, which are bash.
+/// The two files that give git its settings. One is the helper of the tests and of the runner of
+/// the book. The other is the function of the live scripts, which are bash.
 const GIT_HELPERS: [&str; 2] = ["tests/common/git.rs", "examples/live/lib.sh"];
 
 #[test]

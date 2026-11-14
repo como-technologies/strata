@@ -7,10 +7,11 @@
 # The lab project is the project of the other scripts: its name is palette_project of
 # terraform/terraform.tfvars, and its uid the output project_uid. STRATA_LIVE_SECOND_PROJECT is
 # the name of a second project of the tenant. The script finds its uid with strata list projects.
-# It creates and publishes a copy of the release profile in the second project, with the name, the
-# version, the packs, the values, and the manifests of the release. It records the version in each
-# project, and asks same-release and compare with a project for each side. Then it deletes the
-# copy. It deletes only the profile that it makes, and never a project.
+#
+# It creates and publishes a copy of the release profile in the second project. The copy has the
+# name, the version, the packs, the values, and the manifests of the release. It records the
+# version in each project, and asks same-release and compare with a project for each side. Then it
+# deletes the copy. It deletes only the profile that it makes, and never a project.
 #
 # Needs the profiles (just live-profiles), a second project, and no cluster: no cost. It leaves
 # the tenant as it found it. Needs the strata release binary, jq, and the key as verify.sh needs
