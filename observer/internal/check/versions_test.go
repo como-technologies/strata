@@ -44,9 +44,7 @@ func withBehind(t *testing.T) (*rig, *world) {
 func TestTheVersionsCycleComparesEachMoveAndFillsTheRows(t *testing.T) {
 	r, w := withBehind(t)
 	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	s := o.Summary()
 	if len(s.Newer) != 4 || w.countMoves() != 4 || s.Counts.Newer != 4 || s.Counts.NewerProfiles != 1 || s.StrataVersion != w.behind.Tool.Version {
 		t.Fatalf("rows %d, moves %d, counts %+v, strata %q", len(s.Newer), w.countMoves(), s.Counts, s.StrataVersion)
@@ -72,9 +70,7 @@ func TestTheCacheAsksEachMoveOnce(t *testing.T) {
 	r, w := withBehind(t)
 	o := r.observer(w)
 	for range 3 {
-		if err := o.RunVersions(context.Background()); err != nil {
-			t.Fatal(err)
-		}
+		versions(t, o)
 	}
 	if got := w.countMoves(); got != 4 {
 		t.Fatalf(testkit.PackCompares+" after three cycles", got)
@@ -109,9 +105,7 @@ func TestANewBinaryAsksAgainAndTheOldKeysGo(t *testing.T) {
 	}
 	w.behind.Tool.Version = "99.0.0"
 	o := r.restart(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	if got := w.countMoves(); got != 8 {
 		t.Errorf(testkit.PackCompares, got)
 	}
@@ -149,9 +143,7 @@ func TestAPinWithAnErrorBesideGoodPinsIsACause(t *testing.T) {
 	w.behind.Pins[0].Error = &docs.Error{Kind: docs.KindAPI, Status: 404}
 	w.behindExit = 2
 	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	s := o.Summary()
 	if s.Versions.FailedRuns != 0 || len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "addon/cert-manager" {
 		t.Errorf("versions %+v, notChecked %+v", s.Versions, s.NotChecked)
@@ -162,9 +154,7 @@ func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 	r, w := withBehind(t)
 	w.behind.Pins[0].RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	rows := o.Summary().NotChecked
 	if len(rows) != 1 || rows[0].Cause != model.OlderRegistryCopy || rows[0].Registry != "Public Repo" || rows[0].Packs[0] != "addon/cert-manager" {
 		t.Errorf("notChecked %+v", rows)

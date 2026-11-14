@@ -76,10 +76,7 @@ func missing(root, node map[string]any, t reflect.Type, path string, seen map[re
 }
 
 func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
-	bin := os.Getenv("STRATA_BIN")
-	if bin == "" {
-		t.Skip("STRATA_BIN" + notSet)
-	}
+	bin := contractEnv(t, "STRATA_BIN")
 	for _, c := range []struct {
 		kind string
 		typ  any
@@ -108,11 +105,17 @@ func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
 // With no directory, the test skips.
 func contractDir(t *testing.T) string {
 	t.Helper()
-	dir := os.Getenv("STRATA_DOCS")
-	if dir == "" {
-		t.Skip("STRATA_DOCS" + notSet)
+	return contractEnv(t, "STRATA_DOCS")
+}
+
+// contractEnv gives the variable name that the contract script sets. When it is not set, the test skips.
+func contractEnv(t *testing.T, name string) string {
+	t.Helper()
+	value := os.Getenv(name)
+	if value == "" {
+		t.Skip(name + notSet)
 	}
-	return dir
+	return value
 }
 
 // decodeFile reads the JSON file name of dir into v. It does the job of testkit.DecodeFile for the tests of docs, because

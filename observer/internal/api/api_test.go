@@ -95,11 +95,7 @@ func noSummaryRouteHolds(t *testing.T, h http.Handler, words ...string) {
 		if rec.Code != http.StatusOK {
 			t.Errorf("%s: status %d, body %s", pattern, rec.Code, body)
 		}
-		for _, word := range words {
-			if strings.Contains(body, word) {
-				t.Errorf("%s holds %s: %s", pattern, word, body)
-			}
-		}
+		testkit.HoldsNone(t, pattern, body, words...)
 	}
 }
 
@@ -391,16 +387,9 @@ func TestAMarkerInAChangedPathReachesNoSummaryRouteAndNotOnce(t *testing.T) {
 	if planted == string(raw) {
 		t.Fatal("the fixture holds no path to change")
 	}
-	testkit.WriteFile(t, filepath.Join(r.fixtures, "verify.json"), planted)
+	testkit.WriteIn(t, r.fixtures, "verify.json", planted)
 	o := r.observer(&fakeStrata{dir: r.fixtures})
-	once, err := o.Once(context.Background())
-	if err != nil {
-		t.Fatalf(cyclesFailed, err)
-	}
-	printed := testkit.MustJSON(t, once)
-	if strings.Contains(string(printed), pathMarker) {
-		t.Errorf("once prints the path: %s", printed)
-	}
+	testkit.HoldsNone(t, "the summary of once", string(testkit.MustJSON(t, r.once(o))), pathMarker)
 	h := handlerOf(o)
 	noSummaryRouteHolds(t, h, pathMarker)
 	if body := get(h, pathPublished).Body.String(); !strings.Contains(body, pathMarker) {
@@ -430,7 +419,7 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 	if unread == string(raw) {
 		t.Fatal("the fixture holds no who")
 	}
-	testkit.WriteFile(t, filepath.Join(r.fixtures, "verify.json"), unread)
+	testkit.WriteIn(t, r.fixtures, "verify.json", unread)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var findings FindingsView
 	decode(t, get(h, summaryRoutes[patternFindings]), &findings)
@@ -461,15 +450,10 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 	if sentences != 1 {
 		t.Errorf("events %+v", events)
 	}
-	for _, route := range []string{"cluster", "findings", "profiles", "newer", "notchecked", "events"} {
-		if body := get(h, "/v1/"+route).Body.String(); strings.Contains(body, testkit.AuditSentinel) {
-			t.Errorf("/v1/%s holds the text of the error: %s", route, body)
-		}
-	}
+	noSummaryRouteHolds(t, h, testkit.AuditSentinel)
 	// the log of the pod names the status and never the body of the answer
-	if line := r.log.String(); strings.Contains(line, testkit.AuditSentinel) || !strings.Contains(line, `reason="HTTP 403"`) {
-		t.Errorf("log %q", line)
-	}
+	testkit.HoldsNone(t, "the log", r.log.String(), testkit.AuditSentinel)
+	testkit.HoldsAll(t, "the log", r.log.String(), `reason="HTTP 403"`)
 }
 
 // Ask is the click of the stub's Source: it waits until the time limit ends.

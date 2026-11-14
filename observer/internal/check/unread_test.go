@@ -27,9 +27,7 @@ func notRead() docs.VerifyRow {
 func at(t *testing.T, o *Observer, when time.Time) model.Summary {
 	t.Helper()
 	o.now = func() time.Time { return when }
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatalf("the cycle failed: %v", err)
-	}
+	cycle(t, o)
 	return o.Summary()
 }
 
@@ -185,10 +183,7 @@ func TestAFailedReadAfterARestartKeepsTheFirstSightInTheState(t *testing.T) {
 	}
 	keepsFirstSight(t, r, id)
 	w.rows[0] = drift(t)
-	s = at(t, o, t0.Add(2*time.Hour))
-	if len(s.Findings) != 1 || !s.Findings[0].FirstSeen.Equal(t0) {
-		t.Errorf("a read that shows the drift lost the first sight: %+v", s.Findings)
-	}
+	driftAgain(t, at(t, o, t0.Add(2*time.Hour)))
 }
 
 func TestAFailedReadKeepsTheFirstSightOfThePartThatFailedOnly(t *testing.T) {
@@ -229,9 +224,7 @@ func TestOneMoveThatFailsLeavesTheOtherPinsComparedAndTheListNew(t *testing.T) {
 	failing := move("kubernetes", "1.35.3", "1.36.2")
 	w.moveErrs[failing] = &runner.RunError{Kind: docs.KindCrash}
 	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatalf("a move that fails failed the cycle: %v", err)
-	}
+	versions(t, o)
 	s := o.Summary()
 	if s.Versions.ReadAt == nil || s.Versions.FailedRuns != 0 || s.Versions.LastError != nil || len(s.Newer) != 4 || w.countMoves() != 4 {
 		t.Fatalf(versionsNewer+", compares %d", s.Versions, len(s.Newer), w.countMoves())
@@ -247,9 +240,7 @@ func TestOneMoveThatFailsLeavesTheOtherPinsComparedAndTheListNew(t *testing.T) {
 	}
 	delete(w.moveErrs, failing)
 	before := w.countMoves()
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	if got := w.countMoves() - before; got != 1 {
 		t.Errorf("the second cycle asked for %d moves, want 1", got)
 	}
@@ -264,9 +255,7 @@ func TestACycleWhereEveryMoveFailsIsStillAGoodCycle(t *testing.T) {
 		w.moveErrs[key] = &runner.RunError{Kind: docs.KindAPI, Status: 503}
 	}
 	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	s := o.Summary()
 	if s.Versions.ReadAt == nil || s.Versions.FailedRuns != 0 || len(s.Newer) != 4 || len(s.NotChecked) != 4 {
 		t.Errorf(versionsNewer+", notChecked %d", s.Versions, len(s.Newer), len(s.NotChecked))
@@ -277,9 +266,7 @@ func TestNoRecordLeavesTheVersionsClockEmpty(t *testing.T) {
 	r := newRig(t)
 	w := &world{}
 	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	s := o.Summary()
 	if w.count(runner.CmdBehind) != 0 || s.Versions.ReadAt != nil || s.Versions.FailedRuns != 0 || s.Versions.LastError != nil {
 		t.Errorf("behind %d, versions %+v", w.count(runner.CmdBehind), s.Versions)
@@ -326,15 +313,7 @@ func TestTheRealOutputWithNoRecordIsTheSetNoRecords(t *testing.T) {
 
 func asMap(t *testing.T, v any) map[string]any {
 	t.Helper()
-	raw, ok := v.(json.RawMessage)
-	if !ok {
-		raw = testkit.MustJSON(t, v)
-	}
-	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
-		t.Fatal(err)
-	}
-	return out
+	return testkit.Plain(t, v).(map[string]any)
 }
 
 // breakRecord overwrites the file of a record with a file that the observer cannot read.
@@ -342,7 +321,7 @@ func breakRecord(t *testing.T, r *rig, how string) {
 	t.Helper()
 	switch how {
 	case "a bad gzip":
-		testkit.WriteFile(t, filepath.Join(r.records, testkit.RecordFile), "not gzip")
+		testkit.WriteIn(t, r.records, testkit.RecordFile, "not gzip")
 	default:
 		testkit.WriteGzip(t, r.records, testkit.RecordFile, testkit.Record("strata-snapshot/2", "aws-stack", "1.1.0", "", ""))
 	}
@@ -380,9 +359,9 @@ func TestAnUnreadableRecordKeepsItsFindingAndItsFirstSightAndSendsNoClear(t *tes
 			// A later good read decides.
 			restoreRecord(r)
 			w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-			s = at(t, o, t0.Add(2*time.Hour))
-			if len(s.Findings) != 0 || len(sender.texts) != 2 || !strings.Contains(sender.texts[1], "Drift cleared") {
-				t.Errorf(findingsAndMessages, s.Findings, sender.texts)
+			noChangeClears(t, at(t, o, t0.Add(2*time.Hour)))
+			if len(sender.texts) != 2 || !strings.Contains(sender.texts[1], "Drift cleared") {
+				t.Errorf("messages %q", sender.texts)
 			}
 			dropsFirstSight(t, r, id)
 		})
@@ -414,9 +393,9 @@ func TestAnUnreadableRecordWithNoLastRecordKeepsTheFirstSightsAndSendsNoClear(t 
 	// The record is read again and the drift is still there: the first sight is the first one, and nothing goes again.
 	restoreRecord(r)
 	w.rows = []docs.VerifyRow{drift(t), unchanged()}
-	s = at(t, o, t0.Add(2*time.Hour))
-	if len(s.Findings) != 1 || !s.Findings[0].FirstSeen.Equal(t0) || len(sender.texts) != 3 {
-		t.Errorf(findingsAndMessages, s.Findings, sender.texts)
+	driftAgain(t, at(t, o, t0.Add(2*time.Hour)))
+	if len(sender.texts) != 3 {
+		t.Errorf("messages %q", sender.texts)
 	}
 	// A read of no change decides.
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}

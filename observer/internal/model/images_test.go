@@ -35,7 +35,12 @@ func naming(p docs.RecordPack, images ...string) docs.RecordPack {
 // podsOf makes a content with one record whose pack names testkit.VendorRef, and the given containers.
 func podsOf(t *testing.T, containers ...kube.Container) Content {
 	t.Helper()
-	r := rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "2026.2.0"), testkit.VendorRef))
+	return podsWith(t, rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "2026.2.0"), testkit.VendorRef)), containers...)
+}
+
+// podsWith makes a content with the record r, and the given containers that a read of the pods gave at t0.
+func podsWith(t *testing.T, r Record, containers ...kube.Container) Content {
+	t.Helper()
 	c := content(t, r)
 	c.Pods = PodRead{Containers: containers, At: t0}
 	return c
@@ -46,11 +51,11 @@ func firstOf(ref, digest string) map[string]string {
 	return map[string]string{ImageKey(ref): digest}
 }
 
-// podsInput is the input of a build of c at t0 that reads the pods. The first digest of testkit.VendorRef is
-// testkit.Digest1.
-func podsInput(c *Content) Input {
-	return Input{Now: t0, ClusterUID: testkit.PaymentsUID, StartedAt: t0, Files: 1, FilesKnown: true, Content: c, ContentClock: goodClock(testkit.ContentEvery, t0),
-		ReadPods: true, FirstDigests: firstOf(testkit.VendorRef, testkit.Digest1)}
+// podsInput is the input of goodInput of c, with one file, that reads the pods with the first digests first.
+func podsInput(c *Content, first map[string]string) Input {
+	in := goodInput(c, nil)
+	in.Files, in.ReadPods, in.FirstDigests = 1, true, first
+	return in
 }
 
 func kindsOf(findings []Finding) []Kind {
@@ -162,16 +167,15 @@ func TestAnImageThatMatchesNoPackIsListedWithNoPackAndMakesNoFinding(t *testing.
 	if got := FindingsOf(c, firstOf(agent, testkit.Digest1)); len(got) != 0 {
 		t.Errorf("findings %+v", got)
 	}
-	if o := ObservedOf(Input{ReadPods: true, Content: &c, FirstDigests: firstOf(agent, testkit.Digest1)}); o.Counts.Images != 1 || o.Counts.Matched != 0 || o.Counts.Changed != 0 {
+	if o := ObservedOf(podsInput(&c, firstOf(agent, testkit.Digest1))); o.Counts.Images != 1 || o.Counts.Matched != 0 || o.Counts.Changed != 0 {
 		t.Errorf("counts %+v", o.Counts)
 	}
 }
 
 func TestAnImageNamedByADigestCannotMoveAndMakesNoFinding(t *testing.T) {
 	ref := vendorAt + testkit.Digest1
-	r := rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "2026.2.0"), ref))
-	c := content(t, r)
-	c.Pods = PodRead{Containers: []kube.Container{{Pod: "ns/a", Image: ref, ImageID: vendorAt + testkit.Digest2}}, At: t0}
+	c := podsWith(t, rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "2026.2.0"), ref)),
+		kube.Container{Pod: "ns/a", Image: ref, ImageID: vendorAt + testkit.Digest2})
 	row := imageRows(c, firstOf(ref, testkit.Digest1))[0]
 	if !row.ByDigest || row.Match != MatchExact {
 		t.Errorf("row %+v", row)
@@ -206,9 +210,8 @@ func TestAnImageMatchesByTheExactTextFirstAndThenByNameAndTag(t *testing.T) {
 }
 
 func TestOnlyARecordThatTheClusterRunsMatches(t *testing.T) {
-	r := notOnCluster(rec("elsewhere", "1.0.0", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "1"), testkit.VendorRef)))
-	c := content(t, r)
-	c.Pods = PodRead{Containers: []kube.Container{ran("a", testkit.VendorRef, testkit.Digest2)}, At: t0}
+	c := podsWith(t, notOnCluster(rec("elsewhere", "1.0.0", docs.VerifyUnchanged, naming(pk("addon", "vendor-product", "1"), testkit.VendorRef))),
+		ran("a", testkit.VendorRef, testkit.Digest2))
 	if row := imageRows(c, firstOf(testkit.VendorRef, testkit.Digest1))[0]; row.Match != MatchNone {
 		t.Errorf("row %+v", row)
 	}
@@ -225,8 +228,7 @@ func TestOneFindingNamesEachPackAndEachImageOfAProfile(t *testing.T) {
 	second := "vendor.example/sidecar:2026.2"
 	r := rec("wilma-gateway", "3.1.2", docs.VerifyUnchanged,
 		naming(pk("addon", "vendor-product", "2026.2.0"), testkit.VendorRef), naming(pk("addon", "vendor-sidecar", "2026.2.0"), second))
-	c := content(t, r)
-	c.Pods = PodRead{At: t0, Containers: []kube.Container{ran("a", testkit.VendorRef, testkit.Digest2), ran("b", second, testkit.Digest2)}}
+	c := podsWith(t, r, ran("a", testkit.VendorRef, testkit.Digest2), ran("b", second, testkit.Digest2))
 	first := map[string]string{ImageKey(testkit.VendorRef): testkit.Digest1, ImageKey(second): testkit.Digest1}
 	got := FindingsOf(c, first)
 	if len(got) != 1 || got[0].Kind != ImageMoved || !slices.Equal(got[0].Packs, []string{testkit.VendorPack, "addon/vendor-sidecar"}) ||
@@ -274,11 +276,11 @@ func TestTheDocumentSaysOffNotReadOrRead(t *testing.T) {
 	}
 	failed := podsOf(t)
 	failed.Pods = PodRead{Err: &ErrorRef{Kind: docs.KindKubeAPI, Status: 403}}
-	if o := ObservedOf(Input{ReadPods: true, Content: &failed}); o.Pods != PodsUnread || o.Error == nil || o.Error.Status != 403 {
+	if o := ObservedOf(podsInput(&failed, nil)); o.Pods != PodsUnread || o.Error == nil || o.Error.Status != 403 {
 		t.Errorf("failed: %+v", o)
 	}
 	c := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest1))
-	o := ObservedOf(Input{ReadPods: true, Content: &c})
+	o := ObservedOf(podsInput(&c, nil))
 	if o.Pods != PodsRead || o.ReadAt == nil || !o.ReadAt.Equal(t0) || o.Counts.Images != 1 || o.Counts.Matched != 1 || o.Counts.Changed != 0 {
 		t.Errorf("read: %+v", o)
 	}
@@ -296,7 +298,7 @@ func TestAFailedReadKeepsTheLastGoodContainersAndHoldsTheFindings(t *testing.T) 
 	if got := kindsOf(FindingsOf(now, first)); !slices.Equal(got, []Kind{ImageMoved}) {
 		t.Errorf("findings %v", got)
 	}
-	o := ObservedOf(Input{ReadPods: true, Content: &now, FirstDigests: first})
+	o := ObservedOf(podsInput(&now, first))
 	if o.Pods != PodsRead || o.Error == nil || len(o.Images) != 1 {
 		t.Errorf("document %+v", o)
 	}
@@ -332,7 +334,7 @@ func TestTheCausePodsNotReadNamesNoProfileAndChangesNoStatus(t *testing.T) {
 
 func TestAnImageFindingIsNotADriftOfTheContent(t *testing.T) {
 	c := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest2))
-	in := podsInput(&c)
+	in := podsInput(&c, firstOf(testkit.VendorRef, testkit.Digest1))
 	s := Build(in)
 	if len(s.Findings) != 1 || s.Findings[0].Kind != ImageMoved || s.Counts.Findings != 1 {
 		t.Fatalf(testkit.FindingsCounts, s.Findings, s.Counts)
@@ -348,7 +350,7 @@ func TestAnImageFindingIsNotADriftOfTheContent(t *testing.T) {
 func TestNoAnswerOfThePodsCarriesAPodNameOrANamespace(t *testing.T) {
 	marker := kube.Container{Pod: "POD-NAMESPACE-MARKER/POD-NAME-MARKER", Image: testkit.VendorRef, ImageID: testkit.VendorRef + "@" + testkit.Digest2}
 	c := podsOf(t, marker)
-	in := podsInput(&c)
+	in := podsInput(&c, firstOf(testkit.VendorRef, testkit.Digest1))
 	for name, v := range map[string]any{"summary": Build(in), "observed": ObservedOf(in)} {
 		raw := testkit.MustJSON(t, v)
 		if strings.Contains(string(raw), "MARKER") {

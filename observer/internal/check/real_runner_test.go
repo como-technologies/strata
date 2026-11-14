@@ -1,7 +1,6 @@
 package check
 
 import (
-	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -24,10 +23,7 @@ func TestTheRunnerAcceptsEveryCommandAndFlagOfACycle(t *testing.T) {
 	r.record("aws-stack", "1.1.0", testkit.KubernetesKey)
 	strata := InDir{Runner: runner.Runner{Binary: script(t), Timeout: 10 * time.Second}}
 	o := newObserver(r.cfg, strata, slog.New(slog.DiscardHandler), time.Now)
-	s, err := o.Once(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := once(t, o)
 	if s.Page != model.PageOK || len(s.Newer) != 1 || s.Profiles[0].ClusterCopy.Status != model.CopySame || s.Cluster.Name != testkit.PaymentsName {
 		t.Errorf("summary %+v", s)
 	}

@@ -29,17 +29,17 @@ func TestTheFileOfThePlanParses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rules.List) != 4 || rules.List[1].Match != "fred-identity" || !rules.List[3].mute() || rules.Channels["platform-oncall"].URLFile != planAddress {
+	if len(rules.List) != 4 || rules.List[1].Match != "fred-identity" || !rules.List[3].mute() || rules.Channels[platformOncall].URLFile != planAddress {
 		t.Errorf("rules %+v", rules)
 	}
-	if got := rules.Names(); len(got) != 1 || got[0] != "platform-oncall" {
+	if got := rules.Names(); len(got) != 1 || got[0] != platformOncall {
 		t.Errorf("channels %v", got)
 	}
 }
 
-// fileWith puts a rule in a file that has the channel platform-oncall.
-func fileWith(rule string) string {
-	return testkit.Rules([]string{testkit.Channel("platform-oncall", "f")}, rule)
+// fileWith puts the rules in a file that has the channel platform-oncall.
+func fileWith(rules ...string) string {
+	return testkit.Rules([]string{testkit.Channel(platformOncall, "f")}, rules...)
 }
 
 // The rules of the tests of the parse that send to the channel a.
@@ -88,8 +88,9 @@ func TestAFileThatCannotBeUsedStopsWithTheLineOfTheFault(t *testing.T) {
 		{"a mute with a channel", fileWith(`{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01", "to": "platform-oncall"}`), 4, "no to"},
 		{"a rule that sends and mutes", fileWith(`{"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall", "muteUntil": "2026-12-01"}`), 4, "second rule"},
 		{testkit.NewerNow.Name, testkit.OncallRules("f", testkit.NewerNow.Rule), 4, testkit.NewerNow.Want},
-		{"two rules for one thing", fileWith("{\"level\": \"cluster\", \"news\": \"drift\", \"send\": \"now\", \"to\": \"platform-oncall\"},\n{\"level\": \"cluster\", \"news\": \"drift\", \"send\": \"digest\", \"to\": \"platform-oncall\"}"), 5, "rule 2"},
-		{"a channel with no file", "{\n\"channels\": {\"a\": {}}\n}", 2, "needs urlFile"},
+		{"two rules for one thing", fileWith(`{"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall"}`,
+			`{"level": "cluster", "news": "drift", "send": "digest", "to": "platform-oncall"}`), 5, "rule 2"},
+		{"a channel with no file", testkit.Rules([]string{`"a": {}`}), 2, "needs urlFile"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

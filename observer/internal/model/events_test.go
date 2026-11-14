@@ -14,11 +14,16 @@ func at(d time.Duration) string {
 	return t0.Add(d).Format(time.RFC3339)
 }
 
-// eventsAt builds the summary at t0 plus one minute, and gives its events.
+// eventsAt builds the summary of seenAt, and gives its events.
 func eventsAt(c *Content, v *Versions, firstSeen map[string]time.Time) []Event {
+	return seenAt(c, v, firstSeen).Events
+}
+
+// seenAt builds the summary of goodInput, with the first sight of each finding in firstSeen.
+func seenAt(c *Content, v *Versions, firstSeen map[string]time.Time) Summary {
 	in := goodInput(c, v)
 	in.FirstSeen = firstSeen
-	return Build(in).Events
+	return Build(in)
 }
 
 func reasons(events []Event) []string {
@@ -86,9 +91,7 @@ func TestAnEventOlderThanSevenDaysIsNotInTheList(t *testing.T) {
 	old.Newer[0].Listed = at(-8 * 24 * time.Hour)
 	stale := pin("coredns", "addon", "1.0.0", "", "a-stack@1.0.0")
 	stale.RegistrySync = &docs.RegistrySync{LastSyncedTime: at(-8 * 24 * time.Hour)}
-	in := goodInput(&c, &Versions{At: t0, Pins: []docs.Pin{old, stale}})
-	in.FirstSeen = map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-8 * 24 * time.Hour)}
-	s := Build(in)
+	s := seenAt(&c, &Versions{At: t0, Pins: []docs.Pin{old, stale}}, map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-8 * 24 * time.Hour)})
 	if len(s.Events) != 0 {
 		t.Errorf("events %+v", s.Events)
 	}

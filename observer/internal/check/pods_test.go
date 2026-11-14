@@ -2,8 +2,6 @@ package check
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -50,11 +48,30 @@ func podRig(t *testing.T, containers ...kube.Container) (*rig, *world, *Observer
 	return r, w, r.observer(w).WithPods(pods), pods
 }
 
+// cycle runs a content cycle of o, and fails the test when it fails.
 func cycle(t *testing.T, o *Observer) {
 	t.Helper()
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatalf("the content cycle failed: %v", err)
 	}
+}
+
+// versions runs a versions cycle of o, and fails the test when it fails.
+func versions(t *testing.T, o *Observer) {
+	t.Helper()
+	if err := o.RunVersions(context.Background()); err != nil {
+		t.Fatalf("the versions cycle failed: %v", err)
+	}
+}
+
+// once runs a content cycle and a versions cycle of o, and gives the summary. It fails the test when a cycle fails.
+func once(t *testing.T, o *Observer) model.Summary {
+	t.Helper()
+	s, err := o.Once(context.Background())
+	if err != nil {
+		t.Fatalf("the cycles failed: %v", err)
+	}
+	return s
 }
 
 func imageKindsOf(s model.Summary) []model.Kind {
@@ -77,22 +94,13 @@ func readState(t *testing.T, r *rig) State {
 // stateText gives the text of the state file.
 func stateText(t *testing.T, r *rig) string {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(r.state, stateFile))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(raw)
+	return testkit.StateText(t, r.state)
 }
 
 // stateHoldsNone fails when the state file holds one of the words.
 func stateHoldsNone(t *testing.T, r *rig, words ...string) {
 	t.Helper()
-	text := stateText(t, r)
-	for _, w := range words {
-		if strings.Contains(text, w) {
-			t.Errorf("the state holds %q: %s", w, text)
-		}
-	}
+	testkit.HoldsNone(t, "the state", stateText(t, r), words...)
 }
 
 func TestWithoutPodsTheObserverReadsNoPodAndTheDocumentIsOff(t *testing.T) {
@@ -250,9 +258,7 @@ func TestAFailedReadKeepsTheLastGoodImagesAndTheFindings(t *testing.T) {
 	// A restart that cannot read the pods holds the first sight of the finding in the state.
 	again := r.restart(w).WithPods(pods)
 	cycle(t, again)
-	if _, ok := readState(t, r).Findings[id]; !ok {
-		t.Error("the state lost the finding")
-	}
+	keepsFirstSight(t, r, id)
 	if doc := again.Observed(); doc.Pods != model.PodsUnread || len(doc.Images) != 0 {
 		t.Errorf("document %+v", doc)
 	}
@@ -275,8 +281,6 @@ func TestTheRealClientFeedsTheCycleAndNoValueOfAPodReachesTheOutput(t *testing.T
 	}
 	outputs = append(outputs, stateText(t, r), r.log.String())
 	for _, out := range outputs {
-		if strings.Contains(out, "MARKER") {
-			t.Errorf("a value of a pod reached the output: %s", out)
-		}
+		testkit.HoldsNone(t, "an output", out, "MARKER")
 	}
 }

@@ -16,13 +16,15 @@ import (
 // the rules for drift and for the loss of contact.
 func rulesFile(t *testing.T, w *testkit.Receiver) string {
 	t.Helper()
-	dir := t.TempDir()
-	address := filepath.Join(dir, "oncall")
-	testkit.WriteFile(t, address, w.URL+"/TOKEN-SECRET\n")
-	path := filepath.Join(dir, "alerts.json")
-	rules := testkit.OncallRules(address, testkit.DriftNow, testkit.LostNow)
-	testkit.WriteFile(t, path, rules)
-	return path
+	return rulesFileAt(t, w.URL+"/"+testkit.AddressMarker+"\n", testkit.DriftNow, testkit.LostNow)
+}
+
+// rulesFileAt writes the file alerts.json of rules with one channel, oncall, whose file of the address holds address,
+// and the rules. It gives the path of alerts.json.
+func rulesFileAt(t *testing.T, address string, rules ...string) string {
+	t.Helper()
+	file := testkit.OncallFile(t, address)
+	return testkit.WriteIn(t, filepath.Dir(file), "alerts.json", testkit.OncallRules(file, rules...))
 }
 
 // drifting is the answer of `compare` for a record whose pack kubernetes changed.
@@ -42,9 +44,7 @@ func TestOnceSendsNothingAlsoWithTheFlagAlerts(t *testing.T) {
 
 func TestOnceAndServeStopAtTheStartWithAFileOfRulesThatCannotBeUsed(t *testing.T) {
 	for _, c := range []testkit.BadRule{testkit.NoEndDate, testkit.NewerNow} {
-		bad := filepath.Join(t.TempDir(), "alerts.json")
-		file := testkit.OncallRules("f", c.Rule)
-		testkit.WriteFile(t, bad, file)
+		bad := rulesFileAt(t, "https://hooks.example/", c.Rule)
 		for _, command := range []string{"once", "serve"} {
 			t.Run(c.Name+", "+command, func(t *testing.T) {
 				args := append(onceArgs(t, "strata"), "--alerts", bad)
@@ -60,13 +60,9 @@ func TestAFileOfRulesThatIsAbsentStopsTheStart(t *testing.T) {
 }
 
 func TestServeStopsAtTheStartWhenTheAddressOfAChannelCannotBeUsedAndNamesNoAddress(t *testing.T) {
-	dir := t.TempDir()
-	testkit.WriteFile(t, filepath.Join(dir, "oncall"), "http://hooks.example/TOKEN-SECRET")
-	rules := filepath.Join(dir, "alerts.json")
-	testkit.WriteFile(t, rules, testkit.OncallRules(filepath.Join(dir, "oncall")))
-	if stderr := exitsTwoSaying(t, append(serveArgs(t, "strata"), "--alerts", rules), `channel "oncall"`, "https"); strings.Contains(stderr, "TOKEN-SECRET") {
-		t.Errorf("the error names the address: %s", stderr)
-	}
+	rules := rulesFileAt(t, "http://hooks.example/"+testkit.AddressMarker)
+	stderr := exitsTwoSaying(t, append(serveArgs(t, "strata"), "--alerts", rules), `channel "oncall"`, "https")
+	testkit.HoldsNone(t, "the error", stderr, testkit.AddressMarker)
 }
 
 func TestADigestPeriodThatIsNotPositiveStopsTheStart(t *testing.T) {
@@ -89,9 +85,8 @@ func TestServeWithAlertsSendsOneMessageForAFindingAndShowsItsRuleAsFiring(t *tes
 	if got := w.Bodies(); len(got) != 1 || !strings.Contains(got[0], "Drift") || !strings.Contains(got[0], testkit.PaymentsName) {
 		t.Errorf("the receiver got %d messages: %q", len(got), got)
 	}
-	if strings.Contains(stderr.String(), "TOKEN-SECRET") || !strings.Contains(stderr.String(), "channel=oncall") {
-		t.Errorf("stderr %s", stderr.String())
-	}
+	testkit.HoldsNone(t, "stderr", stderr.String(), testkit.AddressMarker)
+	testkit.HoldsAll(t, "stderr", stderr.String(), "channel=oncall")
 }
 
 func TestServeWithoutAlertsSendsNothingAndTheRouteSaysSo(t *testing.T) {

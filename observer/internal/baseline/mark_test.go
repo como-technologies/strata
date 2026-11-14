@@ -20,7 +20,7 @@ func TestMarkChangesWithTheRecordsAndMetaJSONAndNotWithAnotherFile(t *testing.T)
 	if first == "" {
 		t.Fatal("no mark")
 	}
-	testkit.WriteFile(t, filepath.Join(dir, "notes.txt"), "x")
+	testkit.WriteIn(t, dir, "notes.txt", "x")
 	if Mark(dir) != first {
 		t.Error("a file that is no record changed the mark")
 	}

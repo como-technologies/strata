@@ -1250,12 +1250,9 @@ func readScripts(t *testing.T) string {
 func copyScripts(t *testing.T, change func(string) string) string {
 	t.Helper()
 	dir := t.TempDir()
-	write := func(name, text string) {
-		testkit.WriteFile(t, filepath.Join(dir, name), text)
-	}
-	write("index.html", string(readPage(t, "index.html")))
+	testkit.WriteIn(t, dir, "index.html", string(readPage(t, "index.html")))
 	for _, name := range screenScripts(t) {
-		write(name, change(string(readPage(t, name))))
+		testkit.WriteIn(t, dir, name, change(string(readPage(t, name))))
 	}
 	return dir
 }
@@ -2112,7 +2109,7 @@ func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []b
 		if f := edit[name]; f != nil {
 			raw = f(raw)
 		}
-		testkit.WriteFile(t, path.Join(dir, "scratch", name), string(raw))
+		testkit.WriteIn(t, path.Join(dir, "scratch"), name, string(raw))
 	}
 	return dir
 }

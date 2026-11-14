@@ -41,12 +41,8 @@ type bench struct {
 
 func newBench(t *testing.T, rules string) *bench {
 	t.Helper()
-	parsed, err := Parse([]byte(rules))
-	if err != nil {
-		t.Fatal(err)
-	}
 	b := &bench{t: t, send: &fake{fail: map[string]error{}}, store: NewStore(), log: &bytes.Buffer{}, at: now}
-	b.e = New(parsed, b.send, 7*24*time.Hour, slog.New(slog.NewTextHandler(b.log, nil)))
+	b.rulesNow(rules)
 	return b
 }
 
@@ -321,8 +317,8 @@ func TestACycleWithNoRuleForTheNewsSendsNothing(t *testing.T) {
 }
 
 func TestTheViewShowsFiringPendingInactiveAndMuted(t *testing.T) {
-	b := newBench(t, testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testkit.ImageNow, newerToPlanning, `{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01"},
-		{"level": "profile", "match": "wilma-gateway", "news": "newer", "muteUntil": "2026-11-01"}`))
+	b := newBench(t, testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testkit.ImageNow, newerToPlanning, `{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01"}`,
+		`{"level": "profile", "match": "wilma-gateway", "news": "newer", "muteUntil": "2026-11-01"}`))
 	n := Subject{ID: "n1", News: NewsNewer, Profile: testkit.DexProfile, Detail: "x"}
 	muted := Subject{ID: "n2", News: NewsNewer, Profile: "barney-base@1.5.0", Detail: "x"}
 	b.cycle([]Subject{drift, n, muted}, Known{Content: true, Newer: true})
@@ -360,7 +356,7 @@ func (b *bench) rulesNow(rules string) {
 	if err != nil {
 		b.t.Fatal(err)
 	}
-	b.e = New(parsed, b.send, 7*24*time.Hour, slog.New(slog.NewTextHandler(b.log, nil)))
+	b.e = New(parsed, b.send, testkit.DigestEvery, slog.New(slog.NewTextHandler(b.log, nil)))
 }
 
 func TestAMuteOrTheLossOfARuleDropsTheMessageOfTheOpenThatWaitsForARetry(t *testing.T) {

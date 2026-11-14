@@ -118,9 +118,9 @@ func TestAChangeOfTheRecordsStartsAContentCycle(t *testing.T) {
 		return w.count(runner.CmdVerify) == 1 && w.count(runner.CmdBehind) == 1
 	})
 	// the kubelet changes a mounted Secret in one step, so the test writes a new file and renames it
-	newMeta := filepath.Join(t.TempDir(), testkit.MetaFile)
-	testkit.WriteFile(t, newMeta, testkit.ApprovedMeta(testkit.NewRevision))
-	if err := os.Rename(newMeta, filepath.Join(r.records, testkit.MetaFile)); err != nil {
+	next := t.TempDir()
+	testkit.WriteMeta(t, next, testkit.ApprovedMeta(testkit.NewRevision))
+	if err := os.Rename(filepath.Join(next, testkit.MetaFile), filepath.Join(r.records, testkit.MetaFile)); err != nil {
 		t.Fatal(err)
 	}
 	// a change during a cycle starts one more cycle after it, so the count can pass 2
@@ -156,9 +156,7 @@ func TestTheVersionsCycleRunsBehindOnEachRecord(t *testing.T) {
 	r, w := withBehind(t)
 	r.record("aws-stack", "1.1.0", testkit.KubernetesKey)
 	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	w.mu.Lock()
 	var files [][]string
 	for _, c := range w.calls {

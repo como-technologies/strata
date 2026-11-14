@@ -40,14 +40,10 @@ const (
 	paymentsCleared = "Drift cleared\n" + testkit.AWSStackProfile
 )
 
-// alerting gives the observer of a rig that sends the alerts of the rules to the sender.
+// alerting gives the observer of a rig that sends the alerts of the rules everyone to the sender.
 func alerting(t *testing.T, r *rig, w Strata, sender alert.Sender) *Observer {
 	t.Helper()
-	rules, err := alert.Parse([]byte(everyone))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return r.observer(w).WithAlerts(alert.New(rules, sender, 7*24*time.Hour, slog.New(slog.NewTextHandler(r.log, nil))))
+	return withRules(t, r, r.observer(w), sender, everyone)
 }
 
 func TestOneMessageWhenAFindingOpensNoneOnTheNextCycleAndOneWhenItClears(t *testing.T) {
@@ -137,14 +133,11 @@ func TestAMessageHoldsNoValueAndTheStateAndTheLogHoldNone(t *testing.T) {
 		t.Fatalf("messages %q", sender.texts)
 	}
 	view := testkit.MustJSON(t, o.Alerts())
-	places := []string{strings.Join(sender.texts, "\n"), stateText(t, r), r.log.String(), string(view)}
-	for _, banned := range []string{sentinel, "charts.a.b", "Betty", "John", "OLD", "SENTINEL"} {
-		for i, place := range places {
-			if strings.Contains(place, banned) {
-				t.Errorf("place %d holds %q: %s", i, banned, place)
-			}
-		}
-	}
+	banned := []string{sentinel, "charts.a.b", "Betty", "John", "OLD", "SENTINEL"}
+	testkit.HoldsNone(t, "the messages", strings.Join(sender.texts, "\n"), banned...)
+	stateHoldsNone(t, r, banned...)
+	testkit.HoldsNone(t, "the log", r.log.String(), banned...)
+	testkit.HoldsNone(t, "the view of the alerts", string(view), banned...)
 }
 
 func TestAFailedSendKeepsTheMessageInTheStateAndSendsItOnceAfterItWorks(t *testing.T) {
@@ -174,7 +167,7 @@ func TestARestartSendsNothingAgainAndANewPodWithAnEmptyStateSendsTheOpenFindingO
 	if len(sender.texts) != 1 {
 		t.Fatalf("a restart with the state sent %d messages in all", len(sender.texts))
 	}
-	if err := os.Remove(filepath.Join(r.state, stateFile)); err != nil {
+	if err := os.Remove(filepath.Join(r.state, testkit.StateFile)); err != nil {
 		t.Fatal(err)
 	}
 	pod := alerting(t, r, w, sender)
@@ -203,7 +196,7 @@ func TestTheStateThatAnOlderObserverWroteLoadsWithAnEmptyStoreOfAlerts(t *testin
 	if err := os.MkdirAll(r.state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	testkit.WriteFile(t, filepath.Join(r.state, stateFile), `{"startedAt":"2026-11-03T14:00:00Z"}`)
+	testkit.WriteIn(t, r.state, testkit.StateFile, `{"startedAt":"2026-11-03T14:00:00Z"}`)
 	s, err := loadState(r.state)
 	if err != nil || s.Alerts.Items == nil || s.Alerts.Outbox == nil {
 		t.Errorf("state %+v, error %v", s.Alerts, err)
@@ -220,7 +213,7 @@ func withRules(t *testing.T, r *rig, o *Observer, sender alert.Sender, rules str
 	if err != nil {
 		t.Fatal(err)
 	}
-	return o.WithAlerts(alert.New(parsed, sender, 7*24*time.Hour, slog.New(slog.NewTextHandler(r.log, nil))))
+	return o.WithAlerts(alert.New(parsed, sender, testkit.DigestEvery, slog.New(slog.NewTextHandler(r.log, nil))))
 }
 
 func TestAnImageFindingClearsOnlyAfterACycleThatReadThePods(t *testing.T) {

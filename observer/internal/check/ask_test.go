@@ -16,15 +16,16 @@ import (
 )
 
 // askable runs a versions cycle on the world of withBehind, whose first pin is kubernetes 1.35.3, and
-// gives the pin the bump that `behind --pin` would read.
-func askable(t *testing.T, bump docs.Bump) (*rig, *world, *Observer) {
+// gives the pin the bump that `behind --pin` would read. Each prepare changes the world before the cycle.
+func askable(t *testing.T, bump docs.Bump, prepare ...func(w *world)) (*rig, *world, *Observer) {
 	t.Helper()
 	r, w := withBehind(t)
 	w.behind.Pins[kubernetesPin(t, w)].Bump = &bump
-	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
+	for _, p := range prepare {
+		p(w)
 	}
+	o := r.observer(w)
+	versions(t, o)
 	return r, w, o
 }
 
@@ -65,9 +66,7 @@ func TestEachCycleAsksForTheTextAndNoCycleCanSendAPost(t *testing.T) {
 	w.rows = []docs.VerifyRow{unchanged()}
 	w.compares = map[int]docs.Diff{}
 	o := r.observer(w)
-	if _, err := o.Once(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	once(t, o)
 	if w.countMoves() == 0 || w.count(runner.CmdVerify) == 0 || len(w.behindCalls()) != 1 {
 		t.Fatalf("the cycles ran %d moves, %d verifies, %d behinds", w.countMoves(), w.count(runner.CmdVerify), len(w.behindCalls()))
 	}
@@ -205,10 +204,10 @@ func TestAnAnswerStaysInMemoryAndTheStateHoldsNone(t *testing.T) {
 	if len(answers) != 1 || answers[0].Key != testkit.KubernetesKey {
 		t.Fatalf("answers %+v", answers)
 	}
-	raw := stateText(t, r)
-	if len(o.state.Moves) == 0 || strings.Contains(raw, "RefusalCode") || strings.Contains(raw, "refuses") {
-		t.Errorf("the state of %d moves:\n%s", len(o.state.Moves), raw)
+	if len(o.state.Moves) == 0 {
+		t.Error("the state holds no move")
 	}
+	stateHoldsNone(t, r, "RefusalCode", "refuses")
 	if left := r.restart(&world{}).Answers(); len(left) != 0 {
 		t.Errorf("a restart kept %+v", left)
 	}
@@ -236,9 +235,7 @@ func TestAPackAboveTheCapKeepsNoTextOnAnySideAndSaysSo(t *testing.T) {
 	w.moves[key] = moved
 	w.cluster = testkit.Cluster(testkit.PaymentsName, moveSubject)
 	o := r.observer(w)
-	if _, err := o.Once(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	once(t, o)
 	for _, c := range []struct {
 		side model.Side
 		key  string
@@ -267,9 +264,7 @@ func TestAPackAtTheCapKeepsItsText(t *testing.T) {
 	text := strings.Repeat("x", maxText)
 	w.compares[0].Packs[0].Values.Unified, w.compares[0].Packs[0].Manifests = text, nil
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	pack, ok, err := o.PackDiff(context.Background(), testkit.AWSStackProfile, "csi/csi-aws-ebs", model.SideCluster)
 	if err != nil || !ok || pack.TextTooLarge || pack.Values.Unified != text {
 		t.Errorf("%v %v too large %v, %d bytes", ok, err, pack.TextTooLarge, len(pack.Values.Unified))
@@ -347,21 +342,15 @@ func pinCalls(w *world) int {
 // A move whose compare failed is not in the cache of the moves, but the answer of Palette about it is
 // still the answer. The next cycle must not drop it, or the next click sends a second POST.
 func TestAClickAfterAFailedCompareSendsNoSecondPost(t *testing.T) {
-	r, w := withBehind(t)
-	w.behind.Pins[kubernetesPin(t, w)].Bump = &docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}}
-	w.moveErrs[move("kubernetes", "1.35.3", "1.36.2")] = &runner.RunError{Kind: docs.KindCrash}
-	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	_, w, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}}, func(w *world) {
+		w.moveErrs[move("kubernetes", "1.35.3", "1.36.2")] = &runner.RunError{Kind: docs.KindCrash}
+	})
 	got, ok, err := o.Ask(context.Background(), moveSubject, testkit.KubernetesKey)
 	if err != nil || !ok || got.Verdict != model.VerdictNoError || pinCalls(w) != 1 {
 		t.Fatalf("%+v %v %v, %d questions", got, ok, err, pinCalls(w))
 	}
 	// The next cycle compares the move again, and the compare fails again.
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	if list := o.Answers(); len(list) != 1 {
 		t.Fatalf("the cycle dropped the answer: %+v", list)
 	}
@@ -384,13 +373,7 @@ func (c *waitedCtx) Done() <-chan struct{} {
 // A click that waits for a versions cycle must ask about the move that the cycle read. The cycle ends with
 // the move of a newer version, and the answer belongs under that move, or the next cycle cannot drop it.
 func TestAClickThatWaitedForAVersionsCycleAsksAboutTheMoveOfThatCycle(t *testing.T) {
-	r, w := withBehind(t)
-	i := kubernetesPin(t, w)
-	w.behind.Pins[i].Bump = &docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}}
-	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	_, w, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}})
 	// The second cycle holds the worker at its `behind`.
 	g := gated(w)
 	o.strata = g
@@ -406,11 +389,11 @@ func TestAClickThatWaitedForAVersionsCycleAsksAboutTheMoveOfThatCycle(t *testing
 	// The click reads the pin of the first cycle, and then it waits for the worker until the gate opens.
 	// The registry gains a version, and the second cycle reads it.
 	<-ctx.waited
-	w.mu.Lock()
-	w.behind.Pins[i].Newer = append([]docs.Newer{{Version: "1.37.0"}}, w.behind.Pins[i].Newer...)
-	w.behind.Pins[i].Bump = &docs.Bump{To: "1.37.0", PaletteValidation: &docs.Validation{Accepts: true}}
-	w.moves[move("kubernetes", "1.35.3", "1.37.0")] = w.moves[move("kubernetes", "1.35.3", "1.36.2")]
-	w.mu.Unlock()
+	askedShape(t, w, func(p *docs.Pin) {
+		p.Newer = append([]docs.Newer{{Version: "1.37.0"}}, p.Newer...)
+		p.Bump = &docs.Bump{To: "1.37.0", PaletteValidation: &docs.Validation{Accepts: true}}
+		w.moves[move("kubernetes", "1.35.3", "1.37.0")] = w.moves[move("kubernetes", "1.35.3", "1.36.2")]
+	})
 	close(g.gate)
 	if err := <-cycle; err != nil {
 		t.Fatal(err)

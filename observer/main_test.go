@@ -92,9 +92,9 @@ esac`)
 // onceArgs makes the directories of a run of `once` with one record.
 func onceArgs(t *testing.T, bin string) []string {
 	t.Helper()
-	records := t.TempDir()
-	testkit.WriteGzip(t, records, testkit.RecordFile, testkit.AWSStack(`,"packs":[]`))
-	return []string{"once", "--strata", bin, "--cluster-uid", testkit.PaymentsUID, "--records", records, "--work", t.TempDir(), "--state", filepath.Join(t.TempDir(), "state")}
+	d := testkit.NewRigDirs(t)
+	testkit.WriteGzip(t, d.Records, testkit.RecordFile, testkit.AWSStack(testkit.NoPacks))
+	return []string{"once", "--strata", bin, "--cluster-uid", testkit.PaymentsUID, "--records", d.Records, "--work", d.Work, "--state", d.State}
 }
 
 func TestOnceExitsZeroWithNoFindingAndPrintsTheSummary(t *testing.T) {
@@ -184,11 +184,7 @@ func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnl
 			if slices.ContainsFunc(r.allowed, func(prefix string) bool { return strings.HasPrefix(filepath.ToSlash(path), prefix) }) {
 				continue
 			}
-			for _, b := range r.banned {
-				if strings.Contains(string(raw), b) {
-					t.Errorf("%s holds %s", path, b)
-				}
-			}
+			testkit.HoldsNone(t, path, string(raw), r.banned...)
 		}
 	}
 }

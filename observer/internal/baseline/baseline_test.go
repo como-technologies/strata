@@ -71,7 +71,7 @@ const otherSchema = "c-other-schema.json.gz"
 func TestAFileThatIsNoProfileRecordDoesNotStopTheOthers(t *testing.T) {
 	dir := t.TempDir()
 	testkit.WriteGzip(t, dir, "a-good.json.gz", aws)
-	testkit.WriteFile(t, filepath.Join(dir, "b-plain.json.gz"), aws)
+	testkit.WriteIn(t, dir, "b-plain.json.gz", aws)
 	testkit.WriteGzip(t, dir, otherSchema, `{"schema":"`+docs.DiffSchema+`"}`)
 	testkit.WriteGzip(t, dir, "d-cluster.json.gz", testkit.ClusterHead+testkit.PaymentsUID+`"}}}`)
 	testkit.WriteGzip(t, dir, "e-not-json.json.gz", `not json`)
@@ -94,8 +94,8 @@ func TestAFileThatIsNoProfileRecordDoesNotStopTheOthers(t *testing.T) {
 
 func TestOnlyAFileWithTheSuffixOfARecordIsRead(t *testing.T) {
 	dir := t.TempDir()
-	testkit.WriteFile(t, filepath.Join(dir, "README"), "x")
-	testkit.WriteFile(t, filepath.Join(dir, "aws.json"), aws)
+	testkit.WriteIn(t, dir, "README", "x")
+	testkit.WriteIn(t, dir, "aws.json", aws)
 	if err := os.Mkdir(filepath.Join(dir, "..data"), 0o700); err != nil {
 		t.Fatal(err)
 	}

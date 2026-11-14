@@ -92,24 +92,15 @@ func TestARefusalHoldsTheCodeTheMessageAndTheClustersOnTheDetailTierAndOnNoOther
 	}
 	noSummaryRouteStateOrLogHolds(t, r, h, f.Code, "SENTINEL")
 	// The answer stays in memory: the state holds none of it. The log names the verdict of each answer.
-	if state := r.stateText(); strings.Contains(state, string(model.VerdictRefuses)) {
-		t.Errorf("the state holds the answer: %s", state)
-	}
+	testkit.HoldsNone(t, "the state", r.stateText(), string(model.VerdictRefuses))
 }
 
 // noSummaryRouteStateOrLogHolds fails when a summary route, the state, or the log holds one of the words.
 func noSummaryRouteStateOrLogHolds(t *testing.T, r *rig, h http.Handler, words ...string) {
 	t.Helper()
 	noSummaryRouteHolds(t, h, words...)
-	state := r.stateText()
-	for _, word := range words {
-		if strings.Contains(state, word) {
-			t.Errorf("the state holds %s: %s", word, state)
-		}
-		if strings.Contains(r.log.String(), word) {
-			t.Errorf("the log holds %s:\n%s", word, r.log.String())
-		}
-	}
+	testkit.HoldsNone(t, "the state", r.stateText(), words...)
+	testkit.HoldsNone(t, "the log", r.log.String(), words...)
 }
 
 // Issue #867. The reply of the click and the list of answers hold the checks of the update that strata gives
@@ -222,9 +213,7 @@ func TestEachMethodButTheOneOfARouteGets405WithItsAllowHeader(t *testing.T) {
 		refusedWithAllow(t, rec, other+" "+path, route.Method)
 	}
 	// The POSTs of the server are the two clicks: a POST with the header to a route that takes GET is refused.
-	if rec := click(h, summaryRoutes[patternCluster]); rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("a POST to a summary route gave %d", rec.Code)
-	}
+	refusedWithAllow(t, click(h, summaryRoutes[patternCluster]), "a POST to a summary route", http.MethodGet)
 	if len(fake.questions()) != 0 {
 		t.Errorf("%d questions", len(fake.questions()))
 	}
@@ -302,7 +291,7 @@ func TestAnAnswerIsDroppedWhenThePinMovesAndTheNextClickAsksAgain(t *testing.T) 
 		if moved == string(raw) {
 			t.Fatalf("%s holds no newer version to change", name)
 		}
-		testkit.WriteFile(t, filepath.Join(r.fixtures, name), moved)
+		testkit.WriteIn(t, r.fixtures, name, moved)
 	}
 	if err := o.RunVersions(t.Context()); err != nil {
 		t.Fatal(err)

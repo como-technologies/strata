@@ -136,7 +136,7 @@ func secretsOf(t *testing.T, record string) string {
 	}
 	for _, s := range readSecrets(t, string(yaml)) {
 		raw := testkit.MustJSON(t, map[string]any{"data": s.data})
-		testkit.WriteFile(t, filepath.Join(secrets, s.name+".json"), string(raw))
+		testkit.WriteIn(t, secrets, s.name+".json", string(raw))
 	}
 	return secrets
 }
@@ -150,9 +150,8 @@ func TestTheCommandOfTheFirstRowReadsARecordOutOfTheSecretsOfTheRecordsScript(t 
 			t.Skipf("%s is not on the PATH", tool)
 		}
 	}
-	record := filepath.Join(t.TempDir(), "release.json")
 	body := testkit.Record(docs.SnapshotSchema, "fred identity!", "2.3.0", `,"cluster":null`, `,"packs":[1,2,3]`)
-	testkit.WriteFile(t, record, body)
+	record := testkit.WriteIn(t, t.TempDir(), "release.json", body)
 	bin, dir := checkWork(t, "")
 	fakeKubectl(t, bin, secretsOf(t, record))
 	key := regexp.MustCompile(`[^A-Za-z0-9._-]`).ReplaceAllString("fred identity!_2.3.0.json.gz", "_")
@@ -194,7 +193,7 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 	strata := os.Getenv("STRATA_BIN")
 	record, apiDir, registry := os.Getenv("STRATA_CHECK_RECORD"), os.Getenv("STRATA_CHECK_API"), os.Getenv(checkRegistry)
 	if strata == "" || record == "" || (apiDir == "" && registry == "") {
-		t.Skip("STRATA_BIN, STRATA_CHECK_RECORD, and STRATA_CHECK_API or " + checkRegistry + " are not set: run scripts/observer-contract.sh")
+		t.Skip("STRATA_BIN, STRATA_CHECK_RECORD, and STRATA_CHECK_API or " + checkRegistry + " are not set: " + testkit.RunContract)
 	}
 	want, err := os.ReadFile(record)
 	if err != nil {
@@ -287,7 +286,7 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 			if len(rows) != 2 {
 				t.Fatalf("the page of kubernetes gives %d rows for the move, want 2: %+v", len(rows), rows)
 			}
-			testkit.WriteFile(t, filepath.Join(dir, "record.json"), string(want))
+			testkit.WriteIn(t, dir, "record.json", string(want))
 			for _, r := range rows {
 				code, out := runBash(t, dir, bin, r.command)
 				mustAnswer(t, r.command, code, out)

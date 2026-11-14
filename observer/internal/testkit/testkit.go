@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -30,16 +31,27 @@ import (
 const (
 	// VerifyUnchanged is the answer of `verify` for one record, record-0.json, that did not change.
 	VerifyUnchanged = `{"schema":"` + docs.VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}`
-	// ClusterHead starts the snapshot of a cluster, before its uid. ClusterPayments is the snapshot of the cluster
-	// payments, that runs aws-stack@1.1.0.
-	ClusterHead     = `{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"`
-	ClusterPayments = ClusterHead + PaymentsUID + `","name":"` + PaymentsName + `","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}`
+	// ClusterHead starts the snapshot of a cluster, before its uid.
+	ClusterHead = `{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"`
 	// CompareSame is the answer of `compare` for two sides that are the same.
 	CompareSame = `{"schema":"` + docs.DiffSchema + `","same":true,"sameContent":true}`
 	// KubernetesBehind is the answer of `behind` for the record of aws-stack@1.1.0. Its pack kubernetes 1.35.3 is behind
 	// 1.36.2.
 	KubernetesBehind = `{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"` + AWSStackProfile + `"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}`
 )
+
+// ClusterPayments is the snapshot of the cluster payments, that runs aws-stack@1.1.0.
+var ClusterPayments = ClusterJSON(PaymentsUID, PaymentsName, ProfileJSON("aws-stack", "1.1.0", "cluster"))
+
+// ClusterJSON gives the snapshot of the cluster uid, named name, that runs the profiles, each from ProfileJSON.
+func ClusterJSON(uid, name string, profiles ...string) string {
+	return ClusterHead + uid + `","name":"` + name + `","profiles":[` + strings.Join(profiles, ",") + `]}}}`
+}
+
+// ProfileJSON gives a profile that a snapshot of a cluster names, with its type, such as cluster or add-on.
+func ProfileJSON(name, version, typ string) string {
+	return `{"name":"` + name + `","version":"` + version + `","type":"` + typ + `"}`
+}
 
 // The values of the test data that the tests of more than one package hold. The tests of docs hold their own copy,
 // because testkit imports docs.
@@ -52,14 +64,24 @@ const (
 	PaymentsUID     = "c1"
 	AWSStackProfile = "aws-stack@1.1.0"
 	AddonsProfile   = "platform-addons@1.0.0"
+	// EdgeProfile is a profile that a cluster runs and that no record holds.
+	EdgeProfile = "fred-edge@1.0.0"
 	// RecordFile is the file of the record of AWSStackProfile, which AWSStack gives. MetaFile is the meta file of the
 	// records, which WriteMeta writes.
 	RecordFile = AWSStackProfile + ".json.gz"
 	MetaFile   = "meta.json"
 	// ContentEvery and VersionsEvery are the periods of the content cycle and of the versions cycle of an observer of a
-	// test.
+	// test. DigestEvery is the period of the digest of its alerts.
 	ContentEvery  = 15 * time.Minute
 	VersionsEvery = 6 * time.Hour
+	DigestEvery   = 7 * 24 * time.Hour
+	// StateFile is the file of the state of an observer, which StateText reads.
+	StateFile = "state.json"
+	// AddressMarker is in the address of the webhook of a test. It stands for the token that a real address holds, and
+	// it must reach no route, no log, and no file of the state.
+	AddressMarker = "TOKEN-SECRET"
+	// NoPacks is the member of a record that holds no pack, after a comma.
+	NoPacks = `,"packs":[]`
 	// Revision and NewRevision are two revisions of the records that a pipeline approved, in the meta file that
 	// ApprovedMeta gives. NewRevision comes after Revision.
 	Revision    = "4e1c7a2"
@@ -180,6 +202,8 @@ const (
 	NoDiff = "no diff for %s %s %s"
 	// HeadersMissing is the failure of a check of the headers that the server sets on the answer for a file.
 	HeadersMissing = "%s: the headers of the server are missing"
+	// RunContract is the step that sets the variables of a contract test, which skips with no variable.
+	RunContract = "run scripts/observer-contract.sh"
 	// FirstCycles names the wait for the first cycle of each timer of the observer.
 	FirstCycles = "the first cycle of each timer"
 	// ExitStderr is the failure of a check of the exit code of a command, with the text of its stderr.
@@ -344,6 +368,14 @@ func WriteFile(t *testing.T, path, body string) {
 	}
 }
 
+// WriteIn writes body to the file name of dir with WriteFile, and gives its path.
+func WriteIn(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	WriteFile(t, path, body)
+	return path
+}
+
 // WriteExec writes body to the file at path as a program that each user can run, and fails the test on an error.
 func WriteExec(t *testing.T, path, body string) {
 	t.Helper()
@@ -397,7 +429,24 @@ func NewRigDirs(t *testing.T) RigDirs {
 // WriteMeta writes body to the meta file of the records in dir.
 func WriteMeta(t *testing.T, dir, body string) {
 	t.Helper()
-	WriteFile(t, filepath.Join(dir, MetaFile), body)
+	WriteIn(t, dir, MetaFile, body)
+}
+
+// StateText gives the text of the state file that an observer wrote in the directory state.
+func StateText(t *testing.T, state string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(state, StateFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+// OncallFile writes the file of the address of the channel oncall, which holds address, to a new directory of the
+// test, and gives its path.
+func OncallFile(t *testing.T, address string) string {
+	t.Helper()
+	return WriteIn(t, t.TempDir(), "oncall", address)
 }
 
 // DecodeFile reads the JSON file at path into v, and fails the test on an error.
@@ -407,9 +456,28 @@ func DecodeFile(t *testing.T, path string, v any) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	Decode(t, path, raw, v)
+}
+
+// Decode reads the JSON raw into v, and fails the test on an error. what names the JSON in the failure.
+func Decode(t *testing.T, what string, raw []byte, v any) {
+	t.Helper()
 	if err := json.Unmarshal(raw, v); err != nil {
-		t.Fatalf("%s: %v", path, err)
+		t.Fatalf("%s is no JSON that the test can read: %v: %s", what, err, raw)
 	}
+}
+
+// Plain gives the plain values of the JSON of v, such as a map[string]any, so that a test can compare two documents. A
+// json.RawMessage gives the values of the text that it holds.
+func Plain(t *testing.T, v any) any {
+	t.Helper()
+	raw, ok := v.(json.RawMessage)
+	if !ok {
+		raw = MustJSON(t, v)
+	}
+	var out any
+	Decode(t, "the document", raw, &out)
+	return out
 }
 
 // ReadDoc reads the document name of the test data of internal/docs into v. The contract script copies
@@ -469,10 +537,11 @@ const (
 // It then gives the branch of snapshot, which writes ClusterPayments to the file of -o. PacksFirst starts the branch
 // of compare with the case of a compare of two packs.
 const (
-	VerifyFirst       = "case $cmd in\nverify)\n"
-	VerifyAndSnapshot = "  echo '" + VerifyUnchanged + "' ;;\nsnapshot) echo '" + ClusterPayments + "' > \"$out\" ;;\n"
-	PacksFirst        = "compare)\n  case $ref in\n  pack:*)\n"
+	VerifyFirst = "case $cmd in\nverify)\n"
+	PacksFirst  = "compare)\n  case $ref in\n  pack:*)\n"
 )
+
+var VerifyAndSnapshot = "  echo '" + VerifyUnchanged + "' ;;\nsnapshot) echo '" + ClusterPayments + "' > \"$out\" ;;\n"
 
 // ErrorLine gives the line of the script of a fake of strata that writes the error document of strata to its stderr.
 // The document holds the kind and the other fields, such as `"status":401`.
@@ -507,13 +576,23 @@ func ProfileRecord(name, version, rest string) string {
 // AWSStack gives the record of aws-stack@1.1.0, the profile that the cluster payments runs, with the root r1. rest
 // holds the other members of the record, each after a comma.
 func AWSStack(rest string) string {
-	return ProfileRecord("aws-stack", "1.1.0", `,"root":"r1"`+rest)
+	return ProfileRecord("aws-stack", "1.1.0", rootR1+rest)
 }
+
+// rootR1 is the member of the root of a record whose root is r1, after a comma.
+const rootR1 = `,"root":"r1"`
 
 // Snapshot gives the record that a fake of strata writes for a snapshot of the profile name@version. Its root is
 // r-<name>, and it holds no pack.
 func Snapshot(name, version string) string {
-	return ProfileRecord(name, version, `,"root":"r-`+name+`","packs":[]`)
+	return ProfileRecord(name, version, `,"root":"r-`+name+`"`+NoPacks)
+}
+
+// RigPack gives a pack of the record of a rig of the tests of api and of check: the key layer/name, the version, the
+// registry reg1, and the images.
+func RigPack(key, version string, images ...string) map[string]any {
+	layer, name, _ := strings.Cut(key, "/")
+	return map[string]any{"key": key, "layer": layer, "name": name, "version": version, "registryUid": "reg1", "images": images}
 }
 
 // RigRecord gives the record of name@version that a rig of the tests of api and of check writes. Its root is r1, it
@@ -521,5 +600,39 @@ func Snapshot(name, version string) string {
 func RigRecord(t *testing.T, name, version string, packs []map[string]any, value string) string {
 	t.Helper()
 	variables := MustJSON(t, []map[string]string{{"name": "team", "value": value}})
-	return ProfileRecord(name, version, `,"root":"r1","packs":`+string(MustJSON(t, packs))+`,"variables":`+string(variables))
+	return ProfileRecord(name, version, rootR1+`,"packs":`+string(MustJSON(t, packs))+`,"variables":`+string(variables))
+}
+
+var (
+	secretName = regexp.MustCompile(`^  name: (\S+)$`)
+	secretData = regexp.MustCompile(`^  ([^ :]+): (\S+)$`)
+)
+
+// RecordSecrets reads the Secrets in YAML that the records script prints. It gives the data of each Secret by its
+// name: each key with its text in base64. A Secret with no data gives an empty map. It fails the test when the YAML
+// holds no Secret.
+func RecordSecrets(t *testing.T, yaml string) map[string]map[string]string {
+	t.Helper()
+	out := map[string]map[string]string{}
+	for _, doc := range strings.Split(yaml, "---\n") {
+		name, data, inData := "", map[string]string{}, false
+		for _, line := range strings.Split(doc, "\n") {
+			switch {
+			case secretName.MatchString(line):
+				name = secretName.FindStringSubmatch(line)[1]
+			case line == "data:":
+				inData = true
+			case inData && secretData.MatchString(line):
+				m := secretData.FindStringSubmatch(line)
+				data[m[1]] = m[2]
+			}
+		}
+		if name != "" {
+			out[name] = data
+		}
+	}
+	if len(out) == 0 {
+		t.Fatalf("the records script printed no Secret:\n%s", yaml)
+	}
+	return out
 }

@@ -97,10 +97,7 @@ func TestContentCases(t *testing.T) {
 			r, w := oneRecord(t, unchanged())
 			c.setup(t, w)
 			o := r.observer(w)
-			s, err := o.Once(context.Background())
-			if err != nil {
-				t.Fatalf("error %v", err)
-			}
+			s := once(t, o)
 			var got []string
 			for _, f := range s.Findings {
 				got = append(got, string(f.Kind)+" "+strings.Join(f.Packs, ","))
@@ -159,9 +156,10 @@ func TestAnOlderToolVersionNeedsARebaseline(t *testing.T) {
 
 func TestAnUnreadableRecordIsACauseAndStopsNoOther(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	testkit.WriteFile(t, filepath.Join(r.records, "zz.json.gz"), "not gzip")
+	testkit.WriteIn(t, r.records, "zz.json.gz", "not gzip")
 	s, _ := r.observer(w).Once(context.Background())
-	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.ReadError || s.NotChecked[0].Profiles[0] != "zz.json.gz" || s.Records.Count != 1 || s.Page != model.PageOK {
+	readErrorNames(t, s, "zz.json.gz")
+	if len(s.NotChecked) != 1 || s.Records.Count != 1 || s.Page != model.PageOK {
 		t.Errorf("summary %+v", s)
 	}
 }
@@ -170,7 +168,8 @@ func TestARowWithAnErrorBesideGoodRowsIsACauseAndNotAFailedCycle(t *testing.T) {
 	r, w := twoRecords(t)
 	w.rows[1] = docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 404}}
 	s, _ := r.observer(w).Once(context.Background())
-	if s.Content.FailedRuns != 0 || len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.ReadError || s.NotChecked[0].Profiles[0] != testkit.AddonsProfile {
+	readErrorNames(t, s, testkit.AddonsProfile)
+	if s.Content.FailedRuns != 0 || len(s.NotChecked) != 1 {
 		t.Errorf("content %+v, notChecked %+v", s.Content, s.NotChecked)
 	}
 }
@@ -232,9 +231,7 @@ func TestAVerifyThatExitsTwoWithNoDocumentGivesTheKindOfItsError(t *testing.T) {
 func TestACycleThatFailsTwiceWithStatus401IsLost(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	good := o.Summary()
 	w.verifyErr = &runner.RunError{Kind: docs.KindAPI, Status: 401}
 	_ = o.RunContent(context.Background())
@@ -248,9 +245,7 @@ func TestACycleThatFailsTwiceWithStatus401IsLost(t *testing.T) {
 	}
 	// A good cycle sets the failed runs to 0.
 	w.verifyErr = nil
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	if s := o.Summary(); s.Page != model.PageOK || s.Content.FailedRuns != 0 || s.Content.LastError != nil {
 		t.Errorf(pageAndContent, s.Page, s.Content)
 	}
@@ -328,9 +323,7 @@ func TestACycleFailsWhenEverySideFails(t *testing.T) {
 	w.sideErr = nil
 	fails := &failOnce{world: w, name: "aws-stack"}
 	o = r.observer(fails)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	s := o.Summary()
 	if s.Profiles[0].ClusterCopy.Status != model.CopyNotRead || s.Profiles[1].ClusterCopy.Status != model.CopySame {
 		t.Errorf("profiles %+v", s.Profiles)

@@ -16,6 +16,16 @@ func carries(t *testing.T, r Record, row, side bool) {
 	}
 }
 
+// dexIDs gives the ids of the findings of each kind of the profile testkit.DexProfile, in order.
+func dexIDs(kinds ...Kind) []string {
+	var out []string
+	for _, kind := range kinds {
+		out = append(out, FindingID(kind, testkit.DexProfile))
+	}
+	slices.Sort(out)
+	return out
+}
+
 // notRead makes a `verify` row that strata could not read.
 func notRead(r Record) Record {
 	r.Row = &docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 429}}
@@ -212,14 +222,6 @@ func TestAReadThatFailedIsACauseAlsoWhenItsAnswerIsCarried(t *testing.T) {
 
 func TestHeldIDsNameTheFindingsOfAPartThatWasNotRead(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
-	id := func(k ...Kind) []string {
-		var out []string
-		for _, kind := range k {
-			out = append(out, FindingID(kind, testkit.DexProfile))
-		}
-		slices.Sort(out)
-		return out
-	}
 	sideless := rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex)
 	sideless.Cluster = ClusterSide{Runs: true}
 	cases := []struct {
@@ -229,13 +231,13 @@ func TestHeldIDsNameTheFindingsOfAPartThatWasNotRead(t *testing.T) {
 	}{
 		{"a read that worked", rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), nil},
 		{"a row that failed", notRead(onCluster(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), docs.Diff{Same: true})),
-			id(PublishedChanged, Overwritten, Renamed, Gone)},
-		{"a side that failed", sideless, id(ClusterDiffers, ImageIDChanged)},
+			dexIDs(PublishedChanged, Overwritten, Renamed, Gone)},
+		{"a side that failed", sideless, dexIDs(ClusterDiffers, ImageIDChanged)},
 		{"a cluster that does not run the profile", func() Record {
 			r := notRead(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex))
 			r.Cluster = ClusterSide{}
 			return r
-		}(), id(PublishedChanged, Overwritten, Renamed, Gone)},
+		}(), dexIDs(PublishedChanged, Overwritten, Renamed, Gone)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -299,9 +301,9 @@ func TestCarryPutsTheLastRecordOfAFileThatCannotBeReadInPlaceOfTheFile(t *testin
 	if now.Blind() {
 		t.Error("a file with a last record is not blind")
 	}
-	for _, kind := range publishedKinds {
-		if !slices.Contains(HeldIDs(now), FindingID(kind, testkit.DexProfile)) {
-			t.Errorf("HeldIDs lacks %s", kind)
+	for _, id := range dexIDs(publishedKinds...) {
+		if !slices.Contains(HeldIDs(now), id) {
+			t.Errorf("HeldIDs lacks %s", id)
 		}
 	}
 	s := build(&now, nil)

@@ -58,9 +58,7 @@ func TestACompareWithAnotherSchemaBesideGoodSidesIsAProfileThatTheCycleDidNotRea
 	// The compare would make a finding, if the cycle read it.
 	w.compares = map[int]docs.Diff{0: {Schema: otherSchema, RootB: "e06b", Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	s := o.Summary()
 	if len(s.Findings) != 0 || s.Profiles[0].ClusterCopy.Status != model.CopyNotRead || s.Profiles[1].ClusterCopy.Status != model.CopySame {
 		t.Errorf("findings %+v, profiles %+v", s.Findings, s.Profiles)
@@ -90,9 +88,7 @@ func TestAMoveWithAnotherSchemaIsAMoveThatWasNotRead(t *testing.T) {
 	d.Schema = otherSchema
 	w.moves[kubernetes] = d
 	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatalf("a move with another schema failed the cycle: %v", err)
-	}
+	versions(t, o)
 	s := o.Summary()
 	if s.Versions.ReadAt == nil || s.Versions.FailedRuns != 0 || s.Versions.LastError != nil || len(s.Newer) != 4 {
 		t.Fatalf(versionsNewer, s.Versions, len(s.Newer))

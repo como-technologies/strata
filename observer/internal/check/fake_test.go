@@ -299,8 +299,7 @@ func (r *rig) record(name, version string, keys ...string) {
 	r.t.Helper()
 	packs := []map[string]any{}
 	for _, k := range keys {
-		layer, pack, _ := strings.Cut(k, "/")
-		packs = append(packs, map[string]any{"key": k, "layer": layer, "name": pack, "version": "1.0.0", "registryUid": "reg1", "images": []string{testkit.ImageRef}})
+		packs = append(packs, testkit.RigPack(k, "1.0.0", testkit.ImageRef))
 	}
 	testkit.WriteGzip(r.t, r.records, name+"@"+version+".json.gz", testkit.RigRecord(r.t, name, version, packs, sentinel))
 }

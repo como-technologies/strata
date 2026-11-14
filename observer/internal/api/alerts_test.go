@@ -4,32 +4,25 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
-// addressMarker is in the address of the webhook of these tests. It stands for the token that a real
-// address holds, and it must reach no route, no log, and no file of the state.
-const addressMarker = "TOKEN-SECRET"
-
 // alerting gives an observer of the rig that sends the alerts of the rules to the receiver, through the
 // real sender. The address is in a file, as a Secret gives it.
 func alerting(t *testing.T, r *rig, w *testkit.Receiver, s check.Strata) *check.Observer {
 	t.Helper()
-	file := filepath.Join(t.TempDir(), "oncall")
-	testkit.WriteFile(t, file, w.URL+"/"+addressMarker+"\n")
-	rules, err := alert.Parse([]byte(testkit.OncallRules(file, testkit.DriftNow, `{"level": "cluster", "news": "newer", "send": "digest", "to": "oncall"},
-		{"level": "profile", "match": "other-profile", "news": "drift", "muteUntil": "2099-01-01"}`)))
+	file := testkit.OncallFile(t, w.URL+"/"+testkit.AddressMarker+"\n")
+	rules, err := alert.Parse([]byte(testkit.OncallRules(file, testkit.DriftNow, `{"level": "cluster", "news": "newer", "send": "digest", "to": "oncall"}`,
+		`{"level": "profile", "match": "other-profile", "news": "drift", "muteUntil": "2099-01-01"}`)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine := alert.New(rules, alert.NewWebhook(rules.Channels, true), 7*24*time.Hour, slog.New(slog.NewTextHandler(r.log, nil)))
+	engine := alert.New(rules, alert.NewWebhook(rules.Channels, true), testkit.DigestEvery, slog.New(slog.NewTextHandler(r.log, nil)))
 	return r.observer(s).WithAlerts(engine)
 }
 
@@ -37,9 +30,7 @@ func TestTheRouteAlertsShowsTheRulesTheirStatesAndTheChannelNames(t *testing.T) 
 	r := newRig(t)
 	w := testkit.NewReceiver(t)
 	o := alerting(t, r, w, &fakeStrata{dir: r.fixtures})
-	if _, err := o.Once(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	r.once(o)
 	var v alert.View
 	rec := get(handlerOf(o), summaryRoutes[patternAlerts])
 	decode(t, rec, &v)
@@ -49,9 +40,7 @@ func TestTheRouteAlertsShowsTheRulesTheirStatesAndTheChannelNames(t *testing.T) 
 	if v.Rules[0].State != alert.StateFiring || v.Rules[2].State != alert.StateMuted {
 		t.Errorf("states %+v", v.Rules)
 	}
-	if strings.Contains(rec.Body.String(), addressMarker) || strings.Contains(rec.Body.String(), "127.0.0.1") {
-		t.Errorf("the route shows the address: %s", rec.Body.String())
-	}
+	testkit.HoldsNone(t, "the route", rec.Body.String(), testkit.AddressMarker, "127.0.0.1")
 }
 
 func TestAnObserverWithoutAlertsSaysSoOnTheRoute(t *testing.T) {
@@ -70,9 +59,7 @@ func TestAMessageThatReachesTheReceiverHoldsNoValueAndTheAddressReachesNoRouteNo
 	w := testkit.NewReceiver(t)
 	w.SetStatus(http.StatusInternalServerError)
 	o := alerting(t, r, w, &fakeStrata{dir: r.fixtures})
-	if _, err := o.Once(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	r.once(o)
 	w.SetStatus(http.StatusOK)
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatal(err)
@@ -82,19 +69,10 @@ func TestAMessageThatReachesTheReceiverHoldsNoValueAndTheAddressReachesNoRouteNo
 		t.Fatalf("the receiver got %q", got)
 	}
 	h, host := handlerOf(o), strings.TrimPrefix(w.URL, "http://")
-	noSummaryRouteStateOrLogHolds(t, r, h, addressMarker, host)
-	if body := get(h, askRoutes[patternAsks]).Body.String(); strings.Contains(body, addressMarker) || strings.Contains(body, host) {
-		t.Error("the list of answers shows the address")
-	}
-	state := r.stateText()
-	for _, banned := range []string{"SENTINEL", sentinelValue, sentinelVariable, sentinelText, "Betty"} {
-		if strings.Contains(got, banned) || strings.Contains(state, banned) {
-			t.Errorf("a message or the state holds %q", banned)
-		}
-	}
-	for _, want := range []string{"channel=oncall", "verdict=failed", "status=500", "verdict=sent"} {
-		if !strings.Contains(r.log.String(), want) {
-			t.Errorf("the log lacks %q:\n%s", want, r.log.String())
-		}
-	}
+	noSummaryRouteStateOrLogHolds(t, r, h, testkit.AddressMarker, host)
+	testkit.HoldsNone(t, "the list of answers", get(h, askRoutes[patternAsks]).Body.String(), testkit.AddressMarker, host)
+	banned := []string{"SENTINEL", sentinelValue, sentinelVariable, sentinelText, "Betty"}
+	testkit.HoldsNone(t, "the messages", got, banned...)
+	testkit.HoldsNone(t, "the state", r.stateText(), banned...)
+	testkit.HoldsAll(t, "the log", r.log.String(), "channel=oncall", "verdict=failed", "status=500", "verdict=sent")
 }

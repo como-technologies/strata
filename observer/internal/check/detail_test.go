@@ -52,9 +52,7 @@ func TestPackDiffOfARecordWithNoSideReadsNothing(t *testing.T) {
 	r, w := edited(t)
 	w.compares = nil // the compare gives a document with no pack
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	if _, ok, err := o.PackDiff(context.Background(), testkit.AWSStackProfile, "csi/csi-aws-ebs", model.SideCluster); ok || err != nil {
 		t.Errorf("%v %v", ok, err)
 	}

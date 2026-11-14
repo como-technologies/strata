@@ -121,16 +121,13 @@ func TestADirectoryThatAStoppedProcessLeftIsRemovedAtTheStart(t *testing.T) {
 func TestTheStateHoldsTheFirstSightAndNoValue(t *testing.T) {
 	r, w := edited(t)
 	o := r.observer(w)
-	if _, err := o.Once(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	once(t, o)
 	stateHoldsNone(t, r, sentinel, "charts.a.b", "Betty", "John", "csi-aws-ebs")
-	id := model.FindingID(model.PublishedChanged, testkit.AWSStackProfile)
-	state, err := loadState(r.state)
-	if err != nil || state.Findings[id].FirstSeen != t0 || state.StartedAt != t0 {
-		t.Errorf("state %+v, error %v", state, err)
+	keepsFirstSight(t, r, model.FindingID(model.PublishedChanged, testkit.AWSStackProfile))
+	if state := readState(t, r); state.StartedAt != t0 {
+		t.Errorf("state %+v", state)
 	}
-	if entries := entries(t, r.state); len(entries) != 1 || entries[0] != stateFile {
+	if entries := entries(t, r.state); len(entries) != 1 || entries[0] != testkit.StateFile {
 		t.Errorf("the state directory holds %v", entries)
 	}
 }
@@ -157,13 +154,9 @@ func TestASecondRunAfterARestartReadsFirstSeenFromTheState(t *testing.T) {
 func TestAFindingThatGoesLeavesTheState(t *testing.T) {
 	r, w := edited(t)
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	w.rows[0], w.compares = unchanged(), nil
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	if state, _ := loadState(r.state); len(state.Findings) != 0 {
 		t.Errorf("findings %+v", state.Findings)
 	}
@@ -188,7 +181,7 @@ func TestAStateThatCannotBeReadIsALogLineAndAnEmptyState(t *testing.T) {
 	if err := os.MkdirAll(r.state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	testkit.WriteFile(t, filepath.Join(r.state, stateFile), "{"+sentinel)
+	testkit.WriteIn(t, r.state, testkit.StateFile, "{"+sentinel)
 	o := r.observer(&world{})
 	if !strings.Contains(r.log.String(), "the state cannot be read") || strings.Contains(r.log.String(), sentinel) {
 		t.Errorf("log %q", r.log.String())

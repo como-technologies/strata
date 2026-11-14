@@ -356,7 +356,8 @@ func TestAFindingStartsAtTheStateOrAtTheCycle(t *testing.T) {
 	c := content(t, r)
 	id := FindingID(PublishedChanged, testkit.AWSStackProfile)
 	earlier := t0.Add(-48 * time.Hour)
-	in := Input{Now: t0, Content: &c, ContentClock: goodClock(time.Minute, t0), FirstSeen: map[string]time.Time{id: earlier}, FilesKnown: true, Files: 1}
+	in := goodInput(&c, nil)
+	in.Files, in.FirstSeen = 1, map[string]time.Time{id: earlier}
 	f := Build(in).Findings[0]
 	if !f.FirstSeen.Equal(earlier) || !f.LastSeen.Equal(t0) {
 		t.Errorf("times %v %v", f.FirstSeen, f.LastSeen)
@@ -371,9 +372,7 @@ func TestEachFindingMakesOneEventTheNewestFirst(t *testing.T) {
 	old := drifted(rec("a-stack", "1.0.0", docs.VerifyUnchanged), &docs.Verify{})
 	young := drifted(rec("b-stack", "1.0.0", docs.VerifyUnchanged), &docs.Verify{Gone: true})
 	c := content(t, old, young)
-	in := Input{Now: t0, Content: &c, ContentClock: goodClock(time.Minute, t0), Files: 2, FilesKnown: true,
-		FirstSeen: map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-time.Hour)}}
-	events := Build(in).Events
+	events := eventsAt(&c, nil, map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-time.Hour)})
 	if len(events) != 2 || events[0].Object != "b-stack@1.0.0" || events[0].Reason != "Gone" || events[1].Reason != "DriftFound" || events[1].Type != EventDrift {
 		t.Errorf("events %+v", events)
 	}

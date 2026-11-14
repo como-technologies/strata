@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -86,7 +86,7 @@ func fixtures(t *testing.T) string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		testkit.WriteFile(t, filepath.Join(dir, e.Name()), times.Replace(string(raw)))
+		testkit.WriteIn(t, dir, e.Name(), times.Replace(string(raw)))
 	}
 	return dir
 }
@@ -203,10 +203,7 @@ func newRig(t *testing.T) *rig {
 	t.Helper()
 	d := testkit.NewRigDirs(t)
 	r := &rig{t: t, records: d.Records, work: d.Work, state: d.State, log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
-	packs := []map[string]any{
-		{"key": testkit.KubernetesKey, "layer": "k8s", "name": "kubernetes", "version": "1.35.3", "registryUid": "reg1", "images": []string{testkit.ImageRef}},
-		{"key": "csi/csi-aws-ebs", "layer": "csi", "name": "csi-aws-ebs", "version": "1.63.1", "registryUid": "reg1", "images": []string{testkit.DigestImage}},
-	}
+	packs := []map[string]any{testkit.RigPack(testkit.KubernetesKey, "1.35.3", testkit.ImageRef), testkit.RigPack("csi/csi-aws-ebs", "1.63.1", testkit.DigestImage)}
 	testkit.WriteGzip(t, r.records, testkit.RecordFile, testkit.RigRecord(t, "aws-stack", "1.1.0", packs, sentinelVariable))
 	testkit.WriteMeta(t, r.records, testkit.ApprovedMeta(testkit.Revision))
 	return r
@@ -219,11 +216,7 @@ func (r *rig) config() check.Config {
 // stateText gives the text of the state file that the observer wrote.
 func (r *rig) stateText() string {
 	r.t.Helper()
-	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
-	if err != nil {
-		r.t.Fatal(err)
-	}
-	return string(raw)
+	return testkit.StateText(r.t, r.state)
 }
 
 // observer makes an observer on the directories. A second call is a restart of the process.
@@ -245,10 +238,19 @@ var oneImage = check.PodsFunc(func(context.Context) ([]kube.Container, error) {
 func (r *rig) cycled(s check.Strata) *check.Observer {
 	r.t.Helper()
 	o := r.observer(s)
-	if _, err := o.Once(context.Background()); err != nil {
+	r.once(o)
+	return o
+}
+
+// once runs one content cycle and one versions cycle of o, and gives the summary. It fails the test when a cycle
+// fails.
+func (r *rig) once(o *check.Observer) model.Summary {
+	r.t.Helper()
+	s, err := o.Once(context.Background())
+	if err != nil {
 		r.t.Fatalf(cyclesFailed+"\n%s", err, r.log.String())
 	}
-	return o
+	return s
 }
 
 // get makes a request to the handler. The Host is a loopback address, as a port-forward gives.
@@ -263,9 +265,7 @@ func handlerOf(src Source) http.Handler {
 // decode reads the body of an answer into v.
 func decode(t *testing.T, rec *httptest.ResponseRecorder, v any) {
 	t.Helper()
-	if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
-		t.Fatalf("status %d, body %q: %v", rec.Code, rec.Body.String(), err)
-	}
+	testkit.Decode(t, fmt.Sprintf("the body of the answer of status %d", rec.Code), rec.Body.Bytes(), v)
 }
 
 // stub is a Source with a fixed summary and no detail.

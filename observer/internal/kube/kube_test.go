@@ -11,7 +11,6 @@ import (
 	"errors"
 	"math/big"
 	"net/http"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -179,8 +178,7 @@ func anotherCA(t *testing.T) []byte {
 
 func TestAServerThatTheCADoesNotSignIsATransportFailure(t *testing.T) {
 	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
-	other := filepath.Join(t.TempDir(), "ca.crt")
-	testkit.WriteFile(t, other, string(anotherCA(t)))
+	other := testkit.WriteIn(t, t.TempDir(), "ca.crt", string(anotherCA(t)))
 	cfg := cfgOf(a)
 	cfg.CAFile = other
 	if _, err := New(cfg).Pods(context.Background()); kindOf(err) != docs.KindKubeTransport {
@@ -200,7 +198,7 @@ func TestACredentialThatIsMissingIsAConfigFailure(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	testkit.WriteFile(t, a.TokenFile, " \n")
+	a.SetToken(" ")
 	if _, err := New(cfgOf(a)).Pods(context.Background()); kindOf(err) != docs.KindKubeConfig {
 		t.Errorf("an empty token: %v", err)
 	}

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +48,7 @@ exit 3`)
 
 func marker(t *testing.T, fixtures, name string) {
 	t.Helper()
-	testkit.WriteFile(t, filepath.Join(fixtures, name), "")
+	testkit.WriteIn(t, fixtures, name, "")
 }
 
 // scripted makes the strata of a test from script, with the real runner. log and pin go to script.
@@ -118,12 +117,6 @@ func TestTheLogHoldsNoSentinelThroughAFullCycleThatFails(t *testing.T) {
 func assertLog(t *testing.T, r *rig) {
 	t.Helper()
 	log := r.log.String()
-	if !strings.Contains(log, "command=") || !strings.Contains(log, "verdict=") {
-		t.Fatalf("the log is empty or not what the test expects:\n%s", log)
-	}
-	for _, s := range []string{"SENTINEL", sentinelValue, sentinelVariable, "Betty"} {
-		if strings.Contains(log, s) {
-			t.Errorf("the log holds %q:\n%s", s, log)
-		}
-	}
+	testkit.HoldsAll(t, "the log", log, "command=", "verdict=")
+	testkit.HoldsNone(t, "the log", log, "SENTINEL", sentinelValue, sentinelVariable, "Betty")
 }

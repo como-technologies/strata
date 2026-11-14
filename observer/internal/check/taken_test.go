@@ -1,7 +1,6 @@
 package check
 
 import (
-	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -21,7 +20,7 @@ func firstSeenWithANewProfile(t *testing.T) (*rig, *world) {
 	r, w := oneRecord(t, unchanged())
 	r.meta(testkit.FirstSeenMeta(testkit.PaymentsUID))
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = testkit.Payments("fred-edge@1.0.0")
+	w.cluster = testkit.Payments(testkit.EdgeProfile)
 	return r, w
 }
 
@@ -50,7 +49,7 @@ func snapshotsOf(w *world, ref string) int {
 // cycle holds another count of tokens.
 func snapshotsAndTokens(t *testing.T, w *world, o *Observer, want int) {
 	t.Helper()
-	if got, tokens := snapshotsOf(w, "fred-edge@1.0.0"), len(o.kicks[cycleContent]); got != want || tokens != want {
+	if got, tokens := snapshotsOf(w, testkit.EdgeProfile), len(o.kicks[cycleContent]); got != want || tokens != want {
 		t.Errorf("snapshots %d, tokens %d, want %d", got, tokens, want)
 	}
 }
@@ -61,27 +60,23 @@ func snapshotsAndTokens(t *testing.T, w *world, o *Observer, want int) {
 func TestFirstSeenRecordsGetARecordOfAProfileThatTheClusterRunsAfterTheSeed(t *testing.T) {
 	r, w := firstSeenWithANewProfile(t)
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if s := o.Summary(); profileStatus(s, "fred-edge@1.0.0") != model.StatusNoRecord {
-		t.Fatalf("the first cycle: %q", profileStatus(s, "fred-edge@1.0.0"))
+	cycle(t, o)
+	if s := o.Summary(); profileStatus(s, testkit.EdgeProfile) != model.StatusNoRecord {
+		t.Fatalf("the first cycle: %q", profileStatus(s, testkit.EdgeProfile))
 	}
 	snapshotsAndTokens(t, w, o, 1)
 	if !strings.Contains(r.log.String(), "verdict=taken records=1") {
 		t.Errorf("the log:\n%s", r.log.String())
 	}
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	s := o.Summary()
-	if st := profileStatus(s, "fred-edge@1.0.0"); st == model.StatusNoRecord || st == "" {
+	if st := profileStatus(s, testkit.EdgeProfile); st == model.StatusNoRecord || st == "" {
 		t.Errorf("the second cycle: %q", st)
 	}
 	if slices.ContainsFunc(s.NotChecked, func(n model.NotChecked) bool { return n.Cause == model.NoRecord }) {
 		t.Errorf("not checked: %+v", s.NotChecked)
 	}
-	if snapshotsOf(w, "fred-edge@1.0.0") != 1 {
+	if snapshotsOf(w, testkit.EdgeProfile) != 1 {
 		t.Errorf("the second cycle took a second snapshot")
 	}
 	if s.Records.Baseline != baseline.FirstSeen {
@@ -96,12 +91,10 @@ func TestApprovedRecordsGetNoRecordFromTheObserver(t *testing.T) {
 	r.meta(testkit.ApprovedMeta(testkit.Revision))
 	o := r.observer(w)
 	for range 2 {
-		if err := o.RunContent(context.Background()); err != nil {
-			t.Fatal(err)
-		}
+		cycle(t, o)
 	}
 	snapshotsAndTokens(t, w, o, 0)
-	if st := profileStatus(o.Summary(), "fred-edge@1.0.0"); st != model.StatusNoRecord {
+	if st := profileStatus(o.Summary(), testkit.EdgeProfile); st != model.StatusNoRecord {
 		t.Errorf("status %q", st)
 	}
 }
@@ -112,24 +105,18 @@ func TestAFailedSnapshotKeepsTheCycleGoodAndARecordOfTheSecretsWins(t *testing.T
 	r, w := firstSeenWithANewProfile(t)
 	w.profileErr = &runner.RunError{Kind: docs.KindAPI, Status: 429}
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatalf("a failed snapshot failed the cycle: %v", err)
-	}
+	cycle(t, o)
 	if len(o.kicks[cycleContent]) != 0 || !strings.Contains(r.log.String(), "verdict=failed kind="+docs.KindAPI+" status=429") {
 		t.Fatalf("tokens %d, the log:\n%s", len(o.kicks[cycleContent]), r.log.String())
 	}
 	w.profileErr = nil
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if snapshotsOf(w, "fred-edge@1.0.0") != 2 || len(o.taken) != 1 {
-		t.Fatalf("snapshots %d, taken %d", snapshotsOf(w, "fred-edge@1.0.0"), len(o.taken))
+	cycle(t, o)
+	if snapshotsOf(w, testkit.EdgeProfile) != 2 || len(o.taken) != 1 {
+		t.Fatalf("snapshots %d, taken %d", snapshotsOf(w, testkit.EdgeProfile), len(o.taken))
 	}
 	// the pipeline, or a new seed, writes the record into the Secrets
 	r.record("fred-edge", "1.0.0", "addon/edge")
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	if len(o.taken) != 0 {
 		t.Errorf("the observer keeps %d records that the Secrets hold", len(o.taken))
 	}
@@ -139,12 +126,8 @@ func TestAFailedSnapshotKeepsTheCycleGoodAndARecordOfTheSecretsWins(t *testing.T
 func TestTheVersionsCycleReadsTheRecordsThatTheObserverTook(t *testing.T) {
 	r, w := firstSeenWithANewProfile(t)
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
+	versions(t, o)
 	if n := w.count(runner.CmdBehind); n != 2 {
 		t.Errorf("behind ran %d times, want one for each of the two records", n)
 	}
