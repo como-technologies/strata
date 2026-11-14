@@ -224,56 +224,39 @@ mod tests {
 
     /// One answer from a server on this machine, so the reading of a body needs no network.
     fn serve_once(status_line: &str, body: &str) -> String {
-        serve_bytes(status_line, body.as_bytes()).0
+        serve_each(&[(status_line, body.as_bytes())]).0
     }
 
-    /// One answer with the bytes `body`, from a server on this machine. The receiver gives the
-    /// head of the request that the server read.
-    fn serve_bytes(status_line: &str, body: &[u8]) -> (String, std::sync::mpsc::Receiver<String>) {
+    /// The answers `answers`, each a status line and the bytes of a body, one for each request in
+    /// turn, from a server on this machine. The receiver gives the head of each request that the
+    /// server read, in the same order.
+    fn serve_each(answers: &[(&str, &[u8])]) -> (String, std::sync::mpsc::Receiver<String>) {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
-        let mut answer = format!(
-            "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            body.len()
-        )
-        .into_bytes();
-        answer.extend_from_slice(body);
-        let (sent, request) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let (mut s, _) = listener.accept().unwrap();
-            let mut buf = [0u8; 4096];
-            let n = s.read(&mut buf).unwrap_or(0);
-            let _ = sent.send(String::from_utf8_lossy(&buf[..n]).to_string());
-            s.write_all(&answer).unwrap();
-        });
-        (format!("http://{addr}"), request)
-    }
-
-    /// The answers `answers`, each a status line and a body, one for each request in turn, from a
-    /// server on this machine.
-    fn serve_each(answers: &[(&str, &str)]) -> String {
-        use std::io::{Read, Write};
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
-        let answers: Vec<String> = answers
+        let answers: Vec<Vec<u8>> = answers
             .iter()
             .map(|(status_line, body)| {
-                format!(
-                    "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                let mut answer = format!(
+                    "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                     body.len()
                 )
+                .into_bytes();
+                answer.extend_from_slice(body);
+                answer
             })
             .collect();
+        let (sent, request) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             for answer in answers {
                 let (mut s, _) = listener.accept().unwrap();
                 let mut buf = [0u8; 4096];
-                let _ = s.read(&mut buf);
-                s.write_all(answer.as_bytes()).unwrap();
+                let n = s.read(&mut buf).unwrap_or(0);
+                let _ = sent.send(String::from_utf8_lossy(&buf[..n]).to_string());
+                s.write_all(&answer).unwrap();
             }
         });
-        format!("http://{addr}")
+        (format!("http://{addr}"), request)
     }
 
     #[test]
@@ -284,11 +267,11 @@ mod tests {
         );
         let path = routes::TAG_FILTER_LISTING;
         // the first client: an answer with a 2xx status proves its key, so its denial is the role
-        let url = serve_each(&[
-            ("200 OK", "{}"),
-            ("403 Forbidden", &denied),
-            ("403 Forbidden", &denied),
-            ("403 Forbidden", &denied),
+        let (url, _) = serve_each(&[
+            ("200 OK", "{}".as_bytes()),
+            ("403 Forbidden", denied.as_bytes()),
+            ("403 Forbidden", denied.as_bytes()),
+            ("403 Forbidden", denied.as_bytes()),
         ]);
         let first = HttpApi::new(Config::new(url.as_str(), "first-key"));
         first.get_json("/v1/dashboard/projects/metadata").unwrap();
@@ -310,7 +293,7 @@ mod tests {
     #[test]
     fn a_file_is_the_bytes_of_the_body_of_a_request_that_accepts_a_file() {
         let file = [0x1f, 0x8b, 0x08, 0x00, 0xff, 0x00];
-        let (url, request) = serve_bytes("200 OK", &file);
+        let (url, request) = serve_each(&[("200 OK", &file)]);
         let api = HttpApi::new(Config::new(url, "k"));
         assert_eq!(api.get_file(&download_path("u1")).unwrap(), file);
         let head = request.recv().unwrap().to_ascii_lowercase();
@@ -320,7 +303,7 @@ mod tests {
 
     #[test]
     fn a_file_that_palette_refuses_carries_its_status_and_body() {
-        let (url, _) = serve_bytes("429 Too Many Requests", DOWNLOAD_LIMIT_REFUSAL.as_bytes());
+        let (url, _) = serve_each(&[("429 Too Many Requests", DOWNLOAD_LIMIT_REFUSAL.as_bytes())]);
         let api = HttpApi::new(Config::new(url, "k"));
         match api.get_file(&download_path("u1")) {
             Err(Error::Api { status, body, .. }) => {

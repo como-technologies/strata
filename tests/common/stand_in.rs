@@ -95,30 +95,48 @@ pub fn serve_tenants(tenants: BTreeMap<String, BTreeMap<String, Value>>) -> Stri
 fn serve_answers(
     answer: impl Fn(&Request) -> Option<Value> + Send + 'static,
 ) -> (String, Arc<Mutex<Vec<Request>>>) {
+    serve(move |request, _| match answer(request) {
+        Some(doc) => Some((200, doc.to_string())),
+        None => Some((404, "{}".to_string())),
+    })
+}
+
+/// Serve on a free port of this machine. `answer` gives the status and the JSON body of the
+/// answer to a request, with the count of the requests before it. `None` gives no answer, so the
+/// sender waits until its timeout. It gives the address, and each request that the server took,
+/// in the order of arrival.
+fn serve(
+    answer: impl Fn(&Request, usize) -> Option<(u16, String)> + Send + 'static,
+) -> (String, Arc<Mutex<Vec<Request>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = listener.local_addr().unwrap();
+    let address = format!("http://{}", listener.local_addr().unwrap());
     let requests = Arc::new(Mutex::new(Vec::new()));
     let seen = Arc::clone(&requests);
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
-            let request = read_request(&mut stream);
-            let doc = request.as_ref().and_then(&answer);
-            if let Some(request) = request {
-                seen.lock().unwrap().push(request);
-            }
-            let (status, body) = match doc {
-                Some(doc) => ("200 OK", doc.to_string()),
-                None => ("404 Not Found", "{}".to_string()),
+            let Some(request) = read_request(&mut stream) else {
+                continue;
             };
-            let answer = format!(
-                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            let _ = stream.write_all(answer.as_bytes());
+            let answered = {
+                let mut seen = seen.lock().unwrap();
+                let answered = answer(&request, seen.len());
+                seen.push(request);
+                answered
+            };
+            match answered {
+                Some((status, body)) => {
+                    let _ = write!(
+                        stream,
+                        "HTTP/1.1 {status} Stand-in\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                }
+                None => std::thread::sleep(Duration::from_secs(20)),
+            }
         }
     });
-    (format!("http://{address}"), requests)
+    (address, requests)
 }
 
 /// The stand-in of [`serve_recorded`] for some routes, and a home for the runs of strata against
@@ -318,40 +336,19 @@ pub struct Endpoint {
 impl Endpoint {
     /// Serve on a free port of this machine.
     pub fn answering(answer: Answer) -> Endpoint {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}/", listener.local_addr().unwrap());
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let seen = Arc::clone(&requests);
-        std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                let Ok(mut stream) = stream else { continue };
-                let Some(request) = read_request(&mut stream) else {
-                    continue;
-                };
-                let number = {
-                    let mut seen = seen.lock().unwrap();
-                    seen.push(request);
-                    seen.len() - 1
-                };
-                let (status, body) = match answer {
-                    Answer::Status(status) => (Some(status), TAKEN),
-                    Answer::Statuses(list) => (list.get(number).or(list.last()).copied(), TAKEN),
-                    Answer::Body(status, body) => (Some(status), body),
-                    Answer::Silence => (None, TAKEN),
-                };
-                match status {
-                    Some(status) => {
-                        let _ = write!(
-                            stream,
-                            "HTTP/1.1 {status} Stand-in\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                            body.len()
-                        );
-                    }
-                    None => std::thread::sleep(Duration::from_secs(20)),
-                }
-            }
+        let (address, requests) = serve(move |_, number| {
+            let (status, body) = match answer {
+                Answer::Status(status) => (Some(status), TAKEN),
+                Answer::Statuses(list) => (list.get(number).or(list.last()).copied(), TAKEN),
+                Answer::Body(status, body) => (Some(status), body),
+                Answer::Silence => (None, TAKEN),
+            };
+            status.map(|status| (status, body.to_string()))
         });
-        Endpoint { url, requests }
+        Endpoint {
+            url: format!("{address}/"),
+            requests,
+        }
     }
 
     /// The requests that the endpoint took so far, in order.
