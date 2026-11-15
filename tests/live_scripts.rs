@@ -4026,6 +4026,35 @@ fn each_live_step_that_reads_the_rows_deeper_calls_detail_and_passes_against_the
     passed(&steps, &["list-applied", "list-applied-json"]);
 }
 
+/// The stand-in of strata refuses `--packs` and `--applied` before it reads its rules, as strata
+/// does since release 0.35.0 (#862). It takes the same call with `--detail`.
+#[test]
+fn the_stand_in_of_strata_refuses_the_old_names_of_list_with_the_exit_code_2_and_takes_detail() {
+    let mut stage = Stage::new(serde_json::json!({}));
+    // a rule that matches each call, so only the refusal gives the exit code 2
+    stage.strata("list*", 0, "the rows\n");
+    let call = |args: &[&str]| {
+        Command::new(stage.path("bin/fake-strata"))
+            .args(args)
+            .env("FAKE_STRATA", stage.path("strata"))
+            .output_locked()
+            .unwrap()
+    };
+    for args in [
+        &["list", "--packs"][..],
+        &["list", "clusters", "--applied", "--json"],
+    ] {
+        let o = call(args);
+        let stderr = String::from_utf8_lossy(&o.stderr);
+        assert_eq!(o.status.code(), Some(2), "{args:?}: {stderr}");
+        assert!(stderr.contains("unexpected argument"), "{args:?}: {stderr}");
+        assert!(o.stdout.is_empty(), "{args:?}: no answer of a rule");
+    }
+    let o = call(&["list", "clusters", "--detail", "--json"]);
+    assert_eq!(o.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&o.stdout), "the rows\n");
+}
+
 /// A stage of `packs.sh` whose release profile has an OS pack ref with `annotations`, and whose
 /// record of that profile is `record`.
 fn packs_os_stage(annotations: &str, record: &str) -> Stage {
