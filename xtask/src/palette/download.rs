@@ -213,6 +213,7 @@ mod tests {
     use strata::api::{MemoryApi, PackFile, Palette};
 
     use super::*;
+    use crate::common_palette::pack_listing_answer;
     use crate::palette::served;
     use crate::tenant::download_route;
 
@@ -296,8 +297,8 @@ mod tests {
         );
         write(
             &pack_listing("kubernetes"),
-            json!({"items": [{"metadata": {"uid": "pk-1"},
-                "spec": {"version": "1.36.2", "values": "pack:\n  k8sHardening: true\n"}}]}),
+            pack_listing_answer(json!([{"metadata": {"uid": "pk-1"},
+                "spec": {"version": "1.36.2", "values": "pack:\n  k8sHardening: true\n"}}])),
         );
         let (status, file) = answer(temp.path(), "u1", Some(FILE_TYPE));
         assert_eq!(status, 200);

@@ -159,7 +159,7 @@ table gives the files.
 | `xtask/src/checks.rs`, `xtask/src/files.rs`, `xtask/src/size.rs` | `checks.rs` holds the rules that the pages must keep, and `files.rs` holds the scans of a directory. `size.rs` holds the tests of the size limits of [Write the code](./code.md#the-size-of-a-module), for `xtask`, `src/`, and the other packages. |
 | `xtask/facts/`, `xtask/src/facts/`, `xtask/src/contract/` | `facts/` holds the list of the facts of Palette and of the clouds, and `src/facts/` holds the check of it: see [The facts of Palette](./facts.md). `src/contract/` holds the contract run. It compares the facts with a real tenant, and it sends the read-only calls of the clouds. See [The weekly contract run](./facts.md#the-weekly-contract-run). |
 | `tests/` | The tests of the crate, in one crate: `main.rs` names each file as a module, and `common/mod.rs` holds each helper that two files use. `routes.rs` makes sure that the routes of the tests are the routes that strata builds. `cargo test verify::` runs the tests of `verify.rs`. |
-| `tests/common/palette.rs`, `tests/common/answer.rs` | `common/palette.rs` names the routes of Palette and builds the documents of a profile: the pack ref, the pack manifests, and the variables with their masks. It also builds the entry of a pack in the pack listing, and the body and the message of a denial. The generator of `benches/`, the package `fuzz/`, the tests of `strata-preflight`, a unit test of `src/api/http.rs`, and the stand-in of `xtask/` include that file too. So the routes, the documents, the masks, and the denials have one source. `common/answer.rs` holds the check of an answer and the check of a ref. `tests/fuzz.rs` and `fuzz/` use it, so one rule decides what an answer is. |
+| `tests/common/palette.rs`, `tests/common/answer.rs` | `common/palette.rs` names the routes of Palette and builds the documents of a profile: the pack ref, the pack manifests, and the variables with their masks. It also builds the entry of a pack and a page of the pack listing, and the body and the message of a denial. The generator of `benches/`, the package `fuzz/`, the tests of `strata-preflight`, a unit test of `src/api/http.rs`, and the stand-in of `xtask/` include that file too. So the routes, the documents, the masks, and the denials have one source. `common/answer.rs` holds the check of an answer and the check of a ref. `tests/fuzz.rs` and `fuzz/` use it, so one rule decides what an answer is. |
 | `tests/common/download.rs` | It writes the download of a profile version, as Palette writes it. The download holds the list of the packs and the archive of each pack. The tests, the unit tests of `src/api/download.rs`, the seeds of `fuzz/`, and the stand-in in `xtask/` include it, so the layout has one writer. |
 | `tests/common/closed_set.rs`, `tests/common/walk.rs`, `tests/common/process.rs`, `tests/common/toml.rs` | `common/closed_set.rs` holds the checks of a closed set, and `common/walk.rs` holds the walk of a directory. `crates/strata-preflight/tests/` includes both. `common/process.rs` holds the lock for the processes of the tests: see [Write the code](./code.md#tests). The tests of `strata-preflight` and of `xtask` include it too. `common/toml.rs` holds the readers of a TOML file: the lines of a table, and the entries `key = "value"`. `xtask` and the tests of `strata-report-endpoint` include it. |
 | `tests/common/git.rs` | `common/git.rs` gives each git command of a test no setting of the machine and one author. The runner of the book in `xtask` includes it too, so a chapter of the book starts git with the same settings. |
@@ -313,6 +313,14 @@ these rules, a test gives the same result on each run, on a fast machine and on 
   half a second late, or end with no line. A test shows that each step still gets the right result.
 - A step that fails shows its output in the log of the test. The test prints the files `<id>.out`
   and `<id>.err` of each check that failed, and the harness shows them when the test fails.
+
+### The stand-in of strata in a live script test
+
+A stage of `tests/live_scripts.rs` gives the script a stand-in for strata in `STRATA_BIN`. The
+stand-in answers each command line from the rules of the test, and refuses none. So it cannot
+show that strata takes a command line. The stage also gives the binary of the tests in
+`REAL_STRATA`, with no send of the report. A stand-in can give a call to that binary, which asks
+a stand-in Palette. The test of `slash-several` of `registry-kinds.sh` does this (#916).
 
 ### The fuzzing
 
