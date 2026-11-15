@@ -412,6 +412,15 @@ pub const PUBLIC_REGISTRY: &str = "reg-public";
 /// second registry.
 pub const PROD_REGISTRY: &str = "reg-prod";
 
+/// The two registries that the key can see, as [`REGISTRY_LISTING`] lists them:
+/// [`PUBLIC_REGISTRY`] and [`PROD_REGISTRY`].
+pub fn two_registries() -> Value {
+    json!({"items": [
+        {"name": "Public Repo", "uid": PUBLIC_REGISTRY, "kind": "pack"},
+        {"name": "Prod Repo", "uid": PROD_REGISTRY, "kind": "pack"},
+    ]})
+}
+
 /// A pack as a fixture states it: the fields that its pack ref, its pack manifests, and its entry
 /// in the pack listing share.
 ///

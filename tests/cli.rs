@@ -2395,44 +2395,41 @@ fn snapshot_of_a_set_with_json_prints_an_error_of_the_query_as_one_json_line() {
 #[test]
 fn snapshot_of_one_ref_with_json_gives_its_error_as_one_json_line_with_the_exit_code_of_the_error()
 {
-    let packs = ["reg-a", "reg-b"].map(|uid| common::listed_pack("csi", "1.0.0", uid));
+    let packs = [common::PUBLIC_REGISTRY, common::PROD_REGISTRY]
+        .map(|uid| common::listed_pack("csi", "1.0.0", uid));
     let routes = std::collections::BTreeMap::from([
-        (
-            REGISTRY_LISTING.to_string(),
-            serde_json::json!({"items": [{"name": "Mirror", "uid": "reg-a", "kind": "pack"},
-                {"name": "Public Repo", "uid": "reg-b", "kind": "pack"}]}),
-        ),
+        (REGISTRY_LISTING.to_string(), common::two_registries()),
         (
             common::pack_listing_route("csi"),
             common::pack_listing_answer(serde_json::json!(packs)),
         ),
     ]);
     let stand = Stand::new(routes, "p-dev");
+    let several = strata::Error::PackInSeveralRegistries {
+        name: "csi".to_string(),
+        version: "1.0.0".to_string(),
+        registries: vec!["Prod Repo".to_string(), "Public Repo".to_string()],
+    };
+    let code = i32::from(several.exit_code());
     for more in [&[][..], &["-o", "csi.json"][..]] {
         let args = [&["snapshot", "pack:csi@1.0.0", "--json", "-q"][..], more].concat();
         let r = stand.run_loud(&args);
-        assert_eq!(r.code, 2, "{args:?}: {}", r.err);
-        assert_eq!(r.out, "", "{args:?}: no record");
+        assert_eq!((r.code, r.out.as_str()), (code, ""), "{args:?}: {}", r.err);
         assert_eq!(r.err.lines().count(), 1, "{args:?}: one line: {}", r.err);
         let e: serde_json::Value = serde_json::from_str(&r.err).unwrap();
         assert_eq!(e["error"]["kind"], "pack-in-several-registries", "{e}");
         assert_eq!(
-            e["error"]["registries"],
-            serde_json::json!(["Mirror", "Public Repo"]),
-            "{e}"
+            e,
+            serde_json::json!({"error": several.to_json()}),
+            "{args:?}"
         );
     }
     assert!(!stand.home.path().join("csi.json").exists(), "no record");
 
     // the same failure without --json is the line of text
     let r = stand.run_loud(&["snapshot", "pack:csi@1.0.0", "-q"]);
-    assert_eq!(r.code, 2, "{}", r.err);
-    assert!(
-        r.err
-            .starts_with(&error_text("pack 'csi' at version '1.0.0' is in several")),
-        "{}",
-        r.err
-    );
+    assert_eq!(r.code, code, "{}", r.err);
+    assert_eq!(r.err.trim_end(), error_text(&several.to_string()));
 }
 
 /// `--format` is the format of the report of a set, so each argument that refuses `--dir` refuses
