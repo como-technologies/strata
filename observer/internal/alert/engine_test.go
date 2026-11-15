@@ -222,12 +222,14 @@ func TestAMuteHoldsBackTheClearOfAMessageThatWent(t *testing.T) {
 	}
 }
 
+// newerItem is the news of a newer version of the pack dex in the profile, as a digest lists it.
+func newerItem(id, profile string) Subject {
+	return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: testkit.DexFrom + " has a newer version, " + testkit.DexTo + "."}
+}
+
 func TestADigestGoesOncePerPeriodListsTheOpenItemsAndHasNoClear(t *testing.T) {
 	b := newBench(t, oncall)
-	newer := func(id, profile string) Subject {
-		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: testkit.DexFrom + " has a newer version, " + testkit.DexTo + "."}
-	}
-	subjects := []Subject{newer("n1", testkit.DexProfile), newer("n2", testkit.BaseProfile)}
+	subjects := []Subject{newerItem("n1", testkit.DexProfile), newerItem("n2", testkit.BaseProfile)}
 	known := Known{Content: true, Newer: true}
 	b.cycle(subjects, known)
 	if len(b.send.sent) != 1 || b.send.sent[0].channel != "planning" {
@@ -410,12 +412,9 @@ func TestTheClearGoesToTheChannelOfTheOpenMessageAndToNoChannelThatTheRulesLack(
 
 func TestADigestThatWaitsIsMadeAgainFromTheItemsThatAreOpenAndNeverTwice(t *testing.T) {
 	b := newBench(t, oncall)
-	item := func(id, profile string) Subject {
-		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "x"}
-	}
 	known := Known{Content: true, Newer: true}
 	b.send.fail["planning"] = errors.New("down")
-	all := []Subject{item("n1", "a@1"), item("n2", "b@1"), item("n3", "c@1")}
+	all := []Subject{newerItem("n1", "a@1"), newerItem("n2", "b@1"), newerItem("n3", "c@1")}
 	b.cycle(all, known)
 	// one item clears while the channel is down, and a second period passes
 	b.later(8 * 24 * time.Hour)
@@ -460,10 +459,7 @@ func TestAnItemKeepsWhatItsSubjectSaysNowForTheClearAndTheDigest(t *testing.T) {
 func TestADigestThatOneChannelMissedIsMadeAgainForThatChannelOnly(t *testing.T) {
 	const sentCounts = "%s: planning got %d, platform got %d, outbox %+v"
 	b := newBench(t, testkit.Rules([]string{testkit.Channel("planning", "f"), testkit.Channel("platform", "g")}, newerToPlanning, `{"level": "profile", "match": "barney-base", "news": "newer", "send": "digest", "to": "platform"}`))
-	item := func(id, profile string) Subject {
-		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "x"}
-	}
-	subjects := []Subject{item("n1", testkit.DexProfile), item("n2", testkit.BaseProfile)}
+	subjects := []Subject{newerItem("n1", testkit.DexProfile), newerItem("n2", testkit.BaseProfile)}
 	known := Known{Content: true, Newer: true}
 	sentTo := func(channel string) int {
 		n := 0
