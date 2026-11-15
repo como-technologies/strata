@@ -106,7 +106,7 @@ func TestADigestThatIsNotTheFirstOneIsImageMovedUntilItComesBack(t *testing.T) {
 	first := firstOf(testkit.VendorRef, testkit.Digest1)
 	moved := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest2), ran("b", testkit.VendorRef, testkit.Digest2))
 	got := FindingsOf(moved, first)
-	if len(got) != 1 || got[0].Kind != ImageMoved || got[0].Profile != "wilma-gateway@3.1.2" ||
+	if len(got) != 1 || got[0].Kind != ImageMoved || got[0].Profile != testkit.GatewayProfile ||
 		!slices.Equal(got[0].Packs, []string{testkit.VendorPack}) || !slices.Equal(got[0].Images, []string{testkit.VendorRef}) || got[0].ReBaselineNeeded {
 		t.Fatalf("findings %+v", got)
 	}
@@ -198,13 +198,13 @@ func TestAnImageMatchesByTheExactTextFirstAndThenByNameAndTag(t *testing.T) {
 	for _, img := range imageRows(c, nil) {
 		got[img.Ref] = img
 	}
-	if g := got[nginxFull]; g.Match != MatchExact || !slices.Equal(g.Packs, []ImagePack{{"aws-stack@1.0.0", "addon/nginx"}}) {
+	if g := got[nginxFull]; g.Match != MatchExact || !slices.Equal(g.Packs, []ImagePack{{testkit.AWSStackOld, "addon/nginx"}}) {
 		t.Errorf("exact: %+v", g)
 	}
 	if g := got[nginxHub]; g.Match != MatchNameAndTag || len(g.Packs) != 2 {
 		t.Errorf("name and tag: %+v", g)
 	}
-	if g := got["nginx:1.27"]; g.Match != MatchExact || !slices.Equal(g.Packs, []ImagePack{{"other@1.0.0", "addon/web"}}) {
+	if g := got["nginx:1.27"]; g.Match != MatchExact || !slices.Equal(g.Packs, []ImagePack{{testkit.OtherProfile, "addon/web"}}) {
 		t.Errorf("exact, short form: %+v", g)
 	}
 	if g := got["nginx:1.28"]; g.Match != MatchNone || len(g.Packs) != 0 {
@@ -310,11 +310,11 @@ func TestAFailedReadKeepsTheLastGoodContainersAndHoldsTheFindings(t *testing.T) 
 	cold.Pods = PodRead{Err: &ErrorRef{Kind: docs.KindKubeAPI, Status: 500}}
 	cold.Carry(&Content{})
 	for _, kind := range imageKinds {
-		if !slices.Contains(HeldIDs(cold), FindingID(kind, "wilma-gateway@3.1.2")) {
+		if !slices.Contains(HeldIDs(cold), FindingID(kind, testkit.GatewayProfile)) {
 			t.Errorf("the finding %s is not held", kind)
 		}
 	}
-	if slices.Contains(HeldIDs(podsOf(t)), FindingID(ImageMoved, "wilma-gateway@3.1.2")) {
+	if slices.Contains(HeldIDs(podsOf(t)), FindingID(ImageMoved, testkit.GatewayProfile)) {
 		t.Error("a read that worked holds the finding")
 	}
 }

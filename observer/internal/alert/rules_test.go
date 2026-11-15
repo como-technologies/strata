@@ -128,11 +128,11 @@ func TestALowerLevelOverridesAHigherOne(t *testing.T) {
 		want int
 		ok   bool
 	}{
-		{"the cluster rule takes any other profile", Subject{News: NewsDrift, Profile: "barney-base@1.5.0", Packs: []string{"addon/kyverno"}}, 0, true},
+		{"the cluster rule takes any other profile", Subject{News: NewsDrift, Profile: testkit.BaseProfile, Packs: []string{"addon/kyverno"}}, 0, true},
 		{"the profile rule overrides the cluster rule", Subject{News: NewsDrift, Profile: testkit.DexProfile, Packs: []string{"addon/cert"}}, 2, true},
-		{"the pack rule overrides the profile rule", Subject{News: NewsDrift, Profile: testkit.DexProfile, Packs: []string{"addon/dex"}}, 1, true},
-		{"a pack rule takes a finding that names the pack among others", Subject{News: NewsDrift, Profile: "barney-base@1.5.0", Packs: []string{"addon/cert", "addon/dex"}}, 1, true},
-		{"a rule is about its own news", Subject{News: NewsImage, Profile: testkit.DexProfile, Packs: []string{"addon/dex"}}, 0, false},
+		{"the pack rule overrides the profile rule", Subject{News: NewsDrift, Profile: testkit.DexProfile, Packs: []string{testkit.DexKey}}, 1, true},
+		{"a pack rule takes a finding that names the pack among others", Subject{News: NewsDrift, Profile: testkit.BaseProfile, Packs: []string{"addon/cert", testkit.DexKey}}, 1, true},
+		{"a rule is about its own news", Subject{News: NewsImage, Profile: testkit.DexProfile, Packs: []string{testkit.DexKey}}, 0, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -174,8 +174,8 @@ func TestAProfileRuleNamesTheProfileOrNameAndVersion(t *testing.T) {
 	if !r.covers(Subject{Profile: "fred-identity@2.4.0"}) || r.covers(Subject{Profile: "fred-identity-two@1.0.0"}) {
 		t.Error("a rule with a name covers each version of that profile only")
 	}
-	p := Rule{Level: LevelPack, Match: "addon/dex"}
-	if !p.covers(Subject{Packs: []string{"addon/dex"}}) || p.covers(Subject{Packs: []string{"os/dex"}}) {
+	p := Rule{Level: LevelPack, Match: testkit.DexKey}
+	if !p.covers(Subject{Packs: []string{testkit.DexKey}}) || p.covers(Subject{Packs: []string{"os/dex"}}) {
 		t.Error("a pack rule with a key covers that key only")
 	}
 }

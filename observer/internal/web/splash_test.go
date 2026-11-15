@@ -159,9 +159,7 @@ func TestEachToneHasItsLookAndItsAnimationInTheStyle(t *testing.T) {
 		if !runs {
 			t.Errorf("no rule runs the animation %s for the tone %s", animation, tone)
 		}
-		if !strings.Contains(css, "@keyframes "+animation+"{") {
-			t.Errorf("the style has no keyframes %s", animation)
-		}
+		mustHold(t, "the style", css, "@keyframes "+animation+"{")
 	}
 	// The look: an outline for off, an amber mark for warn, and a red top slab for lost. Calm and build keep the colors of the logo.
 	rulesHold(t, css, map[string][]string{
@@ -187,7 +185,7 @@ func TestEachToneHasItsLookAndItsAnimationInTheStyle(t *testing.T) {
 // The mark of the splash is the geometry of the logo in assets/logo/: the four paths in the script are the four paths of the
 // dark mark, in the same order, and the style gives each slab the color of its path.
 func TestTheMarkOfTheSplashIsTheGeometryOfTheLogo(t *testing.T) {
-	logo := readFile(t, logoDir+markDark)
+	logo := testkit.ReadFile(t, logoDir+markDark)
 	want := regexp.MustCompile(`<path fill="(#[0-9a-fA-F]+)" d="([^"]+)"`).FindAllStringSubmatch(string(logo), -1)
 	script := readScripts(t)
 	_, rest, ok := strings.Cut(script, "const SLABS = [")

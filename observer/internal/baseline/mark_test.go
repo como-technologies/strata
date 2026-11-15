@@ -9,7 +9,7 @@ import (
 )
 
 // awsFile is the record file of the tests of the mark.
-const awsFile = "aws-stack@1.0.0.json.gz"
+const awsFile = testkit.AWSStackOld + ".json.gz"
 
 // Mark changes when meta.json or a record file changes, and not when another file changes. A directory
 // that cannot be listed gives the empty text.

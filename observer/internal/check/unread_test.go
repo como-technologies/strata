@@ -17,11 +17,6 @@ import (
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
-// notRead is the row of a record that Palette refused to answer for, such as with a 429.
-func notRead() docs.VerifyRow {
-	return docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 429}}
-}
-
 // at moves the clock of the observer and runs a content cycle.
 func at(t *testing.T, o *Observer, when time.Time) model.Summary {
 	t.Helper()
@@ -43,11 +38,7 @@ func causeOf(s model.Summary, cause model.Cause) []string {
 
 func firstSeenInState(t *testing.T, r *rig, id string) (time.Time, bool) {
 	t.Helper()
-	state, err := loadState(r.state)
-	if err != nil {
-		t.Fatal(err)
-	}
-	f, ok := state.Findings[id]
+	f, ok := readState(t, r).Findings[id]
 	return f.FirstSeen, ok
 }
 
@@ -122,7 +113,7 @@ func TestAVerifyRowThatFailsKeepsTheDriftAndItsFirstSight(t *testing.T) {
 		t.Fatalf("findings %+v", s.Findings)
 	}
 	// One 429 for one record: the other row is good, so the cycle is good.
-	w.rows[0] = notRead()
+	w.rows[0] = testkit.NotReadRow()
 	s := at(t, o, t0.Add(time.Hour))
 	if len(s.Findings) != 1 || s.Findings[0].ID != id || !s.Findings[0].FirstSeen.Equal(t0) || s.Counts.Drift != 1 || s.Profiles[0].Status != model.StatusDrift {
 		t.Fatalf("a failed read cleared the drift: "+testkit.FindingsCounts, s.Findings, s.Counts)
@@ -142,7 +133,7 @@ func TestAVerifyRowThatFailsKeepsTheDriftAndItsFirstSight(t *testing.T) {
 
 func TestASideThatFailsKeepsTheClusterDifferenceAndItsFirstSight(t *testing.T) {
 	r, w := twoRecords(t)
-	w.compares = map[int]docs.Diff{0: {RootB: "e06b", Summary: docs.DiffSummary{MaxImpact: "cluster-wide"}, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
+	w.compares = map[int]docs.Diff{0: {RootB: "e06b", Summary: docs.DiffSummary{MaxImpact: "cluster-wide"}, Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
 	fails := &failOnce{world: w, name: ""}
 	o := r.observer(fails)
 	id := model.FindingID(model.ClusterDiffers, testkit.AWSStackProfile)
@@ -173,7 +164,7 @@ func TestAFailedReadAfterARestartKeepsTheFirstSightInTheState(t *testing.T) {
 	at(t, r.observer(w), t0)
 	// The new process has no last answer in memory.
 	o := r.restart(w)
-	w.rows[0] = notRead()
+	w.rows[0] = testkit.NotReadRow()
 	s := at(t, o, t0.Add(time.Hour))
 	inventsNoFinding(t, s)
 	readErrorNames(t, s, testkit.AWSStackProfile)
@@ -188,13 +179,13 @@ func TestAFailedReadAfterARestartKeepsTheFirstSightInTheState(t *testing.T) {
 func TestAFailedReadKeepsTheFirstSightOfThePartThatFailedOnly(t *testing.T) {
 	r, w := twoRecords(t)
 	w.rows[0] = drift(t)
-	w.compares = map[int]docs.Diff{0: {RootB: "e06b", Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
+	w.compares = map[int]docs.Diff{0: {RootB: "e06b", Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
 	published := model.FindingID(model.PublishedChanged, testkit.AWSStackProfile)
 	cluster := model.FindingID(model.ClusterDiffers, testkit.AWSStackProfile)
 	at(t, r.observer(w), t0)
 	// After a restart the row fails, and the side works and shows no change.
 	o := r.restart(w)
-	w.rows[0], w.compares = notRead(), nil
+	w.rows[0], w.compares = testkit.NotReadRow(), nil
 	at(t, o, t0.Add(time.Hour))
 	keepsFirstSight(t, r, published)
 	dropsFirstSight(t, r, cluster)
@@ -229,13 +220,12 @@ func TestOneMoveThatFailsLeavesTheOtherPinsComparedAndTheListNew(t *testing.T) {
 		t.Fatalf(versionsNewer+", compares %d", s.Versions, len(s.Newer), w.countMoves())
 	}
 	countsAllButKubernetes(t, s)
-	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != testkit.KubernetesKey || s.NotChecked[0].Profiles[0] != moveSubject {
+	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != testkit.KubernetesKey || s.NotChecked[0].Profiles[0] != testkit.AWSStackOld {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 	// The cache holds the three moves that worked. The next cycle asks for the one that failed.
-	state, err := loadState(r.state)
-	if err != nil || len(state.Moves) != 3 {
-		t.Fatalf("moves in the state %d, error %v", len(state.Moves), err)
+	if state := readState(t, r); len(state.Moves) != 3 {
+		t.Fatalf("moves in the state %d", len(state.Moves))
 	}
 	delete(w.moveErrs, failing)
 	before := w.countMoves()
@@ -275,10 +265,7 @@ func TestNoRecordLeavesTheVersionsClockEmpty(t *testing.T) {
 // The set no-records of the test data for the page holds the output that the observer gives with no
 // record. The page shows the set, so the set must be the output.
 func TestTheRealOutputWithNoRecordIsTheSetNoRecords(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "web", "testdata", "api", "no-records", "cluster.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.ReadFile(t, filepath.Join("..", "web", "testdata", "api", "no-records", "cluster.json"))
 	var setProfiles struct {
 		Profiles []model.Profile `json:"profiles"`
 	}
@@ -321,11 +308,6 @@ func breakRecord(t *testing.T, r *rig, how string) {
 	}
 }
 
-// restoreRecord writes the record of aws-stack again, as the pipeline does after it fixed the file.
-func restoreRecord(r *rig) {
-	r.record("aws-stack", "1.1.0", "csi/csi-aws-ebs", "os/ubuntu")
-}
-
 func TestAnUnreadableRecordKeepsItsFindingAndItsFirstSightAndSendsNoClear(t *testing.T) {
 	for _, how := range []string{"a bad gzip", "another schema"} {
 		t.Run(how, func(t *testing.T) {
@@ -351,7 +333,7 @@ func TestAnUnreadableRecordKeepsItsFindingAndItsFirstSightAndSendsNoClear(t *tes
 				t.Fatalf("an unreadable record sent %q", sender.texts[1:])
 			}
 			// A later good read decides.
-			restoreRecord(r)
+			awsRecord(r)
 			w.rows = []docs.VerifyRow{unchanged(), unchanged()}
 			noChangeClears(t, at(t, o, t0.Add(2*time.Hour)))
 			if len(sender.texts) != 2 || !strings.Contains(sender.texts[1], "Drift cleared") {
@@ -385,7 +367,7 @@ func TestAnUnreadableRecordWithNoLastRecordKeepsTheFirstSightsAndSendsNoClear(t 
 		t.Fatalf("messages %q", sender.texts)
 	}
 	// The record is read again and the drift is still there: the first sight is the first one, and nothing goes again.
-	restoreRecord(r)
+	awsRecord(r)
 	w.rows = []docs.VerifyRow{drift(t), unchanged()}
 	driftAgain(t, at(t, o, t0.Add(2*time.Hour)))
 	if len(sender.texts) != 3 {

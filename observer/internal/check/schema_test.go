@@ -33,7 +33,7 @@ func TestADocumentWithAnotherSchemaIsAFailedReadWithTheKindSchemaAndMakesNoFindi
 		{"verify", func(t *testing.T, w *world) { w.rows[0], w.verifySchema = drift(t), otherSchema }},
 		{"the snapshot of the cluster", func(t *testing.T, w *world) { w.cluster.Schema = otherSchema }},
 		{"compare", func(t *testing.T, w *world) {
-			w.compares = map[int]docs.Diff{0: {Schema: otherSchema, RootB: "e06b", Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
+			w.compares = map[int]docs.Diff{0: {Schema: otherSchema, RootB: "e06b", Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
 		}},
 	}
 	for _, c := range cases {
@@ -56,7 +56,7 @@ func TestADocumentWithAnotherSchemaIsAFailedReadWithTheKindSchemaAndMakesNoFindi
 func TestACompareWithAnotherSchemaBesideGoodSidesIsAProfileThatTheCycleDidNotRead(t *testing.T) {
 	r, w := twoRecords(t)
 	// The compare would make a finding, if the cycle read it.
-	w.compares = map[int]docs.Diff{0: {Schema: otherSchema, RootB: "e06b", Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
+	w.compares = map[int]docs.Diff{0: {Schema: otherSchema, RootB: "e06b", Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
 	o := r.observer(w)
 	cycle(t, o)
 	s := o.Summary()

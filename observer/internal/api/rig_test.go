@@ -54,7 +54,7 @@ const (
 	awsPacks       = "/v1/packs/" + testkit.AWSStackProfile
 	kubernetesDiff = awsPacks + testkit.KubernetesDiff
 	pathHealth     = "/healthz"
-	pathPublished  = awsPacks + "/csi/csi-aws-ebs/diff?side=published"
+	pathPublished  = awsPacks + "/" + testkit.CSIKey + "/diff?side=published"
 	pathCluster    = kubernetesDiff + "?side=cluster"
 	pathNewer      = kubernetesDiff + "?side=newer"
 	pathAsk        = awsPacks + "/" + testkit.KubernetesKey + "/ask"
@@ -78,10 +78,7 @@ func fixtures(t *testing.T) string {
 		t.Fatal(err)
 	}
 	for _, e := range list {
-		raw, err := os.ReadFile(filepath.Join("testdata", e.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := testkit.ReadFile(t, filepath.Join("testdata", e.Name()))
 		testkit.WriteIn(t, dir, e.Name(), times.Replace(string(raw)))
 	}
 	return dir
@@ -199,7 +196,7 @@ func newRig(t *testing.T) *rig {
 	t.Helper()
 	d := testkit.NewRigDirs(t)
 	r := &rig{t: t, records: d.Records, work: d.Work, state: d.State, log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
-	packs := []map[string]any{testkit.RigPack(testkit.KubernetesKey, "1.35.3", testkit.ImageRef), testkit.RigPack("csi/csi-aws-ebs", "1.63.1", testkit.DigestImage)}
+	packs := []map[string]any{testkit.RigPack(testkit.KubernetesKey, "1.35.3", testkit.ImageRef), testkit.RigPack(testkit.CSIKey, "1.63.1", testkit.DigestImage)}
 	testkit.WriteGzip(t, r.records, testkit.RecordFile, testkit.RigRecord(t, "aws-stack", "1.1.0", packs, sentinelVariable))
 	testkit.WriteMeta(t, r.records, testkit.ApprovedMeta(testkit.Revision))
 	return r

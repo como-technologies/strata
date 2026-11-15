@@ -39,8 +39,8 @@ func healthFails(t *testing.T, addr string) {
 }
 
 func TestEachAnswerHasTheFourHeaders(t *testing.T) {
-	r := newRig(t)
-	h := (&Server{Source: r.cycled(&fakeStrata{dir: r.fixtures}), Page: http.NotFoundHandler()}).Handler()
+	_, o, _ := asked(t, "")
+	h := (&Server{Source: o, Page: http.NotFoundHandler()}).Handler()
 	for _, c := range []struct {
 		name, method, path, host string
 		status                   int
@@ -70,8 +70,8 @@ func TestEachAnswerHasTheFourHeaders(t *testing.T) {
 }
 
 func TestARequestWithAHostThatIsNotLoopbackGets421(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	for _, c := range []struct {
 		host string
 		want int
@@ -105,8 +105,8 @@ func TestARequestWithAHostThatIsNotLoopbackGets421(t *testing.T) {
 }
 
 func TestOnlyGetIsServed(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT"} {
 		for _, path := range []string{summaryRoutes[patternCluster], pathHealth, pathPublished, "/nowhere"} {
 			rec := testkit.Serve(h, method, path, testkit.LoopbackHost, "")
@@ -144,11 +144,7 @@ func TestListenTakesOnlyALoopbackAddress(t *testing.T) {
 	if ln, err := Listen("0.0.0.0:0"); err == nil || ln != nil || !errors.Is(err, ErrNotLoopback) {
 		t.Errorf("Listen(0.0.0.0:0) = %v, %v", ln, err)
 	}
-	ln, err := Listen(testkit.PortZero)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ln.Close()
+	listener(t).Close()
 }
 
 func TestTheServerSetsEachTimeout(t *testing.T) {

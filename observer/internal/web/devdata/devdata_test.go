@@ -152,7 +152,7 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 			path := "/v1/packs/" + d.Profile + "/" + d.Key + "/diff?side=" + string(d.Side)
 			serves(path, testkit.Plain(t, d))
 		}
-		if _, found, _ := s.PackDiff(context.Background(), "nobody@1.0.0", "addon/none", model.SideNewer); found {
+		if _, found, _ := s.PackDiff(context.Background(), testkit.NobodyProfile, testkit.NoneKey, model.SideNewer); found {
 			t.Errorf("%s: a pack that no entry names has a diff", state)
 		}
 	}
@@ -249,7 +249,7 @@ func TestFirstSeenIsTheOKSetWithAFirstSeenBaseline(t *testing.T) {
 // finding wins, so its status is drift, and its copy is not on this cluster. It and its packs have no newer version, and no row of the
 // newer versions names it, as the summary gives them. The record that the cluster runs, wilma-gateway@3.1.2, has a newer pack.
 func TestMovedDriftHoldsADriftOfAVersionThatTheClusterDoesNotRun(t *testing.T) {
-	const moved, runs = "wilma-gateway@3.0.4", "wilma-gateway@3.1.2"
+	const moved, runs = testkit.GatewayMoved, testkit.GatewayProfile
 	set := load(t, StateMovedDrift)
 	p, mock, here := profileOf(set, moved), profileOf(load(t, StateOK), moved), profileOf(set, runs)
 	if p == nil || mock == nil || here == nil {
@@ -546,7 +546,7 @@ func TestTheSetsOfThePodsHoldTheirStates(t *testing.T) {
 		s := load(t, state)
 		img := s.Images.Images[0]
 		if img.Ref != testkit.VendorRef || img.Status != want || len(s.Findings.Findings) != 2 || s.Cluster.Counts.Findings != 2 ||
-			s.Cluster.Counts.Drift != 1 || s.Images.Counts.Changed != 1 || img.Packs[0].Profile != "wilma-gateway@3.1.2" || img.Packs[0].Key != testkit.VendorPack {
+			s.Cluster.Counts.Drift != 1 || s.Images.Counts.Changed != 1 || img.Packs[0].Profile != testkit.GatewayProfile || img.Packs[0].Key != testkit.VendorPack {
 			t.Errorf("%s: first image %+v, %d findings, counts %+v", state, img, len(s.Findings.Findings), s.Cluster.Counts)
 		}
 	}
@@ -663,17 +663,17 @@ func TestTheOKSetHoldsTheTextOfTheViewer(t *testing.T) {
 		t.Fatalf(testkit.NoDiff, profile, key, side)
 		return api.PackDiff{}
 	}
-	dex := find(testkit.DexProfile, "addon/dex", model.SidePublished)
+	dex := find(testkit.DexProfile, testkit.DexKey, model.SidePublished)
 	if !strings.HasPrefix(dex.Values.Unified, testkit.DexValuesHead+"@@ -15,8 +15,8 @@\n") ||
 		len(dex.Manifests) != 1 || dex.Manifests[0].Name != "fred-realm-config" || !strings.Contains(dex.Manifests[0].Unified, "+  sessionIdleMinutes: \"480\"\n") {
 		t.Errorf("the text of dex: %+v", dex)
 	}
-	if k := find("barney-base@1.5.0", testkit.KubernetesKey, model.SideNewer); strings.Count(k.Values.Unified, "\n@@ ") != 3 {
+	if k := find(testkit.BaseProfile, testkit.KubernetesKey, model.SideNewer); strings.Count(k.Values.Unified, "\n@@ ") != 3 {
 		t.Errorf(testkit.KubernetesValues+" hold %d hunks, want 3", strings.Count(k.Values.Unified, "\n@@ "))
 	}
 	ops := map[string]bool{}
 	var noEnd bool
-	for _, m := range find(testkit.DexProfile, "addon/dex", model.SideNewer).Manifests {
+	for _, m := range find(testkit.DexProfile, testkit.DexKey, model.SideNewer).Manifests {
 		ops[m.Op] = true
 		noEnd = noEnd || strings.Contains(m.Unified, "\n"+testkit.NoEOL+"\n")
 	}
@@ -839,30 +839,30 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 // it. A request that failed gets its reply, and a move with no reply is not found.
 func TestAClickOnAMoveGivesItsReplyAndTheSetKeepsIt(t *testing.T) {
 	ctx := context.Background()
-	const dex, csi, longhorn = testkit.DexProfile, "barney-base@1.5.0", "dino-storage@1.1.0"
+	const dex, csi, longhorn = testkit.DexProfile, testkit.BaseProfile, testkit.LonghornProfile
 	s := load(t, StateOK)
-	a, found, err := s.Ask(ctx, dex, "addon/dex")
+	a, found, err := s.Ask(ctx, dex, testkit.DexKey)
 	if err != nil || !found || a.Verdict != model.VerdictNoError || a.Newest != "2.44.0" {
 		t.Fatalf("the first click gave %+v, %v, %v", a, found, err)
 	}
 	if got := s.Answers(); len(got) != 1 || !reflect.DeepEqual(got[0], a) {
 		t.Errorf("the set holds %+v after the click", got)
 	}
-	if again, found, _ := s.Ask(ctx, dex, "addon/dex"); !found || !reflect.DeepEqual(again, a) || len(s.Answers()) != 1 {
+	if again, found, _ := s.Ask(ctx, dex, testkit.DexKey); !found || !reflect.DeepEqual(again, a) || len(s.Answers()) != 1 {
 		t.Errorf(clickGave, "second click", again, len(s.Answers()))
 	}
 	// A reply that is a request that failed: the next click asks again, and the set keeps one entry.
-	failed, found, _ := s.Ask(ctx, csi, "csi/csi-aws-ebs")
+	failed, found, _ := s.Ask(ctx, csi, testkit.CSIKey)
 	if !found || failed.Verdict != model.VerdictNoAnswer || failed.Status != 403 {
 		t.Fatalf("the click on a move with a failed reply gave %+v", failed)
 	}
-	if again, found, _ := s.Ask(ctx, csi, "csi/csi-aws-ebs"); !found || !reflect.DeepEqual(again, failed) || len(s.Answers()) != 2 {
+	if again, found, _ := s.Ask(ctx, csi, testkit.CSIKey); !found || !reflect.DeepEqual(again, failed) || len(s.Answers()) != 2 {
 		t.Errorf(clickGave, "next click", again, len(s.Answers()))
 	}
-	if a, found, err := s.Ask(ctx, longhorn, "addon/longhorn"); found || err != nil || a.Profile != "" || len(s.Answers()) != 2 {
+	if a, found, err := s.Ask(ctx, longhorn, testkit.LonghornKey); found || err != nil || a.Profile != "" || len(s.Answers()) != 2 {
 		t.Errorf("a move with no reply gave %+v, %v, %v", a, found, err)
 	}
-	if _, found, _ := load(t, StateReadError).Ask(ctx, dex, "addon/dex"); found {
+	if _, found, _ := load(t, StateReadError).Ask(ctx, dex, testkit.DexKey); found {
 		t.Error("a set with no replies found a move")
 	}
 
@@ -871,10 +871,10 @@ func TestAClickOnAMoveGivesItsReplyAndTheSetKeepsIt(t *testing.T) {
 	if got := held.Answers(); len(got) != 3 {
 		t.Fatalf("asks holds %d answers", len(got))
 	}
-	if refused, found, _ := held.Ask(ctx, "wilma-gateway@3.1.2", "addon/traefik"); !found || refused.Verdict != model.VerdictRefuses {
+	if refused, found, _ := held.Ask(ctx, testkit.GatewayProfile, testkit.TraefikKey); !found || refused.Verdict != model.VerdictRefuses {
 		t.Errorf("a held answer gave %+v", refused)
 	}
-	again, found, _ := held.Ask(ctx, dex, "addon/dex")
+	again, found, _ := held.Ask(ctx, dex, testkit.DexKey)
 	if !found || again.Verdict != model.VerdictNoError || len(held.Answers()) != 3 {
 		t.Errorf(clickGave, "click on the failed request", again, len(held.Answers()))
 	}

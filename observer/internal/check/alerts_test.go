@@ -73,7 +73,7 @@ func TestAFailedReadSendsNoClearAndAGoodReadSendsIt(t *testing.T) {
 	o := alerting(t, r, w, sender)
 	at(t, o, t0)
 	// One 429 for one record: the other row is good, so the cycle is good and the part of the record is not read.
-	w.rows[0] = notRead()
+	w.rows[0] = testkit.NotReadRow()
 	at(t, o, t0.Add(time.Hour))
 	if len(sender.texts) != 1 {
 		t.Fatalf("a read that failed sent %q", sender.texts[1:])
@@ -185,10 +185,7 @@ func TestAnObserverWithoutAlertsSendsNothingAndItsViewIsUnset(t *testing.T) {
 	if v := o.Alerts(); v.Set || len(v.Rules) != 0 {
 		t.Errorf("view %+v", v)
 	}
-	state := stateText(t, r)
-	if !strings.Contains(state, `"alerts":{"items":{},"outbox":[]}`) {
-		t.Errorf("state %s", state)
-	}
+	testkit.HoldsAll(t, "the state", stateText(t, r), `"alerts":{"items":{},"outbox":[]}`)
 }
 
 func TestTheStateThatAnOlderObserverWroteLoadsWithAnEmptyStoreOfAlerts(t *testing.T) {
@@ -197,9 +194,8 @@ func TestTheStateThatAnOlderObserverWroteLoadsWithAnEmptyStoreOfAlerts(t *testin
 		t.Fatal(err)
 	}
 	testkit.WriteIn(t, r.state, testkit.StateFile, `{"startedAt":"2026-11-03T14:00:00Z"}`)
-	s, err := loadState(r.state)
-	if err != nil || s.Alerts.Items == nil || s.Alerts.Outbox == nil {
-		t.Errorf("state %+v, error %v", s.Alerts, err)
+	if s := readState(t, r); s.Alerts.Items == nil || s.Alerts.Outbox == nil {
+		t.Errorf("state %+v", s.Alerts)
 	}
 }
 

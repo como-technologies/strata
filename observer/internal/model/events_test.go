@@ -42,8 +42,8 @@ const hoppy = "hoppy-autoscale@1.0.0"
 
 func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-6 * time.Hour), Actor: "Betty Rubble", ActorType: "user", Action: "update"}}}
-	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
-	kubernetes := pin("traefik", "addon", "37.0.0", "38.1.0", "wilma-gateway@3.1.2")
+	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, testkit.DexKey))
+	kubernetes := pin("traefik", "addon", "37.0.0", "38.1.0", testkit.GatewayProfile)
 	kubernetes.Newer[0].Listed = at(-48 * time.Hour)
 	bitnami := pin("coredns", "addon", "1.0.0", "", "rubble-dns@1.0.0", hoppy)
 	bitnami.Registry = "Bitnami"
@@ -53,7 +53,7 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	want := []string{
 		dexDrift,
 		"info ProfileUpdated " + testkit.DexProfile,
-		"newer NewVersion wilma-gateway@3.1.2",
+		"newer NewVersion " + testkit.GatewayProfile,
 		"not-checked OldCopy " + hoppy + ", rubble-dns@1.0.0",
 	}
 	if got := reasons(events); !slices.Equal(got, want) {
@@ -70,8 +70,8 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 
 func TestTheEventsAreOrderedByTimeTheNewestFirst(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-6 * time.Hour), Actor: "Betty", ActorType: "user", Action: "update"}}}
-	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
-	p := pin("traefik", "addon", "37.0.0", "38.1.0", "wilma-gateway@3.1.2")
+	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, testkit.DexKey))
+	p := pin("traefik", "addon", "37.0.0", "38.1.0", testkit.GatewayProfile)
 	p.Newer[0].Listed = at(-48 * time.Hour)
 	events := eventsAt(&c, &Versions{At: t0, Pins: []docs.Pin{p}}, map[string]time.Time{FindingID(PublishedChanged, testkit.DexProfile): t0.Add(-5 * time.Hour)})
 	for i := 1; i < len(events); i++ {
@@ -86,7 +86,7 @@ func TestTheEventsAreOrderedByTimeTheNewestFirst(t *testing.T) {
 
 func TestAnEventOlderThanSevenDaysIsNotInTheList(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-8 * 24 * time.Hour), Actor: "Betty", ActorType: "user", Action: "update"}}}
-	c := content(t, drifted(rec("a-stack", "1.0.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
+	c := content(t, drifted(rec("a-stack", "1.0.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, testkit.DexKey))
 	old := pin("traefik", "addon", "37.0.0", "38.1.0", "a-stack@1.0.0")
 	old.Newer[0].Listed = at(-8 * 24 * time.Hour)
 	stale := pin("coredns", "addon", "1.0.0", "", "a-stack@1.0.0")
@@ -132,7 +132,7 @@ func TestParseSideKnowsThreeSides(t *testing.T) {
 
 func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t *testing.T) {
 	const reason = "HTTP 403: " + testkit.AuditSentinel
-	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), &docs.Verify{WhoError: reason}, "addon/dex")
+	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), &docs.Verify{WhoError: reason}, testkit.DexKey)
 	c := content(t, r)
 	s := build(&c, nil)
 	if len(s.Findings) != 1 || s.Findings[0].Kind != PublishedChanged || !s.Findings[0].WhoUnread || len(s.Findings[0].Who) != 0 {
@@ -162,7 +162,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t 
 
 func TestAFindingWithItsWritesSaysNothingOfAnUnreadAuditLog(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-time.Hour), Actor: "Betty Rubble", ActorType: "user", Action: "update"}}}
-	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
+	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, testkit.DexKey))
 	s := build(&c, nil)
 	if s.Findings[0].WhoUnread {
 		t.Errorf("finding %+v", s.Findings[0])

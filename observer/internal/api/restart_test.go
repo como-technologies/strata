@@ -16,9 +16,7 @@ import (
 // values for a move. So the detail route asks the worker for one compare of two packs, one at a
 // time, and keeps the answer in memory.
 func TestTheNewerSideAfterARestartAsksForOneCompareAndKeepsTheAnswer(t *testing.T) {
-	r := newRig(t)
-	strata := &fakeStrata{dir: r.fixtures}
-	first := r.cycled(strata)
+	r, first, strata := asked(t, "")
 	if strata.moveCompares() != 1 {
 		t.Fatalf("the first cycle ran "+testkit.PackCompares, strata.moveCompares())
 	}
@@ -44,9 +42,7 @@ func TestTheNewerSideAfterARestartAsksForOneCompareAndKeepsTheAnswer(t *testing.
 }
 
 func TestRequestsForTheSameMoveRunOneCompareAndNeverTwoProcessesTogether(t *testing.T) {
-	r := newRig(t)
-	strata := &fakeStrata{dir: r.fixtures}
-	r.cycled(strata)
+	r, _, strata := asked(t, "")
 	// Each process takes 20 ms. So when the code lets two processes run together, they overlap.
 	slow := &countingStrata{fakeStrata: strata, overlap: testkit.Overlap{Delay: 20 * time.Millisecond}}
 	h := handlerOf(r.cycled(slow))

@@ -152,9 +152,7 @@ func TestARecordDecodesOnlyIntoTheAllowList(t *testing.T) {
 		t.Fatalf("set %+v, error %v", set, err)
 	}
 	out := testkit.MustJSON(t, set.Entries[0].Record)
-	if strings.Contains(string(out), marker) {
-		t.Fatalf("the marker passed the allow-list: %s", out)
-	}
+	testkit.HoldsNone(t, "the record after the allow-list", string(out), marker)
 }
 
 func TestARecordAboveTheLimitIsUnreadable(t *testing.T) {

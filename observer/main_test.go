@@ -118,9 +118,7 @@ func TestOnceExitsTwoWhenACycleFailsAndStillPrintsTheSummary(t *testing.T) {
 	if code != 2 || s.Content.FailedRuns != 1 || s.Content.LastError == nil || s.Content.LastError.Kind != docs.KindTransport {
 		t.Fatalf("exit %d, content %+v", code, s.Content)
 	}
-	if strings.Contains(out+errs, "SENTINEL") {
-		t.Errorf("the message of strata left the process: %s %s", out, errs)
-	}
+	testkit.HoldsNone(t, "the output of a failed cycle", out+errs, "SENTINEL")
 }
 
 func TestOnceRefusesAMissingFlagAndAPeriodThatIsNotPositive(t *testing.T) {
@@ -635,9 +633,7 @@ func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *te
 	if len(seen) != 1 || seen[0].Method != http.MethodGet || seen[0].Path != "/api/v1/pods" || seen[0].Auth != "Bearer token-1" {
 		t.Errorf("requests %+v", seen)
 	}
-	if strings.Contains(out.String()+errs.String(), "MARKER") {
-		t.Errorf("a value of a pod left the process: %s %s", out.String(), errs.String())
-	}
+	testkit.HoldsNone(t, "the output of a run with --read-pods", out.String()+errs.String(), "MARKER")
 }
 
 func TestServeWithReadPodsServesTheDigestsOfTheImages(t *testing.T) {

@@ -254,14 +254,13 @@ func diffOf(t *testing.T, set *devdata.Set, profile, key string, side model.Side
 }
 
 const (
-	dexHash       = "#k-" + testkit.DexProfile + "/addon/dex"
-	dexPublished  = "side-" + testkit.DexProfile + "-addon/dex-published"
-	dexMove       = "move-" + testkit.DexProfile + "-addon/dex"
-	k8sHash       = "#k-" + k8sSubject + "/" + testkit.KubernetesKey
-	k8sMove       = "move-" + k8sSubject + "-" + testkit.KubernetesKey
-	traefikHash   = "#k-" + wilmaSubject + "/addon/traefik"
-	traefikMove   = "move-" + wilmaSubject + "-addon/traefik"
-	k8sSubject    = "barney-base@1.5.0"
+	dexHash       = "#k-" + testkit.DexProfile + "/" + testkit.DexKey
+	dexPublished  = "side-" + testkit.DexProfile + "-" + testkit.DexKey + "-published"
+	dexMove       = "move-" + testkit.DexProfile + "-" + testkit.DexKey
+	k8sHash       = "#k-" + testkit.BaseProfile + "/" + testkit.KubernetesKey
+	k8sMove       = "move-" + testkit.BaseProfile + "-" + testkit.KubernetesKey
+	traefikHash   = "#k-" + testkit.GatewayProfile + "/" + testkit.TraefikKey
+	traefikMove   = "move-" + testkit.GatewayProfile + "-" + testkit.TraefikKey
 	layoutUnified = "unified"
 	layoutSplit   = "split"
 )
@@ -276,12 +275,12 @@ const (
 // The hashes of the packs csi-aws-ebs of barney-base and reloader of fred-identity, and the body of a click on "Ask Palette"
 // for a move of the dev data.
 const (
-	csiHash      = "#k-" + k8sSubject + "/csi/csi-aws-ebs"
+	csiHash      = "#k-" + testkit.BaseProfile + "/" + testkit.CSIKey
 	reloaderHash = "#k-" + testkit.DexProfile + "/addon/reloader"
-	k8sClick     = `{"ask":"` + k8sSubject + `","pack":"` + testkit.KubernetesKey + `"}`
-	dexClick     = `{"ask":"` + testkit.DexProfile + `","pack":"addon/dex"}`
-	ubuntuClick  = `{"ask":"` + k8sSubject + `","pack":"os/ubuntu-aws"}`
-	csiClick     = `{"ask":"` + k8sSubject + `","pack":"csi/csi-aws-ebs"}`
+	k8sClick     = `{"ask":"` + testkit.BaseProfile + `","pack":"` + testkit.KubernetesKey + `"}`
+	dexClick     = `{"ask":"` + testkit.DexProfile + `","pack":"` + testkit.DexKey + `"}`
+	ubuntuClick  = `{"ask":"` + testkit.BaseProfile + `","pack":"` + testkit.UbuntuAWSKey + `"}`
+	csiClick     = `{"ask":"` + testkit.BaseProfile + `","pack":"` + testkit.CSIKey + `"}`
 	// splitClick and unifiedClick are the clicks on the two layouts of a diff.
 	splitClick   = `{"view":"split"}`
 	unifiedClick = `{"view":"unified"}`
@@ -321,10 +320,10 @@ func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 		side                    model.Side
 		open                    string
 	}{
-		{dexHash, dexPublished, testkit.DexProfile, "addon/dex", model.SidePublished, ""},
-		{dexHash, dexMove, testkit.DexProfile, "addon/dex", model.SideNewer, "newer"},
-		{k8sHash, k8sMove, k8sSubject, testkit.KubernetesKey, model.SideNewer, ""},
-		{traefikHash, traefikMove, wilmaSubject, "addon/traefik", model.SideNewer, ""},
+		{dexHash, dexPublished, testkit.DexProfile, testkit.DexKey, model.SidePublished, ""},
+		{dexHash, dexMove, testkit.DexProfile, testkit.DexKey, model.SideNewer, "newer"},
+		{k8sHash, k8sMove, testkit.BaseProfile, testkit.KubernetesKey, model.SideNewer, ""},
+		{traefikHash, traefikMove, testkit.GatewayProfile, testkit.TraefikKey, model.SideNewer, ""},
 	} {
 		text := diffOf(t, set, c.profile, c.key, c.side).Values.Unified
 		if text == "" {
@@ -366,7 +365,7 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 		{dexPublished, testkit.DexProfile, model.SidePublished, nil, ""},
 		{dexMove, testkit.DexProfile, model.SideNewer, []string{`<td class="m">added</td><td>Parameter</td><td class="m">dex_hostname</td>`}, "newer"},
 	} {
-		d := diffOf(t, set, c.profile, "addon/dex", c.side)
+		d := diffOf(t, set, c.profile, testkit.DexKey, c.side)
 		var want, wantSplit []string
 		var heads []string
 		for _, m := range d.Manifests {
@@ -399,7 +398,7 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 		}
 	}
 	// The ops of the manifests show in the heads: changed, added, and removed.
-	d := diffOf(t, set, testkit.DexProfile, "addon/dex", model.SideNewer)
+	d := diffOf(t, set, testkit.DexProfile, testkit.DexKey, model.SideNewer)
 	if len(d.Manifests) != 2 || d.Manifests[0].Op != "added" || d.Manifests[1].Op != "removed" {
 		t.Fatalf("the manifests of the newer side: %+v", d.Manifests)
 	}
@@ -423,7 +422,7 @@ func TestTheReadingOfTheTextFollowsTheRulesOfTheIssue(t *testing.T) {
 		"@@ -7 +9,2 @@\n--- not a header\n+" + notAHeader + "\n+added\n" +
 		"@@ -20,3 +22,3 @@\n keep\n-old\n" + testkit.NoEOL + "\n+new\n" + testkit.NoEOL + "\n keep\n"
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished).Values.Unified = text
+		entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished).Values.Unified = text
 	})})
 	for _, layout := range []string{layoutUnified, layoutSplit} {
 		clicks := []string{}
@@ -554,7 +553,7 @@ func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *te
 // A line of a diff with the text of a tag shows as text, in both layouts, in a value and in a manifest.
 func TestALineOfADiffWithMarkupShowsAsText(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished)
 		d.Values.Unified = strings.Replace(d.Values.Unified, idTokens, idTokens+"+"+evil+"\n-"+evil+"\n context "+evil+"\n", 1)
 		d.Manifests[0].Unified = strings.Replace(d.Manifests[0].Unified, "@@ -5,5 +5,5 @@\n", "@@ -5,5 +5,5 @@ "+evil+"\n+"+evil+"\n", 1) + "@@ -90 +90 @@ " + evil + "\n-" + evil + "\n+" + evil + "\n"
 	})})
@@ -608,7 +607,7 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	// The newer side of kubernetes has the command with the two versions of the pack.
 	k8s := cardOf(t, pageOf(t, screens, k8sHash, ""), tabOf(k8sMove))
 	where = testkit.KubernetesValues
-	tooLarge.steps = []string{"<code>" + comparePacks + uid + "/kubernetes@1.35.3 pack:" + uid + "/kubernetes@1.36.2 --full</code>"}
+	tooLarge.steps = []string{"<code>" + comparePacks + uid + "/" + testkit.KubernetesFrom + " pack:" + uid + "/" + testkit.KubernetesTo + " --full</code>"}
 	checkPlace(t, tooLarge, k8s)
 	mustNotHold(t, where, k8s, diffHead)
 	// The pack has no manifest, so the Manifests tab says so, links to the tab with the change, and shows no splash of a large text.
@@ -627,12 +626,12 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 	set := loadSet(t, devdata.StateReadError)
 	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SideCluster)
+		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SideCluster)
 		d.Values.Unified, d.TextTooLarge = "", true
 	})})
 	command := compareCluster + set.Cluster.Cluster.Name + "/fred-identity"
 	r := clickIn(t, dir, scratch, dexHash, "0")
-	card := cardOf(t, r.After, tabOf("side-"+testkit.DexProfile+"-addon/dex-cluster"))
+	card := cardOf(t, r.After, tabOf("side-"+testkit.DexProfile+"-"+testkit.DexKey+"-cluster"))
 	mustHold(t, "the cluster side", card, tooLargeNote, "<code>"+command+" --full</code>")
 	mustNotHold(t, "the cluster side", card, diffHead)
 	// The profile page shows the same command, with the pack name left out and no flag.
@@ -645,7 +644,7 @@ func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 func TestTheCommandOfATextAboveTheCapShowsNamesAsText(t *testing.T) {
 	swap := replaceText("quarry-1", evil)
 	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"cluster.json": swap, "diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SideCluster)
+		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SideCluster)
 		d.Values.Unified, d.TextTooLarge = "", true
 	})})
 	page := clickIn(t, dir, scratch, dexHash, "0").After
@@ -668,8 +667,8 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 	mustHold(t, "the table", table, `<tr class="g"><td colspan="8">`)
 	mustNotHold(t, "the table", table, `colspan="7"`)
 	for _, row := range strings.Split(table, "</tr>") {
-		if strings.Contains(row, goToStart+"#k-") && !strings.Contains(row, narrowCell+rowButton) {
-			t.Errorf("a row has no button in a cell of the class narrow-hide: %s", row)
+		if strings.Contains(row, goToStart+"#k-") {
+			mustHold(t, "a row with a link", row, narrowCell+rowButton)
 		}
 	}
 	// The button is in the row, which opens the pack: its data attributes name the move.
@@ -714,7 +713,7 @@ const (
 const (
 	cardButton     = `<button class="btn" data-ask="`
 	rowButton      = `<button class="lnk" data-ask="`
-	dexMoveAttrs   = testkit.DexProfile + `" data-pack="addon/dex"`
+	dexMoveAttrs   = testkit.DexProfile + `" data-pack="` + testkit.DexKey + `"`
 	askThisMoveEnd = ">" + askThisMove + "</button>"
 	askAgainEnd    = ">" + askAgain + "</button>"
 	askingEnd      = " disabled>" + asking + "</button>"
@@ -890,10 +889,10 @@ func TestAQuestionThatFailsLeavesANoteAndNoAnswer(t *testing.T) {
 		t.Errorf("the table says the note %d times", got)
 	}
 	// A move with no reply in the dev data is not found, and the page says the same.
-	r = click(t, devdata.StateOK, "#k-dino-storage@1.1.0/addon/longhorn", "0", `{"ask":"dino-storage@1.1.0","pack":"addon/longhorn"}`)
+	r = click(t, devdata.StateOK, "#k-"+testkit.LonghornProfile+"/"+testkit.LonghornKey, "0", `{"ask":"`+testkit.LonghornProfile+`","pack":"`+testkit.LonghornKey+`"}`)
 	mustHold(t, "no reply", r.After, askFailed)
 	// A click on a move that the data does not hold sends nothing.
-	r = click(t, devdata.StateOK, "#newer", "0", `{"ask":"nobody@1.0.0","pack":"addon/none"}`)
+	r = click(t, devdata.StateOK, "#newer", "0", `{"ask":"`+testkit.NobodyProfile+`","pack":"`+testkit.NoneKey+`"}`)
 	if len(r.Posts) != 0 {
 		t.Errorf("a click on an unknown move sent %v", r.Posts)
 	}
@@ -924,7 +923,7 @@ func TestAnAnswerForANewerVersionThanTheRowShowsBesideTheMove(t *testing.T) {
 func TestAClickThatGetsAnAnswerWithoutAVersionEndsWithTheWordNoAnswer(t *testing.T) {
 	for _, newest := range []string{"2.44.0", ""} {
 		t.Run("newest "+newest, func(t *testing.T) {
-			reply := `{"asks":[{"profile":"` + testkit.DexProfile + `","key":"addon/dex","newest":"` + newest + `",` + testkit.NoAnswerVerdict + `,"refusals":[],"status":502}]}`
+			reply := `{"asks":[{"profile":"` + testkit.DexProfile + `","key":"` + testkit.DexKey + `","newest":"` + newest + `",` + testkit.NoAnswerVerdict + `,"refusals":[],"status":502}]}`
 			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": func([]byte) []byte { return []byte(reply) }})
 			r := clickIn(t, dir, scratch, dexHash, "0", dexClick)
 			mustHold(t, "after", textOf(r.After), gaveNoAnswer+": HTTP 502.")
@@ -976,15 +975,11 @@ func TestNothingAsksWithoutAClick(t *testing.T) {
 	if got := strings.Count(script, "checkNow("); got != 2 {
 		t.Errorf(usedTwice, "checkNow", got)
 	}
-	if !strings.Contains(script, "if (nw) { checkNow(nw.dataset.now); return; }") {
-		t.Error("the click handler does not call checkNow")
-	}
 	if got := strings.Count(script, "askPalette("); got != 2 {
 		t.Errorf(usedTwice, "askPalette", got)
 	}
-	if !strings.Contains(script, "if (q) { askPalette(q.dataset.ask, q.dataset.pack); return; }") {
-		t.Error("the click handler does not call askPalette")
-	}
+	mustHold(t, "the click handler of the scripts", script, "if (nw) { checkNow(nw.dataset.now); return; }",
+		"if (q) { askPalette(q.dataset.ask, q.dataset.pack); return; }")
 	if got := strings.Count(script, "setInterval("); got != 1 || !strings.Contains(script, "setInterval(refresh, REFRESH_MS)") {
 		t.Errorf("the scripts hold %d timers, and the only timer must read the routes", got)
 	}

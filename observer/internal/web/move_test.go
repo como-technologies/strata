@@ -16,8 +16,7 @@ newest version 3.2.0 moves traefik from 38.0.1 to 38.1.0, changes the values of 
 aws-application-loadbalancer, and adds aws-load-balancer-controller. They need node, like the other tests of the page. */
 
 const (
-	wilmaSubject = "wilma-gateway@3.1.2"
-	wilmaHash    = "#p-" + wilmaSubject
+	wilmaHash    = "#p-" + testkit.GatewayProfile
 	moveQuestion = "What does the move to the newest version change?"
 	// albPack is the pack that the move of wilma-gateway removes.
 	albPack = "aws-application-loadbalancer"
@@ -34,12 +33,12 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	for _, flag := range []string{"IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"} {
 		mustHold(t, "the flags", card, plainFlag("b", flag))
 	}
-	mustHold(t, "the version change", rowWith(t, card, "addon/traefik"),
-		`<a href="`+traefikHash+`">addon/traefik</a>`, `<td>Changed</td>`, `38.0.1 &rarr; 38.1.0`, `<td>Change</td>`)
+	mustHold(t, "the version change", rowWith(t, card, testkit.TraefikKey),
+		`<a href="`+traefikHash+`">`+testkit.TraefikKey+`</a>`, `<td>Changed</td>`, `38.0.1 &rarr; 38.1.0`, `<td>Change</td>`)
 	mustHold(t, "the values change", rowWith(t, card, testkit.VendorPack),
 		`<td>Changed</td>`, `2026.2.0 <span class="mut">same version</span>`, `<td>Change</td>`)
 	mustHold(t, "the removed pack", rowWith(t, card, "addon/"+albPack),
-		goTo(packPage(wilmaSubject, "addon", albPack)), `<td>Removed</td>`, `>2.13.4</td>`)
+		goTo(packPage(testkit.GatewayProfile, "addon", albPack)), `<td>Removed</td>`, `>2.13.4</td>`)
 	// a pack that the move adds is in no record, so it has no page
 	added := rowWith(t, card, "addon/aws-load-balancer-controller")
 	mustHold(t, "the added pack", added, `<td>Added</td>`, `>2.14.0</td>`)
@@ -58,7 +57,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 // A pack that the move does not change shows "Undisturbed". A compare that failed gives no choice, and the card "Move to" says so.
 func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *testing.T) {
 	const notCompared = "a move that strata could not compare"
-	vendor := packPage(wilmaSubject, "addon", "vendor-product")
+	vendor := packPage(testkit.GatewayProfile, "addon", "vendor-product")
 	page := pageOf(t, crawl(t, devdata.StateOK), vendor, "")
 	where := "the pack page of vendor-product"
 	mustHold(t, where, page, newestSelected+newestLabel+`</option>`, badge("b", "Newer"), "product.replicas")
@@ -69,11 +68,11 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i := range v.Profiles {
 			if n := v.Profiles[i].NewerVersion; n != nil && n.Move != nil {
-				n.Move.Packs = slices.DeleteFunc(n.Move.Packs, func(q model.MovePack) bool { return q.Key != "addon/traefik" })
+				n.Move.Packs = slices.DeleteFunc(n.Move.Packs, func(q model.MovePack) bool { return q.Key != testkit.TraefikKey })
 			}
 		}
 	})})
-	same := pageWith(t, dir, scratch, vendor, `S.side["side-`+wilmaSubject+`-`+testkit.VendorPack+`"] = "newest"`)
+	same := pageWith(t, dir, scratch, vendor, `S.side["side-`+testkit.GatewayProfile+`-`+testkit.VendorPack+`"] = "newest"`)
 	mustHold(t, "a pack that the move does not change", same, badge("g", "Identical"),
 		"The newest version of the profile holds what the record holds for this pack.")
 

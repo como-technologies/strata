@@ -47,8 +47,8 @@ func TestEachBuilderOfACommandQuotesItsValues(t *testing.T) {
 	for _, name := range builders {
 		if line, ok := builder[name]; !ok {
 			t.Errorf("the scripts have no builder %s", name)
-		} else if !strings.Contains(line, "shq(") {
-			t.Errorf("the builder %s puts a value in a command with no shq(): %s", name, line)
+		} else {
+			mustHold(t, "the builder "+name, line, "shq(")
 		}
 	}
 	// A line that is no builder writes a command with the file of the record and a quoted word only.
@@ -120,7 +120,7 @@ func TestNoTextOfThePageSaysBehindForANewerVersion(t *testing.T) {
 // The check of a copy of this cluster writes the badge of "same-content" in the words of the book, "Same content", in the card of the
 // versions and in the card "Check this yourself". It is not a drift, and it does not read OK.
 func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
-	book := strings.Join(strings.Fields(string(readFile(t, serverPage))), " ")
+	book := strings.Join(strings.Fields(string(testkit.ReadFile(t, serverPage))), " ")
 	mustHold(t, "observer-api.md", book, "`same-content` reads \"Same content\" on the row of the cluster copy.")
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i := range v.Profiles {
@@ -140,7 +140,7 @@ func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
 // The note of a finding about a published version that changed agrees with the use case "A published version is edited in place": the
 // book gives the reason, so the note says not to repair the version in place, and to publish a new version through review.
 func TestTheNoteOfAFindingAgreesWithTheUseCaseOfTheEditInPlace(t *testing.T) {
-	useCase := strings.Join(strings.Fields(string(readFile(t, "../../../docs/src/use-cases/edited-in-place.md"))), " ")
+	useCase := strings.Join(strings.Fields(string(testkit.ReadFile(t, "../../../docs/src/use-cases/edited-in-place.md"))), " ")
 	script := readScripts(t)
 	const (
 		noRepair   = "Do not repair the edited version in place: that is a second edit."

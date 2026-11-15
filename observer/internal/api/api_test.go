@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -26,7 +25,7 @@ var summaryRoutes = map[string]string{
 	patternCluster:    "/v1/cluster",
 	patternFindings:   "/v1/findings",
 	patternProfiles:   "/v1/profiles",
-	patternProfile:    pathProfileByName + "@1.1.0",
+	patternProfile:    patternProfiles + "/" + testkit.AWSStackProfile,
 	patternNewer:      "/v1/newer",
 	patternNotChecked: "/v1/notchecked",
 	patternEvents:     "/v1/events",
@@ -100,8 +99,8 @@ func noSummaryRouteHolds(t *testing.T, h http.Handler, words ...string) {
 }
 
 func TestEachSummaryRouteHoldsNoSentinelAndTheDetailRouteHoldsIt(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	noSummaryRouteHolds(t, h, "SENTINEL")
 	for pattern, paths := range detailRoutes {
 		for _, path := range paths {
@@ -120,8 +119,8 @@ func TestEachSummaryRouteHoldsNoSentinelAndTheDetailRouteHoldsIt(t *testing.T) {
 func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
 	const key = "SENTINEL-KEY"
 	t.Setenv("PALETTE_API_KEY", key)
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	noSummaryRouteHolds(t, h, key, sentinelVariable)
 	unknown := []string{"/debug", "/debug/vars", "/env", "/v1/env", "/v1/records", "/v1/raw"}
 	paths := append([]string{pathHealth, "/"}, unknown...)
@@ -129,9 +128,7 @@ func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
 		paths = append(paths, ps...)
 	}
 	for _, path := range paths {
-		if body := get(h, path).Body.String(); strings.Contains(body, key) || strings.Contains(body, sentinelVariable) {
-			t.Errorf("%s: %s", path, body)
-		}
+		testkit.HoldsNone(t, path, get(h, path).Body.String(), key, sentinelVariable)
 	}
 	for _, path := range unknown {
 		if rec := get(h, path); rec.Code != http.StatusNotFound {
@@ -141,8 +138,8 @@ func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
 }
 
 func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	const jsonType, textType = testkit.JSONType, "text/plain; charset=utf-8"
 	for _, c := range []struct {
 		name, path string
@@ -163,9 +160,9 @@ func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 		{"the diff of the newer side", pathNewer, 200, jsonType},
 		{"an unknown profile", "/v1/profiles/nope", 404, jsonType},
 		{"the diff of an unknown profile", "/v1/packs/nope" + testkit.KubernetesDiff + "?side=cluster", 404, jsonType},
-		{"the diff of an unknown pack", awsPacks + "/k8s/nope/diff?side=cluster", 404, jsonType},
+		{"the diff of an unknown pack", awsPacks + "/" + testkit.NopeKey + "/diff?side=cluster", 404, jsonType},
 		{"the diff of a pack with no change on the side", kubernetesDiff + "?side=published", 404, jsonType},
-		{"the diff of a pack that no pin names", awsPacks + "/csi/csi-aws-ebs/diff?side=newer", 404, jsonType},
+		{"the diff of a pack that no pin names", awsPacks + "/" + testkit.CSIKey + "/diff?side=newer", 404, jsonType},
 		{"the diff of " + testkit.NoNewerProfile, kubernetesDiff + "?side=newest", 404, jsonType},
 		{"a diff with no side", kubernetesDiff, 400, jsonType},
 		{"a diff with " + noSuchSide, kubernetesDiff + "?side=nope", 400, jsonType},
@@ -182,8 +179,8 @@ func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 }
 
 func TestAnUnknownProfileOrPackGets404AndNamesNoValue(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	for _, path := range []string{
 		"/v1/profiles/SENTINEL-PROFILE",
 		"/v1/packs/SENTINEL-PROFILE" + testkit.KubernetesDiff + "?side=cluster",
@@ -247,8 +244,8 @@ func TestTheClusterRouteGivesEachValueOfThePage(t *testing.T) {
 }
 
 func TestClusterGivesTheFieldsUpToTheCounts(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	var got ClusterView
 	decode(t, get(h, summaryRoutes[patternCluster]), &got)
 	if got.Cluster.Name != testkit.PaymentsName || got.Page != model.PageOK || got.StrataVersion != "0.29.0" || got.Records.Count != 1 ||
@@ -269,8 +266,8 @@ func TestClusterGivesTheFieldsUpToTheCounts(t *testing.T) {
 }
 
 func TestTheProfileRowsHoldTheirFindingsAndWho(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	var all ProfilesView
 	decode(t, get(h, summaryRoutes[patternProfiles]), &all)
 	var one ProfileView
@@ -289,8 +286,8 @@ func TestTheProfileRowsHoldTheirFindingsAndWho(t *testing.T) {
 }
 
 func TestNewerNotCheckedAndEventsGiveTheirPartsOfTheSummary(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	var newer NewerView
 	decode(t, get(h, summaryRoutes[patternNewer]), &newer)
 	if len(newer.Newer) != 1 || newer.Newer[0].Name != "kubernetes" || newer.Newer[0].Newest != "1.36.2" || newer.Newer[0].Impact != "may-repave" || newer.Newer[0].Fold.Settings != 2 || newer.Newer[0].Fold.Repeats != 2 || !newer.Newer[0].New {
@@ -313,11 +310,11 @@ func TestNewerNotCheckedAndEventsGiveTheirPartsOfTheSummary(t *testing.T) {
 }
 
 func TestTheDetailRouteSplitsTheValuesInThreeLists(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	var got PackDiff
 	decode(t, get(h, pathPublished), &got)
-	if got.Profile != testkit.AWSStackProfile || got.Key != "csi/csi-aws-ebs" || got.Side != model.SidePublished || got.Status != "changed" || got.Impact.Level != "cluster-wide" {
+	if got.Profile != testkit.AWSStackProfile || got.Key != testkit.CSIKey || got.Side != model.SidePublished || got.Status != "changed" || got.Impact.Level != "cluster-wide" {
 		t.Errorf("%+v", got)
 	}
 	v := got.Values
@@ -345,9 +342,7 @@ func TestTheDetailRouteSplitsTheValuesInThreeLists(t *testing.T) {
 }
 
 func TestTheDetailRouteAnswersWith502WhenTheCompareFails(t *testing.T) {
-	r := newRig(t)
-	good := &fakeStrata{dir: r.fixtures}
-	r.cycled(good)
+	r, _, _ := asked(t, "")
 	// A restart: the state holds the counts of the move, the memory holds no values, and the compare fails.
 	failing := &fakeStrata{dir: r.fixtures, failMoves: true}
 	h := handlerOf(r.cycled(failing))
@@ -377,10 +372,7 @@ func (s slow) PackDiff(context.Context, string, string, model.Side) (docs.Pack, 
 func TestAMarkerInAChangedPathReachesNoSummaryRouteAndNotOnce(t *testing.T) {
 	const pathMarker = "PATH-MARKER"
 	r := newRig(t)
-	raw, err := os.ReadFile(filepath.Join(r.fixtures, "verify.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.ReadFile(t, filepath.Join(r.fixtures, "verify.json"))
 	planted := strings.Replace(string(raw), replicaPath, "clients[name="+pathMarker+"].id", 1)
 	if planted == string(raw) {
 		t.Fatal("the fixture holds no path to change")
@@ -390,14 +382,12 @@ func TestAMarkerInAChangedPathReachesNoSummaryRouteAndNotOnce(t *testing.T) {
 	testkit.HoldsNone(t, "the summary of once", string(testkit.MustJSON(t, r.once(o))), pathMarker)
 	h := handlerOf(o)
 	noSummaryRouteHolds(t, h, pathMarker)
-	if body := get(h, pathPublished).Body.String(); !strings.Contains(body, pathMarker) {
-		t.Errorf("the detail route does not hold the path, so the marker tests nothing: %s", body)
-	}
+	// When the detail route does not hold the path, the marker tests nothing.
+	testkit.HoldsAll(t, "the detail route", get(h, pathPublished).Body.String(), pathMarker)
 }
 
 func TestTheDetailRouteAnswersWith503WhenTheWaitEnds(t *testing.T) {
-	r := newRig(t)
-	o := r.cycled(&fakeStrata{dir: r.fixtures})
+	_, o, _ := asked(t, "")
 	for _, err := range []error{context.DeadlineExceeded, context.Canceled} {
 		h := handlerOf(slow{stub{o.Summary()}, err})
 		if rec := get(h, pathNewer); rec.Code != http.StatusServiceUnavailable {
@@ -408,10 +398,7 @@ func TestTheDetailRouteAnswersWith503WhenTheWaitEnds(t *testing.T) {
 
 func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *testing.T) {
 	r := newRig(t)
-	raw, err := os.ReadFile(filepath.Join(r.fixtures, "verify.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.ReadFile(t, filepath.Join(r.fixtures, "verify.json"))
 	// strata keeps the verdict of the drifted record, and gives the reason in place of the writes
 	unread := regexp.MustCompile(`"who":\[[^\]]*\]`).ReplaceAllString(string(raw), `"whoError":"HTTP 403: `+testkit.AuditSentinel+`"`)
 	if unread == string(raw) {

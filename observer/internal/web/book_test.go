@@ -8,6 +8,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -30,7 +31,7 @@ const (
 // sectionOf gives the text of a section of a page, from its heading to the next heading of the same level.
 func sectionOf(t *testing.T, page, heading string) string {
 	t.Helper()
-	text := "\n" + string(readFile(t, page))
+	text := "\n" + string(testkit.ReadFile(t, page))
 	level := strings.SplitN(heading, " ", 2)[0]
 	from := strings.Index(text, "\n"+heading+"\n")
 	if from < 0 {
@@ -173,7 +174,7 @@ func TestTheBookQuotesTheQuestionsOfTheCardCheckThisYourself(t *testing.T) {
 	if len(table) != 8 {
 		t.Fatalf("the table of the card has %d rows", len(table))
 	}
-	useCase := strings.Join(strings.Fields(string(readFile(t, useCasePage))), " ")
+	useCase := strings.Join(strings.Fields(string(testkit.ReadFile(t, useCasePage))), " ")
 	for _, row := range table {
 		question := strings.TrimSuffix(row[0], ".")
 		mustHold(t, "the scripts", script, `["`+question+`"`)

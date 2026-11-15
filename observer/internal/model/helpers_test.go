@@ -35,6 +35,11 @@ func rec(name, version, status string, packs ...docs.RecordPack) Record {
 	return r
 }
 
+// aws gives the record of aws-stack 1.1.0 with the pack csi-aws-ebs 1.65.0, with no change.
+func aws() Record {
+	return rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"))
+}
+
 // drifted makes a `verify` row that drifted, with a diff that changes one pack.
 func drifted(r Record, v *docs.Verify, keys ...string) Record {
 	r.Row.Status = docs.VerifyDrifted

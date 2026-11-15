@@ -21,9 +21,9 @@ const (
 	variableLine    = "Adds a " + variableWords
 	variablesLine   = "Adds 2 " + variableWords + "s"
 	skipNote        = "The move skips a minor version:"
-	skipHead        = skipNote + " kubernetes@1.35.3 → kubernetes@1.37.0"
+	skipHead        = skipNote + " " + testkit.KubernetesFrom + " → kubernetes@1.37.0"
 	skipRefuses     = paletteRefuses + " the update with " + testkit.CodeMinorSkip + "."
-	skipStep        = skipRefuses + " Move to kubernetes@1.36.2 first."
+	skipStep        = skipRefuses + " Move to " + testkit.KubernetesTo + " first."
 	variableNote    = "The move adds a " + variableWords + ":"
 	oneVariable     = variableNote + " gateway_owner"
 	variableRefuses = paletteRefuses + " the update with " + testkit.CodeVariable + "."
@@ -58,7 +58,7 @@ func checkAnswers(t *testing.T) (k8s, traefik model.Answer) {
 	asks := loadSet(t, devdata.StateUpdateChecks).Asks.Asks
 	k8s, traefik = asks[0], asks[1]
 	if k8s.Key != testkit.KubernetesKey || k8s.UpdateChecks == nil || k8s.UpdateChecks.SkippedMinor == nil ||
-		traefik.Key != "addon/traefik" || traefik.UpdateChecks == nil || traefik.UpdateChecks.RequiredVariables == nil {
+		traefik.Key != testkit.TraefikKey || traefik.UpdateChecks == nil || traefik.UpdateChecks.RequiredVariables == nil {
 		t.Fatalf("the set %s changed: %+v", devdata.StateUpdateChecks, asks)
 	}
 	return k8s, traefik

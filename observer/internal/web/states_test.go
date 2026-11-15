@@ -263,7 +263,7 @@ var places = []place{
 	}, "same", "md", "Undisturbed", []string{sameFact},
 		[]string{samePublished, noNewerVersion}},
 	{"a pack that was not checked", func(t *testing.T) string {
-		return pageOf(t, crawl(t, devdata.StateOK), "#k-gazoo-backup@1.2.0/addon/velero", "")
+		return pageOf(t, crawl(t, devdata.StateOK), "#k-gazoo-backup@1.2.0/"+testkit.VeleroKey, "")
 	}, "warn", "md", hiddenTitle,
 		[]string{"This pack was not fully checked. velero has no upstream digest. The content check runs every 15m."}, []string{nextStep + `<a href="#notchecked">Why, on the ` + wordNotChecked + ` page</a></div>`}},
 	{placeBusy, func(t *testing.T) string { return retried(t, dexHash)[0] }, "build", "sm", busyTitle, []string{"The observer answers one read at a time. This page asks again each 30 seconds."},
@@ -697,13 +697,13 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 		t.Error("no diff of the set changes the build alone")
 	}
 	// The card of the move says the same, and it gives no count of 0 of 0.
-	ubuntu := pageOf(t, screens, packPage(k8sSubject, "os", "ubuntu-aws"), "")
+	ubuntu := pageOf(t, screens, packPage(testkit.BaseProfile, "os", "ubuntu-aws"), "")
 	where := "the move of ubuntu-aws"
 	mustHold(t, where, ubuntu, labelRow("Content", "<b>The same</b>"), labelRow("Changes", buildWords), "Repave "+repaveHint+"&#39;s table: node repave (OS image change).")
 	mustNotHold(t, where, ubuntu, "of 0 values")
 	// A pack whose change is in a manifest alone opens on Manifests.
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished)
 		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
 	})})
 	page := pagesOf(t, dir, dexHash)[0]
@@ -714,7 +714,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 // An empty tab says so, and it links to the tab that has the change. A click on the link opens that tab.
 func TestAnEmptyTabSaysSoAndLinksToTheTabWithTheChange(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished)
 		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
 	})})
 	empty := pageWith(t, dir, scratch, dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
@@ -728,7 +728,7 @@ func TestAnEmptyTabSaysSoAndLinksToTheTabWithTheChange(t *testing.T) {
 	mustHold(t, "after the link", r.After, tabOn(dexPublished, "manifests"), dexManifest)
 	// A card with no change anywhere says only that nothing changed, and it links nowhere.
 	none := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished)
 		d.Values.Settings, d.Values.Unified, d.Manifests = []docs.Leaf{}, "", []docs.Manifest{}
 	})})
 	page := pageWith(t, none, scratch, dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
@@ -749,7 +749,7 @@ func flagDefinitions(t *testing.T) map[string][2]string {
 	t.Helper()
 	row := regexp.MustCompile("(?m)^\\| `([A-Z]+)` \\| ([^|]*) \\| ([^|]*) \\|$")
 	out := map[string][2]string{}
-	for _, m := range row.FindAllStringSubmatch(string(readFile(t, "../../../docs/src/reference/impact.md")), -1) {
+	for _, m := range row.FindAllStringSubmatch(string(testkit.ReadFile(t, "../../../docs/src/reference/impact.md")), -1) {
 		out[m[1]] = [2]string{strings.ReplaceAll(m[2], "`", ""), strings.ReplaceAll(m[3], "`", "")}
 	}
 	if len(out) != len(flagNames) {
@@ -854,7 +854,7 @@ func TestTheWordsOfTheFlagsHaveOneCopyAndTheyComeFromTheBook(t *testing.T) {
 // AUTHORED opens Manifests when only a manifest changed. IMAGES opens Images, CHARTS opens Charts, and IDENTITY and UPSTREAM stay plain.
 func TestAuthoredOpensManifestsWhenOnlyAManifestChanged(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished)
 		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
 	})})
 	page := pagesOf(t, dir, dexHash)[0]
@@ -955,8 +955,8 @@ func TestTheCardCheckThisYourselfHasTheRowsOfTheMockWithRealNames(t *testing.T) 
 	if len(pack) != 7 {
 		t.Fatalf("the pack page of dex has %d rows, want 7: %+v", len(pack), pack)
 	}
-	mustHold(t, "the move", pack[5].command, comparePacks+uid+"/dex@2.42.0 pack:"+uid+"/dex@2.44.0 --full")
-	mustHold(t, "the question", pack[6].command, "strata behind record.json --pin addon/dex")
+	mustHold(t, "the move", pack[5].command, comparePacks+uid+"/"+testkit.DexFrom+" pack:"+uid+"/"+testkit.DexTo+" --full")
+	mustHold(t, "the question", pack[6].command, "strata behind record.json --pin "+testkit.DexKey)
 	// A pack with no newer version shows neither, and a profile page shows neither.
 	for _, rows := range [][]termRow{termRows(t, shown(t, devdata.StateOK, reloaderHash)[0]), profile} {
 		for _, r := range rows {
@@ -974,17 +974,17 @@ func TestTheCardCheckThisYourselfHasTheRowsOfTheMockWithRealNames(t *testing.T) 
 // The names in the commands are the names of the files of the repository: the four Secrets, the namespace, the key of a record, and
 // the options of the commands. The contract test below runs each command against the stand-in.
 func TestTheNamesInTheCommandsOfTheCardAreRealNames(t *testing.T) {
-	deployment, namespace := string(readFile(t, "../../../deploy/observer/deployment.yaml")), string(readFile(t, "../../../deploy/observer/namespace.yaml"))
+	deployment, namespace := string(testkit.ReadFile(t, "../../../deploy/observer/deployment.yaml")), string(testkit.ReadFile(t, "../../../deploy/observer/namespace.yaml"))
 	for i := 0; i < 4; i++ {
 		mustHold(t, "the deployment", deployment, fmt.Sprintf(recordsSecret+"%d", i))
 	}
 	mustHold(t, "the namespace", namespace, "name: strata-observer")
-	script := string(readFile(t, testkit.RecordsScript))
+	script := string(testkit.ReadFile(t, testkit.RecordsScript))
 	mustHold(t, testkit.RecordsTool, script, []string{`"\(.source.name)_\(.source.version).json.gz"`, `tr -c 'A-Za-z0-9._\n-' _`, recordsSecret + "$i"}...)
 	app := readScripts(t)
 	mustHold(t, "the scripts", app, "replace(/[^A-Za-z0-9._-]/g, \"_\")")
 	for file, flags := range map[string][]string{"help-behind.txt": {"--pin <LAYER/NAME>"}, "help-verify.txt": {"--who", "--full"}, "help-compare.txt": {"--full"}} {
-		help := string(readFile(t, "../../../docs/src/output/"+file))
+		help := string(testkit.ReadFile(t, "../../../docs/src/output/"+file))
 		mustHold(t, file, help, flags...)
 	}
 }
@@ -1085,15 +1085,15 @@ func newerOrder(page, subject string) []string {
 // is no SemVer sorts in natural order.
 func TestAHeadSortsItsTableUpThenDownThenBack(t *testing.T) {
 	sortedUp, sortedDown := sortAria("ascending"), sortAria("descending")
-	natural := newerOrder(pageOf(t, render(t, devdata.StateOK, false), "#newer", ""), k8sSubject)
+	natural := newerOrder(pageOf(t, render(t, devdata.StateOK, false), "#newer", ""), testkit.BaseProfile)
 	up := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.sort.nt = {col: "move", dir: 1}`)
 	mustHold(t, "up", up, `<th class="" `+sortedUp+`>`+sortButton("nt", "move", " on asc", "Move")+sortIcon)
-	if got, want := newerOrder(up, k8sSubject), []string{"cni-cilium-oss", "cert-manager", "kubernetes", "csi-aws-ebs", "ubuntu-aws"}; !slices.Equal(got, want) {
+	if got, want := newerOrder(up, testkit.BaseProfile), []string{"cni-cilium-oss", "cert-manager", "kubernetes", "csi-aws-ebs", "ubuntu-aws"}; !slices.Equal(got, want) {
 		t.Errorf("up: %v, want %v", got, want)
 	}
 	down := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.sort.nt = {col: "move", dir: -1}`)
 	mustHold(t, "down", down, sortedDown, sortButton("nt", "move", " on desc", "Move"))
-	if got, want := newerOrder(down, k8sSubject), []string{"ubuntu-aws", "csi-aws-ebs", "kubernetes", "cert-manager", "cni-cilium-oss"}; !slices.Equal(got, want) {
+	if got, want := newerOrder(down, testkit.BaseProfile), []string{"ubuntu-aws", "csi-aws-ebs", "kubernetes", "cert-manager", "cni-cilium-oss"}; !slices.Equal(got, want) {
 		t.Errorf("down: %v, want %v", got, want)
 	}
 	// The harness clicks twice on each element. So one double click sorts up and then down, and three
@@ -1102,7 +1102,7 @@ func TestAHeadSortsItsTableUpThenDownThenBack(t *testing.T) {
 	mustHold(t, "a double click", click(t, devdata.StateOK, "#newer", "0", sortMove).After, sortedDown)
 	back := click(t, devdata.StateOK, "#newer", "0", sortMove, sortMove, sortMove).After
 	mustNotHold(t, "three double clicks", back, sortedUp, sortedDown)
-	if got := newerOrder(back, k8sSubject); !slices.Equal(got, natural) {
+	if got := newerOrder(back, testkit.BaseProfile); !slices.Equal(got, natural) {
 		t.Errorf("back: %v, want the order of the page %v", got, natural)
 	}
 }
@@ -1149,12 +1149,12 @@ func TestTheVersionSortOfThePageGivesTheOrderOfStrata(t *testing.T) {
 // matches. A filter that matches nothing says so.
 func TestTheFilterOfTheNewerTableKeepsAGroupOrItsMatchingRows(t *testing.T) {
 	byPack := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.qs.newer = "cilium"`)
-	if got := newerOrder(byPack, k8sSubject); !slices.Equal(got, []string{"cni-cilium-oss"}) {
+	if got := newerOrder(byPack, testkit.BaseProfile); !slices.Equal(got, []string{"cni-cilium-oss"}) {
 		t.Errorf("by pack: %v", got)
 	}
 	mustNotHold(t, "by pack", byPack, `href="`+fredHash+`"`)
 	byProfile := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.qs.newer = "barney"`)
-	if got := newerOrder(byProfile, k8sSubject); len(got) != 5 {
+	if got := newerOrder(byProfile, testkit.BaseProfile); len(got) != 5 {
 		t.Errorf("by profile: %v", got)
 	}
 	none := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.qs.newer = "wilma-nothing"`)
@@ -1213,7 +1213,7 @@ const versionsUnread = "D.cluster.versions.readAt = null; "
 // While a cycle runs, its pill shows a ring of its progress and how much is done, with the age of the
 // last good cycle of its kind. A cycle that knows no work yet has an open ring and says "checking".
 func TestThePillOfACycleThatRunsShowsItsProgress(t *testing.T) {
-	page := pageWith(t, "testdata/api", devdata.StateOK, "#overview", runningJS("versions", "Date.now() - 120000", 3, 8)+" "+runningJS("content", "", 0, 1))
+	page := overviewWith(t, runningJS("versions", "Date.now() - 120000", 3, 8)+" "+runningJS("content", "", 0, 1))
 	mustHold(t, "the pill of the versions", page, `<svg class="ring" viewBox="0 0 16 16"`, `Versions <b>checking 3 of 8</b> · last `)
 	mustHold(t, "the pill of the content", page, `<svg class="ring open" viewBox="0 0 16 16"`, `Content <b>checking</b> · last `)
 	mustNotHold(t, "the pills", page, "every 15m", "every 6h")
@@ -1222,10 +1222,10 @@ func TestThePillOfACycleThatRunsShowsItsProgress(t *testing.T) {
 // Before the first read of the versions ends, the tile and the nav item of the newer versions show a
 // dash and say why: a count of 0 would read as "every pack is current".
 func TestNewerVersionsShowADashUntilTheFirstReadOfTheVersions(t *testing.T) {
-	unread := pageWith(t, "testdata/api", devdata.StateOK, "#overview", versionsUnread+"D.cluster.versions.running = null;")
+	unread := overviewWith(t, versionsUnread+"D.cluster.versions.running = null;")
 	mustHold(t, "unread", unread, tileLabel(newerVersions)+tileValue("-")+tileSub(notReadYet),
 		navCount(newerVersions, "", "-"))
-	reading := pageWith(t, "testdata/api", devdata.StateOK, "#overview", versionsUnread+runningJS("versions", "", 0, 1))
+	reading := overviewWith(t, versionsUnread+runningJS("versions", "", 0, 1))
 	mustHold(t, "reading", reading, tileValue("-")+tileSub("Reading the registries"))
 	read := shown(t, devdata.StateOK, "#overview")[0]
 	mustNotHold(t, "read", read, tileLabel(newerVersions)+tileValue("-"))

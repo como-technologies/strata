@@ -25,7 +25,7 @@ func move(name, from, to string) string {
 func withBehind(t *testing.T) (*rig, *world) {
 	t.Helper()
 	r := newRig(t)
-	r.record("aws-stack", "1.0.0", testkit.KubernetesKey, "cni/cni-cilium-oss", "csi/csi-aws-ebs", "os/ubuntu-aws", "addon/cert-manager")
+	r.record("aws-stack", "1.0.0", testkit.KubernetesKey, "cni/cni-cilium-oss", testkit.CSIKey, testkit.UbuntuAWSKey, testkit.CertManagerKey)
 	r.meta(testkit.ApprovedMeta(testkit.Revision))
 	w := &world{moves: map[string]docs.Diff{}, behindExit: 1}
 	testkit.ReadDoc(t, testkit.BehindDoc, &w.behind)
@@ -55,7 +55,7 @@ func TestTheVersionsCycleComparesEachMoveAndFillsTheRows(t *testing.T) {
 	}
 	k := byName["kubernetes"]
 	if k.Newest != "1.36.2" || k.Impact != "repave" || k.Images != 8 || !slices.Equal(k.Flags, []string{docs.FlagIdentity, docs.FlagUpstream, docs.FlagAuthored, docs.FlagImages}) ||
-		k.Fold.Settings+k.Fold.Follows+k.Fold.Repeats != 11 || !slices.Equal(k.Drops, []string{"arm64"}) || !slices.Equal(k.Profiles, []string{moveSubject}) {
+		k.Fold.Settings+k.Fold.Follows+k.Fold.Repeats != 11 || !slices.Equal(k.Drops, []string{"arm64"}) || !slices.Equal(k.Profiles, []string{testkit.AWSStackOld}) {
 		t.Errorf("kubernetes %+v", k)
 	}
 	if u := byName["ubuntu-aws"]; !u.Floating || u.Version != "20.04" || u.Newest != "24.04" {
@@ -89,9 +89,7 @@ func TestTheCacheOfTheMovesSurvivesARestartAndHoldsNoValue(t *testing.T) {
 	}
 	// The real compare of the Kubernetes pack changes the value v1.13.1 of dns.imageTag.
 	stateHoldsNone(t, r, "v1.13.1", "v1.14.2", "imageTag", "apiserver")
-	if raw := stateText(t, r); !strings.Contains(raw, w.behind.Tool.Version+" "+registryUID+testkit.KubernetesMove) {
-		t.Errorf("the key holds no version of the binary: %s", raw)
-	}
+	testkit.HoldsAll(t, "the state", stateText(t, r), w.behind.Tool.Version+" "+registryUID+testkit.KubernetesMove)
 }
 
 func TestANewBinaryAsksAgainAndTheOldKeysGo(t *testing.T) {
@@ -103,10 +101,7 @@ func TestANewBinaryAsksAgainAndTheOldKeysGo(t *testing.T) {
 	if got := w.countMoves(); got != 8 {
 		t.Errorf(testkit.PackCompares, got)
 	}
-	state, err := loadState(r.state)
-	if err != nil {
-		t.Fatal(err)
-	}
+	state := readState(t, r)
 	for key := range state.Moves {
 		if !strings.HasPrefix(key, "99.0.0 ") {
 			t.Errorf("the key %q stays", key)
@@ -139,7 +134,7 @@ func TestAPinWithAnErrorBesideGoodPinsIsACause(t *testing.T) {
 	o := r.observer(w)
 	versions(t, o)
 	s := o.Summary()
-	if s.Versions.FailedRuns != 0 || len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "addon/cert-manager" {
+	if s.Versions.FailedRuns != 0 || len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != testkit.CertManagerKey {
 		t.Errorf("versions %+v, notChecked %+v", s.Versions, s.NotChecked)
 	}
 }
@@ -150,7 +145,7 @@ func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 	o := r.observer(w)
 	versions(t, o)
 	rows := o.Summary().NotChecked
-	if len(rows) != 1 || rows[0].Cause != model.OlderRegistryCopy || rows[0].Registry != "Public Repo" || rows[0].Packs[0] != "addon/cert-manager" {
+	if len(rows) != 1 || rows[0].Cause != model.OlderRegistryCopy || rows[0].Registry != "Public Repo" || rows[0].Packs[0] != testkit.CertManagerKey {
 		t.Errorf("notChecked %+v", rows)
 	}
 }
@@ -164,8 +159,8 @@ func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *testing.T) {
 	r, w := withBehind(t)
 	r.record("barney-addons", "1.3.1", testkit.FredCompositions)
-	r.record("barney-base", "1.5.0", "csi/csi-aws-ebs")
-	r.record("wilma-gateway", "3.1.2", "addon/cert-manager")
+	r.record("barney-base", "1.5.0", testkit.CSIKey)
+	r.record("wilma-gateway", "3.1.2", testkit.CertManagerKey)
 	held := func(name, version, newest, uid string) docs.ProfilePin {
 		p := docs.ProfilePin{Name: name, Version: version, PinnedBy: []docs.PinnedBy{{Subject: name + "@" + version}}}
 		if newest != "" {
@@ -176,10 +171,10 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 	w.behind.Profiles = []docs.ProfilePin{held("barney-addons", "1.3.1", "1.4.0", "u-140"), held("barney-base", "1.5.0", "1.6.0", "u-160"), held("wilma-gateway", "3.1.2", "", "")}
 	fred := docs.Pack{Key: testkit.FredCompositions, Status: docs.PackChanged, Identity: true, A: &docs.PackSide{Version: "0.1.0"}, B: &docs.PackSide{Version: "0.2.0"},
 		Values: docs.Values{Changed: true, Diff: []docs.Leaf{{Op: "changed", Path: "compositions", Old: sentinel, New: "x"}}}}
-	w.profileMoves = map[string]docs.Diff{"barney-addons@1.3.1 u-140": {Summary: docs.DiffSummary{MaxImpact: "in-place"}, Packs: []docs.Pack{fred}}}
-	w.profileMoveErrs = map[string]error{"barney-base@1.5.0 u-160": failure(docs.KindAPI)}
+	w.profileMoves = map[string]docs.Diff{testkit.BarneyAddons + " u-140": {Summary: docs.DiffSummary{MaxImpact: "in-place"}, Packs: []docs.Pack{fred}}}
+	w.profileMoveErrs = map[string]error{testkit.BaseProfile + " u-160": failure(docs.KindAPI)}
 	// the cluster runs the three versions: a version that it does not run gets no newer version
-	w.cluster = testkit.Cluster(testkit.PaymentsName, "barney-addons@1.3.1", "barney-base@1.5.0", "wilma-gateway@3.1.2")
+	w.cluster = testkit.Cluster(testkit.PaymentsName, testkit.BarneyAddons, testkit.BaseProfile, testkit.GatewayProfile)
 	o := r.observer(w)
 	ctx := context.Background()
 	// the rows of the profiles come from a content cycle
@@ -200,14 +195,14 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 	if got := w.countProfileMoves(); got != 2 {
 		t.Errorf("%d compares of a record with a profile version", got)
 	}
-	pack, ok, err := o.PackDiff(ctx, "barney-addons@1.3.1", testkit.FredCompositions, model.SideNewest)
+	pack, ok, err := o.PackDiff(ctx, testkit.BarneyAddons, testkit.FredCompositions, model.SideNewest)
 	if err != nil || !ok || pack.Values.Diff[0].Old != sentinel {
 		t.Errorf("the newest side: %+v %v %v", pack, ok, err)
 	}
 	for _, c := range []struct{ name, subject, key string }{
-		{"a version whose compare failed", "barney-base@1.5.0", "csi/csi-aws-ebs"},
-		{"a version that is current", "wilma-gateway@3.1.2", "addon/cert-manager"},
-		{"a pack that is not in the move", "barney-addons@1.3.1", "addon/nope"},
+		{"a version whose compare failed", testkit.BaseProfile, testkit.CSIKey},
+		{"a version that is current", testkit.GatewayProfile, testkit.CertManagerKey},
+		{"a pack that is not in the move", testkit.BarneyAddons, "addon/nope"},
 	} {
 		if _, ok, err := o.PackDiff(ctx, c.subject, c.key, model.SideNewest); ok || err != nil {
 			t.Errorf("%s: %v %v", c.name, ok, err)

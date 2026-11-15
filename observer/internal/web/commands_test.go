@@ -152,10 +152,7 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 	if strata == "" || record == "" || (apiDir == "" && registry == "") {
 		t.Skip("STRATA_BIN, STRATA_CHECK_RECORD, and STRATA_CHECK_API or " + checkRegistry + " are not set: " + testkit.RunContract)
 	}
-	want, err := os.ReadFile(record)
-	if err != nil {
-		t.Fatal(err)
-	}
+	want := testkit.ReadFile(t, record)
 
 	// The first run: the profile page and the pack pages of a real server. The first row reads the record out of the Secrets
 	// that the real records script writes, and the other rows run against the stand-in.
@@ -207,10 +204,7 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 			if code != 0 {
 				t.Fatalf("the first command exited with %d:\n%s", code, out)
 			}
-			got, err := os.ReadFile(filepath.Join(dir, "record.json"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := testkit.ReadFile(t, filepath.Join(dir, "record.json"))
 			noProblems(t, "the record that the first command writes", []string{copyProblem("record.json", want, got)})
 			for _, c := range commands[1:] {
 				code, out := runBash(t, dir, bin, c)

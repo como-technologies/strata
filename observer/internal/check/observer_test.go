@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +19,7 @@ import (
 func edited(t *testing.T) (*rig, *world) {
 	t.Helper()
 	r, w := oneRecord(t, drift(t))
-	w.compares = map[int]docs.Diff{0: {RootB: w.rows[0].RootLive, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
+	w.compares = map[int]docs.Diff{0: {RootB: w.rows[0].RootLive, Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
 	return r, w
 }
 
@@ -154,7 +153,7 @@ func TestAFindingThatGoesLeavesTheState(t *testing.T) {
 	cycle(t, o)
 	w.rows[0], w.compares = unchanged(), nil
 	cycle(t, o)
-	if state, _ := loadState(r.state); len(state.Findings) != 0 {
+	if state := readState(t, r); len(state.Findings) != 0 {
 		t.Errorf("findings %+v", state.Findings)
 	}
 }
@@ -286,7 +285,10 @@ func TestASnapshotWritesOnlyIntoTheDirectoryOfTheCycle(t *testing.T) {
 			continue
 		}
 		snapshots++
-		out := call[slices.Index(call, "-o")+1]
+		out, err := testkit.OutFile(call)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !filepath.IsLocal(out) || filepath.Dir(w.dirs[i]) != r.work {
 			t.Errorf("a snapshot writes %q from %s", out, w.dirs[i])
 		}

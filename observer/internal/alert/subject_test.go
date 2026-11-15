@@ -18,10 +18,10 @@ func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndThe
 		Page:    model.PageLost,
 		Content: model.ContentClock{Health: model.Health{FailedRuns: 3, LastError: &model.ErrorRef{Kind: docs.KindAPI, Status: 401}}},
 		Findings: []model.Finding{
-			{ID: "f1", Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{"addon/dex"}, FirstSeen: now},
-			{ID: "f2", Kind: model.ImageSplit, Profile: "wilma-gateway@3.1.2", Packs: []string{"addon/traefik"}, Images: []string{testkit.ImageRef}},
+			{ID: "f1", Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{testkit.DexKey}, FirstSeen: now},
+			{ID: "f2", Kind: model.ImageSplit, Profile: testkit.GatewayProfile, Packs: []string{testkit.TraefikKey}, Images: []string{testkit.ImageRef}},
 		},
-		Newer: []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{testkit.DexProfile, "barney-base@1.5.0"}}},
+		Newer: []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{testkit.DexProfile, testkit.BaseProfile}}},
 	}
 	got := SubjectsOf(sum)
 	if len(got) != 5 {
@@ -32,7 +32,7 @@ func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndThe
 	want := []struct {
 		id   string
 		news News
-	}{{"f1", NewsDrift}, {"f2", NewsImage}, {dexNewer + testkit.DexProfile, NewsNewer}, {dexNewer + "barney-base@1.5.0", NewsNewer}, {lostID, NewsLost}}
+	}{{"f1", NewsDrift}, {"f2", NewsImage}, {dexNewer + testkit.DexProfile, NewsNewer}, {dexNewer + testkit.BaseProfile, NewsNewer}, {lostID, NewsLost}}
 	for i, w := range want {
 		if got[i].ID != w.id || got[i].News != w.news {
 			t.Errorf("subject %d is %s %s, want %s %s", i, got[i].ID, got[i].News, w.id, w.news)
@@ -49,14 +49,14 @@ func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndThe
 // A message names a profile, its packs, a fixed sentence, and a time. It holds nothing else of a finding,
 // also what the summary tier carries: the writer, the images, and the impact.
 func TestAMessageHoldsNothingOfAFindingButItsProfilePacksSentenceAndFirstSight(t *testing.T) {
-	f := model.Finding{ID: "f1", Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{"addon/dex"}, Impact: "IMPACT-MARKER",
+	f := model.Finding{ID: "f1", Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{testkit.DexKey}, Impact: "IMPACT-MARKER",
 		Images: []string{"IMAGE-MARKER:1"}, Who: []docs.Who{{Actor: "ACTOR-MARKER", Action: "ACTION-MARKER"}}, FirstSeen: now}
 	s := findingSubject(f)
 	for _, text := range []string{openText("quarry-1", s), clearText("quarry-1", s, now), digestText("quarry-1", []Subject{s})} {
 		testkit.HoldsNone(t, "the text", text, "MARKER")
 		testkit.HoldsAll(t, "the text", text, testkit.DexProfile)
 	}
-	want := dexDrift + "The published version differs from its record.\nPacks: addon/dex\nFirst seen: 2026-11-04T12:00:00Z"
+	want := dexDrift + "The published version differs from its record.\nPacks: " + testkit.DexKey + "\nFirst seen: 2026-11-04T12:00:00Z"
 	if got := openText("quarry-1", s); got != want {
 		t.Errorf("the open message\n%s\nwant\n%s", got, want)
 	}
@@ -125,14 +125,14 @@ func TestThePackageImportsNoPackageThatHoldsAValue(t *testing.T) {
 
 func TestAPackRuleThatNamesTheKeyCoversTheNewerVersionOfThatPack(t *testing.T) {
 	sum := model.Summary{
-		Profiles: []model.Profile{{Name: "fred-identity", Version: "2.3.0", Packs: []model.Pack{{Key: "addon/dex", Name: "dex", Version: "2.42.0"}}}},
+		Profiles: []model.Profile{{Name: "fred-identity", Version: "2.3.0", Packs: []model.Pack{{Key: testkit.DexKey, Name: "dex", Version: "2.42.0"}}}},
 		Newer:    []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{testkit.DexProfile}}},
 	}
 	subjects := SubjectsOf(sum)
-	if len(subjects) != 1 || len(subjects[0].Packs) != 1 || subjects[0].Packs[0] != "addon/dex" {
+	if len(subjects) != 1 || len(subjects[0].Packs) != 1 || subjects[0].Packs[0] != testkit.DexKey {
 		t.Fatalf("subjects %+v", subjects)
 	}
-	for _, match := range []string{"addon/dex", "dex"} {
+	for _, match := range []string{testkit.DexKey, "dex"} {
 		if !(Rule{Level: LevelPack, Match: match}).covers(subjects[0]) {
 			t.Errorf("the rule %q does not cover the pack", match)
 		}

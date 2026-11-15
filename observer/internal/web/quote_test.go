@@ -177,7 +177,7 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 			}
 
 			// The card: the page of a profile and the page of a pack, with a move to a newer version.
-			ok := renamedSet(t, devdata.StateOK, [][2]string{{"fred-identity", profile}, {"quarry-1", cluster}, {`"dex"`, pack}, {`"addon/dex"`, "addon/" + pack}})
+			ok := renamedSet(t, devdata.StateOK, [][2]string{{"fred-identity", profile}, {"quarry-1", cluster}, {`"dex"`, pack}, {`"` + testkit.DexKey + `"`, "addon/" + pack}})
 			pages := pagesOf(t, ok, "#p-"+encodeURIComponent(subject), packPage(subject, "addon", pack))
 			want := map[string][]string{
 				qPaletteHas:                  {"verify", "record.json"},
@@ -212,8 +212,8 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 			}
 
 			// The splash of a text above the cap: the published side of dex, and the move of kubernetes.
-			large := renamedSet(t, devdata.StateTextTooLarge, [][2]string{{"fred-identity", profile}, {`"dex"`, pack}, {`"addon/dex"`, "addon/" + pack}, {`"kubernetes"`, kubernetes}, {`"` + testkit.KubernetesKey + `"`, "k8s/" + kubernetes}})
-			splashes := pagesOf(t, large, packPage(subject, "addon", pack), packPage(k8sSubject, "k8s", kubernetes))
+			large := renamedSet(t, devdata.StateTextTooLarge, [][2]string{{"fred-identity", profile}, {`"dex"`, pack}, {`"` + testkit.DexKey + `"`, "addon/" + pack}, {`"kubernetes"`, kubernetes}, {`"` + testkit.KubernetesKey + `"`, "k8s/" + kubernetes}})
+			splashes := pagesOf(t, large, packPage(subject, "addon", pack), packPage(testkit.BaseProfile, "k8s", kubernetes))
 			check("the splash of dex", commandAfter(t, splashes[0], tooLargeTitle), []string{"compare", "record.json", subject, "--full"})
 			check("the splash of kubernetes", commandAfter(t, splashes[1], tooLargeTitle),
 				[]string{"compare", "pack:" + k8s + "/" + kubernetes + "@1.35.3", "pack:" + k8s + "/" + kubernetes + "@1.36.2", "--full"})

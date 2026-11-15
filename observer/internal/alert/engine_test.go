@@ -92,7 +92,7 @@ const sentWaiting = "sent %d, waiting %d, item %+v"
 
 var firstSight = now.Add(-time.Hour)
 
-var drift = Subject{ID: "d1", News: NewsDrift, Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{"addon/dex"},
+var drift = Subject{ID: "d1", News: NewsDrift, Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{testkit.DexKey},
 	Detail: model.PublishedChanged.Sentence(), Since: &firstSight}
 
 var content = Known{Content: true}
@@ -160,7 +160,7 @@ func TestAFailedSendKeepsTheMessageAndSendsItOnceAfterItWorks(t *testing.T) {
 
 func TestAFailedChannelKeepsTheOrderOfItsMessagesAndOtherChannelsGoOn(t *testing.T) {
 	b := newBench(t, oncall)
-	other := Subject{ID: "d2", News: NewsDrift, Kind: model.ClusterDiffers, Profile: "barney-base@1.5.0", Detail: "x"}
+	other := Subject{ID: "d2", News: NewsDrift, Kind: model.ClusterDiffers, Profile: testkit.BaseProfile, Detail: "x"}
 	b.send.fail["oncall"] = errors.New("down")
 	b.cycle([]Subject{drift, other}, content)
 	delete(b.send.fail, "oncall")
@@ -225,16 +225,16 @@ func TestAMuteHoldsBackTheClearOfAMessageThatWent(t *testing.T) {
 func TestADigestGoesOncePerPeriodListsTheOpenItemsAndHasNoClear(t *testing.T) {
 	b := newBench(t, oncall)
 	newer := func(id, profile string) Subject {
-		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "dex@2.42.0 has a newer version, dex@2.44.0."}
+		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: testkit.DexFrom + " has a newer version, " + testkit.DexTo + "."}
 	}
-	subjects := []Subject{newer("n1", testkit.DexProfile), newer("n2", "barney-base@1.5.0")}
+	subjects := []Subject{newer("n1", testkit.DexProfile), newer("n2", testkit.BaseProfile)}
 	known := Known{Content: true, Newer: true}
 	b.cycle(subjects, known)
 	if len(b.send.sent) != 1 || b.send.sent[0].channel != "planning" {
 		t.Fatalf("messages %+v", b.send.sent)
 	}
 	text := b.send.sent[0].text
-	if !strings.HasPrefix(text, testkit.Quarry+"Digest\n2 open items:\n- Newer version · barney-base@1.5.0: ") || !strings.Contains(text, "\n- Newer version · "+testkit.DexProfile+": ") {
+	if !strings.HasPrefix(text, testkit.Quarry+"Digest\n2 open items:\n- Newer version · "+testkit.BaseProfile+": ") || !strings.Contains(text, "\n- Newer version · "+testkit.DexProfile+": ") {
 		t.Errorf("the digest %q", text)
 	}
 	if it := b.store.Items["n1"]; it.Sent == nil {
@@ -316,7 +316,7 @@ func TestTheViewShowsFiringPendingInactiveAndMuted(t *testing.T) {
 	b := newBench(t, testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testkit.ImageNow, newerToPlanning, muteBarney,
 		`{"level": "profile", "match": "wilma-gateway", "news": "newer", "muteUntil": "2026-11-01"}`))
 	n := Subject{ID: "n1", News: NewsNewer, Profile: testkit.DexProfile, Detail: "x"}
-	muted := Subject{ID: "n2", News: NewsNewer, Profile: "barney-base@1.5.0", Detail: "x"}
+	muted := Subject{ID: "n2", News: NewsNewer, Profile: testkit.BaseProfile, Detail: "x"}
 	b.cycle([]Subject{drift, n, muted}, Known{Content: true, Newer: true})
 	// The digest went, so the newer version fires. A second newer version waits for the next digest.
 	later := Subject{ID: "n3", News: NewsNewer, Profile: "betty-observability@4.2.1", Detail: "x"}
@@ -432,7 +432,7 @@ func TestADigestThatWaitsIsMadeAgainFromTheItemsThatAreOpenAndNeverTwice(t *test
 
 func TestAnImageFindingIsNotClearedByACycleThatReadNoPod(t *testing.T) {
 	b := newBench(t, testkit.OncallRules("f", testkit.ImageNow))
-	moved := Subject{ID: "i1", News: NewsImage, Kind: model.ImageMoved, Profile: "wilma-gateway@3.1.2", Packs: []string{"addon/traefik"}, Detail: "x"}
+	moved := Subject{ID: "i1", News: NewsImage, Kind: model.ImageMoved, Profile: testkit.GatewayProfile, Packs: []string{testkit.TraefikKey}, Detail: "x"}
 	b.cycle([]Subject{moved}, Known{Content: true, Image: true})
 	b.cycle(nil, Known{Content: true})
 	if len(b.send.sent) != 1 || len(b.store.Items) != 1 {
@@ -447,10 +447,10 @@ func TestAnImageFindingIsNotClearedByACycleThatReadNoPod(t *testing.T) {
 func TestAnItemKeepsWhatItsSubjectSaysNowForTheClearAndTheDigest(t *testing.T) {
 	b := newBench(t, oncall)
 	first := drift
-	first.Packs = []string{"addon/dex"}
+	first.Packs = []string{testkit.DexKey}
 	b.cycle([]Subject{first}, content)
 	second := drift
-	second.Packs = []string{"addon/dex", "addon/cert"}
+	second.Packs = []string{testkit.DexKey, "addon/cert"}
 	b.cycle([]Subject{second}, content)
 	if got := b.store.Items["d1"].Packs; len(got) != 2 {
 		t.Errorf("packs %v", got)
@@ -463,7 +463,7 @@ func TestADigestThatOneChannelMissedIsMadeAgainForThatChannelOnly(t *testing.T) 
 	item := func(id, profile string) Subject {
 		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "x"}
 	}
-	subjects := []Subject{item("n1", testkit.DexProfile), item("n2", "barney-base@1.5.0")}
+	subjects := []Subject{item("n1", testkit.DexProfile), item("n2", testkit.BaseProfile)}
 	known := Known{Content: true, Newer: true}
 	sentTo := func(channel string) int {
 		n := 0

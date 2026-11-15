@@ -23,11 +23,17 @@ func drift(t *testing.T) docs.VerifyRow {
 	return s.Records[0]
 }
 
+// awsRecord writes the record of aws-stack 1.1.0 with the packs csi-aws-ebs and ubuntu. A test calls it again to
+// restore the record, as the pipeline does after it fixed the file.
+func awsRecord(r *rig) {
+	r.record("aws-stack", "1.1.0", testkit.CSIKey, testkit.UbuntuKey)
+}
+
 // oneRecord makes a world with one record, aws-stack@1.1.0, that the cluster runs.
 func oneRecord(t *testing.T, row docs.VerifyRow) (*rig, *world) {
 	t.Helper()
 	r := newRig(t)
-	r.record("aws-stack", "1.1.0", "csi/csi-aws-ebs", "os/ubuntu")
+	awsRecord(r)
 	r.meta(testkit.ApprovedMeta(testkit.Revision))
 	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: testkit.Payments()}
 }
@@ -36,7 +42,7 @@ func oneRecord(t *testing.T, row docs.VerifyRow) (*rig, *world) {
 // A row that fails for one of the two records is a cause and not a failed cycle, because the other row is good.
 func addPlatformAddons(t *testing.T, r *rig, w *world) {
 	t.Helper()
-	r.record("platform-addons", "1.0.0", "addon/cert-manager")
+	r.record("platform-addons", "1.0.0", testkit.CertManagerKey)
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
 	w.cluster = testkit.Payments(testkit.AddonsProfile)
 }
@@ -50,7 +56,7 @@ func twoRecords(t *testing.T) (*rig, *world) {
 }
 
 // publishedCSI is the finding of a drift of the published version of csi-aws-ebs, as TestContentCases writes it.
-const publishedCSI = "published-changed csi/csi-aws-ebs"
+const publishedCSI = "published-changed " + testkit.CSIKey
 
 // pageAndContent is the failure of a check of the page and of the content cycle.
 const pageAndContent = "page %q, content %+v"
@@ -76,20 +82,20 @@ func TestContentCases(t *testing.T) {
 			want: []string{publishedCSI}, who: 1},
 		{name: "published changed and the same on the cluster", setup: func(t *testing.T, w *world) {
 			w.rows[0] = drift(t)
-			w.compares = map[int]docs.Diff{0: {RootB: w.rows[0].RootLive, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
+			w.compares = map[int]docs.Diff{0: {RootB: w.rows[0].RootLive, Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
 		}, copy: model.CopyDiffers, want: []string{publishedCSI}, also: true, who: 1},
 		{name: "cluster differs only", setup: func(t *testing.T, w *world) {
-			w.compares = map[int]docs.Diff{0: {RootB: "e06b", Summary: docs.DiffSummary{MaxImpact: "cluster-wide"}, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
-		}, copy: model.CopyDiffers, want: []string{"cluster-differs csi/csi-aws-ebs"}},
+			w.compares = map[int]docs.Diff{0: {RootB: "e06b", Summary: docs.DiffSummary{MaxImpact: "cluster-wide"}, Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
+		}, copy: model.CopyDiffers, want: []string{"cluster-differs " + testkit.CSIKey}},
 		{name: "same content", setup: func(t *testing.T, w *world) {
-			w.compares = map[int]docs.Diff{0: {SameContent: true, Packs: []docs.Pack{{Key: "os/ubuntu", Status: docs.PackChanged}}}}
+			w.compares = map[int]docs.Diff{0: {SameContent: true, Packs: []docs.Pack{{Key: testkit.UbuntuKey, Status: docs.PackChanged}}}}
 		}, copy: model.CopySameContent},
 		{name: "image id changed with same true", setup: func(t *testing.T, w *world) {
-			w.compares = map[int]docs.Diff{0: {Same: true, SameContent: true, ImageIDsChanged: []docs.KeyOnly{{Key: "os/ubuntu"}}}}
-		}, copy: model.CopySame, want: []string{"image-id-changed os/ubuntu"}},
+			w.compares = map[int]docs.Diff{0: {Same: true, SameContent: true, ImageIDsChanged: []docs.KeyOnly{{Key: testkit.UbuntuKey}}}}
+		}, copy: model.CopySame, want: []string{"image-id-changed " + testkit.UbuntuKey}},
 		{name: "overwritten", setup: func(t *testing.T, w *world) {
 			w.rows[0].Status = docs.VerifyDrifted
-			w.rows[0].Diff = &docs.Diff{Verify: &docs.Verify{OverwrittenBy: "aws-stack@1.1.1"}}
+			w.rows[0].Diff = &docs.Diff{Verify: &docs.Verify{OverwrittenBy: testkit.AWSStackNewer}}
 		}, copy: model.CopySame, want: []string{"overwritten "}},
 	}
 	for _, c := range cases {
@@ -120,7 +126,7 @@ func TestContentCases(t *testing.T) {
 
 func TestARecordForAVersionThatTheClusterDoesNotRunHasNoSide(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	r.record("aws-stack", "1.0.0", "csi/csi-aws-ebs")
+	r.record("aws-stack", "1.0.0", testkit.CSIKey)
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
 	s, _ := r.observer(w).Once(context.Background())
 	// The files come in the order of their names: 1.0.0 before 1.1.0.
@@ -358,9 +364,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *t
 	raw := testkit.MustJSON(t, s)
 	testkit.HoldsNone(t, "the document", string(raw), "AccessDenied")
 	// the log of the pod names the status and the profile, and never the body of the answer
-	if line := r.log.String(); !strings.Contains(line, "the audit log could not be read") || !strings.Contains(line, `reason="HTTP 403"`) || !strings.Contains(line, "profile="+testkit.AWSStackProfile) {
-		t.Errorf("log %q", line)
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "the audit log could not be read", `reason="HTTP 403"`, "profile="+testkit.AWSStackProfile)
 }
 
 // The reason of strata is HTTP <status>: <body>, or the message of a request that did not complete.
@@ -383,9 +387,8 @@ func TestTheLineAboutAnUnreadAuditLogHoldsTheStatusAndNoOtherText(t *testing.T) 
 			w.rows[0].Diff.Verify.WhoError = c.whoError
 			w.rows[0].Name, w.rows[0].Version = "aws-stack", "1.1.0"
 			once(t, r.observer(w))
-			if line := r.log.String(); strings.Contains(line, "AUDIT-BODY-MARKER") || !strings.Contains(line, c.want) {
-				t.Errorf("want %s, log %q", c.want, line)
-			}
+			testkit.HoldsAll(t, "the log", r.log.String(), c.want)
+			testkit.HoldsNone(t, "the log", r.log.String(), "AUDIT-BODY-MARKER")
 		})
 	}
 }

@@ -114,12 +114,8 @@ func TestIndexLoadsEachScriptOnceAndTheScriptThatStartsThePageLast(t *testing.T)
 	for _, name := range screens {
 		tags = append(tags, `<script src="`+name+`"></script>`)
 	}
-	if !strings.Contains(index, strings.Join(tags, "\n")+"\n</body>") {
-		t.Errorf("the scripts of the screens %v are not at the end of the body", screens)
-	}
-	if !strings.Contains(string(readPage(t, screens[0])), "const h = ") {
-		t.Errorf("%s loads first, and it does not hold the template h", screens[0])
-	}
+	mustHold(t, "the end of the body of index.html", index, strings.Join(tags, "\n")+"\n</body>")
+	mustHold(t, "the first script "+screens[0], string(readPage(t, screens[0])), "const h = ")
 	for i, name := range screens {
 		want := 0
 		if i == len(screens)-1 {
@@ -132,10 +128,7 @@ func TestIndexLoadsEachScriptOnceAndTheScriptThatStartsThePageLast(t *testing.T)
 }
 
 func TestTheRouteOfThePageGivesTheIndexAndNoPathElseGivesAFile(t *testing.T) {
-	index, err := fs.ReadFile(files(t), "index.html")
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := readPage(t, "index.html")
 	if rec := serve(t, "/"); rec.Code != http.StatusOK || rec.Body.String() != string(index) {
 		t.Errorf("/ gave %d", rec.Code)
 	}
@@ -158,23 +151,16 @@ func TestTheRouteOfThePageGivesTheIndexAndNoPathElseGivesAFile(t *testing.T) {
 
 // Each font file has its SHA-256 in LICENSES.md, with its version and the license.
 func TestLicensesNamesEachFontWithItsChecksum(t *testing.T) {
-	licenses, err := fs.ReadFile(files(t), "LICENSES.md")
-	if err != nil {
-		t.Fatal(err)
-	}
+	licenses := string(readPage(t, "LICENSES.md"))
 	fonts, err := fs.Glob(files(t), "fonts/*.woff2")
 	if err != nil || len(fonts) != 2 {
 		t.Fatalf("fonts %v, %v", fonts, err)
 	}
 	for _, f := range fonts {
-		raw, err := fs.ReadFile(files(t), f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sum := sha256.Sum256(raw)
-		mustHold(t, "the licenses", string(licenses), "`"+f+"`", hex.EncodeToString(sum[:]))
+		sum := sha256.Sum256(readPage(t, f))
+		mustHold(t, "the licenses", licenses, "`"+f+"`", hex.EncodeToString(sum[:]))
 	}
-	mustHold(t, "LICENSES.md", string(licenses), []string{"OFL-1.1", "SIL OPEN FONT LICENSE Version 1.1", "5.3.0"}...)
+	mustHold(t, "LICENSES.md", licenses, []string{"OFL-1.1", "SIL OPEN FONT LICENSE Version 1.1", "5.3.0"}...)
 }
 
 var (
@@ -631,9 +617,7 @@ func TestAPackNameWithAnImgTagShowsAsText(t *testing.T) {
 	if pack == nil {
 		t.Fatal("no screen of the pack dex")
 	}
-	if !strings.Contains(pack.HTML, "dex"+injection) {
-		t.Errorf("the name of the pack does not show as text: %.400s", pack.HTML)
-	}
+	mustHold(t, "the screen of the pack dex", pack.HTML, "dex"+injection)
 }
 
 // The words of the overview that more than one test reads. publishedChanged is the label of a finding: the published version
@@ -782,15 +766,13 @@ func TestAPackWithAnErrorRowDoesNotSayIdenticalForThePublishedSide(t *testing.T)
 		switch s.Variant {
 		case "side published":
 			published = true
-			if strings.Contains(s.HTML, "Identical") || !strings.Contains(s.HTML, "This side was not read") || !strings.Contains(s.HTML, "Strata could not read the published version") {
-				t.Errorf("the published side of a row with an error: %.600s", s.HTML)
-			}
+			const where = "the published side of a row with an error"
+			mustNotHold(t, where, s.HTML, "Identical")
+			mustHold(t, where, s.HTML, "This side was not read", "Strata could not read the published version")
 		case "":
 			// The finding is on the cluster side, and the cluster side was read.
 			cluster = true
-			if !strings.Contains(s.HTML, "Changed") || !strings.Contains(s.HTML, dexIDTokens) {
-				t.Errorf("the cluster side: %.600s", s.HTML)
-			}
+			mustHold(t, "the cluster side", s.HTML, "Changed", dexIDTokens)
 		}
 	}
 	if !published || !cluster {
@@ -817,9 +799,9 @@ func TestAMoveThatWasNotReadShowsNoCount(t *testing.T) {
 			}
 		case s.Hash == "#k-bambam-secrets@2.0.1/addon/vault" && s.Variant == "":
 			pack = true
-			if !strings.Contains(s.HTML, "Strata could not compare these versions now") || strings.Contains(s.HTML, repaveHint) {
-				t.Errorf("the pack of the move that was not read: %.800s", s.HTML)
-			}
+			const where = "the pack of the move that was not read"
+			mustHold(t, where, s.HTML, "Strata could not compare these versions now")
+			mustNotHold(t, where, s.HTML, repaveHint)
 		}
 	}
 	if !table || !pack {
@@ -832,9 +814,8 @@ func TestAMoveThatWasNotReadShowsNoCount(t *testing.T) {
 func TestAFailedDetailRequestAsksAgainOnTheNextRender(t *testing.T) {
 	pages := retried(t, dexHash)
 	checkPlace(t, placeNamed(t, placeBusy), pages[0])
-	if strings.Contains(pages[1], busyTitle) || !strings.Contains(pages[1], dexIDTokens) {
-		t.Errorf("the second render did not ask again: %.600s", pages[1])
-	}
+	mustNotHold(t, "the second render", pages[1], busyTitle)
+	mustHold(t, "the second render", pages[1], dexIDTokens)
 }
 
 // With first-seen records, each screen shows the pill and the words. With approved records, none does.
@@ -844,23 +825,16 @@ func TestFirstSeenShowsOnEachScreen(t *testing.T) {
 		t.Fatalf("only %d screens", len(first))
 	}
 	for _, s := range first {
-		if !strings.Contains(s.HTML, firstSeenPill) || !strings.Contains(s.HTML, firstSeenWords) {
-			t.Errorf("%s %s has no pill or no words of first-seen", s.Hash, s.Variant)
-		}
+		mustHold(t, s.Hash+" "+s.Variant, s.HTML, firstSeenPill, firstSeenWords)
 	}
 	for _, s := range render(t, devdata.StateOK, false) {
-		if strings.Contains(s.HTML, firstSeenPill) || strings.Contains(s.HTML, firstSeenWords) {
-			t.Errorf("%s %s of an approved baseline shows first-seen", s.Hash, s.Variant)
-		}
+		mustNotHold(t, s.Hash+" "+s.Variant+" of an approved baseline", s.HTML, firstSeenPill, firstSeenWords)
 	}
 }
 
 // The crawl reaches each profile and each pack of the ok set, so the tests above cover each screen.
 func TestTheCrawlReachesEachProfileAndEachPack(t *testing.T) {
-	set, err := devdata.Load(os.DirFS("testdata/api"), devdata.StateOK, devdata.Reference)
-	if err != nil {
-		t.Fatal(err)
-	}
+	set := loadSet(t, devdata.StateOK)
 	reached := map[string]bool{}
 	for _, s := range render(t, devdata.StateOK, false) {
 		reached[s.Hash] = true
@@ -895,10 +869,7 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
-			set, err := devdata.Load(os.DirFS("testdata/api"), c.state, devdata.Reference)
-			if err != nil {
-				t.Fatal(err)
-			}
+			set := loadSet(t, c.state)
 			var want []string
 			for _, p := range set.Profiles.Profiles {
 				if slices.ContainsFunc(p.Packs, func(k model.Pack) bool { return k.Newer != "" }) {
@@ -916,9 +887,7 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 				}
 				switch s.Variant {
 				case "":
-					if !strings.Contains(s.HTML, button) {
-						t.Errorf("the button of the filter does not say Newer %d", c.count)
-					}
+					mustHold(t, "the screen of the profiles", s.HTML, button)
 				case "filter newer":
 					shown = true
 					if rows := strings.Count(s.HTML, goToStart+"#p-"); rows != len(want) {
@@ -1102,11 +1071,7 @@ func rulesProblems(css string, rules map[string][]string) []string {
 var tabRow = map[string][]string{".tabs": {"overflow-x:auto;", "overflow-y:hidden;"}}
 
 func TestTheRowOfTabsHasNoVerticalScrollbar(t *testing.T) {
-	css, err := fs.ReadFile(files(t), "app.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	noProblems(t, "app.css", rulesProblems(string(css), tabRow))
+	rulesHold(t, string(readPage(t, "app.css")), tabRow)
 	// The check can fail.
 	const noX, noY = "lacks overflow-x:auto;", "lacks overflow-y:hidden;"
 	for css, want := range map[string]string{
@@ -1117,7 +1082,7 @@ func TestTheRowOfTabsHasNoVerticalScrollbar(t *testing.T) {
 	} {
 		findsProblem(t, css, rulesProblems(css, tabRow), want)
 	}
-	noProblems(t, "a good rule", rulesProblems(`.tabs{display:flex; overflow-x: auto; overflow-y: hidden}`, tabRow))
+	rulesHold(t, `.tabs{display:flex; overflow-x: auto; overflow-y: hidden}`, tabRow)
 }
 
 /* The tests below hold the look of the page: the logo, the choice of a theme, and the colors. */
@@ -1145,15 +1110,6 @@ var (
 	markPath = regexp.MustCompile(`<path [^>]*/>`)
 	markDiv  = regexp.MustCompile(`(?s)<div class="logo">(.*?)</div>`)
 )
-
-func readFile(t *testing.T, name string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return raw
-}
 
 func readPage(t *testing.T, name string) []byte {
 	t.Helper()
@@ -1235,18 +1191,16 @@ func copyProblem(name string, source, copy []byte) string {
 
 func TestEachCopyOfTheLogoIsItsSourceByteForByte(t *testing.T) {
 	for _, name := range logoFiles {
-		if raw := readFile(t, logoDir+name); !bytes.Contains(raw, []byte("<title>strata</title>")) {
-			t.Errorf("%s is not a logo of strata", name)
-		}
+		mustHold(t, name, string(testkit.ReadFile(t, logoDir+name)), "<title>strata</title>")
 	}
-	light, dark := readFile(t, logoDir+markLight), readFile(t, logoDir+markDark)
+	light, dark := testkit.ReadFile(t, logoDir+markLight), testkit.ReadFile(t, logoDir+markDark)
 	for _, c := range []struct {
 		name         string
 		source, copy []byte
 	}{
 		{testkit.FaviconLight, light, readPage(t, testkit.FaviconLight)},
 		{testkit.FaviconDark, dark, readPage(t, testkit.FaviconDark)},
-		{"the favicon of the book", light, readFile(t, bookFavicon)},
+		{"the favicon of the book", light, testkit.ReadFile(t, bookFavicon)},
 	} {
 		noProblems(t, c.name, []string{copyProblem(c.name, c.source, c.copy)})
 	}
@@ -1447,18 +1401,15 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 	}
 	mustHoldInOrder(t, "the nav of index.html", index, `id="navl"`, `<div class="navfoot">`, viewAttr("theme-choice", "dark"), "</aside>")
 	head, body, _ := strings.Cut(index, "</head>")
-	if !strings.Contains(head, `<script src="`+themeScript+`"></script>`) || strings.Contains(body, themeScript) {
-		t.Error(themeScript + " must be a plain script in the head, and only there")
-	}
+	mustHold(t, "the head", head, `<script src="`+themeScript+`"></script>`)
+	mustNotHold(t, "the body", body, themeScript)
 	for _, scheme := range [][2]string{{"light", testkit.FaviconLight}, {"dark", testkit.FaviconDark}} {
 		icon := `<link rel="icon" type="image/svg+xml" href="` + scheme[1] + `" media="(` + schemeQuery + `: ` + scheme[0] + `)">`
 		mustHold(t, "the head", head, icon)
 	}
 	script := string(readPage(t, themeScript))
 	mustHold(t, themeScript, script, []string{`"strata-observer-theme"`, "localStorage.removeItem", "aria-pressed", "data-theme-choice", "catch"}...)
-	if strings.Contains(readScripts(t), "localStorage") {
-		t.Error("a script of the screens reads the storage: the choice of a theme is in " + themeScript)
-	}
+	mustNotHold(t, "the five scripts of the page", readScripts(t), "localStorage")
 }
 
 /* The tests below hold the screens of the pods: the list of images, the page of an image, the finding of
@@ -1808,7 +1759,7 @@ func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
 			href := imageHash(testkit.VendorRef)
 			row := rowTo(t, overview, href)
 			mustHold(t, "the finding", row, `<td class="w90">`+c.badge+`</td>`, `<a href="`+href+`">`+c.title+`</a>`,
-				`<span class="lab"><i>profile=</i>"`+wilmaSubject+`"</span>`, `<span class="lab wrap"><i>image=</i>"`+testkit.VendorRef+`"</span>`)
+				`<span class="lab"><i>profile=</i>"`+testkit.GatewayProfile+`"</span>`, `<span class="lab wrap"><i>image=</i>"`+testkit.VendorRef+`"</span>`)
 			mustNotHold(t, "the finding", row, ">Drift<")
 			mustHold(t, "the tile", overview, tileStart("r")+tileLink("#findings", "Drift")+tileValue("1"))
 			mustHold(t, "the nav", overview, countSpan(" r", "2"))
@@ -2156,12 +2107,12 @@ func TestTheLineOfAFindingReadsRightForOneOrManyPacks(t *testing.T) {
 		packs []string
 		want  string
 	}{
-		{model.ImageIDChanged, []string{"addon/dex"}, "dex " + machineImage},
-		{model.ImageIDChanged, []string{"addon/dex", "addon/reloader"}, "dex, reloader " + machineImage},
-		{model.ImageMoved, []string{"addon/dex"}, "dex" + ranAnotherDigest},
-		{model.ImageMoved, []string{"addon/dex", "addon/reloader"}, "dex, reloader" + ranAnotherDigest},
-		{model.ImageSplit, []string{"addon/dex"}, "dex" + ranTwoDigests},
-		{model.ImageSplit, []string{"addon/dex", "addon/reloader"}, "dex, reloader" + ranTwoDigests},
+		{model.ImageIDChanged, []string{testkit.DexKey}, "dex " + machineImage},
+		{model.ImageIDChanged, []string{testkit.DexKey, "addon/reloader"}, "dex, reloader " + machineImage},
+		{model.ImageMoved, []string{testkit.DexKey}, "dex" + ranAnotherDigest},
+		{model.ImageMoved, []string{testkit.DexKey, "addon/reloader"}, "dex, reloader" + ranAnotherDigest},
+		{model.ImageSplit, []string{testkit.DexKey}, "dex" + ranTwoDigests},
+		{model.ImageSplit, []string{testkit.DexKey, "addon/reloader"}, "dex, reloader" + ranTwoDigests},
 	} {
 		t.Run(string(c.kind)+strconv.Itoa(len(c.packs)), func(t *testing.T) {
 			add := editJSON(t, func(v *api.FindingsView) {

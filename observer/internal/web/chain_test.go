@@ -68,7 +68,7 @@ func TestTheWordsOfTheCarrierFollowTheAnswerOfBehind(t *testing.T) {
 // red badge "Changed".
 func TestTheCompareBadgeOfANewerVersionIsTheNeutralBadgeNewer(t *testing.T) {
 	screens := crawl(t, devdata.StateOK)
-	vendor := packPage(wilmaSubject, "addon", "vendor-product")
+	vendor := packPage(testkit.GatewayProfile, "addon", "vendor-product")
 	for _, c := range []struct {
 		where, hash, variant, option, badge string
 	}{

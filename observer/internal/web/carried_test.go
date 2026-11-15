@@ -5,13 +5,14 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
 const (
-	barneyHash = "#p-" + k8sSubject
-	ubuntuHash = "#k-" + k8sSubject + "/os/ubuntu-aws"
-	ubuntuSide = "side-" + k8sSubject + "-os/ubuntu-aws"
+	barneyHash = "#p-" + testkit.BaseProfile
+	ubuntuHash = "#k-" + testkit.BaseProfile + "/" + testkit.UbuntuAWSKey
+	ubuntuSide = "side-" + testkit.BaseProfile + "-" + testkit.UbuntuAWSKey
 	// unchangedWords say that the published version of a profile is the same as its record.
 	unchangedWords = "Unchanged since the record"
 )

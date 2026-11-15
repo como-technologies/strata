@@ -92,9 +92,7 @@ func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
 			t.Fatalf("strata schema %s: %v", c.kind, err)
 		}
 		var root map[string]any
-		if err := json.Unmarshal(out, &root); err != nil {
-			t.Fatal(err)
-		}
+		decode(t, "strata schema "+c.kind, out, &root)
 		for _, m := range missing(root, root, reflect.TypeOf(c.typ), c.kind, map[reflect.Type]bool{}) {
 			t.Errorf("not in the schema: %s", m)
 		}
@@ -126,9 +124,7 @@ func decodeFile(t *testing.T, dir, name string, v any) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(b, v); err != nil {
-		t.Fatalf("%s: %v", name, err)
-	}
+	decode(t, name, b, v)
 }
 
 // A cluster side holds the value of a variable in clear. This test fails with no such value, so it
@@ -136,21 +132,15 @@ func decodeFile(t *testing.T, dir, name string, v any) {
 func TestAClearValueDoesNotPassTheAllowList(t *testing.T) {
 	dir := contractDir(t)
 	const value = "team-payments"
-	raw, err := os.ReadFile(dir + "/compare-values.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	const name = "compare-values.json"
+	var raw json.RawMessage
+	decodeFile(t, dir, name, &raw)
 	if !strings.Contains(string(raw), value) {
 		t.Fatal("the document holds no clear value, so this test proves nothing")
 	}
 	var d Diff
-	if err := json.Unmarshal(raw, &d); err != nil {
-		t.Fatal(err)
-	}
-	out := encode(t, d)
-	if strings.Contains(string(out), value) {
-		t.Fatalf("the clear value passed the allow-list: %s", out)
-	}
+	decode(t, name, raw, &d)
+	holdsNone(t, "the diff after the allow-list", string(encode(t, d)), value)
 }
 
 func TestTheKindOfAFailedCheckIsInTheRow(t *testing.T) {

@@ -43,7 +43,7 @@ func kubernetesPin(t *testing.T, w *world) int {
 func asksOnce(t *testing.T, o *Observer, w *world, got model.Answer) {
 	t.Helper()
 	runs := len(w.behindCalls())
-	if again, _, _ := o.Ask(context.Background(), moveSubject, testkit.KubernetesKey); !reflect.DeepEqual(again, got) || len(w.behindCalls()) != runs {
+	if again, _, _ := o.Ask(context.Background(), testkit.AWSStackOld, testkit.KubernetesKey); !reflect.DeepEqual(again, got) || len(w.behindCalls()) != runs {
 		t.Errorf("a second ask ran again: %+v, %d runs of behind", again, len(w.behindCalls())-runs)
 	}
 }
@@ -94,8 +94,8 @@ func TestEachCycleAsksForTheTextAndNoCycleCanSendAPost(t *testing.T) {
 func TestAskRunsBehindForOnePackOnTheRecordOfTheProfileAndKeepsTheAnswer(t *testing.T) {
 	r, w, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}})
 	before := len(w.behindCalls())
-	got, ok, err := o.Ask(context.Background(), moveSubject, testkit.KubernetesKey)
-	if err != nil || !ok || got.Verdict != model.VerdictNoError || got.Newest != "1.36.2" || got.Profile != moveSubject || got.Key != testkit.KubernetesKey {
+	got, ok, err := o.Ask(context.Background(), testkit.AWSStackOld, testkit.KubernetesKey)
+	if err != nil || !ok || got.Verdict != model.VerdictNoError || got.Newest != "1.36.2" || got.Profile != testkit.AWSStackOld || got.Key != testkit.KubernetesKey {
 		t.Fatalf("%+v %v %v", got, ok, err)
 	}
 	calls := w.behindCalls()
@@ -129,7 +129,7 @@ func TestAskReadsARefusalAndAFailedRequestAsTheirVerdicts(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r, _, o := askable(t, c.bump)
-			got, ok, err := o.Ask(context.Background(), moveSubject, testkit.KubernetesKey)
+			got, ok, err := o.Ask(context.Background(), testkit.AWSStackOld, testkit.KubernetesKey)
 			if err != nil || !ok || got.Verdict != c.verdict || got.Status != c.status {
 				t.Fatalf("%+v %v %v", got, ok, err)
 			}
@@ -146,14 +146,14 @@ func TestAskGivesNoAnswerForARunThatFailsAndTheNextAskTriesAgain(t *testing.T) {
 	w.mu.Lock()
 	w.behindErr = &runner.RunError{Kind: docs.KindAPI, Status: 500}
 	w.mu.Unlock()
-	got, ok, err := o.Ask(context.Background(), moveSubject, testkit.KubernetesKey)
+	got, ok, err := o.Ask(context.Background(), testkit.AWSStackOld, testkit.KubernetesKey)
 	if err != nil || !ok || got.Verdict != model.VerdictNoAnswer || got.Status != 500 {
 		t.Fatalf("%+v %v %v", got, ok, err)
 	}
 	w.mu.Lock()
 	w.behindErr = nil
 	w.mu.Unlock()
-	if got, _, _ = o.Ask(context.Background(), moveSubject, testkit.KubernetesKey); got.Verdict != model.VerdictNoError {
+	if got, _, _ = o.Ask(context.Background(), testkit.AWSStackOld, testkit.KubernetesKey); got.Verdict != model.VerdictNoError {
 		t.Errorf("%+v", got)
 	}
 }
@@ -162,10 +162,10 @@ func TestAskKnowsNoMoveForAProfileAPackOrAPinThatIsCurrent(t *testing.T) {
 	_, w, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}})
 	before := len(w.behindCalls())
 	for _, c := range []struct{ subject, key string }{
-		{"other@1.0.0", testkit.KubernetesKey},
-		{moveSubject, "k8s/nope"},
-		{moveSubject, "addon/kubernetes"},
-		{moveSubject, ""},
+		{testkit.OtherProfile, testkit.KubernetesKey},
+		{testkit.AWSStackOld, testkit.NopeKey},
+		{testkit.AWSStackOld, testkit.AddonKubernetesKey},
+		{testkit.AWSStackOld, ""},
 	} {
 		if _, ok, err := o.Ask(context.Background(), c.subject, c.key); ok || err != nil {
 			t.Errorf("%v: %v %v", c, ok, err)
@@ -186,7 +186,7 @@ func TestAskWaitsForTheVersionsSlotAndEndsWithTheContext(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, err := o.Ask(ctx, moveSubject, testkit.KubernetesKey); !errors.Is(err, context.Canceled) {
+	if _, _, err := o.Ask(ctx, testkit.AWSStackOld, testkit.KubernetesKey); !errors.Is(err, context.Canceled) {
 		t.Errorf("error %v", err)
 	}
 	o.release(o.versionsSlot)
@@ -194,7 +194,7 @@ func TestAskWaitsForTheVersionsSlotAndEndsWithTheContext(t *testing.T) {
 
 func TestAnAnswerStaysInMemoryAndTheStateHoldsNone(t *testing.T) {
 	r, _, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Errors: []docs.Refusal{{Code: "RefusalCode", Message: "SENTINEL-MESSAGE"}}}})
-	if _, _, err := o.Ask(context.Background(), moveSubject, testkit.KubernetesKey); err != nil {
+	if _, _, err := o.Ask(context.Background(), testkit.AWSStackOld, testkit.KubernetesKey); err != nil {
 		t.Fatal(err)
 	}
 	answers := o.Answers()
@@ -230,7 +230,7 @@ func TestAPackAboveTheCapKeepsNoTextOnAnySideAndSaysSo(t *testing.T) {
 	moved.Packs[0].Values.Unified = bigText()
 	moved.Packs[0].Manifests = []docs.Manifest{{Op: "added", Name: "m", Unified: "small"}}
 	w.moves[key] = moved
-	w.cluster = testkit.Cluster(testkit.PaymentsName, moveSubject)
+	w.cluster = testkit.Cluster(testkit.PaymentsName, testkit.AWSStackOld)
 	o := r.observer(w)
 	once(t, o)
 	for _, c := range []struct {
@@ -241,7 +241,7 @@ func TestAPackAboveTheCapKeepsNoTextOnAnySideAndSaysSo(t *testing.T) {
 		if key == "" {
 			key = w.rows[0].Diff.Packs[0].Key
 		}
-		pack, ok, err := o.PackDiff(context.Background(), moveSubject, key, c.side)
+		pack, ok, err := o.PackDiff(context.Background(), testkit.AWSStackOld, key, c.side)
 		if err != nil || !ok {
 			t.Fatalf("%s: %v %v", c.side, ok, err)
 		}
@@ -262,7 +262,7 @@ func TestAPackAtTheCapKeepsItsText(t *testing.T) {
 	w.compares[0].Packs[0].Values.Unified, w.compares[0].Packs[0].Manifests = text, nil
 	o := r.observer(w)
 	cycle(t, o)
-	pack, ok, err := o.PackDiff(context.Background(), testkit.AWSStackProfile, "csi/csi-aws-ebs", model.SideCluster)
+	pack, ok, err := o.PackDiff(context.Background(), testkit.AWSStackProfile, testkit.CSIKey, model.SideCluster)
 	if err != nil || !ok || pack.TextTooLarge || pack.Values.Unified != text {
 		t.Errorf("%v %v too large %v, %d bytes", ok, err, pack.TextTooLarge, len(pack.Values.Unified))
 	}
@@ -296,7 +296,7 @@ func TestAskForAPinThatFailsOrIsNotBehindAnyMoreGivesNoAnswerForTheNewestVersion
 		t.Run(c.name, func(t *testing.T) {
 			_, w, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}})
 			askedShape(t, w, c.change)
-			got, ok, err := o.Ask(context.Background(), moveSubject, testkit.KubernetesKey)
+			got, ok, err := o.Ask(context.Background(), testkit.AWSStackOld, testkit.KubernetesKey)
 			if err != nil || !ok || got.Verdict != model.VerdictNoAnswer || got.Newest != "1.36.2" || got.Status != c.status {
 				t.Fatalf("%+v %v %v", got, ok, err)
 			}
@@ -315,7 +315,7 @@ func TestAskKeepsTheAnswerForANewerVersionUnderTheMoveOfTheCycle(t *testing.T) {
 		p.Newer = append([]docs.Newer{{Version: "1.37.0"}}, p.Newer...)
 		p.Bump = &docs.Bump{To: "1.37.0", PaletteValidation: &docs.Validation{Accepts: true}}
 	})
-	got, ok, err := o.Ask(context.Background(), moveSubject, testkit.KubernetesKey)
+	got, ok, err := o.Ask(context.Background(), testkit.AWSStackOld, testkit.KubernetesKey)
 	if err != nil || !ok || got.Verdict != model.VerdictNoError || got.Newest != "1.37.0" {
 		t.Fatalf("%+v %v %v", got, ok, err)
 	}
@@ -342,7 +342,7 @@ func TestAClickAfterAFailedCompareSendsNoSecondPost(t *testing.T) {
 	_, w, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}}, func(w *world) {
 		w.moveErrs[move("kubernetes", "1.35.3", "1.36.2")] = &runner.RunError{Kind: docs.KindCrash}
 	})
-	got, ok, err := o.Ask(context.Background(), moveSubject, testkit.KubernetesKey)
+	got, ok, err := o.Ask(context.Background(), testkit.AWSStackOld, testkit.KubernetesKey)
 	if err != nil || !ok || got.Verdict != model.VerdictNoError || pinCalls(w) != 1 {
 		t.Fatalf("%+v %v %v, %d questions", got, ok, err, pinCalls(w))
 	}
@@ -380,7 +380,7 @@ func TestAClickThatWaitedForAVersionsCycleAsksAboutTheMoveOfThatCycle(t *testing
 	ctx := &waitedCtx{Context: context.Background(), waited: make(chan struct{})}
 	clicked := make(chan model.Answer, 1)
 	go func() {
-		a, _, _ := o.Ask(ctx, moveSubject, testkit.KubernetesKey)
+		a, _, _ := o.Ask(ctx, testkit.AWSStackOld, testkit.KubernetesKey)
 		clicked <- a
 	}()
 	// The click reads the pin of the first cycle, and then it waits for the worker until the gate opens.
@@ -398,8 +398,8 @@ func TestAClickThatWaitedForAVersionsCycleAsksAboutTheMoveOfThatCycle(t *testing
 	if got := <-clicked; got.Verdict != model.VerdictNoError || got.Newest != "1.37.0" {
 		t.Fatalf("answer %+v", got)
 	}
-	_, move, ok := o.pinOf(moveSubject, testkit.KubernetesKey)
-	if _, held := o.cachedAsk(askKey{moveSubject, move}); !ok || !held || len(o.asks) != 1 {
+	_, move, ok := o.pinOf(testkit.AWSStackOld, testkit.KubernetesKey)
+	if _, held := o.cachedAsk(askKey{testkit.AWSStackOld, move}); !ok || !held || len(o.asks) != 1 {
 		t.Errorf("the answer is not under the move %q of the second cycle: %d answers", move, len(o.asks))
 	}
 	// The next cycle keeps it, because the move is the same.

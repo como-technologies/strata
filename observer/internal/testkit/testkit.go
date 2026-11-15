@@ -114,10 +114,11 @@ const (
 	AuditSentinel = "AUDIT-REASON-SENTINEL"
 	// AuditUnread is the message of an event when the observer could not read the audit log.
 	AuditUnread = "The audit log could not be read, so this does not say who made the change."
-	// DexProfile is the profile of the pack dex in the dev data and in the tests of more than one package. DexAsk is the
-	// route of the question to Palette for the move of dex in the dev data.
+	// DexProfile is the profile of the pack dex in the dev data and in the tests of more than one package, and DexKey is
+	// the key of the pack. DexAsk is the route of the question to Palette for the move of dex in the dev data.
 	DexProfile = "fred-identity@2.3.0"
-	DexAsk     = "/v1/packs/" + DexProfile + "/addon/dex/ask"
+	DexKey     = "addon/dex"
+	DexAsk     = "/v1/packs/" + DexProfile + "/" + DexKey + "/ask"
 	// AsksRoute is the route of the list of answers of Palette. NoAnswers is the list of an observer that holds none, in
 	// the JSON of the route. The list is empty, and not null.
 	AsksRoute = "/v1/asks"
@@ -156,15 +157,56 @@ const (
 	DexExpiry = "charts.dex.config.expiry"
 	// KubernetesMove is the key of the move of kubernetes from 1.35.3 to 1.36.2, after the uid of its registry. DexMove
 	// is the key of the move of dex from 2.42.0 to 2.44.0.
-	KubernetesMove = "/kubernetes@1.35.3->1.36.2"
-	DexMove        = "/dex@2.42.0->2.44.0"
+	KubernetesMove = "/" + KubernetesFrom + "->1.36.2"
+	DexMove        = "/" + DexFrom + "->2.44.0"
 	// KubernetesKey is the key of the pack kubernetes, and KubernetesDiff ends the route of its diff in a profile.
 	KubernetesKey  = "k8s/kubernetes"
 	KubernetesDiff = "/" + KubernetesKey + "/diff"
 	// DexValuesHead is the head of the diff of the values of dex in the dev data. NoEOL is the note of a diff for a side
 	// with no newline at its end.
-	DexValuesHead = "--- a: addon/dex values\n+++ b: addon/dex values\n"
+	DexValuesHead = "--- a: " + DexKey + " values\n+++ b: " + DexKey + " values\n"
 	NoEOL         = `\ No newline at end of file`
+)
+
+// The profiles and the keys of the packs of the test data that the tests of more than one package hold, with the
+// versions of a pack in a move.
+const (
+	// BaseProfile and GatewayProfile are two profiles of the dev data. BaseProfile holds the pack kubernetes, and
+	// GatewayProfile holds the pack traefik, whose key is TraefikKey. GatewayMoved is the version of the profile that the
+	// cluster no longer runs.
+	BaseProfile    = "barney-base@1.5.0"
+	GatewayProfile = "wilma-gateway@3.1.2"
+	GatewayMoved   = "wilma-gateway@3.0.4"
+	TraefikKey     = "addon/traefik"
+	// LonghornProfile is the profile of the pack longhorn in the dev data, and LonghornKey is the key of the pack.
+	LonghornProfile = "dino-storage@1.1.0"
+	LonghornKey     = "addon/longhorn"
+	// NobodyProfile is a profile that no record holds, and NoneKey and NopeKey are keys of no pack.
+	NobodyProfile = "nobody@1.0.0"
+	NoneKey       = "addon/none"
+	NopeKey       = "k8s/nope"
+	// AWSStackOld is a version of aws-stack before AWSStackProfile, and AWSStackNewer is a version after it.
+	AWSStackOld   = "aws-stack@1.0.0"
+	AWSStackNewer = "aws-stack@1.1.1"
+	// BarneyAddons is the version of barney-addons that a cluster runs, and BarneyAddonsOld is the version before it.
+	BarneyAddons    = "barney-addons@1.3.1"
+	BarneyAddonsOld = "barney-addons@1.3.0"
+	// OtherProfile is a second profile that holds a pack of the first profile of a test.
+	OtherProfile = "other@1.0.0"
+	// CSIKey, CertManagerKey, UbuntuKey, UbuntuAWSKey, and VeleroKey are the keys of the packs csi-aws-ebs,
+	// cert-manager, ubuntu, ubuntu-aws, and velero. AddonKubernetesKey has the name of kubernetes in another layer.
+	CSIKey             = "csi/csi-aws-ebs"
+	CertManagerKey     = "addon/cert-manager"
+	UbuntuKey          = "os/ubuntu"
+	UbuntuAWSKey       = UbuntuKey + "-aws"
+	VeleroKey          = "addon/velero"
+	AddonKubernetesKey = "addon/kubernetes"
+	// KubernetesFrom and KubernetesTo are the versions of the pack kubernetes in the move KubernetesMove. DexFrom and
+	// DexTo are the versions of the pack dex in the move DexMove.
+	KubernetesFrom = "kubernetes@1.35.3"
+	KubernetesTo   = "kubernetes@1.36.2"
+	DexFrom        = "dex@2.42.0"
+	DexTo          = "dex@2.44.0"
 )
 
 // PageTypes is the Content-Type of each kind of file that the server of the page serves.
@@ -269,7 +311,7 @@ func AskFlow(t *testing.T, get func(path string) (int, string), post func(path s
 	if code, list := get(AsksRoute); code != http.StatusOK || strings.Count(list, `"verdict"`) != 1 || !strings.Contains(list, strings.TrimSpace(body)) {
 		t.Errorf("the list after the click: %d %s", code, list)
 	}
-	for _, path := range []string{"/v1/packs/dino-storage@1.1.0/addon/longhorn/ask", "/v1/packs/nobody@1.0.0/addon/dex/ask"} {
+	for _, path := range []string{"/v1/packs/" + LonghornProfile + "/" + LonghornKey + "/ask", "/v1/packs/" + NobodyProfile + "/" + DexKey + "/ask"} {
 		if code, _ := post(path, true); code != http.StatusNotFound {
 			t.Errorf("%s gave %d", path, code)
 		}
@@ -445,11 +487,17 @@ func WriteMeta(t *testing.T, dir, body string) {
 // StateText gives the text of the state file that an observer wrote in the directory state.
 func StateText(t *testing.T, state string) string {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(state, StateFile))
+	return string(ReadFile(t, filepath.Join(state, StateFile)))
+}
+
+// ReadFile reads the file at path, and fails the test on an error.
+func ReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(raw)
+	return raw
 }
 
 // OncallFile writes the file of the address of the channel oncall with AddressFile.
@@ -468,11 +516,7 @@ func AddressFile(t *testing.T, channel, address string) string {
 // DecodeFile reads the JSON file at path into v, and fails the test on an error.
 func DecodeFile(t *testing.T, path string, v any) {
 	t.Helper()
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	Decode(t, path, raw, v)
+	Decode(t, path, ReadFile(t, path), v)
 }
 
 // Decode reads the JSON raw into v, and fails the test on an error. what names the JSON in the failure.
@@ -566,6 +610,11 @@ const (
 )
 
 var VerifyAndSnapshot = "  echo '" + VerifyUnchanged + "' ;;\nsnapshot) echo '" + ClusterPayments + "' > \"$out\" ;;\n"
+
+// NotReadRow is the row of `verify` for a record that Palette refused to answer for, with a 429.
+func NotReadRow() docs.VerifyRow {
+	return docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 429}}
+}
 
 // ErrorLine gives the line of the script of a fake of strata that writes the error document of strata to its stderr.
 // The document holds the kind and the other fields, such as `"status":401`.

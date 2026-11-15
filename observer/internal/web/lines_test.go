@@ -3,7 +3,6 @@ package web
 import (
 	"fmt"
 	htmlpkg "html"
-	"io/fs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -47,7 +46,7 @@ const dblockOpen = `<div class="dblock"`
 func longSet(t *testing.T, leaf docs.Leaf, edit ...func(*api.PackDiff)) string {
 	t.Helper()
 	return writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, k8sSubject, testkit.KubernetesKey, model.SideNewer)
+		d := entryOf(t, ds, testkit.BaseProfile, testkit.KubernetesKey, model.SideNewer)
 		d.Values.Settings = []docs.Leaf{leaf}
 		for _, f := range edit {
 			f(d)
@@ -107,11 +106,7 @@ const maxChars = 48
 // maximum width and the table gives the rest of the width to the column of the path.
 func rowHeight(t *testing.T, before, after []string) float64 {
 	t.Helper()
-	raw, err := fs.ReadFile(files(t), "app.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	css := string(raw)
+	css := string(readPage(t, "app.css"))
 	line, cell := lineHeight.FindStringSubmatch(ruleOf(css, ".vls")), ruleOf(css, "td")
 	pad, edge := padding.FindStringSubmatch(cell), border.FindStringSubmatch(cell)
 	if line == nil || pad == nil || edge == nil {
@@ -181,7 +176,7 @@ func rowIsShort(t *testing.T, before, after []string) {
 // three changed versions. A line that holds the same text on both sides, between two changed lines, is not marked.
 func TestTheRealKubeadmFileOfKubernetesShowsItsThreeChangedLines(t *testing.T) {
 	set := loadSet(t, devdata.StateOK)
-	leaf := entryOf(t, set.Diffs, k8sSubject, testkit.KubernetesKey, model.SideNewer).Values.Settings[0]
+	leaf := entryOf(t, set.Diffs, testkit.BaseProfile, testkit.KubernetesKey, model.SideNewer).Values.Settings[0]
 	if old, _ := leaf.Old.(string); leaf.Path != contentPath || strings.Count(old, "\n") != 21 {
 		t.Fatalf("the set ok must hold the real file of 21 lines as the first setting of kubernetes, not %q", leaf.Path)
 	}
@@ -274,9 +269,8 @@ func TestAMaskInALineOfAValueStaysAMask(t *testing.T) {
 	page := pagesOf(t, dir, k8sHash)[0]
 	before, after := sidesOf(t, page, contentPath)
 	wantMasked := "c|3||password: ********"
-	if !(strings.Contains(strings.Join(before, "\n"), wantMasked) && strings.Contains(strings.Join(after, "\n"), wantMasked)) {
-		t.Errorf("the lines do not show the mask of the password: %q and %q", before, after)
-	}
+	mustHold(t, "the lines before", strings.Join(before, "\n"), wantMasked)
+	mustHold(t, "the lines after", strings.Join(after, "\n"), wantMasked)
 	const user, token = "c|2||user: admin", "c|5||token: ********"
 	sameRows(t, "Before", before, []string{gap, user, wantMasked, "d|4|-|version: 1", token, gap})
 	sameRows(t, "After", after, []string{gap, user, wantMasked, "a|4|+|version: 2", token, gap})

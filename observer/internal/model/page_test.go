@@ -21,7 +21,7 @@ func TestThePageStateFollowsTheFirstRowThatMatches(t *testing.T) {
 		clock      Clock
 		want       Page
 	}{
-		{"no record file", true, 0, Clock{Every: every, Last: &fresh}, PageNoRecords},
+		{"no record file", true, 0, goodClock(every, fresh), PageNoRecords},
 		{"no record file beats a lost key", true, 0, Clock{Every: every, FailedRuns: 5, LastError: e(docs.KindTransport, 0)}, PageNoRecords},
 		{"the directory is not read yet", false, 0, Clock{Every: every}, PageFirstLoad},
 		{"two 401 with no good cycle", true, 2, Clock{Every: every, FailedRuns: 2, LastError: e(docs.KindAPI, 401)}, PageLost},
@@ -34,11 +34,11 @@ func TestThePageStateFollowsTheFirstRowThatMatches(t *testing.T) {
 		{"a 500 is not lost", true, 2, Clock{Every: every, FailedRuns: 2, LastError: e(docs.KindAPI, 500)}, PageStale},
 		{"a wrong cluster uid", true, 2, Clock{Every: every, FailedRuns: 2, LastError: e(docs.KindUnknown, 0)}, PageStale},
 		{"two failed runs after a good cycle that is not old", true, 2, Clock{Every: every, Last: &fresh, FailedRuns: 2, LastError: e(docs.KindUnknown, 0)}, PageOK},
-		{"the last good cycle is older than two periods", true, 2, Clock{Every: every, Last: &old}, PageStale},
-		{"the last good cycle is two periods old", true, 2, Clock{Every: every, Last: ptr(now.Add(-2 * every))}, PageOK},
+		{"the last good cycle is older than two periods", true, 2, goodClock(every, old), PageStale},
+		{"the last good cycle is two periods old", true, 2, goodClock(every, now.Add(-2*every)), PageOK},
 		{"no cycle finished", true, 2, Clock{Every: every}, PageFirstLoad},
 		{"one failed first run", true, 2, Clock{Every: every, FailedRuns: 1, LastError: e(docs.KindUnknown, 0)}, PageFirstLoad},
-		{"a good cycle", true, 2, Clock{Every: every, Last: &fresh}, PageOK},
+		{"a good cycle", true, 2, goodClock(every, fresh), PageOK},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

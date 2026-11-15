@@ -2,7 +2,6 @@ package web
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 )
 
@@ -33,9 +32,7 @@ func TestTheListOfTheCompareDropdownTakesTheTokensOfTheTheme(t *testing.T) {
 		t.Errorf("the block of the dropdown holds the color %q: use a token", m)
 	}
 	// Nothing outside the block names the list, so a browser with no support sees no rule of it.
-	if strings.Contains(without(css, baseSelect), "::picker") {
-		t.Error("a rule outside the block names ::picker")
-	}
+	mustNotHold(t, "the style outside the block", without(css, baseSelect), "::picker")
 }
 
 // The dropdown needs no script: the change of a side still goes through the one handler of the page.

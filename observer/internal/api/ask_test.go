@@ -141,9 +141,9 @@ func TestA403FromPaletteReadsNoAnswerWithItsStatusAndMakesNoFinding(t *testing.T
 	if rec.Code != http.StatusOK || got.Verdict != model.VerdictNoAnswer || got.Status != 403 || len(got.Refusals) != 0 {
 		t.Fatalf(statusAndAnswer, rec.Code, got)
 	}
-	if strings.Contains(rec.Body.String(), "SENTINEL") || strings.Contains(r.log.String(), "SENTINEL") {
-		t.Errorf("the body of the answer of Palette left the observer: %s\n%s", rec.Body.String(), r.log.String())
-	}
+	// The body of the answer of Palette does not leave the observer.
+	testkit.HoldsNone(t, "the answer", rec.Body.String(), "SENTINEL")
+	testkit.HoldsNone(t, "the log", r.log.String(), "SENTINEL")
 	if after := get(h, summaryRoutes[patternCluster]).Body.String() + get(h, summaryRoutes[patternFindings]).Body.String() + get(h, summaryRoutes[patternEvents]).Body.String(); after != before {
 		t.Errorf("a failed question changed the summary:\n%s\n%s", before, after)
 	}
@@ -224,11 +224,11 @@ func TestTheClickAnswers404ForAProfileAPackOrAMoveThatIsNotKnownAndSendsNothing(
 	h := handlerOf(o)
 	for _, path := range []string{
 		"/v1/packs/nope@1/" + testkit.KubernetesKey + "/ask",
-		awsPacks + "/k8s/nope/ask",
+		awsPacks + "/" + testkit.NopeKey + "/ask",
 		// cert-manager is current: no move exists for it
-		awsPacks + "/addon/cert-manager/ask",
+		awsPacks + "/" + testkit.CertManagerKey + "/ask",
 		// the layer is part of the key
-		awsPacks + "/addon/kubernetes/ask",
+		awsPacks + "/" + testkit.AddonKubernetesKey + "/ask",
 	} {
 		rec := click(h, path)
 		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "nope") {
@@ -267,9 +267,7 @@ func TestAnAnswerIsForgottenAtARestart(t *testing.T) {
 	}
 	// A restart: the state is on disk and the answer is not.
 	restarted := handlerOf(r.cycled(fake))
-	if body := get(restarted, askRoutes[patternAsks]).Body.String(); !strings.Contains(body, testkit.NoAnswers) {
-		t.Errorf("a restart kept the answer: %s", body)
-	}
+	testkit.HoldsAll(t, "the list of answers after a restart", get(restarted, askRoutes[patternAsks]).Body.String(), testkit.NoAnswers)
 }
 
 func TestAnAnswerIsDroppedWhenThePinMovesAndTheNextClickAsksAgain(t *testing.T) {
@@ -282,10 +280,7 @@ func TestAnAnswerIsDroppedWhenThePinMovesAndTheNextClickAsksAgain(t *testing.T) 
 	}
 	// The registry has a newer version now, so the move is another move.
 	for _, name := range []string{testkit.BehindDoc, askNoError} {
-		raw, err := os.ReadFile(filepath.Join(r.fixtures, name))
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := testkit.ReadFile(t, filepath.Join(r.fixtures, name))
 		moved := strings.ReplaceAll(string(raw), `"version":"1.36.2"`, `"version":"1.37.0"`)
 		moved = strings.ReplaceAll(moved, `"to":"1.36.2"`, `"to":"1.37.0"`)
 		if moved == string(raw) {
@@ -310,14 +305,10 @@ func TestTheTextOfADiffIsOnTheDetailTierAndOnNoSummaryRouteNorInTheStateNorInThe
 	r, o, _ := asked(t, askRefuses)
 	h := handlerOf(o)
 	for _, path := range detailRoutes[patternPackDiff] {
-		if body := get(h, path).Body.String(); !strings.Contains(body, sentinelText) {
-			t.Errorf("%s holds no text: %s", path, body)
-		}
+		testkit.HoldsAll(t, path, get(h, path).Body.String(), sentinelText)
 	}
 	click(h, pathAsk)
-	if body := get(h, askRoutes[patternAsks]).Body.String(); strings.Contains(body, sentinelText) {
-		t.Errorf("the list of answers holds the text: %s", body)
-	}
+	testkit.HoldsNone(t, "the list of answers", get(h, askRoutes[patternAsks]).Body.String(), sentinelText)
 	noSummaryRouteStateOrLogHolds(t, r, h, sentinelText)
 }
 
@@ -328,10 +319,7 @@ func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.
 	log := filepath.Join(r.fixtures, "calls.log")
 	o := r.cycled(scripted(t, r, log, askRefuses))
 	lines := func() []string {
-		raw, err := os.ReadFile(log)
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := testkit.ReadFile(t, log)
 		return strings.Split(strings.TrimSpace(string(raw)), "\n")
 	}
 	cycles := lines()
@@ -346,9 +334,8 @@ func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.
 			testkit.HoldsAll(t, "the line", line, " --no-impact ")
 			testkit.HoldsNone(t, "the line", line, "--pin")
 		case strings.HasPrefix(line, "compare "), strings.HasPrefix(line, "verify "):
-			if !strings.Contains(line, " --full ") || strings.Contains(line, "--validate") || strings.Contains(line, "--repave") {
-				t.Errorf("a cycle ran %q", line)
-			}
+			testkit.HoldsAll(t, "the line", line, " --full ")
+			testkit.HoldsNone(t, "the line", line, "--validate", "--repave")
 		}
 	}
 	if behind != 1 {

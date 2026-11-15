@@ -7,16 +7,15 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
-// moved is the record of a version that the cluster no longer runs: the cluster moved to wilma-gateway@3.1.2. The set ok holds it
-// with no finding, and the set moved-drift holds it with a finding.
-const moved = "wilma-gateway@3.0.4"
-
-// The words of a version that the cluster no longer runs, and the fold of the table of the profiles that lists it.
+// The words of a version that the cluster no longer runs, and the fold of the table of the profiles that lists it. The version is
+// testkit.GatewayMoved: the cluster moved to wilma-gateway@3.1.2. The set ok holds it with no finding, and the set moved-drift holds
+// it with a finding.
 const (
-	movedHash    = "#p-" + moved
+	movedHash    = "#p-" + testkit.GatewayMoved
 	notOnCluster = "Not on this cluster"
 	notRunFact   = "This cluster does not run this version."
 	movedFold    = `data-open="not-on-cluster"`
@@ -68,7 +67,7 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 	mustHold(t, "the row", row, badge("y", notOnCluster), `<span class="mut">`+notRunFact+`</span>`)
 	mustNotHold(t, "the row", row, "Newer", "newer")
 	for _, variant := range []string{"filter newer", "filter ok", "filter drift", "filter not-checked"} {
-		mustNotHold(t, "the profiles with the "+variant, pageOf(t, screens, "#profiles", variant), moved, movedFold)
+		mustNotHold(t, "the profiles with the "+variant, pageOf(t, screens, "#profiles", variant), testkit.GatewayMoved, movedFold)
 	}
 	overview := pageOf(t, screens, "#overview", "")
 	mustHold(t, "the overview", overview, tileLabel("Profiles")+tileValue("12"))
@@ -101,7 +100,7 @@ func TestThePageOfAPackOfAVersionThatTheClusterNoLongerRunsHasNoFactOfANewerVers
 	}{{devdata.StateOK, ""}, {devdata.StateMovedDrift, "traefik"}} {
 		screens := crawl(t, c.state)
 		for _, name := range []string{"traefik", albPack, "vendor-product"} {
-			hash, where := packPage(moved, "addon", name), fmt.Sprintf("%s: the page of %s", c.state, name)
+			hash, where := packPage(testkit.GatewayMoved, "addon", name), fmt.Sprintf("%s: the page of %s", c.state, name)
 			if name == c.changed {
 				mustHold(t, where, pageOf(t, screens, hash, ""), badge("r", "Changed"), "charts.traefik.deployment.replicas")
 			} else {

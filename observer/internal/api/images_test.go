@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/check"
@@ -15,8 +14,8 @@ import (
 )
 
 func TestTheImagesRouteServesTheDocumentOfThePods(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	rec := get(h, summaryRoutes[patternImages])
 	var got model.Observed
 	decode(t, rec, &got)
@@ -27,8 +26,8 @@ func TestTheImagesRouteServesTheDocumentOfThePods(t *testing.T) {
 }
 
 func TestTheImageRouteTakesTheReferenceAsOneEscapedSegment(t *testing.T) {
-	r := newRig(t)
-	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	_, o, _ := asked(t, "")
+	h := handlerOf(o)
 	for _, c := range []struct {
 		path string
 		code int
@@ -48,9 +47,7 @@ func TestTheImageRouteTakesTheReferenceAsOneEscapedSegment(t *testing.T) {
 	if view.Schema != model.ObservedSchema || view.Image.Ref != testkit.ImageRef || view.Pods != model.PodsRead {
 		t.Errorf("view %+v", view)
 	}
-	if body := get(h, "/v1/images/"+url.PathEscape("SECRET-REF:1")).Body.String(); strings.Contains(body, "SECRET-REF") {
-		t.Errorf("the answer of an unknown reference echoes the input: %s", body)
-	}
+	testkit.HoldsNone(t, "the answer of an unknown reference", get(h, "/v1/images/"+url.PathEscape("SECRET-REF:1")).Body.String(), "SECRET-REF")
 }
 
 func TestWithTheReadOffTheRouteSaysSoAndListsNoImage(t *testing.T) {

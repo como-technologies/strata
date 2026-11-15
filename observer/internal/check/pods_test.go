@@ -151,7 +151,7 @@ func TestADigestOtherThanTheFirstIsImageMovedUntilTheDigestComesBack(t *testing.
 	if got := imageKindsOf(s); !slices.Equal(got, []model.Kind{model.ImageMoved}) || s.Counts.Findings != 1 || s.Counts.Drift != 0 {
 		t.Fatalf("findings %v, counts %+v", got, s.Counts)
 	}
-	if f := s.Findings[0]; f.Profile != testkit.AWSStackProfile || !slices.Equal(f.Packs, []string{"csi/csi-aws-ebs", "os/ubuntu"}) || !slices.Equal(f.Images, []string{testkit.ImageRef}) {
+	if f := s.Findings[0]; f.Profile != testkit.AWSStackProfile || !slices.Equal(f.Packs, []string{testkit.CSIKey, testkit.UbuntuKey}) || !slices.Equal(f.Images, []string{testkit.ImageRef}) {
 		t.Errorf("finding %+v", f)
 	}
 	if doc := o.Observed(); doc.Counts.Changed != 1 || doc.Images[0].Status != model.ImageStatusMoved || doc.Images[0].Digests[0].Status != model.AnotherDigest {
