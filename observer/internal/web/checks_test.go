@@ -237,11 +237,14 @@ func TestTheCardMoveToOfAProfileNamesEachCheckOfTheMove(t *testing.T) {
 	mustHoldInOrder(t, "a move that changes no pack", noPack, oneVariable, oneProfileRule, "The move changes no pack.")
 }
 
-// A code, a version, and the name of a variable of a check on the move of a profile show as text on the card.
+// A code, a version, and the name of a variable of a check on the move of a profile show as text on the card. render.js adds the
+// injection to the name and to the version of each profile, so the hash of the page of barney-base holds it two times.
 func TestACheckOfTheMoveOfAProfileWithMarkupShowsAsText(t *testing.T) {
+	name, version, _ := strings.Cut(testkit.BaseProfile, "@")
+	hash := "#p-" + encodeURIComponent(name+evilText+"@"+version+evilText)
 	var reached int
 	for _, s := range render(t, devdata.StateProfileChecks, true) {
-		if s.Hash != barneyHash || s.Variant != "" {
+		if s.Hash != hash || s.Variant != "" {
 			continue
 		}
 		reached++
