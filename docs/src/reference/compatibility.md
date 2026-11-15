@@ -1178,6 +1178,12 @@ field, a value, an input, or an option is in the sections above.
   alone, such as `strata list clusters --detail`. The tip of the refusal of `--packs` names
   `--pack`, which keeps the versions with a pack whose name holds its text. See
   [Read each row deeper](../commands/list.md#read-each-row-deeper).
+- **`strata snapshot` of one object takes `--json`.** Before, the command line refused `--json`
+  without `--dir`, as a usage error in text. Now `--json` writes an error as one JSON line on
+  standard error, also with `-o`, and the record does not change. A script can read
+  `error.kind` of a snapshot of one ref, in place of a call of `compare --json`. With `--json`
+  and `--validate`, strata prints no `palette    refuses:` line: the error holds each one in
+  `errors`. See [Errors](./errors.md).
 
 ## Release 0.34.0: changes that need action
 

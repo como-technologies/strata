@@ -664,13 +664,20 @@ fn packs(r: &mut Runner) {
 }
 
 /// The steps of the chapter `packs` for a pack version in two registries: the refusal of a ref
-/// that names no registry, and the list and the record that name the registry of each pin.
+/// that names no registry, as text and as JSON, and the list and the record that name the registry
+/// of each pin.
 fn two_registries(r: &mut Runner) {
     r.step(
         "pack-ambiguous",
         2,
         true,
         "strata compare pack:csi-aws-ebs@1.65.0 pack:csi-aws-ebs@1.65.0",
+    );
+    r.step(
+        "pack-ambiguous-json",
+        2,
+        true,
+        "strata snapshot pack:csi-aws-ebs@1.65.0 --json --quiet",
     );
     r.step(
         "pack-which-registry",

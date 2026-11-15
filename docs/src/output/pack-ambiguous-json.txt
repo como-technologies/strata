@@ -1,0 +1,2 @@
+$ strata snapshot pack:csi-aws-ebs@1.65.0 --json --quiet
+{"error":{"kind":"pack-in-several-registries","message":"pack 'csi-aws-ebs' at version '1.65.0' is in several registries: Palette Registry, Public Repo; name one, as in pack:<registry>/csi-aws-ebs@1.65.0. `strata list --pack csi-aws-ebs` names the registry of the pack in each profile version","name":"csi-aws-ebs","registries":["Palette Registry","Public Repo"],"version":"1.65.0"}}

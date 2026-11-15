@@ -2385,29 +2385,97 @@ fn snapshot_of_a_set_with_json_prints_an_error_of_the_query_as_one_json_line() {
     }
 
     // the format is the report of a set, so it needs --dir: a record is always JSON
-    let r = run(&["snapshot", "aws-stack@1.1.1", "--json"]);
+    let r = run(&["snapshot", "aws-stack@1.1.1", "--format", "json"]);
     assert_eq!(r.code, 2);
     assert!(r.err.contains("--dir"), "{}", r.err);
 }
 
+/// Issue #917. With `--json`, `snapshot` of one ref writes its error as one JSON line on standard
+/// error, as `compare --json -q` does. The record is JSON already.
 #[test]
-fn snapshot_refuses_the_format_flags_with_each_argument_that_refuses_dir() {
+fn snapshot_of_one_ref_with_json_gives_its_error_as_one_json_line_with_the_exit_code_of_the_error()
+{
+    let packs = ["reg-a", "reg-b"].map(|uid| common::listed_pack("csi", "1.0.0", uid));
+    let routes = std::collections::BTreeMap::from([
+        (
+            REGISTRY_LISTING.to_string(),
+            serde_json::json!({"items": [{"name": "Mirror", "uid": "reg-a", "kind": "pack"},
+                {"name": "Public Repo", "uid": "reg-b", "kind": "pack"}]}),
+        ),
+        (
+            common::pack_listing_route("csi"),
+            common::pack_listing_answer(serde_json::json!(packs)),
+        ),
+    ]);
+    let stand = Stand::new(routes, "p-dev");
+    for more in [&[][..], &["-o", "csi.json"][..]] {
+        let args = [&["snapshot", "pack:csi@1.0.0", "--json", "-q"][..], more].concat();
+        let r = stand.run_loud(&args);
+        assert_eq!(r.code, 2, "{args:?}: {}", r.err);
+        assert_eq!(r.out, "", "{args:?}: no record");
+        assert_eq!(r.err.lines().count(), 1, "{args:?}: one line: {}", r.err);
+        let e: serde_json::Value = serde_json::from_str(&r.err).unwrap();
+        assert_eq!(e["error"]["kind"], "pack-in-several-registries", "{e}");
+        assert_eq!(
+            e["error"]["registries"],
+            serde_json::json!(["Mirror", "Public Repo"]),
+            "{e}"
+        );
+    }
+    assert!(!stand.home.path().join("csi.json").exists(), "no record");
+
+    // the same failure without --json is the line of text
+    let r = stand.run_loud(&["snapshot", "pack:csi@1.0.0", "-q"]);
+    assert_eq!(r.code, 2, "{}", r.err);
+    assert!(
+        r.err
+            .starts_with(&error_text("pack 'csi' at version '1.0.0' is in several")),
+        "{}",
+        r.err
+    );
+}
+
+/// `--format` is the format of the report of a set, so each argument that refuses `--dir` refuses
+/// it. Issue #917: `--json` of one object makes its error one JSON line, so each such argument
+/// takes it.
+#[test]
+fn snapshot_refuses_format_with_each_argument_that_refuses_dir_and_takes_json_with_each() {
     let dir = tempfile::tempdir().unwrap();
     let path = |name: &str| dir.path().join(name).to_str().unwrap().to_string();
     let (candidate, raw, out) = (path("nothere.yaml"), path("raw"), path("out.json"));
-    for format in [&["--json"][..], &["--format", "json"][..]] {
-        for args in [
-            vec!["--from-candidate", candidate.as_str()],
-            vec!["--from-raw", raw.as_str()],
+    for (args, kind) in [
+        (vec!["--from-candidate", candidate.as_str()], "io"),
+        (vec!["--from-raw", raw.as_str()], "io"),
+        (
             vec!["aws-stack@1.1.1", "-o", out.as_str()],
+            "missing-credential",
+        ),
+        (
             vec!["aws-stack@1.1.1", "--raw-dir", raw.as_str()],
-        ] {
-            let args = [&["snapshot"][..], &args, format].concat();
-            let r = run(&args);
-            assert_eq!(r.code, 2, "{args:?}: {}", r.err);
-            assert!(r.err.contains("cannot be used with"), "{args:?}: {}", r.err);
-            assert_eq!(r.out, "", "{args:?}");
-        }
+            "missing-credential",
+        ),
+    ] {
+        let format = [&["snapshot"][..], &args, &["--format", "json"]].concat();
+        let r = run(&format);
+        assert_eq!(r.code, 2, "{format:?}: {}", r.err);
+        assert!(
+            r.err.contains("cannot be used with"),
+            "{format:?}: {}",
+            r.err
+        );
+        assert_eq!(r.out, "", "{format:?}");
+
+        let json = [&["snapshot"][..], &args, &["--json", "-q"]].concat();
+        let r = run_in(
+            &json,
+            &[("HOME", dir.path().to_str().unwrap())],
+            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        );
+        assert_eq!(r.code, 2, "{json:?}: {}", r.err);
+        assert_eq!(r.out, "", "{json:?}");
+        assert_eq!(r.err.lines().count(), 1, "{json:?}: one line: {}", r.err);
+        let e: serde_json::Value = serde_json::from_str(&r.err).unwrap();
+        assert_eq!(e["error"]["kind"], kind, "{json:?}: {e}");
     }
 }
 
@@ -2764,6 +2832,19 @@ fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
         "{text}"
     );
     assert!(!text.contains(&accepts), "{text}");
+
+    // issue #917: with --json, the error document holds the errors, so it is the one line
+    let r = stand.run_loud(&["snapshot", "barney@1.0.0", "--validate", "--json", "-q"]);
+    assert_eq!((r.code, r.out.as_str()), (2, ""), "{}", r.err);
+    assert_eq!(r.err.lines().count(), 1, "one line: {}", r.err);
+    let e: serde_json::Value = serde_json::from_str(&r.err).unwrap();
+    assert_eq!(e["error"]["kind"], "palette-refuses", "{e}");
+    assert_eq!(
+        e["error"]["errors"],
+        serde_json::json!([{"pack": "cert-manager", "code": "PackDependencyNotFound",
+            "message": "a pack is missing"}]),
+        "{e}"
+    );
 }
 
 /// Issue #625. `appprofile:<name>@latest` writes the note of the profile form, and names the

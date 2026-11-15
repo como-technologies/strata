@@ -523,6 +523,15 @@ impl<'a> PackFixture<'a> {
     }
 }
 
+/// A pack of the listing: its name, version, and registry, and the uid and the values of the pack.
+pub fn listed_pack(name: &str, version: &str, registry: &str) -> Value {
+    let (uid, values) = (
+        format!("pk-{name}-{version}"),
+        format!("values of {name}\n"),
+    );
+    PackFixture::new(name, "addon", version, &uid, registry, "", &values).summary(&[])
+}
+
 /// The values of the pack of virtual machines `pack`, with `address` as the YAML text of the
 /// address that its console forwards to, and the value `replicas` beside it.
 pub fn console_pack_values(pack: &str, address: &str, replicas: u8) -> String {

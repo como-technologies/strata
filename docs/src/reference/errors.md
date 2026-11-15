@@ -9,6 +9,14 @@ note shares the stream:
 {{#include ../output/auto-error.txt}}
 ```
 
+`snapshot` of one object takes `--json` too, also with `-o`. A record is always
+JSON, so `--json` changes only the error. Here two registries have the pack
+version:
+
+```text
+{{#include ../output/pack-ambiguous-json.txt}}
+```
+
 `kind` is a stable name. A new release can add a kind. A kind keeps its meaning.
 `message` is the sentence that the terminal shows. The other fields belong to
 the kind.
@@ -29,7 +37,7 @@ the kind.
 | `cluster-profile-not-found` | The cluster runs no profile with this name or uid. | `cluster`, `profile`, `applied` |
 | `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
-| `palette-refuses` | `snapshot --validate` asked Palette whether it takes the version, and Palette refused its name, its version, or its packs. Strata prints each error as a `palette    refuses:` line first, and writes no record. | `reference`, `errors[]` of `pack`, `code`, and `message` |
+| `palette-refuses` | `snapshot --validate` asked Palette whether it takes the version, and Palette refused its name, its version, or its packs. Strata prints each error as a `palette    refuses:` line first, and writes no record. With `--json`, strata prints no such line: `errors` holds each error. | `reference`, `errors[]` of `pack`, `code`, and `message` |
 | `usage` | The command line cannot work as given. See [The usage errors](#the-usage-errors). | |
 | `stale-record` | The record of the update that waits for a cluster holds a profile that the cluster does not run now. The record is older than the cluster. See [The refusals that a record or a cluster causes](#the-refusals-that-a-record-or-a-cluster-causes). | `cluster`, `name`, `profile` |
 | `cluster-template-governs` | A cluster template governs the cluster, and `compare --repave` asks about a change that gives pack values to a profile that the cluster runs. The route of the template takes no pack values. | `cluster`, `template` |
@@ -111,9 +119,6 @@ Two `usage` errors can come after a request:
   The listing of the scope then shows the name. The message lists each version
   of the name, and names `<name>@latest`. See
   [A name with no version](./refs.md#a-name-with-no-version).
-
-`snapshot` takes `--json` only with `--dir`. Without `--dir`, a `usage` error
-of `snapshot` prints as a `strata: error:` line.
 
 ## The refusals that a record or a cluster causes
 
