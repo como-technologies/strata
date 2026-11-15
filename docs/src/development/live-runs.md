@@ -2498,7 +2498,7 @@ create itself breaks it. The two new rules find the risk before the create. See
   `cluster.sh`, and `tag-only.sh` have run under OpenTofu, with the same
   provider that Terraform used, and give the same answers. `drift-report.sh` has
   run under Terraform only. Stages 1 to 3 of `order.sh` read the OpenTofu
-  outputs and apply nothing. No live window ran stage 4.
+  outputs and apply nothing.
 - On GCP, the scripts in [A second cloud: GCP](#a-second-cloud-gcp) have run.
   `drift-report.sh`, `merge-gate.sh`, `pack-states.sh`, `registry.sh`,
   `template.sh`, `cluster.sh`, `order.sh`, `who.sh`, `macros.sh`, and

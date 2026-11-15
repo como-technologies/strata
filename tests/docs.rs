@@ -2926,12 +2926,12 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "observer-role.sh",
         "who.sh",
     ] {
-        // the rows of #647, #648, #732, and #619 wait for the next live window, so they are not in
-        // this test
+        // the rows of #647, #648, and #732 wait for the next live window, so they are not in this
+        // test. The window of Wave 17 ran the rows of #619.
         let part = section(&runs, &format!("## {script}"), Some("\n## "))
             .lines()
             .filter(|line| {
-                !["#647", "#648", "#732", "#619"]
+                !["#647", "#648", "#732"]
                     .iter()
                     .any(|item| line.contains(item))
             })
@@ -3017,6 +3017,109 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         assert!(clusters.contains(needle), "clusters.md lacks {needle:?}");
     }
     assert!(!clusters.contains("No run has used a key with a smaller"));
+}
+
+/// The live window of Wave 17 ran the checks of #619, #620, #621, #665, #829, #844, #853, #864, and
+/// #892. Each page that states one of their facts gives the result in place of "no live run shows
+/// it yet". A fact whose check has no result keeps its words (#920).
+#[test]
+fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
+    // each page, the words of a result or of a fact with no result, and the words that are gone
+    let pages: [(&str, &[&str], &[&str]); 8] = [
+        (
+            "internals/palette/clusters.md",
+            &[
+                "reads the three routes with such a key, and gets this answer from each one.",
+                "sends a key that no tenant has. The output and the errors of `strata list projects` hold no copy of it.",
+                "The code of Palette shows this table. A live run shows its first row for Project Viewer",
+                "The cluster listing answers HTTP 500 with `ResourceAccessDenied`, and the profile listing gives the profiles.",
+                "The stage also shows that an added profile goes to the end when the `PUT` gives it first.",
+                "show that Palette answers the search of each project of the tenant listing.",
+                "The code of Palette shows these facts; no live run shows the refusal yet:",
+                "The code of Palette shows it; no live run shows it yet. Stage 10 of",
+            ],
+            &[
+                "a message that names `cluster.get`. The code of Palette shows it; no live run shows it yet.",
+                "The code of Palette shows this table; no live run shows it yet.",
+                "The code of Palette shows these answers; no live run shows them yet.",
+                "keeps its stored order. The code of Palette shows it;",
+                "search each project with a key that reads each one.",
+            ],
+        ),
+        (
+            "internals/palette/limits.md",
+            &[
+                "A run shows that answer only for the cluster listing:",
+                "The refusal of a search to a key that cannot read a project.",
+                "reads such a cluster with two keys, and has no result yet.",
+            ],
+            &[
+                "reads the three routes with such a key, and has no result yet.",
+                "runs `strata list` with such a key, and has no result yet.",
+            ],
+        ),
+        (
+            "internals/palette/profiles.md",
+            &[
+                "| 1.0.0 to 1.0.2: the tag `24.04` to `LTS__24.04` | No repave. | No repave. |",
+                "`tenant.sh repave` sends this body. | No repave. |",
+            ],
+            &[
+                "| No live run shows it yet. |",
+                "the live window of wave 16",
+            ],
+        ),
+        (
+            "internals/palette/other-objects.md",
+            &[
+                "shows the scope `project` and the project of an app profile of a project.",
+                "show that Palette answers the listing of its project.",
+                "The code of Palette shows the refusal. No live run shows it yet.",
+            ],
+            &["list the app deployments of the project of the run."],
+        ),
+        (
+            "internals/palette/validate-routes.md",
+            &[
+                "A live run shows `K8SCidrOverlap`, and no live run shows the other three yet.",
+                "In that run, the message names only the scope `project`.",
+                "A live run shows that the route refuses the body with `K8SCidrOverlap`.",
+                "No live run shows the mark yet.",
+            ],
+            &[
+                "No live run of the example shows it yet",
+                "and not its value. No live run shows it yet.",
+            ],
+        ),
+        (
+            "internals/palette/packs.md",
+            &["Palette takes it, and the registry listing names it."],
+            &[
+                "`ResourceNameAlreadyExists`. The code of Palette shows it; no live run shows it yet.",
+            ],
+        ),
+        (
+            "reference/errors.md",
+            &[
+                "A live run shows `ClusterProfilesNotSupported`, `RequiredParam`, and `K8SCidrOverlap`.",
+            ],
+            &[],
+        ),
+        (
+            "development/live-runs.md",
+            &[],
+            &["No live window ran stage 4."],
+        ),
+    ];
+    for (name, now, gone) in pages {
+        let text = one_line(&read(&docs().join(name)));
+        for needle in now {
+            assert!(text.contains(needle), "{name} lacks {needle:?}");
+        }
+        for old in gone {
+            assert!(!text.contains(old), "{name} still says {old:?}");
+        }
+    }
 }
 
 /// The five pages of the observer, in the book: the pages of `OBSERVER_PAGES` for a reader, and two

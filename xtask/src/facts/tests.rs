@@ -931,6 +931,67 @@ fn the_request_of_each_fact_holds_the_query_that_its_rules_send() {
     }
 }
 
+/// The live window of Wave 17 ran the checks that these facts waited for. So each fact names its
+/// checks under `live` and gives no `unchecked` reason, and no reason of another fact names one of
+/// them (#920).
+#[test]
+fn the_facts_that_the_live_window_of_wave_17_shows_name_its_checks_under_live() {
+    const SHOWN: &[(&str, &[&str])] = &[
+        (
+            "listing-access-denied",
+            &[
+                "tiers.sh:narrow-list",
+                "tiers.sh:narrow-list-profiles",
+                "tiers.sh:narrow-list-says",
+                "tiers.sh:narrow-list-once",
+            ],
+        ),
+        (
+            "cluster-config-forbidden",
+            &[
+                "tiers.sh:narrow-rbacs-says",
+                "tiers.sh:narrow-namespaces-says",
+                "tiers.sh:narrow-repave-says",
+            ],
+        ),
+        (
+            "cluster-profile-order-append",
+            &[
+                "order.sh:added-last",
+                "order.sh:upgraded-last",
+                "order.sh:summary-first",
+                "order.sh:summary-addon",
+                "order.sh:control-kept",
+            ],
+        ),
+        (
+            "search-reach-of-the-key",
+            &[
+                "scope.sh:tenant-consumers",
+                "scope.sh:tenant-consumers-projects",
+                "scope.sh:release-consumers-edge-hosts",
+            ],
+        ),
+    ];
+    let facts = super::load(&crate::repository()).expect("the list of the facts");
+    for (id, checks) in SHOWN {
+        let fact = facts.iter().find(|f| f.id == *id).expect(id);
+        assert!(fact.unchecked.is_none(), "{id}: {:?}", fact.unchecked);
+        for check in *checks {
+            assert!(fact.live.iter().any(|c| c == check), "{id} lacks {check}");
+        }
+    }
+    for fact in &facts {
+        let reason = fact.unchecked.as_deref().unwrap_or_default();
+        for (_, checks) in SHOWN {
+            for check in *checks {
+                let (_, name) = check.split_once(':').unwrap();
+                assert!(!reason.contains(name), "{} still waits for {name}", fact.id);
+            }
+        }
+    }
+}
+
 #[test]
 fn the_list_of_the_repository_prints_as_json_for_a_script() {
     let json = super::print(&crate::repository()).unwrap();

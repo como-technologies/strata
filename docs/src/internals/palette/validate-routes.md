@@ -78,7 +78,8 @@ it as the answer of the route, with the verdict `failed` and the message of
 Palette.
 
 The route also refuses the whole entity with HTTP `500` and one of these codes.
-The code of Palette shows it; no live run shows it yet.
+The code of Palette shows each one. A live run shows `K8SCidrOverlap`, and no
+live run shows the other three yet.
 
 - `InvalidDropDownVariable`: a value of a dropdown variable that is not the
   label of an option.
@@ -103,9 +104,12 @@ lists each code. The code of Palette shows them; no live run shows them yet.
 The check `cidr-overlap-status` of
 [`route-bodies.sh`](../../development/live-runs.md#route-bodiessh) asks the
 route about a pod CIDR that overlaps. Its body names a subnet for each pool, so
-that the route reaches the check of the CIDRs. Strata does not send these refusals
-again either. `palette-validate` reads each one as the answer of the route, with
-the verdict `failed` and the message of Palette.
+that the route reaches the check of the CIDRs. The route refuses the body with
+HTTP `500` and `K8SCidrOverlap`. The case `cidr-variable` gets the same code for
+a pod CIDR from a variable: see [The variables of the body](#the-variables-of-the-body).
+Strata does not send these refusals again either. `palette-validate` reads each
+one as the answer of the route, with the verdict `failed` and the message of
+Palette.
 
 The same live run shows what the route does not check. It takes a body with an
 add-on profile that holds a pack version that does not list the cloud type, and
@@ -147,11 +151,12 @@ cluster.create operation is not permitted, required permissions 'cluster.create'
 
 The order of the scopes in the message can change from one answer to the next.
 The code of Palette shows it, and a field test with a read-only key got the
-refusal. No live run of the example shows it yet: the check
-`preflight-role-validate` of [observer-role.sh](../../development/live-runs.md#observer-rolesh)
-asks the route with the key of a role. [The role that a key
-needs](./clusters.md#the-role-that-a-key-needs) names the roles that give the
-permission.
+refusal. The check `preflight-role-validate` of
+[observer-role.sh](../../development/live-runs.md#observer-rolesh) shows it with
+Project Viewer: each rule of the route gives `error`, with HTTP `403` and
+`AccessDenied`. In that run, the message names only the scope `project`.
+[The role that a key needs](./clusters.md#the-role-that-a-key-needs) names the
+roles that give the permission.
 
 The route then reads each profile of the body. A role that does not give
 `clusterProfile.get` gets HTTP `500` and the code `OperationForbidden`.
@@ -189,9 +194,10 @@ variable. So the report of `strata preflight` writes a mark in place of each
 value: see [The values in a message](../../commands/preflight/report.md#the-values-in-a-message).
 The case `cidr-variable` of
 [`validate-route.sh`](../../development/live-runs.md#validate-routesh) sends a
-body whose pod CIDR comes from the variable `pod_cidr` of a profile. Its checks
-make sure that the three reports hold the mark of the variable, and not its
-value. No live run shows it yet.
+body whose pod CIDR comes from the variable `pod_cidr` of a profile. A live run
+shows that the route refuses the body with `K8SCidrOverlap`. The checks of the
+case also make sure that the three reports hold the mark of the variable, and
+not its value. No live run shows the mark yet.
 
 ## POST /v1/spectroclusters/{uid}/validate/packs
 

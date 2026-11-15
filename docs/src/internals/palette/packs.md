@@ -687,9 +687,10 @@ pack. See [packs.sh](../../development/live-runs.md#packssh).
 Palette takes any text as the name of a registry, also a text with a `/`. It
 refuses an empty name with the code `ShouldNotBeEmpty`. It refuses the name of
 another registry of the same scope with the code `ResourceNameAlreadyExists`.
-The code of Palette shows it; no live run shows it yet. Stage 1 of
-[registry-kinds.sh](../../development/live-runs.md#registry-kindssh) makes a
-registry with a `/` in its name.
+Stage 1 of [registry-kinds.sh](../../development/live-runs.md#registry-kindssh)
+makes the registry `strata-live/packs`: Palette takes it, and the registry
+listing names it. The code of Palette shows the two refusals; no live run shows
+them yet.
 
 Palette takes the name of a pack as its registry gives it, also with a `/`. This
 holds for a Spectro pack registry, a Helm repository, and an OCI registry of the

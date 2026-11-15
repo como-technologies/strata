@@ -416,8 +416,7 @@ Palette serves the two templates as follows:
   Each pack summary takes its `metadata.name` and its `spec.name` from its pin.
   So while a draft waits, the profile and the answer have the new name. The
   code of Palette shows these facts, and the check `route-names` of
-  [draft.sh](../../development/live-runs.md#draftsh) tests the two names. No
-  result yet: the live window of wave 16 runs it.
+  [draft.sh](../../development/live-runs.md#draftsh) shows the two names.
 - `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}`
   gives one manifest with `spec.draft.content` and `spec.published.content`.
   A draft content is empty when the draft did not change the manifest.
@@ -507,13 +506,12 @@ No route names the profile versions that pin a version of a pack. Each entry of
 search takes no pack. The template of a version, with the name and the version of
 each pack, is in the document of that version alone.
 
-The code of Palette shows these facts. On the live tenant, the checks
+The code of Palette shows these facts. A live run shows two of them. The checks
 `versions-tenant` and `versions-project` of
-[scope.sh](../../development/live-runs.md#scopesh) test the scope. The check
+[scope.sh](../../development/live-runs.md#scopesh) show the scope. The check
 `behind-profile-names` of [loop.sh](../../development/live-runs.md#loopsh)
-tests a new version of the same project. No result yet: the live window of wave
-16 runs them. The compare of the names and the deleted versions have no live
-check. The command page is
+shows a new version of the same project. The compare of the names and the
+deleted versions have no live check. The command page is
 [Newer versions of a profile](../../commands/behind.md#newer-versions-of-a-profile).
 
 `GET /v1/clusterprofiles/{uid}` answers HTTP `404` with the code
@@ -802,15 +800,16 @@ the tag of the OS pack with each body:
 
 | The move of cluster A | The body of a swap | The earlier body |
 | --- | --- | --- |
-| 1.0.0 to 1.0.2: the tag `24.04` to `LTS__24.04` | No live run shows it yet. | No repave. |
-| 1.0.0 to 1.0.3: the tag `24.04` to `LTS__24.x` | No live run shows it yet. | No repave. |
-| 1.0.2 back to 1.0.0 | No live run shows it yet. | No repave. |
+| 1.0.0 to 1.0.2: the tag `24.04` to `LTS__24.04` | No repave. | No repave. |
+| 1.0.0 to 1.0.3: the tag `24.04` to `LTS__24.x` | No repave. | No repave. |
+| 1.0.2 back to 1.0.0 | No repave. | No repave. |
 
 The three versions hold one pack version of the OS pack, with one pack uid and
 the same values. The route gives a reason for a pack of the OS or Kubernetes
 layer with another version or other values. It also gives one for a pack that
 one side does not hold: see [the codes](../../commands/compare/repave.md). So
-the code of Palette shows no repave for the body of a swap too.
+the code of Palette shows no repave for the body of a swap too, and a live run
+shows it.
 
 ## A variable in a field that repaves
 
@@ -829,7 +828,7 @@ about such a move:
 | The body of the request | The answer of Palette |
 | --- | --- |
 | The uid of 1.0.1 in place of 1.0.0, and the uid of the add-on profile of the cluster, with no `packValues` and no `variables[]`. `compare --repave` sends this body. | No repave. |
-| The body of a swap: the uid of 1.0.1 and its `packValues` in place of 1.0.0, and the uid of the add-on profile. It has no `variables[]`. `tenant.sh repave` sends this body. | No live run shows it yet. |
+| The body of a swap: the uid of 1.0.1 and its `packValues` in place of 1.0.0, and the uid of the add-on profile. It has no `variables[]`. `tenant.sh repave` sends this body. | No repave. |
 | The earlier body of `tenant.sh repave`: one profile, the uid of 1.0.0, `replaceWithProfile` 1.0.1, and the `packValues` of 1.0.1, with no `variables[]`. | Repave: `PackValuesUpdated`, `kubernetes`, `kubeadmconfig.postKubeadmCommands`. |
 | The same, with `strata_mode` `600`, the default | The same repave. |
 | The same, with `strata_mode` `644` | The same repave. |
@@ -841,11 +840,11 @@ without `variables[]` in the body. So `compare --repave` sends no
 
 The earlier body asks about 1.0.0 with the values of 1.0.1, and not about the
 move: see [The body of a swap](#the-body-of-a-swap). So its answer is not the
-answer for the move. For the body of a swap, the code of Palette shows the
-same answer as for the body of `compare --repave`. The sent values are the
-published values of 1.0.1, so the two bodies ask about the same profile
-version. Stage 8 of [repave.sh](../../development/live-runs.md#repavesh) asks
-with each body: `examples/live/repave.sh 8`.
+answer for the move. For the body of a swap, the live run and the code of
+Palette give the same answer as for the body of `compare --repave`. The sent
+values are the published values of 1.0.1, so the two bodies ask about the same
+profile version. Stage 8 of [repave.sh](../../development/live-runs.md#repavesh)
+asks with each body: `examples/live/repave.sh 8`.
 
 ## Macros
 

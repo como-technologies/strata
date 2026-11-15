@@ -339,8 +339,9 @@ Each other `403` of the route, such as `AccessDenied` for the role of the key,
 is an error of the check. A refusal of the body with HTTP `400`, `404`, or `409`
 is an answer of the route.
 
-A live run shows `ClusterProfilesNotSupported` and `RequiredParam`. The code of
-Palette shows the other codes, and no live run shows them yet.
+A live run shows `ClusterProfilesNotSupported`, `RequiredParam`, and
+`K8SCidrOverlap`. The code of Palette shows the other codes, and no live run
+shows them yet.
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.
