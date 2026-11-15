@@ -3,20 +3,50 @@ package docs
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 )
 
 const sentinel = "SENTINEL-MUST-NOT-LEAVE"
 
-func read(t *testing.T, name string) []byte {
+// testdata is the directory of the documents of the real binary. driftSummary is the document of `verify` for a drift
+// in it, and behindFile the document of `behind`. testkit.DriftSummary names the same file for the tests of other
+// packages, and the tests of docs cannot read it, because testkit imports docs.
+const (
+	testdata     = "testdata"
+	driftSummary = "verify-summary-drift.json"
+	behindFile   = "behind.json"
+)
+
+// encode encodes v, and fails the test on an error. It does the job of testkit.MustJSON for the tests of docs, because
+// testkit imports docs.
+func encode(t *testing.T, v any) []byte {
 	t.Helper()
-	b, err := os.ReadFile("testdata/" + name)
+	raw, err := json.Marshal(v)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return b
+	return raw
+}
+
+// decode reads the JSON raw into v, and fails the test on an error. what names the JSON in the failure. It does the job
+// of testkit.Decode for the tests of docs, because testkit imports docs.
+func decode(t *testing.T, what string, raw []byte, v any) {
+	t.Helper()
+	if err := json.Unmarshal(raw, v); err != nil {
+		t.Fatalf("%s is no JSON that the test can read: %v: %s", what, err, raw)
+	}
+}
+
+// holdsNone fails when text holds one of the words. where names the text in the failure. It does the job of
+// testkit.HoldsNone for the tests of docs, because testkit imports docs.
+func holdsNone(t *testing.T, where, text string, words ...string) {
+	t.Helper()
+	for _, w := range words {
+		if strings.Contains(text, w) {
+			t.Errorf("%s holds %q", where, w)
+		}
+	}
 }
 
 // plant writes the sentinel at a path of a generic copy of a document. A key of "*" takes each
@@ -52,9 +82,7 @@ func plant(t *testing.T, node any, path []string, v any) int {
 
 func TestFieldsOutsideTheAllowListDoNotSurvive(t *testing.T) {
 	var doc map[string]any
-	if err := json.Unmarshal(read(t, "verify-summary-drift.json"), &doc); err != nil {
-		t.Fatal(err)
-	}
+	decodeFile(t, testdata, driftSummary, &doc)
 	for _, p := range []string{
 		"records.*.diff.a.cluster.variables",
 		"records.*.diff.b.cluster.variables",
@@ -69,31 +97,18 @@ func TestFieldsOutsideTheAllowListDoNotSurvive(t *testing.T) {
 			t.Fatalf("the test planted nothing at %s", p)
 		}
 	}
-	raw, err := json.Marshal(doc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := encode(t, doc)
 	if !bytes.Contains(raw, []byte(sentinel)) {
 		t.Fatal("the test document holds no sentinel")
 	}
 	var got VerifySummary
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatal(err)
-	}
-	out, err := json.Marshal(got)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(out, []byte(sentinel)) {
-		t.Fatalf("a field outside the allow-list survived: %s", out)
-	}
+	decode(t, "the test document", raw, &got)
+	holdsNone(t, "the document after the allow-list", string(encode(t, got)), sentinel)
 }
 
 func TestTheDriftDocumentDecodes(t *testing.T) {
 	var got VerifySummary
-	if err := json.Unmarshal(read(t, "verify-summary-drift.json"), &got); err != nil {
-		t.Fatal(err)
-	}
+	decodeFile(t, testdata, driftSummary, &got)
 	if got.Schema != VerifySummarySchema || len(got.Records) != 1 {
 		t.Fatalf("schema %q, %d records", got.Schema, len(got.Records))
 	}
@@ -123,13 +138,11 @@ func TestTheSchemaIdsAreThoseOfTheDocumentsOfTheBinary(t *testing.T) {
 		doc  Document
 		want string
 	}{
-		{"verify-summary-drift.json", &VerifySummary{}, VerifySummarySchema},
-		{"behind.json", &Behind{}, BehindSchema},
+		{driftSummary, &VerifySummary{}, VerifySummarySchema},
+		{behindFile, &Behind{}, BehindSchema},
 		{"move-kubernetes.json", &Diff{}, DiffSchema},
 	} {
-		if err := json.Unmarshal(read(t, c.file), c.doc); err != nil {
-			t.Fatal(err)
-		}
+		decodeFile(t, testdata, c.file, c.doc)
 		if got := c.doc.SchemaID(); got != c.want {
 			t.Errorf("%s states %q, want %q", c.file, got, c.want)
 		}
@@ -138,9 +151,7 @@ func TestTheSchemaIdsAreThoseOfTheDocumentsOfTheBinary(t *testing.T) {
 
 func TestBehindDecodes(t *testing.T) {
 	var got Behind
-	if err := json.Unmarshal(read(t, "behind.json"), &got); err != nil {
-		t.Fatal(err)
-	}
+	decodeFile(t, testdata, behindFile, &got)
 	behind := 0
 	for _, p := range got.Pins {
 		if p.Behind {
@@ -168,9 +179,7 @@ func TestAVerdictWithAnUnreadAuditLogDecodesTheReason(t *testing.T) {
 	const doc = `{"schema":"` + VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"drifted","name":"aws-stack","version":"1.1.0",
 		"diff":{"schema":"` + DiffSchema + `","verify":{"status":"drifted","whoError":"HTTP 403: {\"code\":\"AccessDenied\"}"}}}]}`
 	var got VerifySummary
-	if err := json.Unmarshal([]byte(doc), &got); err != nil {
-		t.Fatal(err)
-	}
+	decode(t, "the document", []byte(doc), &got)
 	r := got.Records[0]
 	if r.Status != VerifyDrifted || r.Error != nil || r.Diff.Verify.WhoError != `HTTP 403: {"code":"AccessDenied"}` || len(r.Diff.Verify.Who) != 0 {
 		t.Fatalf("row %+v, verify %+v", r, r.Diff.Verify)
@@ -198,17 +207,12 @@ func TestCapTextDropsAllTheTextOfAPackAboveTheLimitAndKeepsTheOthers(t *testing.
 
 func TestTextTooLargeIsNeverReadFromADocumentOrWrittenToOne(t *testing.T) {
 	var p Pack
-	if err := json.Unmarshal([]byte(`{"key":"k8s/x","TextTooLarge":true,"textTooLarge":true}`), &p); err != nil {
-		t.Fatal(err)
-	}
+	decode(t, "the pack", []byte(`{"key":"k8s/x","TextTooLarge":true,"textTooLarge":true}`), &p)
 	if p.TextTooLarge {
 		t.Error("a document set a field that only the observer sets")
 	}
 	p.TextTooLarge = true
-	out, err := json.Marshal(p)
-	if err != nil || strings.Contains(strings.ToLower(string(out)), "texttoolarge") {
-		t.Errorf("%s %v", out, err)
-	}
+	holdsNone(t, "the encoded pack", strings.ToLower(string(encode(t, p))), "texttoolarge")
 }
 
 func TestStatusOfReadsTheStatusAtTheStartOfAReasonOnly(t *testing.T) {

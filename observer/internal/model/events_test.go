@@ -1,23 +1,29 @@
 package model
 
 import (
-	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func at(d time.Duration) string {
 	return t0.Add(d).Format(time.RFC3339)
 }
 
-// eventsAt builds the summary at t0 plus one minute, and gives its events.
+// eventsAt builds the summary of seenAt, and gives its events.
 func eventsAt(c *Content, v *Versions, firstSeen map[string]time.Time) []Event {
-	return Build(Input{Now: t0.Add(time.Minute), ClusterUID: "c1", StartedAt: t0, Files: 2, FilesKnown: true, Content: c, Versions: v, FirstSeen: firstSeen,
-		ContentClock: goodClock(15*time.Minute, t0), VersionsClock: goodClock(6*time.Hour, t0)}).Events
+	return seenAt(c, v, firstSeen).Events
+}
+
+// seenAt builds the summary of goodInput, with the first sight of each finding in firstSeen.
+func seenAt(c *Content, v *Versions, firstSeen map[string]time.Time) Summary {
+	in := goodInput(c, v)
+	in.FirstSeen = firstSeen
+	return Build(in)
 }
 
 func reasons(events []Event) []string {
@@ -28,21 +34,27 @@ func reasons(events []Event) []string {
 	return out
 }
 
+// dexDrift is the reason of the event of the drift of fred-identity@2.3.0, as reasons gives it.
+var dexDrift = string(EventDrift) + " " + eventKinds[PublishedChanged].reason + " " + testkit.DexProfile
+
+// hoppy is a profile that runs an old copy of coredns.
+const hoppy = "hoppy-autoscale@1.0.0"
+
 func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-6 * time.Hour), Actor: "Betty Rubble", ActorType: "user", Action: "update"}}}
-	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
-	kubernetes := pin("traefik", "addon", "37.0.0", "38.1.0", "wilma-gateway@3.1.2")
+	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, testkit.DexKey))
+	kubernetes := pin("traefik", "addon", "37.0.0", "38.1.0", testkit.GatewayProfile)
 	kubernetes.Newer[0].Listed = at(-48 * time.Hour)
-	bitnami := pin("coredns", "addon", "1.0.0", "", "rubble-dns@1.0.0", "hoppy-autoscale@1.0.0")
+	bitnami := pin("coredns", "addon", "1.0.0", "", "rubble-dns@1.0.0", hoppy)
 	bitnami.Registry = "Bitnami"
-	bitnami.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
+	bitnami.RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{kubernetes, bitnami}, Moves: map[string]Move{}}
-	events := eventsAt(&c, v, map[string]time.Time{FindingID(PublishedChanged, "fred-identity@2.3.0"): t0.Add(-5 * time.Hour)})
+	events := eventsAt(&c, v, map[string]time.Time{FindingID(PublishedChanged, testkit.DexProfile): t0.Add(-5 * time.Hour)})
 	want := []string{
-		"drift DriftFound fred-identity@2.3.0",
-		"info ProfileUpdated fred-identity@2.3.0",
-		"newer NewVersion wilma-gateway@3.1.2",
-		"not-checked OldCopy hoppy-autoscale@1.0.0, rubble-dns@1.0.0",
+		dexDrift,
+		string(EventInfo) + " " + reasonProfileUpdated + " " + testkit.DexProfile,
+		string(EventNewer) + " " + reasonNewVersion + " " + testkit.GatewayProfile,
+		string(EventNotChecked) + " " + reasonOldCopy + " " + hoppy + ", rubble-dns@1.0.0",
 	}
 	if got := reasons(events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
@@ -58,10 +70,10 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 
 func TestTheEventsAreOrderedByTimeTheNewestFirst(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-6 * time.Hour), Actor: "Betty", ActorType: "user", Action: "update"}}}
-	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
-	p := pin("traefik", "addon", "37.0.0", "38.1.0", "wilma-gateway@3.1.2")
+	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, testkit.DexKey))
+	p := pin("traefik", "addon", "37.0.0", "38.1.0", testkit.GatewayProfile)
 	p.Newer[0].Listed = at(-48 * time.Hour)
-	events := eventsAt(&c, &Versions{At: t0, Pins: []docs.Pin{p}}, map[string]time.Time{FindingID(PublishedChanged, "fred-identity@2.3.0"): t0.Add(-5 * time.Hour)})
+	events := eventsAt(&c, &Versions{At: t0, Pins: []docs.Pin{p}}, map[string]time.Time{FindingID(PublishedChanged, testkit.DexProfile): t0.Add(-5 * time.Hour)})
 	for i := 1; i < len(events); i++ {
 		if events[i].Time.After(events[i-1].Time) {
 			t.Errorf("event %d is newer than event %d: %+v", i, i-1, events)
@@ -74,14 +86,12 @@ func TestTheEventsAreOrderedByTimeTheNewestFirst(t *testing.T) {
 
 func TestAnEventOlderThanSevenDaysIsNotInTheList(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-8 * 24 * time.Hour), Actor: "Betty", ActorType: "user", Action: "update"}}}
-	c := content(t, drifted(rec("a-stack", "1.0.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
+	c := content(t, drifted(rec("a-stack", "1.0.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, testkit.DexKey))
 	old := pin("traefik", "addon", "37.0.0", "38.1.0", "a-stack@1.0.0")
 	old.Newer[0].Listed = at(-8 * 24 * time.Hour)
 	stale := pin("coredns", "addon", "1.0.0", "", "a-stack@1.0.0")
 	stale.RegistrySync = &docs.RegistrySync{LastSyncedTime: at(-8 * 24 * time.Hour)}
-	s := Build(Input{Now: t0.Add(time.Minute), Files: 2, FilesKnown: true, Content: &c, Versions: &Versions{At: t0, Pins: []docs.Pin{old, stale}},
-		ContentClock: goodClock(15*time.Minute, t0), VersionsClock: goodClock(6*time.Hour, t0),
-		FirstSeen: map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-8 * 24 * time.Hour)}})
+	s := seenAt(&c, &Versions{At: t0, Pins: []docs.Pin{old, stale}}, map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-8 * 24 * time.Hour)})
 	if len(s.Events) != 0 {
 		t.Errorf("events %+v", s.Events)
 	}
@@ -121,8 +131,8 @@ func TestParseSideKnowsThreeSides(t *testing.T) {
 }
 
 func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t *testing.T) {
-	const reason = "HTTP 403: AUDIT-REASON-SENTINEL"
-	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), &docs.Verify{WhoError: reason}, "addon/dex")
+	const reason = "HTTP 403: " + testkit.AuditSentinel
+	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), &docs.Verify{WhoError: reason}, testkit.DexKey)
 	c := content(t, r)
 	s := build(&c, nil)
 	if len(s.Findings) != 1 || s.Findings[0].Kind != PublishedChanged || !s.Findings[0].WhoUnread || len(s.Findings[0].Who) != 0 {
@@ -137,26 +147,22 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t 
 		t.Errorf("counts %+v", s.Counts)
 	}
 	// the notice is as new as the last sight, and the drift is as old as the first
-	want := []string{"info AuditUnread fred-identity@2.3.0", "drift DriftFound fred-identity@2.3.0"}
+	want := []string{string(EventInfo) + " " + reasonAuditUnread + " " + testkit.DexProfile, dexDrift}
 	if got := reasons(s.Events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
 	}
-	if got := s.Events[0].Message; got != "The audit log could not be read, so this does not say who made the change." {
+	if got := s.Events[0].Message; got != testkit.AuditUnread {
 		t.Errorf("message %q", got)
 	}
 	// the summary carries the flag, and never the text of the error
-	raw, err := json.Marshal(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "AUDIT-REASON-SENTINEL") || !strings.Contains(string(raw), `"whoUnread":true`) {
-		t.Errorf("the summary %s", raw)
-	}
+	raw := testkit.MustJSON(t, s)
+	testkit.HoldsNone(t, "the summary", string(raw), testkit.AuditSentinel)
+	testkit.HoldsAll(t, "the summary", string(raw), `"whoUnread":true`)
 }
 
 func TestAFindingWithItsWritesSaysNothingOfAnUnreadAuditLog(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-time.Hour), Actor: "Betty Rubble", ActorType: "user", Action: "update"}}}
-	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
+	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, testkit.DexKey))
 	s := build(&c, nil)
 	if s.Findings[0].WhoUnread {
 		t.Errorf("finding %+v", s.Findings[0])

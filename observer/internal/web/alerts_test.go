@@ -1,24 +1,26 @@
 package web
 
 import (
-	"encoding/json"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
+// rulesHead starts the head of the screen of the alert rules, before the count.
+const rulesHead = `<h2>Alert rules <span class="sub">`
+
 // navOfAlerts finds the nav item Alerts and its count.
-var navOfAlerts = regexp.MustCompile(`<a href="#alerts" class="[^"]*"><span>Alerts</span><span class="cnt( r)?">([^<]*)</span></a>`)
+var navOfAlerts = navItem("#alerts", "Alerts", "( r)?")
 
 // The badge of each state of a rule, as the page draws it.
 var alertBadges = map[alert.State]string{
-	alert.StateFiring:   `<span class="badge r">Firing</span>`,
-	alert.StatePending:  `<span class="badge a">Pending</span>`,
-	alert.StateInactive: `<span class="badge g">Inactive</span>`,
-	alert.StateMuted:    `<span class="badge y">Muted</span>`,
+	alert.StateFiring:   badge("r", "Firing"),
+	alert.StatePending:  badge("a", "Pending"),
+	alert.StateInactive: badge("g", "Inactive"),
+	alert.StateMuted:    badge("y", "Muted"),
 }
 
 // The nav item Alerts is the last item. It says "Not set" when the observer sends no alert, and else it
@@ -29,8 +31,8 @@ func TestTheNavItemAlertsSaysNotSetOrCountsTheRulesThatFire(t *testing.T) {
 		red   string
 		count string
 	}{
-		{devdata.StateOK, "", "Not set"},
-		{devdata.StateAlertsUnset, "", "Not set"},
+		{devdata.StateOK, "", notSet},
+		{devdata.StateAlertsUnset, "", notSet},
 		{devdata.StateAlerts, " r", "1"},
 	}
 	for _, c := range cases {
@@ -40,9 +42,7 @@ func TestTheNavItemAlertsSaysNotSetOrCountsTheRulesThatFire(t *testing.T) {
 			if m == nil || m[1] != c.red || m[2] != c.count {
 				t.Fatalf("the nav item is %q, want %q %q", m, c.red, c.count)
 			}
-			if notChecked, alerts := strings.Index(overview, `<a href="#notchecked" class=`), strings.Index(overview, `<a href="#alerts" class=`); !(notChecked >= 0 && notChecked < alerts) {
-				t.Errorf("the nav item Alerts does not follow Not checked: %d %d", notChecked, alerts)
-			}
+			mustHoldInOrder(t, "the nav", overview, navLink("#notchecked"), navLink("#alerts"))
 		})
 	}
 }
@@ -54,11 +54,11 @@ func TestTheScreenOfTheAlertsShowsEachRuleWithItsStateAndTheSampleMessage(t *tes
 	set := loadSet(t, devdata.StateAlerts)
 	screen := pageOf(t, render(t, devdata.StateAlerts, false), "#alerts", "")
 	mustHold(t, "the screen", screen,
-		`<div class="alertbar b">One message when a finding opens, and one when it clears. <span>A lower level overrides a higher one. A mute always has an end date. Messages hold no values.</span></div>`,
-		`<h2>Alert rules <span class="sub">7</span></h2>`,
+		alertBar+`b">One message when a finding opens, and one when it clears. `+span("A lower level overrides a higher one. A mute always has an end date. Messages hold no values.")+`</div>`,
+		rulesHead+`7</span></h2>`,
 		`<th>State</th><th>Level</th><th>Applies to</th><th>News</th><th>Send</th><th>Where</th>`,
 		`<h2>Sample message</h2>`)
-	mustNotHold(t, "the screen", screen, "A sketch for later", "Not set")
+	mustNotHold(t, "the screen", screen, "A sketch for later", notSet)
 	rows := map[string]string{ // the cells of a row, by the text that marks it
 		"identity-oncall":   `<td>Profile</td><td class="m">fred-identity</td><td>Drift</td><td>At once</td><td class="m">identity-oncall</td>`,
 		"platform-planning": `<td>Cluster</td><td class="m">quarry-1</td><td>Newer version</td><td>Weekly digest</td><td class="m">platform-planning</td>`,
@@ -75,7 +75,7 @@ func TestTheScreenOfTheAlertsShowsEachRuleWithItsStateAndTheSampleMessage(t *tes
 	for _, line := range strings.Split(set.AlertRules.Sample, "\n") {
 		mustHold(t, "the sample message", screen, line)
 	}
-	mustHold(t, "the sample message", screen, `<div class="pre mt0">strata · quarry-1 · Drift`)
+	mustHold(t, "the sample message", screen, `<div class="pre mt0">`+testkit.QuarryDrift)
 }
 
 // The screen of an observer that started without --alerts is an offer: it says that no rule is set, what a message
@@ -84,9 +84,8 @@ func TestWithNoAlertsFlagTheScreenSaysTheSendIsOptIn(t *testing.T) {
 	for _, state := range []devdata.State{devdata.StateOK, devdata.StateAlertsUnset} {
 		t.Run(string(state), func(t *testing.T) {
 			screen := pageOf(t, render(t, state, false), "#alerts", "")
-			mustHold(t, "the screen", screen, `<h2>Alert rules <span class="sub">Not set</span></h2>`, "Nobody gets paged yet", "This install has no alert rules.",
-				"The rules are a file in Git, so a mute always has a name and an end date.",
-				`<b>Next</b> Turn on the alerts when you install the observer.`, `class="splash md tone-off"`)
+			checkPlace(t, placeNamed(t, placeAlertsOff), screen)
+			mustHold(t, "the screen", screen, rulesHead+notSet+`</span></h2>`, "The rules are a file in Git, so a mute always has a name and an end date.")
 			mustNotHold(t, "the screen", screen, "<table>", "Sample message", "Firing")
 		})
 	}
@@ -96,30 +95,20 @@ func TestWithNoAlertsFlagTheScreenSaysTheSendIsOptIn(t *testing.T) {
 // bar. The log names the channel and the status, and the bar says so.
 func TestAMuteThatEndedAndAMessageThatWaitsShowTheirWords(t *testing.T) {
 	dir := writeSet(t, devdata.StateAlerts, map[string]func([]byte) []byte{
-		"alerts.json": func(raw []byte) []byte {
-			var v alert.View
-			if err := devdata.Decode(raw, &v); err != nil {
-				t.Fatal(err)
-			}
+		"alerts.json": editJSON(t, func(v *alert.View) {
 			v.Waiting = 2
 			v.Rules[5].State = alert.StateInactive
 			v.Rules[5].MuteUntil = "2026-10-01"
-			return mustJSON(t, v)
-		},
+		}),
 	})
 	screen := pagesOf(t, dir, "#alerts")[0]
-	mustHold(t, "the screen", screen, `<div class="alertbar a">2 messages wait for a retry. <span>The log names the channel and the status. It never holds the address.</span></div>`,
+	mustHold(t, "the screen", screen, amberBar+`2 messages wait for a retry. `+span("The log names the channel and the status. It never holds the address.")+`</div>`,
 		`<td>Mute ended 2026-10-01</td>`)
 	mustNotHold(t, "the screen", screen, "Muted until 2026-10-01")
 	one := writeSet(t, devdata.StateAlerts, map[string]func([]byte) []byte{
-		"alerts.json": func(raw []byte) []byte {
-			var v alert.View
-			if err := devdata.Decode(raw, &v); err != nil {
-				t.Fatal(err)
-			}
+		"alerts.json": editJSON(t, func(v *alert.View) {
 			v.Waiting = 1
-			return mustJSON(t, v)
-		},
+		}),
 	})
 	mustHold(t, "the screen", pagesOf(t, one, "#alerts")[0], "1 message waits for a retry.")
 }
@@ -127,14 +116,9 @@ func TestAMuteThatEndedAndAMessageThatWaitsShowTheirWords(t *testing.T) {
 // A digest period other than a week reads as the period.
 func TestADigestPeriodOtherThanAWeekReadsAsThePeriod(t *testing.T) {
 	dir := writeSet(t, devdata.StateAlerts, map[string]func([]byte) []byte{
-		"alerts.json": func(raw []byte) []byte {
-			var v alert.View
-			if err := devdata.Decode(raw, &v); err != nil {
-				t.Fatal(err)
-			}
+		"alerts.json": editJSON(t, func(v *alert.View) {
 			v.DigestEvery = "24h"
-			return mustJSON(t, v)
-		},
+		}),
 	})
 	screen := pagesOf(t, dir, "#alerts")[0]
 	mustHold(t, "the screen", screen, "<td>Digest every 24h</td>")
@@ -145,14 +129,5 @@ func TestADigestPeriodOtherThanAWeekReadsAsThePeriod(t *testing.T) {
 func TestTheNamesOfTheRulesShowAsTextOnTheScreenOfTheAlerts(t *testing.T) {
 	screen := pageOf(t, render(t, devdata.StateAlerts, true), "#alerts", "")
 	mustNotHold(t, "the screen", screen, "<img")
-	mustHold(t, "the screen", screen, "&lt;img src=x onerror=alert(1)&gt;")
-}
-
-func mustJSON(t *testing.T, v any) []byte {
-	t.Helper()
-	raw, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return raw
+	mustHold(t, "the screen", screen, injection)
 }

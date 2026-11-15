@@ -7,6 +7,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // valueTypes are the types that hold a changed value. Only PackDiff of the detail tier can use them.
@@ -64,9 +65,7 @@ func TestNoTypeOfTheSummaryTierHoldsAChangedValue(t *testing.T) {
 	for name, typ := range summary {
 		var found []string
 		holds(typ, valueTypes, name, map[reflect.Type]bool{}, &found)
-		for _, f := range found {
-			t.Errorf("%s", f)
-		}
+		testkit.NoProblems(t, name, found)
 	}
 }
 
@@ -74,9 +73,7 @@ func TestNoTypeOfTheSummaryTierHoldsAChangedValue(t *testing.T) {
 func TestTheWalkSeesTheLeafOfTheDetailType(t *testing.T) {
 	var found []string
 	holds(reflect.TypeOf(PackDiff{}), valueTypes, "PackDiff", map[reflect.Type]bool{}, &found)
-	if len(found) == 0 {
-		t.Error("the walk found no value type in PackDiff")
-	}
+	testkit.FindsProblem(t, "the walk of PackDiff", found, "")
 }
 
 // Every type that a route serves is a view or a part of the summary: a route cannot serve a docs type.

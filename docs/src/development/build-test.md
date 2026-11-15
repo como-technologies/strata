@@ -80,7 +80,8 @@ newer versions. `observer-1` is the tenant before the edit, with no finding.
 `images`, `images-split`, `images-off`, and `images-unread` show the read of the pods.
 Its sets `asks` and `text-too-large` show the answers of Palette and the cap of the text.
 Its sets `alerts` and `alerts-unset` show the Alerts screen with rules and with no alert.
-Its set `moved-drift` shows a finding on a version that the cluster no longer runs.
+Its set `moved-drift` shows a finding on a version that the cluster no longer runs, and
+`update-checks` shows the checks of strata.
 [Try each state](./observer-api.md#try-each-state) lists every set.
 
 `scripts/observer-lib.sh` holds the functions that start and stop the stand-in.
@@ -91,11 +92,12 @@ contract script and the playground script both source it.
 step of the chapter `observer` runs it. The runner puts it on the `PATH` of a step.
 The job `docs` of CI installs Go for this step.
 
-`just observer-contract --write` also copies six documents to
+`just observer-contract --write` also copies seven documents to
 `observer/internal/docs/testdata/`. They hold made-up data of the stand-in. Do
 not edit them by hand. `go test` reads them, so it needs neither the binary nor
-the network, and the contract tests skip. The job `check` of CI runs
-`just observer-contract` after `just examples`.
+the network, and the contract tests skip. A test outside `internal/docs` reads
+one with `testkit.ReadDoc`. The job `check` of CI runs `just observer-contract`
+after `just examples`.
 
 `just lint` builds the rustdoc of `strata-palette`, `strata-preflight`, `xtask`,
 `strata-benches`, `strata-report-endpoint`, and `strata-fuzz` two times. It fails on a warning of each build. The first build

@@ -18,17 +18,15 @@ func TestPackDiffGivesThePackOfEachSideWithItsValues(t *testing.T) {
 	r, w := edited(t)
 	o := r.observer(w)
 	ctx := context.Background()
-	if _, ok, err := o.PackDiff(ctx, "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SidePublished); ok || err != nil {
+	if _, ok, err := o.PackDiff(ctx, testkit.AWSStackProfile, testkit.CSIKey, model.SidePublished); ok || err != nil {
 		t.Fatalf("before a cycle: %v %v", ok, err)
 	}
-	if err := o.RunContent(ctx); err != nil {
-		t.Fatal(err)
-	}
-	published, ok, err := o.PackDiff(ctx, "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SidePublished)
-	if err != nil || !ok || published.Key != "csi/csi-aws-ebs" || len(published.Values.Diff) == 0 {
+	cycle(t, o)
+	published, ok, err := o.PackDiff(ctx, testkit.AWSStackProfile, testkit.CSIKey, model.SidePublished)
+	if err != nil || !ok || published.Key != testkit.CSIKey || len(published.Values.Diff) == 0 {
 		t.Fatalf("published %+v %v %v", published, ok, err)
 	}
-	cluster, ok, err := o.PackDiff(ctx, "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SideCluster)
+	cluster, ok, err := o.PackDiff(ctx, testkit.AWSStackProfile, testkit.CSIKey, model.SideCluster)
 	if err != nil || !ok || cluster.Values.Diff[0].Old != sentinel {
 		t.Fatalf("cluster %+v %v %v", cluster, ok, err)
 	}
@@ -36,11 +34,11 @@ func TestPackDiffGivesThePackOfEachSideWithItsValues(t *testing.T) {
 		name, subject, key string
 		side               model.Side
 	}{
-		{"a profile that is not known", "nope@1.0.0", "csi/csi-aws-ebs", model.SidePublished},
-		{"a version that is not known", "aws-stack@9.9.9", "csi/csi-aws-ebs", model.SidePublished},
-		{"a pack that is not in the diff", "aws-stack@1.1.0", "os/ubuntu", model.SidePublished},
-		{"a pack that is not known", "aws-stack@1.1.0", "csi/nope", model.SideCluster},
-		{"the newer side with no versions cycle", "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SideNewer},
+		{"a profile that is not known", "nope@1.0.0", testkit.CSIKey, model.SidePublished},
+		{"a version that is not known", "aws-stack@9.9.9", testkit.CSIKey, model.SidePublished},
+		{"a pack that is not in the diff", testkit.AWSStackProfile, testkit.UbuntuKey, model.SidePublished},
+		{"a pack that is not known", testkit.AWSStackProfile, "csi/nope", model.SideCluster},
+		{"the newer side with no versions cycle", testkit.AWSStackProfile, testkit.CSIKey, model.SideNewer},
 	} {
 		if _, ok, err := o.PackDiff(ctx, c.subject, c.key, c.side); ok || err != nil {
 			t.Errorf("%s: %v %v", c.name, ok, err)
@@ -52,32 +50,26 @@ func TestPackDiffOfARecordWithNoSideReadsNothing(t *testing.T) {
 	r, w := edited(t)
 	w.compares = nil // the compare gives a document with no pack
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok, err := o.PackDiff(context.Background(), "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SideCluster); ok || err != nil {
+	cycle(t, o)
+	if _, ok, err := o.PackDiff(context.Background(), testkit.AWSStackProfile, testkit.CSIKey, model.SideCluster); ok || err != nil {
 		t.Errorf("%v %v", ok, err)
 	}
 }
-
-const moveSubject = "aws-stack@1.0.0"
 
 func TestPackDiffOfTheNewerSideComesFromMemoryAfterAFreshCompare(t *testing.T) {
 	r, w := withBehind(t)
 	o := r.observer(w)
 	ctx := context.Background()
-	if err := o.RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	before := w.countMoves()
-	pack, ok, err := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
-	if err != nil || !ok || pack.Key != "k8s/kubernetes" || len(pack.Values.Diff) != 11 {
+	pack, ok, err := o.PackDiff(ctx, testkit.AWSStackOld, testkit.KubernetesKey, model.SideNewer)
+	if err != nil || !ok || pack.Key != testkit.KubernetesKey || len(pack.Values.Diff) != 11 {
 		t.Fatalf("%+v %v %v", pack.Key, ok, err)
 	}
 	if w.countMoves() != before {
 		t.Errorf("the request ran a compare, and the cycle had the values")
 	}
-	for _, c := range []struct{ subject, key string }{{"other@1.0.0", "k8s/kubernetes"}, {moveSubject, "k8s/nope"}, {moveSubject, "addon/cert-manager"}} {
+	for _, c := range []struct{ subject, key string }{{testkit.OtherProfile, testkit.KubernetesKey}, {testkit.AWSStackOld, testkit.NopeKey}, {testkit.AWSStackOld, testkit.CertManagerKey}} {
 		if _, ok, err := o.PackDiff(ctx, c.subject, c.key, model.SideNewer); ok || err != nil {
 			t.Errorf("%v: %v %v", c, ok, err)
 		}
@@ -87,16 +79,12 @@ func TestPackDiffOfTheNewerSideComesFromMemoryAfterAFreshCompare(t *testing.T) {
 func TestAfterARestartTheNewerSideAsksForOneCompareAtATimeAndKeepsTheAnswer(t *testing.T) {
 	r, w := withBehind(t)
 	ctx := context.Background()
-	if err := r.observer(w).RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, r.observer(w))
 	o := r.restart(w)
-	if err := o.RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	cycle := w.countMoves()
 	for i := range 3 {
-		pack, ok, err := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
+		pack, ok, err := o.PackDiff(ctx, testkit.AWSStackOld, testkit.KubernetesKey, model.SideNewer)
 		if err != nil || !ok || len(pack.Values.Diff) != 11 {
 			t.Fatalf("request %d: %v %v", i, ok, err)
 		}
@@ -108,7 +96,7 @@ func TestAfterARestartTheNewerSideAsksForOneCompareAtATimeAndKeepsTheAnswer(t *t
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	last := w.calls[len(w.calls)-1]
-	if last[0] != runner.CmdCompare || last[1] != "pack:"+registryUID+"/kubernetes@1.35.3" || last[2] != "pack:"+registryUID+"/kubernetes@1.36.2" {
+	if last[0] != runner.CmdCompare || last[1]+" "+last[2] != move("kubernetes", "1.35.3", "1.36.2") {
 		t.Errorf("the last command is %v", last)
 	}
 	if slices.Contains(last, "POST") {
@@ -119,22 +107,18 @@ func TestAfterARestartTheNewerSideAsksForOneCompareAtATimeAndKeepsTheAnswer(t *t
 func TestACompareThatFailsForTheNewerSideIsNotKept(t *testing.T) {
 	r, w := withBehind(t)
 	ctx := context.Background()
-	if err := r.observer(w).RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, r.observer(w))
 	o := r.restart(w)
-	if err := o.RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	key := move("kubernetes", "1.35.3", "1.36.2")
 	w.moveErrs[key] = &runner.RunError{Kind: docs.KindAPI, Status: 500}
-	_, ok, err := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
+	_, ok, err := o.PackDiff(ctx, testkit.AWSStackOld, testkit.KubernetesKey, model.SideNewer)
 	var re *runner.RunError
 	if ok || !errors.As(err, &re) || re.Kind != docs.KindAPI {
 		t.Fatalf("%v %v", ok, err)
 	}
 	delete(w.moveErrs, key)
-	if pack, ok, err := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer); err != nil || !ok || len(pack.Values.Diff) != 11 {
+	if pack, ok, err := o.PackDiff(ctx, testkit.AWSStackOld, testkit.KubernetesKey, model.SideNewer); err != nil || !ok || len(pack.Values.Diff) != 11 {
 		t.Errorf("the next request asks again: %v %v", ok, err)
 	}
 	if entries := entries(t, r.work); len(entries) != 0 {
@@ -146,15 +130,11 @@ func TestAMoveThatTheNextCycleDropsLeavesTheMemory(t *testing.T) {
 	r, w := withBehind(t)
 	ctx := context.Background()
 	o := r.observer(w)
-	if err := o.RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	// The next cycle sees no pin that is behind, so the memory of the moves goes with the state.
 	w.behind.Pins = nil
-	if err := o.RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok, _ := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer); ok {
+	versions(t, o)
+	if _, ok, _ := o.PackDiff(ctx, testkit.AWSStackOld, testkit.KubernetesKey, model.SideNewer); ok {
 		t.Error("a pin that is gone still has a diff")
 	}
 	o.mu.Lock()
@@ -169,9 +149,7 @@ func TestAMoveThatTheNextCycleDropsLeavesTheMemory(t *testing.T) {
 func TestTheCyclesAndARequestShareThePoolOfProcesses(t *testing.T) {
 	r, w := withBehind(t)
 	ctx := context.Background()
-	if err := r.observer(w).RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, r.observer(w))
 	r.cfg.Processes = 2
 	// The count starts after the first cycle. The first process waits for a second one, so the count does
 	// not depend on how fast the goroutines start.
@@ -183,24 +161,20 @@ func TestTheCyclesAndARequestShareThePoolOfProcesses(t *testing.T) {
 	go func() { defer wg.Done(); _ = o.RunContent(ctx) }()
 	go func() {
 		defer wg.Done()
-		_, _, _ = o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
+		_, _, _ = o.PackDiff(ctx, testkit.AWSStackOld, testkit.KubernetesKey, model.SideNewer)
 	}()
 	wg.Wait()
 	if most := w.overlap.Most(); most != 2 {
-		t.Errorf("%d processes ran together, want the 2 of the pool", most)
+		t.Errorf(testkit.RanTogether+", want the 2 of the pool", most)
 	}
 }
 
 func TestARequestThatWaitsEndsWithItsContext(t *testing.T) {
 	r, w := withBehind(t)
 	ctx := context.Background()
-	if err := r.observer(w).RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, r.observer(w))
 	o := r.restart(w)
-	if err := o.RunVersions(ctx); err != nil {
-		t.Fatal(err)
-	}
+	versions(t, o)
 	for range cap(o.procs) { // the cycles hold each token of the pool
 		if err := o.acquire(ctx, o.procs); err != nil {
 			t.Fatal(err)
@@ -213,7 +187,7 @@ func TestARequestThatWaitsEndsWithItsContext(t *testing.T) {
 	}()
 	short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 	defer cancel()
-	if _, ok, err := o.PackDiff(short, moveSubject, "k8s/kubernetes", model.SideNewer); ok || !errors.Is(err, context.DeadlineExceeded) {
+	if _, ok, err := o.PackDiff(short, testkit.AWSStackOld, testkit.KubernetesKey, model.SideNewer); ok || !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("%v %v", ok, err)
 	}
 }

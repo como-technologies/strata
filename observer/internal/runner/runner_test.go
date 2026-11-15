@@ -25,19 +25,19 @@ func fake(t *testing.T, body string) Runner {
 func TestExitOneIsAnAnswer(t *testing.T) {
 	r, err := fake(t, `echo '{"same":false}'; exit 1`).Run(context.Background(), CmdCompare, "a.json", "b.json", "--json", "-q")
 	if err != nil || r.Exit != 1 || !strings.Contains(string(r.Stdout), "same") {
-		t.Fatalf("result %+v, error %v", r, err)
+		t.Fatalf(testkit.ResultAndError, r, err)
 	}
 }
 
 func TestExitTwoWithADocumentIsAnAnswer(t *testing.T) {
 	r, err := fake(t, `echo '{"pins":[]}'; exit 2`).Run(context.Background(), CmdBehind, "a.json", FlagNoImpact, "--json", "-q")
 	if err != nil || r.Exit != 2 {
-		t.Fatalf("result %+v, error %v", r, err)
+		t.Fatalf(testkit.ResultAndError, r, err)
 	}
 }
 
 func TestExitTwoWithNoDocumentIsTheKindOfTheError(t *testing.T) {
-	_, err := fake(t, `echo '{"error":{"kind":"api","message":"HTTP 401","status":401}}' >&2; exit 2`).Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
+	_, err := fake(t, testkit.ErrorLine(docs.KindAPI, `"message":"HTTP 401","status":401`)+"; exit 2").Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
 	var re *RunError
 	if !errors.As(err, &re) || re.Kind != docs.KindAPI || re.Status != 401 {
 		t.Fatalf("error %v", err)
@@ -47,7 +47,7 @@ func TestExitTwoWithNoDocumentIsTheKindOfTheError(t *testing.T) {
 func TestStderrStaysOutOfTheError(t *testing.T) {
 	for _, body := range []string{
 		`echo 'SENTINEL value' >&2; exit 2`,
-		`echo '{"error":{"kind":"api","message":"SENTINEL body of Palette","status":500}}' >&2; exit 2`,
+		testkit.ErrorLine(docs.KindAPI, `"message":"SENTINEL body of Palette","status":500`) + "; exit 2",
 	} {
 		_, err := fake(t, body).Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
 		if err == nil || strings.Contains(err.Error(), "SENTINEL") {
@@ -75,8 +75,8 @@ func TestACommandOrAFlagOutsideTheListIsRefused(t *testing.T) {
 		{CmdCompare, "a", "b", "--repave"},
 		{CmdBehind, "a.json", FlagFull},
 		{CmdSnapshot, "x", FlagFull},
-		{CmdCompare, "a", "b", FlagPin, "k8s/kubernetes"},
-		{CmdVerify, "a.json", FlagPin, "k8s/kubernetes"},
+		{CmdCompare, "a", "b", FlagPin, testkit.KubernetesKey},
+		{CmdVerify, "a.json", FlagPin, testkit.KubernetesKey},
 		{CmdBehind, "a.json", "--validate"},
 		{CmdSnapshot, "x", "--validate"},
 	} {
@@ -100,16 +100,16 @@ func TestTheFlagsOfTheClickAreAllowedForTheirCommandsOnly(t *testing.T) {
 		{[]string{CmdCompare, "a", "b", FlagFull, "--json", "-q"}, true},
 		{[]string{CmdVerify, "a.json", "--summary", FlagFull, "--json", "-q"}, true},
 		{[]string{CmdBehind, "a.json", FlagNoImpact, "--json", "-q"}, true},
-		{[]string{CmdBehind, "a.json", FlagPin, "k8s/kubernetes", "--json", "-q"}, true},
+		{[]string{CmdBehind, "a.json", FlagPin, testkit.KubernetesKey, "--json", "-q"}, true},
 		{[]string{CmdBehind, "a.json", "--json", "-q"}, false},
 		{[]string{CmdBehind, "a.json", "b.json", "--json", "-q"}, false},
 		{[]string{CmdBehind, FlagNoImpact}, true},
 		{[]string{CmdBehind, "a.json", FlagFull, FlagNoImpact}, false},
-		{[]string{CmdSnapshot, "cluster:c1", FlagPin, "k8s/kubernetes"}, false},
+		{[]string{CmdSnapshot, "cluster:" + testkit.PaymentsUID, FlagPin, testkit.KubernetesKey}, false},
 	} {
 		_, err := x.Run(context.Background(), c.args...)
 		if (err == nil) != c.ok {
-			t.Errorf("%v: error %v, want ok %v", c.args, err, c.ok)
+			t.Errorf("%v: "+testkit.ErrorWantOK, c.args, err, c.ok)
 		}
 	}
 }
@@ -186,7 +186,5 @@ func TestCodeMdNamesEachVariableThatTheRunnerSets(t *testing.T) {
 	if !slices.Equal(named, want) {
 		t.Errorf("code.md names %v, want %v", named, want)
 	}
-	if !strings.Contains(rule, "`STRATA_REPORT=0`") {
-		t.Error("code.md does not give the value of STRATA_REPORT")
-	}
+	testkit.HoldsAll(t, "the rule", rule, "`STRATA_REPORT=0`")
 }

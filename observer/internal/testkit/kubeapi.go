@@ -4,7 +4,6 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,6 +15,31 @@ import (
 // and the message of a state. The pods of the stand-in hold it, and no route, log line, or file of state
 // can.
 const EnvMarker = "ENV-MARKER-VALUE"
+
+// The images of the packs and of the pods of the tests. ImageRef names the image ImageName by a tag, and ImageRan is
+// the id of the image that its pod runs. DigestImage names an image by a digest.
+const (
+	ImageName   = "a/b"
+	ImageRef    = ImageName + ":1"
+	ImageRan    = ImageName + "@" + Digest1
+	DigestImage = "a/c@sha256:abc"
+)
+
+// MarkerPods starts a stand-in for the API server of Kubernetes with one pod, whose namespace and name are
+// markers. The pod runs ImageRef, with the image id ImageRan.
+func MarkerPods(t *testing.T) *KubeAPI {
+	t.Helper()
+	return PodsAPI(t, PodJSON("NS-MARKER", "POD-MARKER", ImageRef, ImageRan))
+}
+
+// PodsAPI starts a stand-in for the API server of Kubernetes that answers each request with one page of the pods,
+// each from PodJSON.
+func PodsAPI(t *testing.T, pods ...string) *KubeAPI {
+	t.Helper()
+	return NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(PodList("", pods...)))
+	})
+}
 
 // KubeRequest is a request that the stand-in saw.
 type KubeRequest struct {
@@ -46,11 +70,8 @@ func NewKubeAPI(t *testing.T, handler func(w http.ResponseWriter, r *http.Reques
 	}))
 	t.Cleanup(a.srv.Close)
 	dir := t.TempDir()
-	a.Host, a.TokenFile, a.CAFile = a.srv.Listener.Addr().String(), filepath.Join(dir, "token"), filepath.Join(dir, "ca.crt")
-	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: a.srv.Certificate().Raw})
-	if err := os.WriteFile(a.CAFile, ca, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	a.Host, a.TokenFile = a.srv.Listener.Addr().String(), filepath.Join(dir, "token")
+	a.CAFile = WriteIn(t, dir, "ca.crt", string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: a.srv.Certificate().Raw})))
 	a.SetToken("token-1")
 	return a
 }
@@ -58,9 +79,7 @@ func NewKubeAPI(t *testing.T, handler func(w http.ResponseWriter, r *http.Reques
 // SetToken replaces the token file, as the kubelet does when it rotates the token.
 func (a *KubeAPI) SetToken(text string) {
 	a.t.Helper()
-	if err := os.WriteFile(a.TokenFile, []byte(text+"\n"), 0o600); err != nil {
-		a.t.Fatal(err)
-	}
+	WriteFile(a.t, a.TokenFile, text+"\n")
 }
 
 // Close stops the server.
@@ -79,7 +98,7 @@ func (a *KubeAPI) Requests() []KubeRequest {
 // token and the CA is the directory of the two files.
 func (a *KubeAPI) Env() map[string]string {
 	host, port, _ := strings.Cut(a.Host, ":")
-	return map[string]string{"KUBERNETES_SERVICE_HOST": host, "KUBERNETES_SERVICE_PORT": port}
+	return map[string]string{KubeHost: host, KubePort: port}
 }
 
 // Dir is the directory that holds the token and the CA.

@@ -52,6 +52,12 @@ func newReceiver(t *testing.T, start func(http.Handler) *httptest.Server) *Recei
 	return r
 }
 
+// MarkedAddress gives the address of the receiver with AddressMarker in its path and a newline at its end, as the file
+// of a Secret of a channel holds it.
+func (r *Receiver) MarkedAddress() string {
+	return r.URL + "/" + AddressMarker + "\n"
+}
+
 // SetStatus sets the status of each next answer.
 func (r *Receiver) SetStatus(status int) {
 	r.mu.Lock()

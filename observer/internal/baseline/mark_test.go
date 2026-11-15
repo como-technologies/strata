@@ -1,36 +1,35 @@
 package baseline
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
+
+// awsFile is the record file of the tests of the mark.
+const awsFile = testkit.AWSStackOld + ".json.gz"
 
 // Mark changes when meta.json or a record file changes, and not when another file changes. A directory
 // that cannot be listed gives the empty text.
 func TestMarkChangesWithTheRecordsAndMetaJSONAndNotWithAnotherFile(t *testing.T) {
 	dir := t.TempDir()
-	testkit.WriteGzip(t, dir, "aws-stack@1.0.0.json.gz", `{"schema":"strata-snapshot/1"}`)
+	testkit.WriteGzip(t, dir, awsFile, `{"schema":"`+docs.SnapshotSchema+`"}`)
 	first := Mark(dir)
 	if first == "" {
 		t.Fatal("no mark")
 	}
-	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteIn(t, dir, "notes.txt", "x")
 	if Mark(dir) != first {
 		t.Error("a file that is no record changed the mark")
 	}
-	if err := os.WriteFile(filepath.Join(dir, metaFile), []byte(`{"baseline":"approved"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteMeta(t, dir, testkit.ApprovedMeta(testkit.Revision))
 	second := Mark(dir)
 	if second == first {
-		t.Error("a new meta.json kept the mark")
+		t.Error("a new " + testkit.MetaFile + " kept the mark")
 	}
-	testkit.WriteGzip(t, dir, "aws-stack@1.0.0.json.gz", `{"schema":"strata-snapshot/1","packs":[]}`)
+	testkit.WriteGzip(t, dir, awsFile, `{"schema":"`+docs.SnapshotSchema+`"`+testkit.NoPacks+`}`)
 	if Mark(dir) == second {
 		t.Error("a changed record kept the mark")
 	}

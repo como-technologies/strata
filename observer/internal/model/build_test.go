@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"reflect"
 	"slices"
 	"strings"
@@ -13,15 +12,6 @@ import (
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
-func marshal(t *testing.T, v any) string {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
-}
-
 func pin(name, layer, version, newest string, subjects ...string) docs.Pin {
 	p := docs.Pin{Name: name, Layer: layer, Registry: "Public Repo", RegistryUID: "reg1", Version: version}
 	for _, s := range subjects {
@@ -29,43 +19,31 @@ func pin(name, layer, version, newest string, subjects ...string) docs.Pin {
 	}
 	if newest != "" {
 		p.Behind = true
-		p.Newer = []docs.Newer{{Version: newest, Listed: t0.Add(-24 * time.Hour).Format(time.RFC3339)}}
+		p.Newer = []docs.Newer{{Version: newest, Listed: at(-24 * time.Hour)}}
 	}
 	return p
 }
 
 func TestTheSummaryHoldsNoOldValueAndNoNewValue(t *testing.T) {
-	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")), &docs.Verify{Who: who()}, "csi/csi-aws-ebs"),
-		docs.Diff{RootB: "r3", Packs: []docs.Pack{changed("csi/csi-aws-ebs", "charts.a.b")}})
-	out := marshal(t, build(ptr(content(t, r)), nil))
-	for _, banned := range []string{"OLD-SENTINEL", "NEW-SENTINEL", `"old"`, `"new":"`, "charts.a.", "changedPaths"} {
-		if strings.Contains(out, banned) {
-			t.Errorf("the summary holds %s: %s", banned, out)
-		}
-	}
-	if !strings.Contains(out, `"fold":{"settings":2,"followsTheVersion":0,"repeatsTheLists":0}`) {
-		t.Errorf("the count of the changed values is not there: %s", out)
-	}
+	r := onCluster(drifted(aws(), &docs.Verify{Who: who()}, testkit.CSIKey),
+		docs.Diff{RootB: "r3", Packs: []docs.Pack{changed(testkit.CSIKey, "charts.a.b")}})
+	out := string(testkit.MustJSON(t, build(ptr(content(t, r)), nil)))
+	testkit.HoldsNone(t, "the summary", out, []string{"OLD-SENTINEL", "NEW-SENTINEL", `"old"`, `"new":"`, "charts.a.", "changedPaths"}...)
+	testkit.HoldsAll(t, "the summary", out, `"fold":{"settings":2,"followsTheVersion":0,"repeatsTheLists":0}`)
 }
 
 func TestAnEmptyListIsNeverNull(t *testing.T) {
-	out := marshal(t, Build(Input{Now: t0}))
+	out := string(testkit.MustJSON(t, Build(Input{Now: t0})))
 	for _, name := range []string{"findings", "profiles", "newer", "notChecked", "events"} {
-		if !strings.Contains(out, `"`+name+`":[]`) {
-			t.Errorf("%s is not an empty list: %s", name, out)
-		}
+		testkit.HoldsAll(t, "the output", out, `"`+name+`":[]`)
 	}
-	good := marshal(t, build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))), nil))
-	for _, banned := range []string{":null,\"flags\"", `"flags":null`, `"packs":null`, `"profiles":null`, `"findings":null`} {
-		if strings.Contains(good, banned) {
-			t.Errorf("a list is null (%s): %s", banned, good)
-		}
-	}
+	good := string(testkit.MustJSON(t, build(ptr(content(t, aws())), nil)))
+	testkit.HoldsNone(t, "the summary of a good build", good, []string{":null,\"flags\"", `"flags":null`, `"packs":null`, `"profiles":null`, `"findings":null`}...)
 }
 
 func TestTheClusterFlagsAppearOnlyWhenAFindingExists(t *testing.T) {
 	clean := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged))), nil)
-	if clean.Cluster.UpdatesPending != nil || clean.Cluster.RepavePending != nil || strings.Contains(marshal(t, clean.Cluster), "Pending") {
+	if clean.Cluster.UpdatesPending != nil || clean.Cluster.RepavePending != nil || strings.Contains(string(testkit.MustJSON(t, clean.Cluster)), "Pending") {
 		t.Errorf("cluster %+v", clean.Cluster)
 	}
 	drift := build(ptr(content(t, drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}))), nil)
@@ -111,10 +89,10 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 	pins := func(ps ...docs.Pin) *Versions {
 		return &Versions{At: t0, Strata: "0.29.0", Pins: ps, Moves: map[string]Move{}}
 	}
-	drift := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")), &docs.Verify{}, "csi/csi-aws-ebs")
+	drift := drifted(aws(), &docs.Verify{}, testkit.CSIKey)
 	unverified := rec("aws-stack", "1.1.0", docs.VerifyUnverified, pk("csi", "csi-aws-ebs", "1.65.0"))
-	ok := rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"))
-	newer := pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "aws-stack@1.1.0")
+	ok := aws()
+	newer := pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", testkit.AWSStackProfile)
 	cases := []struct {
 		name    string
 		record  Record
@@ -128,13 +106,13 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 		{"newer beats not checked", unverified, pins(newer), StatusNewer, StatusNewer},
 		{"not checked", unverified, nil, StatusNotChecked, StatusNotChecked},
 		{"ok", ok, nil, StatusOK, StatusOK},
-		{"a pin that is current is no newer", ok, pins(pin("csi-aws-ebs", "csi", "1.65.0", "", "aws-stack@1.1.0")), StatusOK, StatusOK},
-		{"a pin of another profile", ok, pins(pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "other@1.0.0")), StatusOK, StatusOK},
+		{"a pin that is current is no newer", ok, pins(pin("csi-aws-ebs", "csi", "1.65.0", "", testkit.AWSStackProfile)), StatusOK, StatusOK},
+		{"a pin of another profile", ok, pins(pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", testkit.OtherProfile)), StatusOK, StatusOK},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if c.record.Row.Status == docs.VerifyUnverified {
-				c.record.Row.Diff = &docs.Diff{UpstreamUnknown: []string{"csi/csi-aws-ebs"}}
+				c.record.Row.Diff = &docs.Diff{UpstreamUnknown: []string{testkit.CSIKey}}
 			}
 			s := build(ptr(content(t, c.record)), c.pins)
 			if s.Profiles[0].Status != c.profile || s.Profiles[0].Packs[0].Status != c.pack {
@@ -145,13 +123,13 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 }
 
 func TestAProfileThatTheClusterRunsWithNoRecordIsNoRecord(t *testing.T) {
-	c := content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))
-	c.Cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	c := content(t, aws())
+	c.Cluster = testkit.Payments(testkit.AddonsProfile)
 	s := build(&c, nil)
 	if len(s.Profiles) != 2 || s.Profiles[1].Name != "platform-addons" || s.Profiles[1].Status != StatusNoRecord || s.Profiles[1].Published != nil || s.Profiles[1].ClusterCopy != nil {
 		t.Fatalf("profiles %+v", s.Profiles)
 	}
-	want := NotChecked{Cause: NoRecord, Profiles: []string{"platform-addons@1.0.0"}, Packs: []string{}}
+	want := NotChecked{Cause: NoRecord, Profiles: []string{testkit.AddonsProfile}, Packs: []string{}}
 	if len(s.NotChecked) != 1 || !equalRow(s.NotChecked[0], want) {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
@@ -164,13 +142,21 @@ func equalRow(a, b NotChecked) bool {
 	return a.Cause == b.Cause && slices.Equal(a.Profiles, b.Profiles) && slices.Equal(a.Packs, b.Packs) && a.Registry == b.Registry
 }
 
+// sameCounts fails when the counts of a summary are not want.
+func sameCounts(t *testing.T, got, want Counts) {
+	t.Helper()
+	if got != want {
+		t.Errorf("counts %+v, want %+v", got, want)
+	}
+}
+
 func TestNotCheckedGroupsEachCause(t *testing.T) {
 	dex, velero := pk("addon", "dex", "2.42.0"), pk("addon", "velero", "1.0.0")
 	unverified := rec("fred-identity", "2.3.0", docs.VerifyUnverified, dex, velero)
-	unverified.Row.Diff = &docs.Diff{UpstreamUnknown: []string{"addon/velero"}, Verify: &docs.Verify{UpstreamUnknown: []string{"addon/velero"}},
-		Packs: []docs.Pack{{Key: "addon/dex", UpstreamUnknown: true}}}
+	unverified.Row.Diff = &docs.Diff{UpstreamUnknown: []string{testkit.VeleroKey}, Verify: &docs.Verify{UpstreamUnknown: []string{testkit.VeleroKey}},
+		Packs: []docs.Pack{{Key: testkit.DexKey, UpstreamUnknown: true}}}
 	second := rec("gazoo-backup", "1.2.0", docs.VerifyUnverified, velero)
-	second.Row.Diff = &docs.Diff{UpstreamUnknown: []string{"addon/velero"}}
+	second.Row.Diff = &docs.Diff{UpstreamUnknown: []string{testkit.VeleroKey}}
 	broken := rec("broken", "1.0.0", docs.VerifyError, pk("os", "ubuntu", "22.04"), pk("k8s", "kubernetes", "1.35.3"))
 	broken.Row.Error = &docs.Error{Kind: docs.KindAPI, Status: 500}
 	cont := content(t, unverified, second, broken)
@@ -178,11 +164,11 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 	versions := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{
 		func() docs.Pin {
 			p := pin("kubernetes", "k8s", "1.35.3", "", "broken@1.0.0")
-			p.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
+			p.RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 			return p
 		}(),
 		func() docs.Pin {
-			p := pin("cilium", "cni", "1.19.6", "", "fred-identity@2.3.0", "gazoo-backup@1.2.0")
+			p := pin("cilium", "cni", "1.19.6", "", testkit.DexProfile, testkit.GazooProfile)
 			p.Error = &docs.Error{Kind: docs.KindAPI, Status: 404}
 			return p
 		}(),
@@ -192,13 +178,15 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 	for _, row := range s.NotChecked {
 		got = append(got, string(row.Cause)+" "+row.Registry+" "+strings.Join(row.Profiles, ",")+" "+strings.Join(row.Packs, ","))
 	}
+	// twoProfiles is the empty registry and the two profiles of a row of velero and of cilium.
+	const twoProfiles = "  " + testkit.DexProfile + "," + testkit.GazooProfile + " "
 	want := []string{
-		"no-upstream-digest  fred-identity@2.3.0 addon/dex",
-		"no-upstream-digest  fred-identity@2.3.0,gazoo-backup@1.2.0 addon/velero",
-		"older-registry-copy Public Repo broken@1.0.0 k8s/kubernetes",
-		"read-error  broken@1.0.0 k8s/kubernetes,os/ubuntu",
-		"read-error  zz.json.gz ",
-		"pin-error  fred-identity@2.3.0,gazoo-backup@1.2.0 cni/cilium",
+		string(NoUpstreamDigest) + "  " + testkit.DexProfile + " " + testkit.DexKey,
+		string(NoUpstreamDigest) + twoProfiles + testkit.VeleroKey,
+		string(OlderRegistryCopy) + " Public Repo broken@1.0.0 " + testkit.KubernetesKey,
+		string(ReadError) + "  broken@1.0.0 " + testkit.KubernetesKey + "," + testkit.UbuntuKey,
+		string(ReadError) + "  zz.json.gz ",
+		string(PinError) + twoProfiles + "cni/cilium",
 	}
 	// The rows keep the order of the table of the causes, and then the order of the group.
 	if !slices.Equal(got, want) {
@@ -217,7 +205,7 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 func TestPacksInFullIsThePacksMinusTheOnesThatACauseNames(t *testing.T) {
 	dex, cert := pk("addon", "dex", "2.42.0"), pk("addon", "cert-manager", "1.20.3")
 	r := rec("fred-identity", "2.3.0", docs.VerifyUnverified, dex, cert)
-	r.Row.Diff = &docs.Diff{UpstreamUnknown: []string{"addon/dex"}}
+	r.Row.Diff = &docs.Diff{UpstreamUnknown: []string{testkit.DexKey}}
 	other := notOnCluster(rec("other", "1.0.0", docs.VerifyUnchanged, pk("os", "ubuntu", "22.04")))
 	s := build(ptr(content(t, r, other)), nil)
 	if s.Counts.Packs != 2 || s.Counts.PacksInFull != 1 {
@@ -226,27 +214,25 @@ func TestPacksInFullIsThePacksMinusTheOnesThatACauseNames(t *testing.T) {
 }
 
 func TestACountIsTheNumberOfRowsOfItsList(t *testing.T) {
-	r := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"), pk("k8s", "kubernetes", "1.35.3")), &docs.Verify{}, "csi/csi-aws-ebs")
+	r := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"), pk("k8s", "kubernetes", "1.35.3")), &docs.Verify{}, testkit.CSIKey)
 	other := rec("other", "1.0.0", docs.VerifyUnchanged, pk("k8s", "kubernetes", "1.35.3"))
 	versions := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{
-		pin("kubernetes", "k8s", "1.35.3", "1.36.2", "aws-stack@1.1.0", "other@1.0.0"),
-		pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "aws-stack@1.1.0"),
+		pin("kubernetes", "k8s", "1.35.3", "1.36.2", testkit.AWSStackProfile, testkit.OtherProfile),
+		pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", testkit.AWSStackProfile),
 	}}
 	s := build(ptr(content(t, r, other)), versions)
 	want := Counts{Findings: 1, Drift: 1, Newer: 2, NewerProfiles: 2, NotChecked: 0, Packs: 3, PacksInFull: 3, Profiles: 2}
-	if s.Counts != want {
-		t.Errorf("counts %+v, want %+v", s.Counts, want)
-	}
+	sameCounts(t, s.Counts, want)
 }
 
 func TestTheNewerRowsJoinThePinAndTheMove(t *testing.T) {
-	floating := pin("ubuntu-aws", "os", "20.04", "24.04", "aws-stack@1.0.0")
+	floating := pin("ubuntu-aws", "os", "20.04", "24.04", testkit.AWSStackOld)
 	floating.Floating, floating.PinnedState = true, "deprecated"
 	floating.Newer[0].Drops = []string{"arm64"}
-	floating.Newer[0].Listed = t0.Add(-8 * 24 * time.Hour).Format(time.RFC3339)
-	fresh := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "other@1.0.0", "aws-stack@1.0.0")
+	floating.Newer[0].Listed = at(-8 * 24 * time.Hour)
+	fresh := pin("kubernetes", "k8s", "1.35.3", "1.36.2", testkit.OtherProfile, testkit.AWSStackOld)
 	fresh.Registry = ""
-	current := pin("cert-manager", "addon", "1.21.1", "", "aws-stack@1.0.0")
+	current := pin("cert-manager", "addon", "1.21.1", "", testkit.AWSStackOld)
 	move := Move{Impact: "repave", Flags: []string{docs.FlagIdentity, docs.FlagAuthored}, Fold: Fold{Settings: 2, Follows: 1, Repeats: 8}, Images: 8, Charts: 1}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{floating, fresh, current}, Moves: map[string]Move{MoveKey(fresh): move}}
 	rows := build(nil, v).Newer
@@ -255,29 +241,28 @@ func TestTheNewerRowsJoinThePinAndTheMove(t *testing.T) {
 	}
 	u, k := rows[0], rows[1]
 	if u.Name != "ubuntu-aws" || u.Version != "20.04" || u.Newest != "24.04" || !u.Floating || u.PinnedState != "deprecated" || u.New ||
-		!slices.Equal(u.Drops, []string{"arm64"}) || !slices.Equal(u.Profiles, []string{"aws-stack@1.0.0"}) || u.Registry != "Public Repo" {
+		!slices.Equal(u.Drops, []string{"arm64"}) || !slices.Equal(u.Profiles, []string{testkit.AWSStackOld}) || u.Registry != "Public Repo" {
 		t.Errorf("floating row %+v", u)
 	}
 	if u.Flags == nil || len(u.Flags) != 0 || u.Impact != "" {
 		t.Errorf("a move that is not there gives an empty move: %+v", u.Move)
 	}
-	if k.Newest != "1.36.2" || !k.New || k.Registry != "Public Repo" || k.RegistryUID != "reg1" || !slices.Equal(k.Profiles, []string{"aws-stack@1.0.0", "other@1.0.0"}) ||
+	if k.Newest != "1.36.2" || !k.New || k.Registry != "Public Repo" || k.RegistryUID != "reg1" || !slices.Equal(k.Profiles, []string{testkit.AWSStackOld, testkit.OtherProfile}) ||
 		k.Drops == nil || k.Move.Impact != "repave" || k.Images != 8 || k.Charts != 1 || k.Fold != move.Fold || !slices.Equal(k.Flags, move.Flags) {
 		t.Errorf("row %+v", k)
 	}
 }
 
 func TestAVersionIsNewForSevenDays(t *testing.T) {
-	now := t0
 	for listed, want := range map[string]bool{
-		now.Add(-6 * 24 * time.Hour).Format(time.RFC3339): true,
-		now.Add(-7 * 24 * time.Hour).Format(time.RFC3339): true,
-		now.Add(-8 * 24 * time.Hour).Format(time.RFC3339): false,
-		"2026-11-01T10:00:00.123Z":                        true,
-		"":                                                false,
-		"yesterday":                                       false,
+		at(-6 * 24 * time.Hour):    true,
+		at(-7 * 24 * time.Hour):    true,
+		at(-8 * 24 * time.Hour):    false,
+		"2026-11-01T10:00:00.123Z": true,
+		"":                         false,
+		"yesterday":                false,
 	} {
-		if got := listedWithin(listed, now); got != want {
+		if got := listedWithin(listed, t0); got != want {
 			t.Errorf("%q: %v", listed, got)
 		}
 	}
@@ -287,10 +272,10 @@ func TestThePackRowJoinsTheRecordAndThePins(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
 	dex.RegistryProviderType = ""
 	dex.Type = docs.PackHelm
-	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
+	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, testkit.DexKey)
 	r.Doc.Source.ProjectUID = "p1"
-	r.Row.Diff.Packs[0].Values.Diff = append(r.Row.Diff.Packs[0].Values.Diff, docs.Leaf{Path: "pack.content.images[0]"}, docs.Leaf{Path: "charts.dex.image.tag"})
-	v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "2.44.0", "fred-identity@2.3.0")}}
+	r.Row.Diff.Packs[0].Values.Diff = append(r.Row.Diff.Packs[0].Values.Diff, docs.Leaf{Path: testkit.ImageItem}, docs.Leaf{Path: dexTag})
+	v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "2.44.0", testkit.DexProfile)}}
 	s := build(ptr(content(t, r)), v)
 	p := s.Profiles[0]
 	if p.Scope != ScopeProject || p.Status != StatusDrift {
@@ -310,7 +295,7 @@ func TestThePackRowJoinsTheRecordAndThePins(t *testing.T) {
 }
 
 func TestTheRegistryIsTheUidWhenNoPinNamesIt(t *testing.T) {
-	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))), nil)
+	s := build(ptr(content(t, aws())), nil)
 	if got := s.Profiles[0].Packs[0].Registry; got != "reg1" {
 		t.Errorf("registry %q", got)
 	}
@@ -320,7 +305,7 @@ func TestThePackRowNamesTheRegistryThatTheRecordNamesWhenNoPinHoldsThePack(t *te
 	csi := pk("csi", "csi-aws-ebs", "1.65.0")
 	csi.RegistryUID, csi.RegistryName = "reg2", "Palette Registry"
 	// behind pins another pack of another registry, so no pin names reg2
-	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "", "aws-stack@1.1.0")}}
+	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "", testkit.AWSStackProfile)}}
 	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
 	if got := s.Profiles[0].Packs[0].Registry; got != "Palette Registry" {
 		t.Errorf("registry %q", got)
@@ -332,7 +317,7 @@ func TestThePackRowNamesTheRegistryThatTheRecordNamesWhenNoPinHoldsThePack(t *te
 func TestThePackRowAndItsNewerRowNameTheRegistryOfTheRecord(t *testing.T) {
 	csi := pk("csi", "csi-aws-ebs", "1.63.1")
 	csi.RegistryName = "Palette Registry"
-	behind := pin("csi-aws-ebs", "csi", "1.63.1", "1.65.0", "aws-stack@1.1.0")
+	behind := pin("csi-aws-ebs", "csi", "1.63.1", "1.65.0", testkit.AWSStackProfile)
 	behind.Registry = ""
 	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{behind}}
 	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
@@ -345,8 +330,8 @@ func TestThePackRowAndItsNewerRowNameTheRegistryOfTheRecord(t *testing.T) {
 }
 
 func TestTheLimitsCountMaskedPathsOfEachDiff(t *testing.T) {
-	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}, "csi/csi-aws-ebs"),
-		docs.Diff{Packs: []docs.Pack{{Key: "csi/csi-aws-ebs", Masked: []string{"a.b", "a.c"}}}})
+	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}, testkit.CSIKey),
+		docs.Diff{Packs: []docs.Pack{{Key: testkit.CSIKey, Masked: []string{"a.b", "a.c"}}}})
 	r.Row.Diff.Packs[0].Masked = []string{"x.y"}
 	if got := build(ptr(content(t, r)), nil).Limits.MaskedPaths; got != 3 {
 		t.Errorf("masked paths %d", got)
@@ -356,15 +341,13 @@ func TestTheLimitsCountMaskedPathsOfEachDiff(t *testing.T) {
 func TestAFindingStartsAtTheStateOrAtTheCycle(t *testing.T) {
 	r := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{Who: who()})
 	c := content(t, r)
-	id := FindingID(PublishedChanged, "aws-stack@1.1.0")
+	id := FindingID(PublishedChanged, testkit.AWSStackProfile)
 	earlier := t0.Add(-48 * time.Hour)
-	in := Input{Now: t0, Content: &c, ContentClock: goodClock(time.Minute, t0), FirstSeen: map[string]time.Time{id: earlier}, FilesKnown: true, Files: 1}
-	f := Build(in).Findings[0]
+	f := seenAt(&c, nil, map[string]time.Time{id: earlier}).Findings[0]
 	if !f.FirstSeen.Equal(earlier) || !f.LastSeen.Equal(t0) {
 		t.Errorf("times %v %v", f.FirstSeen, f.LastSeen)
 	}
-	in.FirstSeen = nil
-	if f := Build(in).Findings[0]; !f.FirstSeen.Equal(t0) {
+	if f := seenAt(&c, nil, nil).Findings[0]; !f.FirstSeen.Equal(t0) {
 		t.Errorf("first seen %v", f.FirstSeen)
 	}
 }
@@ -373,10 +356,8 @@ func TestEachFindingMakesOneEventTheNewestFirst(t *testing.T) {
 	old := drifted(rec("a-stack", "1.0.0", docs.VerifyUnchanged), &docs.Verify{})
 	young := drifted(rec("b-stack", "1.0.0", docs.VerifyUnchanged), &docs.Verify{Gone: true})
 	c := content(t, old, young)
-	in := Input{Now: t0, Content: &c, ContentClock: goodClock(time.Minute, t0), Files: 2, FilesKnown: true,
-		FirstSeen: map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-time.Hour)}}
-	events := Build(in).Events
-	if len(events) != 2 || events[0].Object != "b-stack@1.0.0" || events[0].Reason != "Gone" || events[1].Reason != "DriftFound" || events[1].Type != "drift" {
+	events := eventsAt(&c, nil, map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-time.Hour)})
+	if len(events) != 2 || events[0].Object != "b-stack@1.0.0" || events[0].Reason != eventKinds[Gone].reason || events[1].Reason != eventKinds[PublishedChanged].reason || events[1].Type != EventDrift {
 		t.Errorf("events %+v", events)
 	}
 	for kind := range eventKinds {
@@ -402,22 +383,20 @@ func TestTheRecordsPartSaysWhereTheBaselineCameFrom(t *testing.T) {
 }
 
 func TestTheClocksShowThePeriodAndTheLastError(t *testing.T) {
-	in := Input{Now: t0, ContentClock: Clock{Every: 15 * time.Minute, FailedRuns: 1, LastError: &ErrorRef{Kind: docs.KindAPI, Status: 401}},
-		VersionsClock: Clock{Every: 6 * time.Hour, Last: ptr(t0)}}
-	out := marshal(t, Build(in))
+	in := Input{Now: t0, ContentClock: Clock{Every: testkit.ContentEvery, FailedRuns: 1, LastError: &ErrorRef{Kind: docs.KindAPI, Status: 401}},
+		VersionsClock: goodClock(testkit.VersionsEvery, t0)}
+	out := string(testkit.MustJSON(t, Build(in)))
 	for _, want := range []string{
-		`"content":{"checkedAt":null,"every":"15m","failedRuns":1,"lastError":{"kind":"api","status":401}}`,
+		`"content":{"checkedAt":null,"every":"15m","failedRuns":1,"lastError":{"kind":"` + docs.KindAPI + `","status":401}}`,
 		`"versions":{"readAt":"2026-11-03T14:00:00Z","every":"6h","failedRuns":0,"lastError":null}`,
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %s in %s", want, out)
-		}
+		testkit.HoldsAll(t, "the output", out, want)
 	}
 }
 
 func TestAMoveReadsTheCountsOfTheCompare(t *testing.T) {
 	d := docs.Diff{Summary: docs.DiffSummary{MaxImpact: "repave", ImagesChanged: 8, ChartsChanged: 1}, Packs: []docs.Pack{{Identity: true, Authored: true, Images: true,
-		Values: docs.Values{Diff: []docs.Leaf{{Path: "pack.content.images[0]"}, {Path: "charts.x.image.tag"}, {Path: "charts.x.replicas"}}}}}}
+		Values: docs.Values{Diff: []docs.Leaf{{Path: testkit.ImageItem}, {Path: "charts.x.image.tag"}, {Path: "charts.x.replicas"}}}}}}
 	want := Move{Impact: "repave", Flags: []string{docs.FlagIdentity, docs.FlagAuthored, docs.FlagImages}, Fold: Fold{Settings: 1, Follows: 1, Repeats: 1}, Images: 8, Charts: 1}
 	got := MoveOf(d)
 	if got.Impact != want.Impact || !slices.Equal(got.Flags, want.Flags) || got.Fold != want.Fold || got.Images != 8 || got.Charts != 1 {
@@ -430,7 +409,7 @@ func TestAMoveReadsTheCountsOfTheCompare(t *testing.T) {
 
 func TestTheKeyOfAMoveNamesTheRegistryThePackAndTheTwoVersions(t *testing.T) {
 	p := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "x@1")
-	if got := MoveKey(p); got != "reg1/kubernetes@1.35.3->1.36.2" {
+	if got := MoveKey(p); got != "reg1"+testkit.KubernetesMove {
 		t.Errorf("key %q", got)
 	}
 	if got := MoveKey(pin("kubernetes", "k8s", "1.35.3", "")); got != "" {
@@ -439,7 +418,7 @@ func TestTheKeyOfAMoveNamesTheRegistryThePackAndTheTwoVersions(t *testing.T) {
 }
 
 func TestTheRegistryOfARowIsTheUidWhenNoPinNamesIt(t *testing.T) {
-	lone := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "aws-stack@1.0.0")
+	lone := pin("kubernetes", "k8s", "1.35.3", "1.36.2", testkit.AWSStackOld)
 	lone.Registry = ""
 	rows := build(nil, &Versions{At: t0, Pins: []docs.Pin{lone}}).Newer
 	if len(rows) != 1 || rows[0].Registry != "reg1" {
@@ -449,7 +428,7 @@ func TestTheRegistryOfARowIsTheUidWhenNoPinNamesIt(t *testing.T) {
 
 func TestAnUnverifiedRecordThatNamesNoPackStillShowsItsProfile(t *testing.T) {
 	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnverified, pk("csi", "csi-aws-ebs", "1.65.0")))), nil)
-	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != NoUpstreamDigest || !slices.Equal(s.NotChecked[0].Profiles, []string{"aws-stack@1.1.0"}) || s.Profiles[0].Status != StatusNotChecked {
+	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != NoUpstreamDigest || !slices.Equal(s.NotChecked[0].Profiles, []string{testkit.AWSStackProfile}) || s.Profiles[0].Status != StatusNotChecked {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 }
@@ -474,7 +453,7 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 	failed := profilePin("barney-base", "1.5.0", "1.6.0", at(-time.Hour))
 	failed.Error = &docs.Error{Kind: docs.KindAPI, Status: 500}
 	v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{},
-		Pins:     []docs.Pin{pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "barney-base@1.5.0")},
+		Pins:     []docs.Pin{pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", testkit.BaseProfile)},
 		Profiles: []docs.ProfilePin{profilePin("barney-addons", "1.3.1", "1.4.0", at(-2*time.Hour)), failed}}
 	s := build(&c, v)
 	addons, base := s.Profiles[0], s.Profiles[1]
@@ -491,7 +470,7 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 		t.Errorf("counts %+v", s.Counts)
 	}
 	got := reasons(s.Events)
-	addonsEvent, baseEvent := "newer "+reasonNewProfile+" barney-addons@1.3.1", "newer "+reasonNewProfile+" barney-base@1.5.0"
+	addonsEvent, baseEvent := string(EventNewer)+" "+reasonNewProfile+" "+testkit.BarneyAddons, string(EventNewer)+" "+reasonNewProfile+" "+testkit.BaseProfile
 	if !slices.Contains(got, addonsEvent) || slices.Contains(got, baseEvent) {
 		t.Errorf("events %q", got)
 	}
@@ -505,7 +484,7 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 	for _, versions := range []*Versions{v, {At: t0, Strata: "0.29.0", Moves: map[string]Move{}}} {
 		s := build(&c, versions)
 		if s.Profiles[0].NewerVersion != nil || s.Profiles[0].Status != StatusOK || s.Counts.NewerProfileVersions != 0 {
-			t.Errorf("a current version: %+v, status %q, counts %+v", s.Profiles[0].NewerVersion, s.Profiles[0].Status, s.Counts)
+			t.Errorf(currentVersion+", status %q, counts %+v", s.Profiles[0].NewerVersion, s.Profiles[0].Status, s.Counts)
 		}
 	}
 }
@@ -517,7 +496,7 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *testing.T) {
 	c := content(t, rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0"), pk("addon", "wilma-values", "1.0.0"), pk("addon", "dino-logs", "2.0.0")))
 	side := func(version string) *docs.PackSide { return &docs.PackSide{Version: version} }
-	fred := docs.Pack{Key: "addon/fred-compositions", Status: docs.PackChanged, Identity: true, Upstream: true, A: side("0.1.0"), B: side("0.2.0")}
+	fred := docs.Pack{Key: testkit.FredCompositions, Status: docs.PackChanged, Identity: true, Upstream: true, A: side("0.1.0"), B: side("0.2.0")}
 	wilma := changed("addon/wilma-values", "replicas")
 	wilma.Values.Changed, wilma.A, wilma.B = true, side("1.0.0"), side("1.0.0")
 	diff := docs.Diff{Summary: docs.DiffSummary{MaxImpact: "in-place"}, Packs: []docs.Pack{
@@ -527,7 +506,7 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 	}}
 	v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{},
 		Profiles:     []docs.ProfilePin{profilePin("barney-addons", "1.3.1", "1.4.0", at(-2*time.Hour))},
-		ProfileMoves: map[string]docs.Diff{"barney-addons@1.3.1": diff}}
+		ProfileMoves: map[string]docs.Diff{testkit.BarneyAddons: diff}}
 	s := build(&c, v)
 	n := s.Profiles[0].NewerVersion
 	if n == nil || n.Move == nil || n.Unread {
@@ -535,29 +514,25 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 	}
 	want := ProfileMove{Impact: "in-place", Flags: []string{docs.FlagIdentity, docs.FlagUpstream, docs.FlagAuthored}, Packs: []MovePack{
 		{Key: "addon/dino-logs", Status: docs.PackRemoved, From: "2.0.0", Flags: []string{}},
-		{Key: "addon/fred-compositions", Status: docs.PackChanged, From: "0.1.0", To: "0.2.0", Flags: []string{docs.FlagIdentity, docs.FlagUpstream}},
+		{Key: testkit.FredCompositions, Status: docs.PackChanged, From: "0.1.0", To: "0.2.0", Flags: []string{docs.FlagIdentity, docs.FlagUpstream}},
 		{Key: "addon/pebbles-dns", Status: docs.PackAdded, To: "1.0.0", Flags: []string{}},
 		{Key: "addon/wilma-values", Status: docs.PackChanged, From: "1.0.0", To: "1.0.0", Flags: []string{docs.FlagAuthored}, ValuesChanged: true},
 	}}
 	if !reflect.DeepEqual(*n.Move, want) {
 		t.Errorf("the move\n got %+v\nwant %+v", *n.Move, want)
 	}
-	raw := marshal(t, s)
-	for _, banned := range []string{"OLD-SENTINEL", "NEW-SENTINEL", "replicas"} {
-		if strings.Contains(raw, banned) {
-			t.Errorf("the summary holds %q", banned)
-		}
-	}
+	raw := string(testkit.MustJSON(t, s))
+	testkit.HoldsNone(t, "the summary", raw, []string{"OLD-SENTINEL", "NEW-SENTINEL", "replicas"}...)
 
 	// a compare that failed names the newer version with no move, and says so
-	v.ProfileMoves, v.ProfileUnread = nil, map[string]bool{"barney-addons@1.3.1": true}
+	v.ProfileMoves, v.ProfileUnread = nil, map[string]bool{testkit.BarneyAddons: true}
 	if n := build(&c, v).Profiles[0].NewerVersion; n == nil || n.Move != nil || !n.Unread {
 		t.Errorf("a failed compare: %+v", n)
 	}
 	// a version that is current shows no move, also when a compare of an earlier cycle is there
-	v.Profiles, v.ProfileMoves, v.ProfileUnread = []docs.ProfilePin{profilePin("barney-addons", "1.3.1", "", "")}, map[string]docs.Diff{"barney-addons@1.3.1": diff}, nil
+	v.Profiles, v.ProfileMoves, v.ProfileUnread = []docs.ProfilePin{profilePin("barney-addons", "1.3.1", "", "")}, map[string]docs.Diff{testkit.BarneyAddons: diff}, nil
 	if n := build(&c, v).Profiles[0].NewerVersion; n != nil {
-		t.Errorf("a current version: %+v", n)
+		t.Errorf(currentVersion, n)
 	}
 }
 
@@ -565,11 +540,11 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 // as `behind` names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed
 // read says that the carrier was not read. A profile that the pin does not name has no carrier on its row.
 func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
-	fred := pin("fred-compositions", "addon", "0.1.0", "0.2.0", "barney-addons@1.3.1", "barney-addons@1.3.0", "other@1.0.0")
+	fred := pin("fred-compositions", "addon", "0.1.0", "0.2.0", testkit.BarneyAddons, testkit.BarneyAddonsOld, testkit.OtherProfile)
 	fred.Carriers = []docs.PinCarrier{
 		{Profile: "barney-addons", Version: "1.3.1", Carrier: &docs.Carrier{Version: "1.4.0", PackVersion: "0.1.5"}},
 		{Profile: "barney-addons", Version: "1.3.0"},
-		{Profile: "other", Version: "1.0.0", Error: &docs.Error{Kind: "api", Status: 500}},
+		{Profile: "other", Version: "1.0.0", Error: &docs.Error{Kind: docs.KindAPI, Status: 500}},
 	}
 	records := []Record{
 		rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
@@ -580,10 +555,10 @@ func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{}, Pins: []docs.Pin{fred}}
 	s := build(ptr(content(t, records...)), v)
 	want := map[string]*Carried{
-		"barney-addons@1.3.1": {Profile: "barney-addons@1.3.1", Version: "1.4.0", Pack: "0.1.5"},
-		"barney-addons@1.3.0": {Profile: "barney-addons@1.3.0"},
-		"other@1.0.0":         {Profile: "other@1.0.0", Unread: true},
-		"wilma@1.0.0":         nil,
+		testkit.BarneyAddons:    {Profile: testkit.BarneyAddons, Version: "1.4.0", Pack: "0.1.5"},
+		testkit.BarneyAddonsOld: {Profile: testkit.BarneyAddonsOld},
+		testkit.OtherProfile:    {Profile: testkit.OtherProfile, Unread: true},
+		"wilma@1.0.0":           nil,
 	}
 	for _, p := range s.Profiles {
 		got, w := p.Packs[0].Carried, want[Subject(p.Name, p.Version)]
@@ -595,57 +570,61 @@ func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("rows %+v", rows)
 	}
-	carriers := []Carried{*want["barney-addons@1.3.1"], *want["barney-addons@1.3.0"], *want["other@1.0.0"]}
+	carriers := []Carried{*want[testkit.BarneyAddons], *want[testkit.BarneyAddonsOld], *want[testkit.OtherProfile]}
 	if !slices.Equal(rows[0].Carriers, carriers) {
 		t.Errorf("the newer row carries %+v, want %+v", rows[0].Carriers, carriers)
 	}
 }
+
+// rowStatus is the failure of a check of the row of a profile version that has no newer version. packNewer is the
+// failure of a check of each pack of that row. The first value names the version.
+const (
+	rowStatus = "%s: status %q, newer version %+v, copy %+v"
+	packNewer = "%s: the pack %s has the newer version %q, the carrier %+v, and the status %q"
+)
 
 // Issue #834. The cluster ran fred-crossplane@1.3.1, and then moved to 2.0.0. The record of 1.3.1 stays,
 // so the versions cycle still names a newer version of its packs and of the profile. The row of 1.3.1
 // has the status not-on-this-cluster and no newer version. No count of the page and no newer row
 // holds it. A pin that the two versions share stays for 2.0.0. The answers of the cycle stay as they are.
 func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t *testing.T) {
+	const oldSubject, newSubject = "fred-crossplane@1.3.1", "fred-crossplane@2.0.0"
 	ubuntu := pk("os", "ubuntu", "22.04")
 	old := notOnCluster(rec("fred-crossplane", "1.3.1", docs.VerifyUnchanged, pk("addon", "crossplane", "1.17.0"), ubuntu))
 	moved := rec("fred-crossplane", "2.0.0", docs.VerifyUnchanged, pk("addon", "crossplane", "2.0.2"), ubuntu)
-	crossplane := pin("crossplane", "addon", "1.17.0", "2.0.2", "fred-crossplane@1.3.1")
+	crossplane := pin("crossplane", "addon", "1.17.0", "2.0.2", oldSubject)
 	crossplane.Carriers = []docs.PinCarrier{{Profile: "fred-crossplane", Version: "1.3.1", Carrier: &docs.Carrier{Version: "2.0.0", PackVersion: "2.0.2"}}}
-	shared := pin("ubuntu", "os", "22.04", "24.04", "fred-crossplane@1.3.1", "fred-crossplane@2.0.0")
+	shared := pin("ubuntu", "os", "22.04", "24.04", oldSubject, newSubject)
 	shared.Carriers = []docs.PinCarrier{{Profile: "fred-crossplane", Version: "1.3.1"}, {Profile: "fred-crossplane", Version: "2.0.0"}}
 	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{}, Pins: []docs.Pin{crossplane, shared},
 		Profiles: []docs.ProfilePin{profilePin("fred-crossplane", "1.3.1", "2.0.0", at(-2*time.Hour)), profilePin("fred-crossplane", "2.0.0", "", "")}}
 	s := build(ptr(content(t, old, moved)), v)
 	oldRow, newRow := s.Profiles[0], s.Profiles[1]
 	if oldRow.Version != "1.3.1" || oldRow.Status != StatusNotOnThisCluster || oldRow.NewerVersion != nil || oldRow.ClusterCopy.Status != CopyNotOnThisCluster {
-		t.Errorf("1.3.1: status %q, newer version %+v, copy %+v", oldRow.Status, oldRow.NewerVersion, oldRow.ClusterCopy)
+		t.Errorf(rowStatus, "1.3.1", oldRow.Status, oldRow.NewerVersion, oldRow.ClusterCopy)
 	}
 	for _, p := range oldRow.Packs {
 		if p.Newer != "" || p.Carried != nil || p.Status != StatusOK {
-			t.Errorf("1.3.1: the pack %s has the newer version %q, the carrier %+v, and the status %q", p.Key, p.Newer, p.Carried, p.Status)
+			t.Errorf(packNewer, "1.3.1", p.Key, p.Newer, p.Carried, p.Status)
 		}
 	}
 	if newRow.Status != StatusNewer || newRow.Packs[1].Newer != "24.04" || newRow.Packs[1].Carried == nil {
 		t.Errorf("2.0.0: status %q, packs %+v", newRow.Status, newRow.Packs)
 	}
 	want := Counts{Newer: 1, NewerProfiles: 1, Packs: 2, PacksInFull: 2, Profiles: 1}
-	if s.Counts != want {
-		t.Errorf("counts %+v, want %+v", s.Counts, want)
-	}
-	carriers := []Carried{{Profile: "fred-crossplane@2.0.0"}}
-	if len(s.Newer) != 1 || s.Newer[0].Name != "ubuntu" || !slices.Equal(s.Newer[0].Profiles, []string{"fred-crossplane@2.0.0"}) || !slices.Equal(s.Newer[0].Carriers, carriers) {
+	sameCounts(t, s.Counts, want)
+	carriers := []Carried{{Profile: newSubject}}
+	if len(s.Newer) != 1 || s.Newer[0].Name != "ubuntu" || !slices.Equal(s.Newer[0].Profiles, []string{newSubject}) || !slices.Equal(s.Newer[0].Carriers, carriers) {
 		t.Errorf("newer rows %+v", s.Newer)
 	}
 	for _, e := range s.Events {
-		if strings.Contains(e.Object, "fred-crossplane@1.3.1") {
-			t.Errorf("an event names 1.3.1: %+v", e)
-		}
+		testkit.HoldsNone(t, "the object of an event", e.Object, oldSubject)
 	}
 	if len(v.Pins) != 2 || len(v.Pins[1].PinnedBy) != 2 || len(v.Pins[1].Carriers) != 2 || len(v.Profiles) != 2 {
 		t.Errorf("the answers of the cycle changed: %+v", v)
 	}
 	// before the first good content cycle, the observer does not know what the cluster runs
-	if rows := build(nil, v).Newer; len(rows) != 2 || !slices.Equal(rows[1].Profiles, []string{"fred-crossplane@1.3.1", "fred-crossplane@2.0.0"}) {
+	if rows := build(nil, v).Newer; len(rows) != 2 || !slices.Equal(rows[1].Profiles, []string{oldSubject, newSubject}) {
 		t.Errorf("newer rows with no content cycle %+v", rows)
 	}
 }
@@ -655,25 +634,23 @@ func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t
 // summary names neither for 1.0.0. The record counts as a profile and as a drift. Its packs, its pins, and its profile version count
 // nowhere, and no event of a newer version names it.
 func TestAVersionThatTheClusterDoesNotRunWithAFindingIsADriftWithNoNewerVersion(t *testing.T) {
-	old := notOnCluster(drifted(rec("aws-stack", "1.0.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"), pk("addon", "dns", "1.0.0")), &docs.Verify{}, "csi/csi-aws-ebs"))
+	old := notOnCluster(drifted(rec("aws-stack", "1.0.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"), pk("addon", "dns", "1.0.0")), &docs.Verify{}, testkit.CSIKey))
 	runs := rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.66.0"))
 	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{},
-		Pins:     []docs.Pin{pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "aws-stack@1.0.0"), pin("dns", "addon", "1.0.0", "1.2.0", "aws-stack@1.0.0")},
+		Pins:     []docs.Pin{pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", testkit.AWSStackOld), pin("dns", "addon", "1.0.0", "1.2.0", testkit.AWSStackOld)},
 		Profiles: []docs.ProfilePin{profilePin("aws-stack", "1.0.0", "1.1.0", at(-2*time.Hour)), profilePin("aws-stack", "1.1.0", "", "")}}
 	s := build(ptr(content(t, old, runs)), v)
 	row := s.Profiles[0]
 	if row.Version != "1.0.0" || row.Status != StatusDrift || row.NewerVersion != nil || row.ClusterCopy.Status != CopyNotOnThisCluster {
-		t.Errorf("1.0.0: status %q, newer version %+v, copy %+v", row.Status, row.NewerVersion, row.ClusterCopy)
+		t.Errorf(rowStatus, "1.0.0", row.Status, row.NewerVersion, row.ClusterCopy)
 	}
 	for _, p := range row.Packs {
 		if p.Newer != "" || p.Carried != nil || p.Status == StatusNewer {
-			t.Errorf("1.0.0: the pack %s has the newer version %q, the carrier %+v, and the status %q", p.Key, p.Newer, p.Carried, p.Status)
+			t.Errorf(packNewer, "1.0.0", p.Key, p.Newer, p.Carried, p.Status)
 		}
 	}
 	want := Counts{Findings: 1, Drift: 1, Packs: 1, PacksInFull: 1, Profiles: 2}
-	if s.Counts != want {
-		t.Errorf("counts %+v, want %+v", s.Counts, want)
-	}
+	sameCounts(t, s.Counts, want)
 	if len(s.Newer) != 0 {
 		t.Errorf("newer rows %+v", s.Newer)
 	}

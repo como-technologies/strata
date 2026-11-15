@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -12,22 +14,22 @@ import (
 newer version of it, and the record of the cluster. In the set ok, traefik of wilma-gateway@3.1.2 is behind 38.1.0, and
 wilma-gateway@3.2.0 carries that version. They need node, like the other tests of the page. */
 
-const (
-	carriedByWilma = `carried by <span class="m">wilma-gateway<span class="ver">@3.2.0</span></span>`
-	traefikSlab    = `<span class="m ref">traefik<span class="ver">@38.0.1</span></span>`
+var (
+	carriedByWilma = `carried by <span class="m">` + wilmaNewest + `</span>`
+	traefikSlab    = refSpan + traefikPin + `</span>`
 )
 
 // Two places name the newer profile version that carries a newer version of a pack that is behind. One is the slab of the pack
 // on the page of its profile. The other is the row of the pack in the table of the newer versions. A pack of a profile with no
 // newer version names no carrier.
 func TestThePackThatIsBehindNamesTheNewerProfileVersionThatCarriesIt(t *testing.T) {
-	pages := shown(t, devdata.StateOK, wilmaHash, "#newer", "#p-fred-identity@2.3.0")
+	pages := shown(t, devdata.StateOK, wilmaHash, "#newer", fredHash)
 	mustHold(t, "the slab of traefik", slabOf(t, pages[0], traefikSlab),
-		`newer: <span class="m">traefik<span class="ver">@38.1.0</span></span> · `+carriedByWilma+` · `)
+		`newer: <span class="m">`+ref("traefik", "38.1.0")+`</span> · `+carriedByWilma+` · `)
 	mustHold(t, "the row of traefik in the newer versions", rowWith(t, pages[1], `>traefik</a>`),
 		`<div class="mut small">`+carriedByWilma+`</div>`)
 	mustNotHold(t, "the row of dex, whose profile has no newer version", rowWith(t, pages[1], `>dex</a>`), "carried by")
-	mustNotHold(t, "the page of a profile with no newer version", pages[2], "carried by", "carrier not read")
+	mustNotHold(t, "the page of "+testkit.NoNewerProfile, pages[2], "carried by", "carrier not read")
 }
 
 // A carrier with no version says that no newer profile version carries the pack. A carrier at a version of the pack below the
@@ -44,7 +46,7 @@ func TestTheWordsOfTheCarrierFollowTheAnswerOfBehind(t *testing.T) {
 		{"a read that failed", "", "", true, "carrier not read"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editProfiles(t, func(v *api.ProfilesView) {
+			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 				for i := range v.Profiles {
 					for j := range v.Profiles[i].Packs {
 						if k := v.Profiles[i].Packs[j].Carried; k != nil {
@@ -67,18 +69,17 @@ func TestTheWordsOfTheCarrierFollowTheAnswerOfBehind(t *testing.T) {
 // red badge "Changed".
 func TestTheCompareBadgeOfANewerVersionIsTheNeutralBadgeNewer(t *testing.T) {
 	screens := crawl(t, devdata.StateOK)
-	vendor := packPage(wilmaSubject, "addon", "vendor-product")
 	for _, c := range []struct {
 		where, hash, variant, option, badge string
 	}{
-		{"the newer version of traefik", traefikHash, "", `<option value="newer" selected>`, `<span class="badge b">Newer</span>`},
-		{"the newest profile version of vendor-product", vendor, "", `<option value="newest" selected>`, `<span class="badge b">Newer</span>`},
-		{"the published side of dex", dexHash, "", `<option value="published" selected>`, `<span class="badge r">Changed</span>`},
+		{"the newer version of traefik", traefikHash, "", `<option value="` + string(model.SideNewer) + `" selected>`, badge("b", "Newer")},
+		{"the newest profile version of vendor-product", vendorHash, "", newestSelected, badge("b", "Newer")},
+		{"the published side of dex", dexHash, "", `<option value="` + string(model.SidePublished) + `" selected>`, badge("r", "Changed")},
 	} {
 		head := compareHead(t, pageOf(t, screens, c.hash, c.variant))
 		mustHold(t, c.where, head, c.option, c.badge)
-		if c.badge != `<span class="badge r">Changed</span>` {
-			mustNotHold(t, c.where, head, `<span class="badge r">`)
+		if c.badge != badge("r", "Changed") {
+			mustNotHold(t, c.where, head, badgeOf("r"))
 		}
 	}
 }
@@ -97,17 +98,19 @@ func slabOf(t *testing.T, markup, text string) string {
 	return markup[start : at+end]
 }
 
+// compareLabel is the label of the dropdown Compare of a pack page.
+const compareLabel = `<label for="side" class="small mut">Compare</label>`
+
 // compareHead gives the head of the card of comparison of a pack page: the dropdown, the roots, and the badge of the side.
 func compareHead(t *testing.T, markup string) string {
 	t.Helper()
-	const label = `<label for="side" class="small mut">Compare</label>`
-	at := strings.Index(markup, label)
+	at := strings.Index(markup, compareLabel)
 	if at < 0 {
 		t.Fatal("the page has no dropdown Compare")
 	}
 	end := strings.Index(markup[at:], "</div>")
 	if end < 0 {
-		t.Fatal("the head of the card Compare has no end")
+		t.Fatal(cardHead + " Compare has no end")
 	}
 	return markup[at : at+end]
 }

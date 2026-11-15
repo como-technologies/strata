@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -20,10 +22,16 @@ const (
 	useCasePage = "../../../docs/src/use-cases/observer.md"
 )
 
+// askSection is the section of servicePage about the button "Ask Palette", and askMove is its heading with no level.
+const (
+	askMove    = askButton + " about a move"
+	askSection = "## " + askMove
+)
+
 // sectionOf gives the text of a section of a page, from its heading to the next heading of the same level.
 func sectionOf(t *testing.T, page, heading string) string {
 	t.Helper()
-	text := "\n" + string(readFile(t, page))
+	text := "\n" + string(testkit.ReadFile(t, page))
 	level := strings.SplitN(heading, " ", 2)[0]
 	from := strings.Index(text, "\n"+heading+"\n")
 	if from < 0 {
@@ -35,6 +43,10 @@ func sectionOf(t *testing.T, page, heading string) string {
 	}
 	return rest
 }
+
+// unwrapped gives the text with each run of white space as one space, so that a sentence of the book that wraps reads as
+// one line.
+func unwrapped(text string) string { return strings.Join(strings.Fields(text), " ") }
 
 // tableRows gives the cells of each row of the first table in the text, with no header row and no rule row.
 func tableRows(t *testing.T, text string) [][]string {
@@ -101,14 +113,17 @@ func TestTheBookQuotesTheHeadlinesAndTheWordsOfTheStatesOfThePage(t *testing.T) 
 			}
 		}
 	}
+	// The book quotes a next step of the page with a small first letter and no period.
+	quote := func(words string) string { return strings.ToLower(words[:1]) + strings.TrimSuffix(words[1:], ".") }
+	const refusal, other = "For HTTP 401 and 403, ", "For another error, "
 	for _, row := range rows {
 		switch row[0] {
-		case "We lost the signal from Palette":
-			mustHold(t, "the next step of the lost page", row[2], "For HTTP 401 and 403, check the key in the Secret `strata-observer-key`", "For another error, check that the observer reaches Palette")
-			mustHold(t, "the scripts", script, "Check the key in the Secret", "Check that the observer can reach Palette, then read the log.")
-		case "The pods stay silent":
-			mustHold(t, "the next step of the pods", row[2], "For HTTP 401 and 403, ask the API server if the role of the observer can list pods", "For another error, read the log")
-			mustHold(t, "the scripts", script, "Ask the API server if the role of the observer can list pods.", `next("Read the log."`)
+		case lostTitle:
+			mustHold(t, "the next step of the lost page", row[2], refusal+quote(checkTheKey)+" `"+keySecret+"`", other+"check that the observer reaches Palette")
+			mustHold(t, "the scripts", script, checkTheKey, checkTheLink)
+		case podsTitle:
+			mustHold(t, "the next step of the pods", row[2], refusal+quote(askListPods), other+"read the log")
+			mustHold(t, "the scripts", script, askListPods, `next("Read the log."`)
 		}
 	}
 }
@@ -121,16 +136,16 @@ func TestALostPageNamesTheKeyOnlyForARefusal(t *testing.T) {
 		want string
 		not  string
 	}{
-		{"a refused key", model.ErrorRef{Kind: "api", Status: 403}, "Check the key in the Secret", "Check that the observer can reach Palette"},
-		{"a failed link", model.ErrorRef{Kind: "transport"}, "Check that the observer can reach Palette, then read the log.", "Check the key in the Secret"},
-		{"another error of Palette", model.ErrorRef{Kind: "api", Status: 500}, "Check that the observer can reach Palette, then read the log.", "Check the key in the Secret"},
+		{"a refused key", model.ErrorRef{Kind: docs.KindAPI, Status: 403}, checkTheKey, reachPalette},
+		{"a failed link", model.ErrorRef{Kind: docs.KindTransport}, checkTheLink, checkTheKey},
+		{"another error of Palette", model.ErrorRef{Kind: docs.KindAPI, Status: 500}, checkTheLink, checkTheKey},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			lastError := c.err
 			dir := writeSet(t, devdata.StateLostUnchecked, map[string]func([]byte) []byte{
-				"cluster.json": editCluster(t, func(v *api.ClusterView) { v.Content.LastError = &lastError }),
+				"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Content.LastError = &lastError }),
 			})
-			page := pageWith(t, dir, "scratch", "#overview", "")
+			page := pagesOf(t, dir, "#overview")[0]
 			mustHold(t, c.name, page, c.want)
 			mustNotHold(t, c.name, page, c.not)
 		})
@@ -143,15 +158,15 @@ func TestTheThirdFactOfAllQuietIsASingleShortLabel(t *testing.T) {
 	script := readScripts(t)
 	mustNotHold(t, "the scripts", script, "a choice and not a fault")
 	// The screen of the newer versions keeps the sentence that a newer version is a choice.
-	mustHold(t, "the scripts", script, "A choice, not a fault, so they stay out of Needs attention.")
+	mustHold(t, "the scripts", script, "A choice, not a fault, so they stay out of "+needsAttention+".")
 	for _, c := range []struct {
 		newer int
 		want  string
-	}{{0, "<span>newer versions</span>"}, {1, "<span>newer version</span>"}, {3, "<span>newer versions</span>"}} {
+	}{{0, newerFact}, {1, span("newer version")}, {3, newerFact}} {
 		dir := writeSet(t, devdata.StateQuiet, map[string]func([]byte) []byte{
-			"cluster.json": editCluster(t, func(v *api.ClusterView) { v.Counts.Newer = c.newer }),
+			"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Counts.Newer = c.newer }),
 		})
-		mustHold(t, "the facts of All quiet", pageWith(t, dir, "scratch", "#findings", ""), c.want)
+		mustHold(t, "the facts of "+calmQuiet, pagesOf(t, dir, "#findings")[0], c.want)
 	}
 }
 
@@ -163,7 +178,7 @@ func TestTheBookQuotesTheQuestionsOfTheCardCheckThisYourself(t *testing.T) {
 	if len(table) != 8 {
 		t.Fatalf("the table of the card has %d rows", len(table))
 	}
-	useCase := strings.Join(strings.Fields(string(readFile(t, useCasePage))), " ")
+	useCase := unwrapped(string(testkit.ReadFile(t, useCasePage)))
 	for _, row := range table {
 		question := strings.TrimSuffix(row[0], ".")
 		mustHold(t, "the scripts", script, `["`+question+`"`)
@@ -175,14 +190,14 @@ func TestTheBookQuotesTheQuestionsOfTheCardCheckThisYourself(t *testing.T) {
 // service quotes both. The words of the button and of each verdict are words of the scripts.
 func TestTheBookQuotesTheWordsOfTheColumnPaletteAndOfTheCardMoveTo(t *testing.T) {
 	script := readScripts(t)
-	rows := tableRows(t, sectionOf(t, servicePage, "## Ask Palette about a move"))
+	rows := tableRows(t, sectionOf(t, servicePage, askSection))
 	if len(rows) != 4 {
 		t.Fatalf("the table of the answers has %d rows", len(rows))
 	}
 	for _, row := range rows {
 		mustHold(t, "the scripts", script, words(row[0]), words(row[1]))
 	}
-	mustHold(t, "the scripts", script, `<th class="narrow-hide" title="${ASK_WHAT}">Palette</th>`, "Ask again", "${ASK_COVERS}", "It changes nothing.", "It did not check your own values of the pack.")
+	mustHold(t, "the scripts", script, `<th class="narrow-hide" title="${ASK_WHAT}">Palette</th>`, askAgain, "${ASK_COVERS}", "It changes nothing.", notYourValues)
 }
 
 // The table of the splashes in the page of the server holds the headline of each splash of the scripts, and no other. A place with a

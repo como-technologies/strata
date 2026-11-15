@@ -26,6 +26,13 @@ var t0 = time.Date(2026, 11, 3, 14, 0, 0, 0, time.UTC)
 
 const sentinel = "SENTINEL-CLEAR-VALUE"
 
+// verifyBehind is the failure of a check of the count of the runs of verify and of behind. versionsNewer is the failure
+// of a check of the versions and the newer versions of a summary.
+const (
+	verifyBehind  = "verify %d, behind %d"
+	versionsNewer = "versions %+v, newer %d"
+)
+
 // world holds the answers of the fake strata. A record is known by its index: record-<i>.json.
 type world struct {
 	// rows gives one `verify` row for each record, by index. The fake sets the path of the row.
@@ -92,7 +99,7 @@ func (w *world) Run(ctx context.Context, dir string, args ...string) (runner.Res
 	case runner.CmdBehind:
 		return w.runBehind()
 	}
-	return runner.Result{}, fmt.Errorf("the fake does not know %q", args[0])
+	return runner.Result{}, testkit.Unknown(args)
 }
 
 // doc makes the result of a command that prints v and exits with the code exit.
@@ -140,12 +147,7 @@ func (w *world) runSnapshot(dir string, args []string) (runner.Result, error) {
 		if w.profileErr != nil {
 			return runner.Result{}, w.profileErr
 		}
-		raw, err := json.Marshal(map[string]any{"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r-" + name,
-			"source": map[string]any{"uid": "u-" + name, "name": name, "version": version, "type": "cluster"}, "packs": []any{}})
-		if err != nil {
-			return runner.Result{}, err
-		}
-		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), raw, 0o600)
+		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), []byte(testkit.Snapshot(name, version)), 0o600)
 	}
 	if w.clusterErr != nil {
 		return runner.Result{}, w.clusterErr
@@ -286,8 +288,9 @@ type rig struct {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{t: t, records: t.TempDir(), work: t.TempDir(), state: filepath.Join(t.TempDir(), "state"), log: &bytes.Buffer{}}
-	r.cfg = Config{ClusterUID: "c1", Records: r.records, Work: r.work, State: r.state, ContentEvery: 15 * time.Minute, VersionsEvery: 6 * time.Hour}
+	d := testkit.NewRigDirs(t)
+	r := &rig{t: t, records: d.Records, work: d.Work, state: d.State, log: &bytes.Buffer{}}
+	r.cfg = Config{ClusterUID: testkit.PaymentsUID, Records: r.records, Work: r.work, State: r.state, ContentEvery: testkit.ContentEvery, VersionsEvery: testkit.VersionsEvery}
 	return r
 }
 
@@ -296,26 +299,14 @@ func (r *rig) record(name, version string, keys ...string) {
 	r.t.Helper()
 	packs := []map[string]any{}
 	for _, k := range keys {
-		layer, pack, _ := strings.Cut(k, "/")
-		packs = append(packs, map[string]any{"key": k, "layer": layer, "name": pack, "version": "1.0.0", "registryUid": "reg1", "images": []string{"a/b:1"}})
+		packs = append(packs, testkit.RigPack(k, "1.0.0", testkit.ImageRef))
 	}
-	body, err := json.Marshal(map[string]any{
-		"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r1",
-		"source":    map[string]any{"uid": "u-" + name, "name": name, "version": version, "type": "cluster"},
-		"packs":     packs,
-		"variables": []map[string]any{{"name": "team", "value": sentinel}},
-	})
-	if err != nil {
-		r.t.Fatal(err)
-	}
-	testkit.WriteGzip(r.t, r.records, name+"@"+version+".json.gz", string(body))
+	testkit.WriteRecord(r.t, r.records, name, version, packs, sentinel)
 }
 
 func (r *rig) meta(body string) {
 	r.t.Helper()
-	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(body), 0o600); err != nil {
-		r.t.Fatal(err)
-	}
+	testkit.WriteMeta(r.t, r.records, body)
 }
 
 // observer makes an observer with the clock at now. A test changes o.now to move the clock.

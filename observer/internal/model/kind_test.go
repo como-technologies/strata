@@ -3,11 +3,11 @@ package model
 import (
 	"testing"
 
-	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func TestOnlyTheKindsOfThePodsAreImageKinds(t *testing.T) {
-	for _, k := range []Kind{PublishedChanged, Overwritten, Renamed, Gone, ClusterDiffers, ImageIDChanged, ImageMoved, ImageSplit} {
+	for _, k := range allKinds {
 		if got, want := k.IsImage(), k == ImageMoved || k == ImageSplit; got != want {
 			t.Errorf("%s: IsImage is %v, want %v", k, got, want)
 		}
@@ -26,9 +26,9 @@ func TestEachKindHasASentenceThatIsTheMessageOfItsEvent(t *testing.T) {
 }
 
 func TestTheKeyOfARowIsTheKeyOfItsPin(t *testing.T) {
-	pin := docs.Pin{Name: "dex", RegistryUID: "reg1", Version: "2.42.0", Newer: []docs.Newer{{Version: "2.44.0"}}}
-	row := Newer{Name: pin.Name, RegistryUID: pin.RegistryUID, Version: pin.Version, Newest: "2.44.0"}
-	if row.Key() != MoveKey(pin) || row.Key() != "reg1/dex@2.42.0->2.44.0" {
-		t.Errorf("key %q, pin %q", row.Key(), MoveKey(pin))
+	p := pin("dex", "addon", "2.42.0", "2.44.0")
+	row := Newer{Name: p.Name, RegistryUID: p.RegistryUID, Version: p.Version, Newest: "2.44.0"}
+	if row.Key() != MoveKey(p) || row.Key() != "reg1"+testkit.DexMove {
+		t.Errorf("key %q, pin %q", row.Key(), MoveKey(p))
 	}
 }

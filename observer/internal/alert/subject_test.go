@@ -10,6 +10,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndTheLoss(t *testing.T) {
@@ -17,25 +18,27 @@ func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndThe
 		Page:    model.PageLost,
 		Content: model.ContentClock{Health: model.Health{FailedRuns: 3, LastError: &model.ErrorRef{Kind: docs.KindAPI, Status: 401}}},
 		Findings: []model.Finding{
-			{ID: "f1", Kind: model.PublishedChanged, Profile: "fred-identity@2.3.0", Packs: []string{"addon/dex"}, FirstSeen: now},
-			{ID: "f2", Kind: model.ImageSplit, Profile: "wilma-gateway@3.1.2", Packs: []string{"addon/traefik"}, Images: []string{"a/b:1"}},
+			{ID: "f1", Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{testkit.DexKey}, FirstSeen: now},
+			{ID: "f2", Kind: model.ImageSplit, Profile: testkit.GatewayProfile, Packs: []string{testkit.TraefikKey}, Images: []string{testkit.ImageRef}},
 		},
-		Newer: []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{"fred-identity@2.3.0", "barney-base@1.5.0"}}},
+		Newer: []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{testkit.DexProfile, testkit.BaseProfile}}},
 	}
 	got := SubjectsOf(sum)
 	if len(got) != 5 {
 		t.Fatalf("subjects %+v", got)
 	}
+	// dexNewer starts the id of the newer version of dex for a profile.
+	const dexNewer = "newer:r1" + testkit.DexMove + "|"
 	want := []struct {
 		id   string
 		news News
-	}{{"f1", NewsDrift}, {"f2", NewsImage}, {"newer:r1/dex@2.42.0->2.44.0|fred-identity@2.3.0", NewsNewer}, {"newer:r1/dex@2.42.0->2.44.0|barney-base@1.5.0", NewsNewer}, {lostID, NewsLost}}
+	}{{"f1", NewsDrift}, {"f2", NewsImage}, {dexNewer + testkit.DexProfile, NewsNewer}, {dexNewer + testkit.BaseProfile, NewsNewer}, {lostID, NewsLost}}
 	for i, w := range want {
 		if got[i].ID != w.id || got[i].News != w.news {
 			t.Errorf("subject %d is %s %s, want %s %s", i, got[i].ID, got[i].News, w.id, w.news)
 		}
 	}
-	if got[4].Detail != "The observer cannot reach Palette. The last 3 content checks failed: api, HTTP 401." {
+	if got[4].Detail != testkit.NoReachAfter(3) {
 		t.Errorf("the detail of the loss: %q", got[4].Detail)
 	}
 	if none := SubjectsOf(model.Summary{Page: model.PageOK}); len(none) != 0 {
@@ -46,18 +49,14 @@ func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndThe
 // A message names a profile, its packs, a fixed sentence, and a time. It holds nothing else of a finding,
 // also what the summary tier carries: the writer, the images, and the impact.
 func TestAMessageHoldsNothingOfAFindingButItsProfilePacksSentenceAndFirstSight(t *testing.T) {
-	f := model.Finding{ID: "f1", Kind: model.PublishedChanged, Profile: "fred-identity@2.3.0", Packs: []string{"addon/dex"}, Impact: "IMPACT-MARKER",
+	f := model.Finding{ID: "f1", Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{testkit.DexKey}, Impact: "IMPACT-MARKER",
 		Images: []string{"IMAGE-MARKER:1"}, Who: []docs.Who{{Actor: "ACTOR-MARKER", Action: "ACTION-MARKER"}}, FirstSeen: now}
 	s := findingSubject(f)
 	for _, text := range []string{openText("quarry-1", s), clearText("quarry-1", s, now), digestText("quarry-1", []Subject{s})} {
-		if strings.Contains(text, "MARKER") {
-			t.Errorf("the message holds a marker: %s", text)
-		}
-		if !strings.Contains(text, "fred-identity@2.3.0") {
-			t.Errorf("the message lacks the profile: %s", text)
-		}
+		testkit.HoldsNone(t, "the text", text, "MARKER")
+		testkit.HoldsAll(t, "the text", text, testkit.DexProfile)
 	}
-	want := "strata · quarry-1 · Drift\nfred-identity@2.3.0: The published version differs from its record.\nPacks: addon/dex\nFirst seen: 2026-11-04T12:00:00Z"
+	want := dexDrift + "The published version differs from its record.\nPacks: " + testkit.DexKey + "\nFirst seen: 2026-11-04T12:00:00Z"
 	if got := openText("quarry-1", s); got != want {
 		t.Errorf("the open message\n%s\nwant\n%s", got, want)
 	}
@@ -83,7 +82,7 @@ func TestEachKindOfNewsHasItsTitle(t *testing.T) {
 func TestADigestListsAtMostThirtySubjectsAndSaysHowManyMore(t *testing.T) {
 	var subjects []Subject
 	for i := 0; i < digestLimit+5; i++ {
-		subjects = append(subjects, Subject{News: NewsNewer, Profile: "p@1", Detail: "x"})
+		subjects = append(subjects, newerItem("", "p@1"))
 	}
 	lines := strings.Split(digestText("quarry-1", subjects), "\n")
 	if len(lines) != 2+digestLimit+1 || lines[len(lines)-1] != "and 5 more." {
@@ -92,7 +91,7 @@ func TestADigestListsAtMostThirtySubjectsAndSaysHowManyMore(t *testing.T) {
 }
 
 func TestTheSampleIsTheMessageOfAFindingForAMadeUpProfile(t *testing.T) {
-	if got := Sample("quarry-1"); !strings.HasPrefix(got, "strata · quarry-1 · Drift\nfred-identity@2.3.0: ") || !strings.HasSuffix(got, "First seen: 2026-11-03T06:09:00Z") {
+	if got := Sample("quarry-1"); !strings.HasPrefix(got, dexDrift) || !strings.HasSuffix(got, "First seen: 2026-11-03T06:09:00Z") {
 		t.Errorf("sample %q", got)
 	}
 }
@@ -126,14 +125,14 @@ func TestThePackageImportsNoPackageThatHoldsAValue(t *testing.T) {
 
 func TestAPackRuleThatNamesTheKeyCoversTheNewerVersionOfThatPack(t *testing.T) {
 	sum := model.Summary{
-		Profiles: []model.Profile{{Name: "fred-identity", Version: "2.3.0", Packs: []model.Pack{{Key: "addon/dex", Name: "dex", Version: "2.42.0"}}}},
-		Newer:    []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{"fred-identity@2.3.0"}}},
+		Profiles: []model.Profile{{Name: "fred-identity", Version: "2.3.0", Packs: []model.Pack{{Key: testkit.DexKey, Name: "dex", Version: "2.42.0"}}}},
+		Newer:    []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{testkit.DexProfile}}},
 	}
 	subjects := SubjectsOf(sum)
-	if len(subjects) != 1 || len(subjects[0].Packs) != 1 || subjects[0].Packs[0] != "addon/dex" {
+	if len(subjects) != 1 || len(subjects[0].Packs) != 1 || subjects[0].Packs[0] != testkit.DexKey {
 		t.Fatalf("subjects %+v", subjects)
 	}
-	for _, match := range []string{"addon/dex", "dex"} {
+	for _, match := range []string{testkit.DexKey, "dex"} {
 		if !(Rule{Level: LevelPack, Match: match}).covers(subjects[0]) {
 			t.Errorf("the rule %q does not cover the pack", match)
 		}

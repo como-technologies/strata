@@ -12,6 +12,9 @@ import (
 // The contract test runs against the strata binary of this commit. scripts/observer-contract.sh
 // sets STRATA_BIN and STRATA_DOCS. Without them, `go test` skips it, and it needs no network.
 
+// notSet ends the reason of a skip of the contract test.
+const notSet = " is not set: run scripts/observer-contract.sh"
+
 // schemaProps finds the properties of a JSON Schema node. It follows $ref, anyOf, oneOf, and items.
 func schemaProps(root, node map[string]any, out map[string]map[string]any) {
 	if ref, ok := node["$ref"].(string); ok {
@@ -73,10 +76,7 @@ func missing(root, node map[string]any, t reflect.Type, path string, seen map[re
 }
 
 func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
-	bin := os.Getenv("STRATA_BIN")
-	if bin == "" {
-		t.Skip("STRATA_BIN is not set: run scripts/observer-contract.sh")
-	}
+	bin := contractEnv(t, "STRATA_BIN")
 	for _, c := range []struct {
 		kind string
 		typ  any
@@ -92,59 +92,59 @@ func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
 			t.Fatalf("strata schema %s: %v", c.kind, err)
 		}
 		var root map[string]any
-		if err := json.Unmarshal(out, &root); err != nil {
-			t.Fatal(err)
-		}
+		decode(t, "strata schema "+c.kind, out, &root)
 		for _, m := range missing(root, root, reflect.TypeOf(c.typ), c.kind, map[reflect.Type]bool{}) {
 			t.Errorf("not in the schema: %s", m)
 		}
 	}
 }
 
+// contractDir gives the directory of the documents of the real binary that the contract script sets in STRATA_DOCS.
+// With no directory, the test skips.
+func contractDir(t *testing.T) string {
+	t.Helper()
+	return contractEnv(t, "STRATA_DOCS")
+}
+
+// contractEnv gives the variable name that the contract script sets. When it is not set, the test skips.
+func contractEnv(t *testing.T, name string) string {
+	t.Helper()
+	value := os.Getenv(name)
+	if value == "" {
+		t.Skip(name + notSet)
+	}
+	return value
+}
+
+// decodeFile reads the JSON file name of dir into v. It does the job of testkit.DecodeFile for the tests of docs, because
+// testkit imports docs.
 func decodeFile(t *testing.T, dir, name string, v any) {
 	t.Helper()
 	b, err := os.ReadFile(dir + "/" + name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(b, v); err != nil {
-		t.Fatalf("%s: %v", name, err)
-	}
+	decode(t, name, b, v)
 }
 
 // A cluster side holds the value of a variable in clear. This test fails with no such value, so it
 // cannot pass by an empty document.
 func TestAClearValueDoesNotPassTheAllowList(t *testing.T) {
-	dir := os.Getenv("STRATA_DOCS")
-	if dir == "" {
-		t.Skip("STRATA_DOCS is not set: run scripts/observer-contract.sh")
-	}
+	dir := contractDir(t)
 	const value = "team-payments"
-	raw, err := os.ReadFile(dir + "/compare-values.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	const name = "compare-values.json"
+	var raw json.RawMessage
+	decodeFile(t, dir, name, &raw)
 	if !strings.Contains(string(raw), value) {
 		t.Fatal("the document holds no clear value, so this test proves nothing")
 	}
 	var d Diff
-	if err := json.Unmarshal(raw, &d); err != nil {
-		t.Fatal(err)
-	}
-	out, err := json.Marshal(d)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(out), value) {
-		t.Fatalf("the clear value passed the allow-list: %s", out)
-	}
+	decode(t, name, raw, &d)
+	holdsNone(t, "the diff after the allow-list", string(encode(t, d)), value)
 }
 
 func TestTheKindOfAFailedCheckIsInTheRow(t *testing.T) {
-	dir := os.Getenv("STRATA_DOCS")
-	if dir == "" {
-		t.Skip("STRATA_DOCS is not set: run scripts/observer-contract.sh")
-	}
+	dir := contractDir(t)
 	var down VerifySummary
 	decodeFile(t, dir, "verify-summary-down.json", &down)
 	if len(down.Records) != 1 || down.Records[0].Status != VerifyError || down.Records[0].Error == nil || down.Records[0].Error.Kind != KindTransport {
@@ -153,12 +153,9 @@ func TestTheKindOfAFailedCheckIsInTheRow(t *testing.T) {
 }
 
 func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
-	dir := os.Getenv("STRATA_DOCS")
-	if dir == "" {
-		t.Skip("STRATA_DOCS is not set: run scripts/observer-contract.sh")
-	}
+	dir := contractDir(t)
 	var drift VerifySummary
-	decodeFile(t, dir, "verify-summary-drift.json", &drift)
+	decodeFile(t, dir, driftSummary, &drift)
 	if drift.Schema != VerifySummarySchema {
 		t.Errorf("verify states %q", drift.Schema)
 	}
@@ -166,7 +163,7 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 		t.Errorf("drift: %+v", drift.Records)
 	}
 	var behind Behind
-	decodeFile(t, dir, "behind.json", &behind)
+	decodeFile(t, dir, behindFile, &behind)
 	if behind.Schema != BehindSchema {
 		t.Errorf("behind states %q", behind.Schema)
 	}
@@ -189,6 +186,16 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	decodeFile(t, dir, "ask-behind.json", &ask)
 	if len(ask.Pins) != 1 || ask.Pins[0].Bump == nil || ask.Pins[0].Bump.To == "" {
 		t.Errorf("the question about one move gives %d pins, and the first has no bump: %+v", len(ask.Pins), ask.Pins)
+	}
+	// The question about a move of Kubernetes that skips a minor version: the bump holds the check of strata, with
+	// the next step (#867).
+	var skip Behind
+	decodeFile(t, dir, "ask-skip.json", &skip)
+	if len(skip.Pins) != 1 || skip.Pins[0].Bump == nil {
+		t.Fatalf("the question about the skip gives %d pins: %+v", len(skip.Pins), skip.Pins)
+	}
+	if s := skip.Pins[0].Bump.UpdateChecks.SkippedMinor; s == nil || s.From != skip.Pins[0].Version || s.To != skip.Pins[0].Bump.To || s.NextMinor == "" || s.NextStep == "" {
+		t.Errorf("the bump of the skip holds the check %+v", s)
 	}
 	for _, name := range []string{"compare-payments-aws-stack.json", "compare-payments-platform-addons.json"} {
 		var d Diff

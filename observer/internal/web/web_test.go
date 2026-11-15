@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -24,8 +23,10 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -56,21 +57,7 @@ func (noSource) StartCycle(string) (model.Start, bool) { return model.Start{}, f
 func serve(t *testing.T, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	h := (&api.Server{Source: noSource{}, Page: api.Page(files(t))}).Handler()
-	req := httptest.NewRequest(http.MethodGet, target, nil)
-	req.Host = "127.0.0.1:8080"
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	return rec
-}
-
-// types is the Content-Type that each kind of file must have.
-var types = map[string]string{
-	".html":  "text/html; charset=utf-8",
-	".js":    "text/javascript; charset=utf-8",
-	".css":   "text/css; charset=utf-8",
-	".woff2": "font/woff2",
-	".svg":   "image/svg+xml",
-	".md":    "text/markdown; charset=utf-8",
+	return testkit.Get(h, target)
 }
 
 func TestEachAssetIsServedWithItsType(t *testing.T) {
@@ -80,7 +67,7 @@ func TestEachAssetIsServedWithItsType(t *testing.T) {
 			return err
 		}
 		found = append(found, name)
-		want, ok := types[path.Ext(name)]
+		want, ok := testkit.PageTypes[path.Ext(name)]
 		if !ok {
 			t.Errorf("%s has a type that the test does not know", name)
 			return nil
@@ -89,16 +76,16 @@ func TestEachAssetIsServedWithItsType(t *testing.T) {
 		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != want {
 			t.Errorf("%s: status %d, type %q, want %q", name, rec.Code, rec.Header().Get("Content-Type"), want)
 		}
-		policy := rec.Header().Get("Content-Security-Policy")
-		if rec.Header().Get("X-Content-Type-Options") != "nosniff" || !strings.Contains(policy, "font-src 'self'") || !strings.Contains(policy, "img-src 'self'") {
-			t.Errorf("%s: the headers of the server are missing", name)
+		policy := rec.Header().Get(testkit.HeaderPolicy)
+		if rec.Header().Get(testkit.HeaderNoSniff) != "nosniff" || !strings.Contains(policy, "font-src 'self'") || !strings.Contains(policy, "img-src 'self'") {
+			t.Errorf(testkit.HeadersMissing, name)
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"index.html", "app.js", "theme.js", "app.css", "favicon-light.svg", "favicon-dark.svg", "LICENSES.md", "fonts/public-sans-latin-wght-normal.woff2", "fonts/roboto-mono-latin-wght-normal.woff2"} {
+	for _, want := range []string{"index.html", "app.js", themeScript, "app.css", testkit.FaviconLight, testkit.FaviconDark, "LICENSES.md", "fonts/public-sans-latin-wght-normal.woff2", "fonts/roboto-mono-latin-wght-normal.woff2"} {
 		if !slices.Contains(found, want) {
 			t.Errorf("assets/ has no %s", want)
 		}
@@ -128,12 +115,8 @@ func TestIndexLoadsEachScriptOnceAndTheScriptThatStartsThePageLast(t *testing.T)
 	for _, name := range screens {
 		tags = append(tags, `<script src="`+name+`"></script>`)
 	}
-	if !strings.Contains(index, strings.Join(tags, "\n")+"\n</body>") {
-		t.Errorf("the scripts of the screens %v are not at the end of the body", screens)
-	}
-	if !strings.Contains(string(readPage(t, screens[0])), "const h = ") {
-		t.Errorf("%s loads first, and it does not hold the template h", screens[0])
-	}
+	mustHold(t, "the end of the body of index.html", index, strings.Join(tags, "\n")+"\n</body>")
+	mustHold(t, "the first script "+screens[0], string(readPage(t, screens[0])), "const h = ")
 	for i, name := range screens {
 		want := 0
 		if i == len(screens)-1 {
@@ -146,10 +129,7 @@ func TestIndexLoadsEachScriptOnceAndTheScriptThatStartsThePageLast(t *testing.T)
 }
 
 func TestTheRouteOfThePageGivesTheIndexAndNoPathElseGivesAFile(t *testing.T) {
-	index, err := fs.ReadFile(files(t), "index.html")
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := readPage(t, "index.html")
 	if rec := serve(t, "/"); rec.Code != http.StatusOK || rec.Body.String() != string(index) {
 		t.Errorf("/ gave %d", rec.Code)
 	}
@@ -158,7 +138,7 @@ func TestTheRouteOfThePageGivesTheIndexAndNoPathElseGivesAFile(t *testing.T) {
 	if rec := serve(t, "/favicon.ico"); rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
 		t.Errorf("/favicon.ico gave %d with %d bytes", rec.Code, rec.Body.Len())
 	}
-	for _, icon := range []string{"/favicon-light.svg", "/favicon-dark.svg"} {
+	for _, icon := range []string{"/" + testkit.FaviconLight, "/" + testkit.FaviconDark} {
 		if rec := serve(t, icon); rec.Code != http.StatusOK || rec.Body.Len() == 0 {
 			t.Errorf("%s gave %d with %d bytes", icon, rec.Code, rec.Body.Len())
 		}
@@ -172,29 +152,16 @@ func TestTheRouteOfThePageGivesTheIndexAndNoPathElseGivesAFile(t *testing.T) {
 
 // Each font file has its SHA-256 in LICENSES.md, with its version and the license.
 func TestLicensesNamesEachFontWithItsChecksum(t *testing.T) {
-	licenses, err := fs.ReadFile(files(t), "LICENSES.md")
-	if err != nil {
-		t.Fatal(err)
-	}
+	licenses := string(readPage(t, "LICENSES.md"))
 	fonts, err := fs.Glob(files(t), "fonts/*.woff2")
 	if err != nil || len(fonts) != 2 {
 		t.Fatalf("fonts %v, %v", fonts, err)
 	}
 	for _, f := range fonts {
-		raw, err := fs.ReadFile(files(t), f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sum := sha256.Sum256(raw)
-		if !strings.Contains(string(licenses), "`"+f+"`") || !strings.Contains(string(licenses), hex.EncodeToString(sum[:])) {
-			t.Errorf("LICENSES.md does not name %s with its checksum", f)
-		}
+		sum := sha256.Sum256(readPage(t, f))
+		mustHold(t, "the licenses", licenses, "`"+f+"`", hex.EncodeToString(sum[:]))
 	}
-	for _, want := range []string{"OFL-1.1", "SIL OPEN FONT LICENSE Version 1.1", "5.3.0"} {
-		if !strings.Contains(string(licenses), want) {
-			t.Errorf("LICENSES.md has no %q", want)
-		}
-	}
+	mustHold(t, "LICENSES.md", licenses, []string{"OFL-1.1", "SIL OPEN FONT LICENSE Version 1.1", "5.3.0"}...)
 }
 
 var (
@@ -236,7 +203,7 @@ func problems(files fs.FS) []string {
 			text = strings.ReplaceAll(text, svgNamespace, "")
 		}
 		if m := externalAddress.FindString(text); m != "" {
-			add("an external address " + m)
+			add(problemAddress + " " + m)
 		}
 		switch path.Ext(name) {
 		case ".html":
@@ -259,17 +226,41 @@ func problems(files fs.FS) []string {
 	return out
 }
 
+// The words of the problems that the check of the assets finds, which its test names.
+const (
+	problemHandler   = "an inline event handler"
+	problemInnerHTML = "innerHTML must appear once"
+	problemRaw       = "holds more than a fixed word"
+	problemAttribute = "sets more than a fixed attribute"
+	problemStyle     = "an inline style"
+	problemScript    = "an inline script"
+	problemAddress   = "an external address"
+	problemMaxWidth  = "holds a max-width"
+	// inMarkup ends a problem of a string of markup in a script.
+	inMarkup = " in a string of markup"
+	// screensOnly says where markup is written, oneWrite is that write, and notAFont is the problem of an address of a
+	// font.
+	screensOnly = "only the scripts of the screens write markup"
+	oneWrite    = "el.innerHTML = part(markup);"
+	notAFont    = "is not a file of fonts/"
+	// inAString and styledCell name and make a problem of a string of the script, and secondWrite names a second write
+	// of markup, in the names of the cases.
+	inAString   = " in a string of the script"
+	styledCell  = "\nconst s = `<td style=\"width:90px\">`;"
+	secondWrite = "a second write of markup"
+)
+
 func problemsInPage(text string, add func(string)) {
 	if inlineStyle.MatchString(text) || styleTag.MatchString(text) {
-		add("an inline style")
+		add(problemStyle)
 	}
 	for _, m := range scriptTag.FindAllStringSubmatch(text, -1) {
 		if strings.TrimSpace(m[1]) != "" {
-			add("an inline script")
+			add(problemScript)
 		}
 	}
 	if inlineHandler.MatchString(text) {
-		add("an inline event handler")
+		add(problemHandler)
 	}
 }
 
@@ -292,10 +283,10 @@ var themeAttributes = []string{`"data-theme"`, `"aria-pressed"`}
 func problemsInScript(name, text string, add func(string)) {
 	text = jsComment.ReplaceAllString(text, "")
 	if inlineStyle.MatchString(text) {
-		add("an inline style in a string of markup")
+		add(problemStyle + inMarkup)
 	}
 	if inlineHandler.MatchString(text) {
-		add("an inline event handler in a string of markup")
+		add(problemHandler + inMarkup)
 	}
 	banned := []string{"insertAdjacentHTML", "outerHTML", "document.write", "eval(", "new Function", "javascript:", "srcdoc"}
 	if name != themeScript {
@@ -308,11 +299,11 @@ func problemsInScript(name, text string, add func(string)) {
 	}
 	if name == themeScript {
 		if strings.Contains(text, "innerHTML") {
-			add("it uses innerHTML: only the scripts of the screens write markup")
+			add("it uses innerHTML: " + screensOnly)
 		}
 		for _, m := range setCall.FindAllStringSubmatch(text, -1) {
 			if !slices.Contains(themeAttributes, strings.TrimSpace(m[1])) {
-				add("setAttribute(" + m[1] + ") sets more than a fixed attribute of the theme")
+				add("setAttribute(" + m[1] + ") " + problemAttribute + " of the theme")
 			}
 		}
 		return
@@ -320,7 +311,7 @@ func problemsInScript(name, text string, add func(string)) {
 	// raw() marks markup that the code wrote itself, so its argument is a fixed word or entity.
 	for _, m := range rawCall.FindAllStringSubmatch(text, -1) {
 		if !rawArgument.MatchString(strings.TrimSpace(m[1])) {
-			add("raw(" + m[1] + ") holds more than a fixed word")
+			add("raw(" + m[1] + ") " + problemRaw)
 		}
 	}
 }
@@ -329,8 +320,8 @@ func problemsInScript(name, text string, add func(string)) {
 // of markup is put(), and it writes what part() escapes.
 func problemsInScreens(text string, add func(string)) {
 	text = jsComment.ReplaceAllString(text, "")
-	if n := strings.Count(text, "innerHTML"); n != 1 || !strings.Contains(text, "el.innerHTML = part(markup);") {
-		add("innerHTML must appear once, in put(), with the value that part() escapes")
+	if n := strings.Count(text, "innerHTML"); n != 1 || !strings.Contains(text, oneWrite) {
+		add(problemInnerHTML + ", in put(), with the value that part() escapes")
 	}
 	for _, pair := range [][2]string{{`"&": "&amp;"`, "&"}, {`"<": "&lt;"`, "<"}, {`">": "&gt;"`, ">"}, {`'"': "&quot;"`, `"`}, {`"'": "&#39;"`, "'"}} {
 		if !strings.Contains(text, pair[0]) {
@@ -346,23 +337,30 @@ func problemsInStyle(text string, add func(string)) {
 	}
 	for _, m := range cssURL.FindAllStringSubmatch(text, -1) {
 		if !strings.HasPrefix(m[1], "fonts/") {
-			add("url(" + m[1] + ") is not a file of fonts/")
+			add("url(" + m[1] + ") " + notAFont)
 		}
 	}
 	for _, rule := range cssRule.FindAllStringSubmatch(text, -1) {
 		for _, selector := range strings.Split(rule[1], ",") {
 			// A rule inside @media starts after the brace of the block, so its selector is whole.
 			if slices.Contains(wide, strings.TrimSpace(selector)) && strings.Contains(rule[2], "max-width") {
-				add("the rule of " + strings.TrimSpace(selector) + " holds a max-width")
+				add("the rule of " + strings.TrimSpace(selector) + " " + problemMaxWidth)
 			}
 		}
 	}
 }
 
+// noProblems and findsProblem check the problems that a check of the page found. mustHold and mustNotHold check the
+// words of a screen. Each one is a helper of testkit.
+var (
+	noProblems   = testkit.NoProblems
+	findsProblem = testkit.FindsProblem
+	mustHold     = testkit.HoldsAll
+	mustNotHold  = testkit.HoldsNone
+)
+
 func TestTheAssetsHoldNoExternalAddressNoInlineStyleNoInlineScriptAndNoUnescapedValue(t *testing.T) {
-	if got := problems(files(t)); len(got) != 0 {
-		t.Errorf("%s", strings.Join(got, "\n"))
-	}
+	noProblems(t, "assets/", problems(files(t)))
 }
 
 // The check above must be able to fail, for each kind of problem.
@@ -371,76 +369,67 @@ func TestTheCheckFindsEachKindOfProblem(t *testing.T) {
 const ESCAPES = {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"};
 // raw() is for a fixed word, and innerHTML is for put() alone.
 function put(el, markup) {
-  el.innerHTML = part(markup);
+  ` + oneWrite + `
 }
 const A = raw(" &rarr; ");`
 	cases := []struct {
 		name, file, content, want string
 	}{
-		{"an address in the page", "index.html", `<link rel="stylesheet" href="https://fonts.googleapis.com/css2">`, "an external address"},
-		{"an address with no scheme", "index.html", `<script src="//cdn.example/x.js"></script>`, "an external address"},
-		{"an address in the script", "app.js", good + "\nfetch('http://example.com')", "an external address"},
-		{"an address in the style", "app.css", `@font-face{src:url(https://x.example/a.woff2)}`, "an external address"},
-		{"a font outside fonts", "app.css", `@font-face{src:url(other/a.woff2)}`, "is not a file of fonts/"},
+		{"an address in the page", "index.html", `<link rel="stylesheet" href="https://fonts.googleapis.com/css2">`, problemAddress},
+		{"an address with no scheme", "index.html", `<script src="//cdn.example/x.js"></script>`, problemAddress},
+		{"an address in the script", "app.js", good + "\nfetch('http://example.com')", problemAddress},
+		{"an address in the style", "app.css", `@font-face{src:url(https://x.example/a.woff2)}`, problemAddress},
+		{"a font outside fonts", "app.css", `@font-face{src:url(other/a.woff2)}`, notAFont},
 		{"an import", "app.css", `@import "other.css";`, "an @import"},
-		{"an inline style", "index.html", `<div style="color:red"></div>`, "an inline style"},
-		{"a style tag", "index.html", `<style>.a{}</style>`, "an inline style"},
-		{"an inline script", "index.html", `<script>alert(1)</script>`, "an inline script"},
-		{"an inline handler", "index.html", `<button onclick="go()">x</button>`, "an inline event handler"},
-		{"an inline style in a string of the script", "app.js", good + "\nconst s = `<td style=\"width:90px\">`;", "an inline style"},
-		{"an inline handler in a string of the script", "app.js", good + "\nconst s = `<a onclick=\"go()\">`;", "an inline event handler"},
-		{"an inline style after a glob in a string", "app.js", good + "\nconst g = \"releases/*/dev.json\";\nconst s = `<td style=\"width:90px\">`;\nconst z = \"*/\";", "an inline style"},
-		{"a second write of markup", "app.js", good + "\nx.innerHTML = y;", "innerHTML must appear once"},
-		{"no write through part", "app.js", strings.Replace(good, "part(markup)", "markup", 1), "innerHTML must appear once"},
+		{problemStyle, "index.html", `<div style="color:red"></div>`, problemStyle},
+		{"a style tag", "index.html", `<style>.a{}</style>`, problemStyle},
+		{problemScript, "index.html", `<script>alert(1)</script>`, problemScript},
+		{"an inline handler", "index.html", `<button onclick="go()">x</button>`, problemHandler},
+		{problemStyle + inAString, "app.js", good + styledCell, problemStyle},
+		{"an inline handler" + inAString, "app.js", good + "\nconst s = `<a onclick=\"go()\">`;", problemHandler},
+		{problemStyle + " after a glob in a string", "app.js", good + "\nconst g = \"releases/*/dev.json\";" + styledCell + "\nconst z = \"*/\";", problemStyle},
+		{secondWrite, "app.js", good + "\nx.innerHTML = y;", problemInnerHTML},
+		{"no write through part", "app.js", strings.Replace(good, "part(markup)", "markup", 1), problemInnerHTML},
 		{"eval", "app.js", good + "\neval(x)", "it uses eval("},
 		{"a helper that does not escape a quote", "app.js", strings.Replace(good, `'"': "&quot;", `, "", 1), "e() does not escape"},
-		{"raw with a value", "app.js", good + "\nconst r = raw(name);", "holds more than a fixed word"},
-		{"raw with a template", "app.js", good + "\nconst r = raw(`<b>${name}</b>`);", "holds more than a fixed word"},
-		{"a maximum width on the page", "app.css", `.page{padding:18px;max-width:1200px}`, "holds a max-width"},
-		{"a maximum width on a list of selectors", "app.css", `.x,.page{max-width:90vw}`, "holds a max-width"},
-		{"a maximum width in a media rule", "app.css", `@media (max-width:760px){.page{max-width:600px}}`, "holds a max-width"},
-		{"a maximum width on the app", "app.css", `.app{max-width:1400px;margin:auto}`, "holds a max-width"},
-		{"a script in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><script href="x.js"/></svg>`, "a script"},
-		{"an inline style in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><path style="fill:red" d="M0 0"/></svg>`, "an inline style"},
-		{"a style tag in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><style>path{fill:red}</style></svg>`, "an inline style"},
-		{"an address in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><image href="https://x.example/a.png"/></svg>`, "an external address"},
-		{"an event attribute in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg" onload="go()"></svg>`, "an inline event handler"},
-		{"innerHTML in the script of the theme", "theme.js", `document.body.innerHTML = x;`, "only the scripts of the screens write markup"},
-		{"an attribute that is not of the theme", "theme.js", `el.setAttribute("onclick", v);`, "sets more than a fixed attribute"},
-		{"an attribute with a name from a variable", "theme.js", `el.setAttribute(name, v);`, "sets more than a fixed attribute"},
-		{"eval in the script of the theme", "theme.js", `eval(x)`, "it uses eval("},
+		{"raw with a value", "app.js", good + "\nconst r = raw(name);", problemRaw},
+		{"raw with a template", "app.js", good + "\nconst r = raw(`<b>${name}</b>`);", problemRaw},
+		{"a maximum width on the page", "app.css", `.page{padding:18px;max-width:1200px}`, problemMaxWidth},
+		{"a maximum width on a list of selectors", "app.css", `.x,.page{max-width:90vw}`, problemMaxWidth},
+		{"a maximum width in a media rule", "app.css", `@media (max-width:760px){.page{max-width:600px}}`, problemMaxWidth},
+		{"a maximum width on the app", "app.css", `.app{max-width:1400px;margin:auto}`, problemMaxWidth},
+		{"a script in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + `><script href="x.js"/></svg>`, "a script"},
+		{problemStyle + " in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + `><path style="fill:red" d="M0 0"/></svg>`, problemStyle},
+		{"a style tag in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + `><style>path{fill:red}</style></svg>`, problemStyle},
+		{"an address in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + `><image href="https://x.example/a.png"/></svg>`, problemAddress},
+		{"an event attribute in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + ` onload="go()"></svg>`, problemHandler},
+		{"innerHTML in the script of the theme", themeScript, `document.body.innerHTML = x;`, screensOnly},
+		{"an attribute that is not of the theme", themeScript, `el.setAttribute("onclick", v);`, problemAttribute},
+		{"an attribute with a name from a variable", themeScript, `el.setAttribute(name, v);`, problemAttribute},
+		{"eval in the script of the theme", themeScript, `eval(x)`, "it uses eval("},
 		{"setAttribute in app.js", "app.js", good + "\nel.setAttribute(\"data-theme\", v);", "it uses setAttribute("},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := problems(fstest.MapFS{c.file: {Data: []byte(c.content)}})
-			if !strings.Contains(strings.Join(got, "\n"), c.want) {
-				t.Errorf("problems %q, want one with %q", got, c.want)
-			}
+			findsProblem(t, c.name, problems(fstest.MapFS{c.file: {Data: []byte(c.content)}}), c.want)
 		})
 	}
 	// A page with none of these is accepted, and a max-width on a rule that is not a page rule is too.
 	clean := fstest.MapFS{
 		"index.html": {Data: []byte(`<!DOCTYPE html><link rel="stylesheet" href="app.css"><script src="app.js"></script>`)},
 		"app.js":     {Data: []byte(good)},
-		"theme.js":   {Data: []byte(`document.documentElement.setAttribute("data-theme", v); b.setAttribute("aria-pressed", String(on));`)},
-		"icon.svg":   {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#5b2fc4" d="M3 3L9 9Z"/></svg>`)},
+		themeScript:  {Data: []byte(`document.documentElement.setAttribute("data-theme", v); b.setAttribute("aria-pressed", String(on));`)},
+		"icon.svg":   {Data: []byte(`<svg ` + svgNamespace + ` viewBox="0 0 100 100"><path fill="#5b2fc4" d="M3 3L9 9Z"/></svg>`)},
 		"app.css":    {Data: []byte(`@font-face{src:url(fonts/a.woff2)} .page{padding:1px} .val{max-width:60ch} @media (max-width:760px){.page{padding:0}}`)},
 	}
-	if got := problems(clean); len(got) != 0 {
-		t.Errorf("a clean page has problems: %q", got)
-	}
+	noProblems(t, "a clean page", problems(clean))
 	// The scripts of the screens count as one text. The escape and the write of markup can be in two scripts, and a write in a
 	// third script is a second write.
 	escape, write, _ := strings.Cut(good, "// raw()")
 	split := fstest.MapFS{"app.js": {Data: []byte(escape)}, "routes.js": {Data: []byte("// raw()" + write)}}
-	if got := problems(split); len(got) != 0 {
-		t.Errorf("a page with the escape and the write of markup in two scripts has problems: %q", got)
-	}
+	noProblems(t, "a page with the escape and the write of markup in two scripts", problems(split))
 	split["frame.js"] = &fstest.MapFile{Data: []byte("x.innerHTML = y;")}
-	if got := strings.Join(problems(split), "\n"); !strings.Contains(got, "innerHTML must appear once") {
-		t.Errorf("problems %q, want one with a second write of markup in another script", got)
-	}
+	findsProblem(t, secondWrite+" in another script", problems(split), problemInnerHTML)
 }
 
 /* The tests below run the scripts of the page with node, when node is there. A session has no browser,
@@ -463,22 +452,63 @@ type screen struct {
 	Error   string `json:"error"`
 }
 
-// whenNodeIsMissing ends a test that needs node. With the variable CI set, the test fails: a runner with
-// no node would skip each render test, and the checks would pass with nothing checked. Else the test
-// skips, and the lead checks the render.
-func whenNodeIsMissing(ci string, fail, skip func(args ...any)) {
-	if ci != "" {
-		fail("node is not on the PATH, and CI is set: a runner must have node, or the render tests check nothing")
-		return
-	}
-	skip("node is not on the PATH: the lead checks the render")
-}
-
 // runNode runs testdata/render.js for one set of testdata/api, with the arguments that follow the
 // set, and gives what it prints.
 func runNode(t *testing.T, state devdata.State, extra ...string) []byte {
 	t.Helper()
 	return runNodeIn(t, "testdata/api", state, extra...)
+}
+
+// renderOutput names the output of render.js in a failure.
+const renderOutput = "the output of render.js"
+
+// nodeJSON decodes the output of render.js into a value of T, and fails the test when the output is no JSON.
+func nodeJSON[T any](t *testing.T, raw []byte) T {
+	t.Helper()
+	var v T
+	testkit.Decode(t, renderOutput, raw, &v)
+	return v
+}
+
+// showIn shows some screens of a set in a directory of sets, with no crawl.
+func showIn(t *testing.T, dir string, state devdata.State, hashes ...string) []string {
+	t.Helper()
+	out := nodeJSON[[]string](t, runNodeIn(t, dir, state, append([]string{"show"}, hashes...)...))
+	if len(out) != len(hashes) {
+		t.Fatalf(renderOutput+" holds %d screens for %d hashes", len(out), len(hashes))
+	}
+	return out
+}
+
+// retried runs the mode retry on the screen hash of the set ok. It gives the first render, whose request of a diff
+// fails, and the next one.
+func retried(t *testing.T, hash string) []string {
+	t.Helper()
+	pages := nodeJSON[[]string](t, runNode(t, devdata.StateOK, "retry", hash))
+	if len(pages) != 2 {
+		t.Fatalf("the mode retry gave %d renders, want 2", len(pages))
+	}
+	return pages
+}
+
+// offline runs the mode offline on the overview of the set ok. It gives the page that cannot reach the observer, and the
+// page after a click on "Try now" when the observer is back.
+func offline(t *testing.T) (before, after string) {
+	t.Helper()
+	out := nodeJSON[struct{ Before, After string }](t, runNode(t, devdata.StateOK, "offline", "#overview"))
+	return out.Before, out.After
+}
+
+// request is a request that the page sent.
+type request struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
+}
+
+// requestsOf gives the requests that a crawl of each screen of the set sends.
+func requestsOf(t *testing.T, state devdata.State) []request {
+	t.Helper()
+	return nodeJSON[[]request](t, runNode(t, state, "requests"))
 }
 
 // runNodeIn does the same for a set in another directory of sets. It skips the test when node is not
@@ -492,11 +522,7 @@ func runNodeIn(t *testing.T, apiDir string, state devdata.State, extra ...string
 // render.js gets the files of the scripts in the order of the index.html of that directory.
 func runNodeAssets(t *testing.T, assets, apiDir string, state devdata.State, extra ...string) []byte {
 	t.Helper()
-	node, err := exec.LookPath("node")
-	if err != nil {
-		whenNodeIsMissing(os.Getenv("CI"), t.Fatal, t.Skip)
-		return nil
-	}
+	node := testkit.ToolPath(t, "node")
 	names, err := scriptsOf(os.DirFS(assets))
 	if err != nil {
 		t.Fatal(err)
@@ -524,11 +550,13 @@ func render(t *testing.T, state devdata.State, poison bool) []screen {
 	if poison {
 		extra = append(extra, "poison")
 	}
-	out := runNode(t, state, extra...)
-	var screens []screen
-	if err := json.Unmarshal(out, &screens); err != nil {
-		t.Fatalf("the output of render.js is no JSON: %v", err)
-	}
+	return renderIn(t, "assets", "testdata/api", state, extra...)
+}
+
+// renderIn crawls each screen of the set state of apiDir with the scripts of assets. It fails for a screen that threw.
+func renderIn(t *testing.T, assets, apiDir string, state devdata.State, extra ...string) []screen {
+	t.Helper()
+	screens := nodeJSON[[]screen](t, runNodeAssets(t, assets, apiDir, state, extra...))
 	for _, s := range screens {
 		if s.Error != "" {
 			t.Errorf("%s %s threw: %s", s.Hash, s.Variant, s.Error)
@@ -553,7 +581,12 @@ func checkMarkup(t *testing.T, s screen) {
 	}
 }
 
-const injection = "&lt;img src=x onerror=alert(1)&gt;"
+// evil is a tag that runs a script, and injection is the same tag as the page must show it: as text.
+const (
+	evilTag   = "img src=x onerror=alert(1)"
+	evil      = "<" + evilTag + ">"
+	injection = "&lt;" + evilTag + "&gt;"
+)
 
 // A name, a path, and a value with <img src=x> show as text on each screen of each set.
 func TestAValueWithMarkupShowsAsTextOnEachScreen(t *testing.T) {
@@ -565,9 +598,7 @@ func TestAValueWithMarkupShowsAsTextOnEachScreen(t *testing.T) {
 				checkMarkup(t, s)
 				all.WriteString(s.HTML)
 			}
-			if strings.Contains(all.String(), "<img") {
-				t.Error("a value reached the page as an img tag")
-			}
+			mustNotHold(t, "the screens", all.String(), "<img")
 			if state != devdata.StateFirstLoad && !strings.Contains(all.String(), injection) {
 				t.Error("the injection does not show as text: the test did not reach a value")
 			}
@@ -587,36 +618,105 @@ func TestAPackNameWithAnImgTagShowsAsText(t *testing.T) {
 	if pack == nil {
 		t.Fatal("no screen of the pack dex")
 	}
-	if !strings.Contains(pack.HTML, "dex"+injection) {
-		t.Errorf("the name of the pack does not show as text: %.400s", pack.HTML)
-	}
+	mustHold(t, "the screen of the pack dex", pack.HTML, "dex"+injection)
 }
+
+// The words of the overview that more than one test reads. publishedChanged is the label of a finding: the published version
+// changed after its record.
+const (
+	needsAttention   = "Needs attention"
+	imageChanges     = "Image changes"
+	podImages        = "8 images in pods"
+	newerVersions    = "Newer versions"
+	publishedChanged = "Published version changed after its record"
+	// The words of the read of the pods.
+	tagMoved     = "A tag runs another digest than the first one seen"
+	tagSplit     = "One tag runs with two digests"
+	movedOrSplit = "Moved or split"
+	notReadYet   = "Not read yet"
+	byNameAndTag = "Strata compares the name and the tag."
+	// notSet is the word of the nav item Alerts of an observer that sends no alert.
+	notSet = "Not set"
+	// The pill and the words of the records: with no record read yet, and with first-seen records.
+	unknownRecords = "records: <b>" + baseline.Unknown + "</b>"
+	firstSeenPill  = "records: <b>" + baseline.FirstSeen + "</b>"
+	firstSeenWords = "No pipeline approved these records yet."
+	// comparedFirst names the compare of each digest with the first digest of its tag. comparedLink is its link on the
+	// overview.
+	comparedFirst = "Compared with the first digest"
+	comparedSeen  = comparedFirst + " seen in pods"
+	comparedLink  = `<a href="#images">` + comparedSeen + `</a>`
+	// matchedByName says that a row of an image matched its pack by the name and the tag. whenThisHappens heads the cause
+	// of a finding of an image.
+	matchedByName   = "matched by name and tag"
+	whenThisHappens = "<b>When this happens</b>"
+	// dexIDTokens is the path of a value of dex that its change sets.
+	dexIDTokens = testkit.DexExpiry + ".idTokens"
+	// mutedCell starts a muted cell of the table of the images. catchTab ends the tab of what the pods catch, and
+	// machineImage ends the sentence of a finding of an image id.
+	mutedCell    = `<td class="m nw"><span class="mut">`
+	catchTab     = "What pods do catch</button>"
+	machineImage = "changed the machine image on this cluster."
+	// The words of the badges of an image and of a pack, and of a row of a profile with a newer version.
+	twoDigests     = "Two digests"
+	wordNotChecked = "Not checked"
+	newerProfile   = "Newer profile version"
+	// wrapAnywhere is the declaration of a rule that lets a long word wrap.
+	wrapAnywhere = "overflow-wrap:anywhere;"
+	// podsFailed starts the words of a read of the pods that failed, and podsRefusedWords give the cause of a refusal.
+	podsFailed       = "The last read of the pods failed"
+	roleRefused      = "HTTP 403, the role of the observer was refused"
+	podsRefusedWords = podsFailed + ". <b>" + roleRefused + ".</b>"
+	// ranAnotherDigest and ranTwoDigests end the line of a profile for a finding of an image, after the names of the packs.
+	ranAnotherDigest = " ran another digest in pods than the first one seen."
+	ranTwoDigests    = " ran with two digests in pods at one time."
+)
+
+// imagesOn is the start of the nav item Images when it is on.
+var imagesOn = navLink("#images") + `"on">`
+
+// ref gives the name and the version of a pack or of a profile, as ref of app.js writes them.
+func ref(name, version string) string { return name + `<span class="ver">@` + version + `</span>` }
+
+// traefikPin is the pack of the row of wilma-gateway that has a newer version, and wilmaNewest is the newer version of
+// wilma-gateway.
+var (
+	traefikPin  = ref("traefik", "38.0.1")
+	wilmaNewest = ref("wilma-gateway", "3.2.0")
+)
+
+// imageScreens name the overview, the list of the images, and the page of an image, for the failures of the tests below.
+var imageScreens = []string{"the overview", "the list", "the page of the image"}
 
 // Each set renders each screen with no error, and says what its state says.
 func TestEachSetShowsItsWords(t *testing.T) {
+	// The sets that change no count of ok show these words of its overview.
+	const okInFull = "26 of 29 packs in full"
+	okOverview := []string{needsAttention, "2 causes · " + okInFull, "6 profiles · 2 this week", newerVersions}
 	cases := []struct {
 		state devdata.State
 		words []string
 	}{
-		{devdata.StateOK, []string{"Needs attention", "What a check does not cover", "Compared with the first digest seen in pods", "Image changes", "8 images in pods", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
-		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "All quiet on quarry-1", "Nothing needs attention.", "Strata compares the name and the tag."}},
-		{devdata.StateFirstLoad, []string{"Reading the layers", "The first check is running", "records: <b>unknown</b>"}},
-		{devdata.StateNoRecords, []string{"Nothing to compare against yet", "A record is the copy of a profile that the observer checks against. Start with what the cluster runs now, and let your pipeline approve records later.", "scripts/ci/observer-records.sh --first-seen 7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35", "records: <b>unknown</b>"}},
+		{devdata.StateOK, append([]string{coverJump, comparedSeen, imageChanges, podImages}, okOverview...)},
+		{devdata.StateQuiet, []string{calmChanged, calmPacks, "29 of 29 packs in full", quietTitle, calmNothing + ".", byNameAndTag}},
+		{devdata.StateFirstLoad, []string{"Reading the layers", firstCheck, unknownRecords}},
+		{devdata.StateNoRecords, []string{noRecordsTitle, noRecordsFact, firstSeenCmd, unknownRecords}},
 		{devdata.StateStale, []string{"Checks stopped", "expected every 15m"}},
-		{devdata.StateLost, []string{"Lost contact with Palette", "HTTP 401, the API key was refused", "no finding clears until a check proves it"}},
-		{devdata.StateFirstSeen, []string{"records: <b>first-seen</b>", "No pipeline approved these records yet."}},
-		{devdata.StateLostUnchecked, []string{"We lost the signal from Palette", "The last 3 checks failed: <b>HTTP 401, the API key was refused.</b> No check has ended well", "strata-observer-key"}},
-		{devdata.StateStaleUnchecked, []string{"Checks stopped before one ended well", "No check has ended well", "kubectl -n strata-observer logs"}},
-		{devdata.StateReadError, []string{"Needs attention", "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
-		{devdata.StateImages, []string{"Needs attention", "Image moved", "A tag runs another digest than the first one seen", "Moved or split", "Image changes"}},
-		{devdata.StateImagesSplit, []string{"Needs attention", "Two digests", "One tag runs with two digests", "Moved or split", "Image changes"}},
-		{devdata.StateImagesOff, []string{"Needs attention", "Strata compares the name and the tag."}},
-		{devdata.StateImagesUnread, []string{"Image changes", "Not read yet", "3 causes · 26 of 29 packs in full", "Strata compares the name and the tag."}},
-		{devdata.StateAsks, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
-		{devdata.StateTextTooLarge, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
-		{devdata.StateAlerts, []string{"Needs attention", "Alerts"}},
-		{devdata.StateAlertsUnset, []string{"Needs attention", "Not set"}},
-		{devdata.StateMovedDrift, []string{"Needs attention", "Published version changed after its record", "3 of 3 packs in full", "1 profile · 1 this week"}},
+		{devdata.StateLost, []string{lostContact, keyRefused, noClear}},
+		{devdata.StateFirstSeen, []string{firstSeenPill, firstSeenWords}},
+		{devdata.StateLostUnchecked, []string{lostTitle, lostFact, keySecret}},
+		{devdata.StateStaleUnchecked, []string{stoppedTitle, noGoodCheck, kubeLogs}},
+		{devdata.StateReadError, []string{needsAttention, "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
+		{devdata.StateImages, []string{needsAttention, testkit.ImageMoved, tagMoved, movedOrSplit, imageChanges}},
+		{devdata.StateImagesSplit, []string{needsAttention, twoDigests, tagSplit, movedOrSplit, imageChanges}},
+		{devdata.StateImagesOff, []string{needsAttention, byNameAndTag}},
+		{devdata.StateImagesUnread, []string{imageChanges, notReadYet, "3 causes · " + okInFull, byNameAndTag}},
+		{devdata.StateAsks, okOverview},
+		{devdata.StateTextTooLarge, okOverview},
+		{devdata.StateAlerts, []string{needsAttention, "Alerts"}},
+		{devdata.StateAlertsUnset, []string{needsAttention, notSet}},
+		{devdata.StateMovedDrift, []string{needsAttention, publishedChanged, "3 of 3 packs in full", "1 profile · 1 this week"}},
+		{devdata.StateUpdateChecks, okOverview},
 	}
 	if len(cases) != len(devdata.States) {
 		t.Fatalf("the table has %d sets, and devdata lists %d", len(cases), len(devdata.States))
@@ -626,11 +726,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 			for _, s := range render(t, c.state, false) {
 				checkMarkup(t, s)
 				if s.Hash == "#overview" && s.Variant == "" {
-					for _, w := range c.words {
-						if !strings.Contains(s.HTML, w) {
-							t.Errorf("the overview of %s has no %q", c.state, w)
-						}
-					}
+					mustHold(t, "the overview of "+string(c.state), s.HTML, c.words...)
 				}
 			}
 		})
@@ -641,7 +737,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 // state file holds the failed runs, and the memory holds no answer. The page then has page lost or
 // stale, with checkedAt null, and each count is 0 because nothing was read.
 func TestAnOutageBeforeTheFirstGoodCheckClaimsNothing(t *testing.T) {
-	banned := []string{"Nothing changed", "All 0 packs", "0 of 0 packs", "0 packs on this cluster", "Nothing needs attention", "needs a record", "Nothing. All"}
+	banned := []string{calmChanged, "All 0 packs", "0 of 0 packs", "0 packs on this cluster", calmNothing, "needs a record", "Nothing. All"}
 	for _, state := range []devdata.State{devdata.StateLostUnchecked, devdata.StateStaleUnchecked} {
 		t.Run(string(state), func(t *testing.T) {
 			screens := render(t, state, false)
@@ -649,19 +745,11 @@ func TestAnOutageBeforeTheFirstGoodCheckClaimsNothing(t *testing.T) {
 				t.Fatalf("only %d screens", len(screens))
 			}
 			for _, s := range screens {
-				for _, b := range banned {
-					if strings.Contains(s.HTML, b) {
-						t.Errorf("%s %s says %q", s.Hash, s.Variant, b)
-					}
-				}
+				mustNotHold(t, s.Hash+" "+s.Variant, s.HTML, banned...)
 			}
 			for _, s := range screens {
 				if s.Hash == "#overview" && s.Variant == "" {
-					for _, want := range []string{"No check has ended well"} {
-						if !strings.Contains(s.HTML, want) {
-							t.Errorf("the overview has no %q", want)
-						}
-					}
+					mustHold(t, "the overview", s.HTML, noGoodCheck)
 				}
 			}
 		})
@@ -671,24 +759,21 @@ func TestAnOutageBeforeTheFirstGoodCheckClaimsNothing(t *testing.T) {
 // A published side that strata could not read has no answer. The page says that it was not read, and it sends no
 // request for it. It never says that the published version is identical.
 func TestAPackWithAnErrorRowDoesNotSayIdenticalForThePublishedSide(t *testing.T) {
-	const hash = "#k-fred-identity@2.3.0/addon/dex"
 	var published, cluster bool
 	for _, s := range render(t, devdata.StateReadError, false) {
-		if s.Hash != hash {
+		if s.Hash != dexHash {
 			continue
 		}
 		switch s.Variant {
-		case "side published":
+		case variantOf(string(model.SidePublished), layoutUnified, "", ""):
 			published = true
-			if strings.Contains(s.HTML, "Identical") || !strings.Contains(s.HTML, "This side was not read") || !strings.Contains(s.HTML, "Strata could not read the published version") {
-				t.Errorf("the published side of a row with an error: %.600s", s.HTML)
-			}
+			const where = "the published side of a row with an error"
+			mustNotHold(t, where, s.HTML, "Identical")
+			mustHold(t, where, s.HTML, "This side was not read", "Strata could not read the published version")
 		case "":
 			// The finding is on the cluster side, and the cluster side was read.
 			cluster = true
-			if !strings.Contains(s.HTML, "Changed") || !strings.Contains(s.HTML, "charts.dex.config.expiry.idTokens") {
-				t.Errorf("the cluster side: %.600s", s.HTML)
-			}
+			mustHold(t, "the cluster side", s.HTML, "Changed", dexIDTokens)
 		}
 	}
 	if !published || !cluster {
@@ -706,20 +791,18 @@ func TestAMoveThatWasNotReadShowsNoCount(t *testing.T) {
 			for _, row := range strings.Split(s.HTML, "</tr>") {
 				switch {
 				case strings.Contains(row, ">vault<"):
-					if !strings.Contains(row, "Not read") || strings.Contains(row, "<b>0</b>") {
-						t.Errorf("the row of the move that was not read: %s", row)
-					}
+					mustHold(t, "the row", row, "Not read")
+					mustNotHold(t, "the row", row, "<b>0</b>")
 				case strings.Contains(row, ">ubuntu-aws<"):
-					if strings.Contains(row, "Not read") || !strings.Contains(row, "Repave") {
-						t.Errorf("the row of the move that was read: %s", row)
-					}
+					mustNotHold(t, "the row", row, "Not read")
+					mustHold(t, "the row", row, "Repave")
 				}
 			}
 		case s.Hash == "#k-bambam-secrets@2.0.1/addon/vault" && s.Variant == "":
 			pack = true
-			if !strings.Contains(s.HTML, "Strata could not compare these versions now") || strings.Contains(s.HTML, "is a hint from strata") {
-				t.Errorf("the pack of the move that was not read: %.800s", s.HTML)
-			}
+			const where = "the pack of the move that was not read"
+			mustHold(t, where, s.HTML, "Strata could not compare these versions now")
+			mustNotHold(t, where, s.HTML, repaveHint)
 		}
 	}
 	if !table || !pack {
@@ -730,60 +813,46 @@ func TestAMoveThatWasNotReadShowsNoCount(t *testing.T) {
 // A request of the detail route that fails is not kept. A 503 is a normal answer while a cycle holds the
 // slot, so the next render asks again.
 func TestAFailedDetailRequestAsksAgainOnTheNextRender(t *testing.T) {
-	var pages []string
-	if err := json.Unmarshal(runNode(t, devdata.StateOK, "retry", "#k-fred-identity@2.3.0/addon/dex"), &pages); err != nil || len(pages) != 2 {
-		t.Fatalf("the output of render.js: %v, %d renders", err, len(pages))
-	}
-	if !strings.Contains(pages[0], "One moment, a check is running") || !strings.Contains(pages[0], "Try now") {
-		t.Errorf("the first render does not say that the request failed: %.600s", pages[0])
-	}
-	if strings.Contains(pages[1], "One moment, a check is running") || !strings.Contains(pages[1], "charts.dex.config.expiry.idTokens") {
-		t.Errorf("the second render did not ask again: %.600s", pages[1])
-	}
+	pages := retried(t, dexHash)
+	checkPlace(t, placeNamed(t, placeBusy), pages[0])
+	mustNotHold(t, "the second render", pages[1], busyTitle)
+	mustHold(t, "the second render", pages[1], dexIDTokens)
 }
 
 // With first-seen records, each screen shows the pill and the words. With approved records, none does.
 func TestFirstSeenShowsOnEachScreen(t *testing.T) {
-	const pill, words = "records: <b>first-seen</b>", "No pipeline approved these records yet."
 	first := render(t, devdata.StateFirstSeen, false)
 	if len(first) < 10 {
 		t.Fatalf("only %d screens", len(first))
 	}
 	for _, s := range first {
-		if !strings.Contains(s.HTML, pill) || !strings.Contains(s.HTML, words) {
-			t.Errorf("%s %s has no pill or no words of first-seen", s.Hash, s.Variant)
-		}
+		mustHold(t, s.Hash+" "+s.Variant, s.HTML, firstSeenPill, firstSeenWords)
 	}
 	for _, s := range render(t, devdata.StateOK, false) {
-		if strings.Contains(s.HTML, pill) || strings.Contains(s.HTML, words) {
-			t.Errorf("%s %s of an approved baseline shows first-seen", s.Hash, s.Variant)
-		}
+		mustNotHold(t, s.Hash+" "+s.Variant+" of an approved baseline", s.HTML, firstSeenPill, firstSeenWords)
 	}
 }
 
 // The crawl reaches each profile and each pack of the ok set, so the tests above cover each screen.
 func TestTheCrawlReachesEachProfileAndEachPack(t *testing.T) {
-	set, err := devdata.Load(os.DirFS("testdata/api"), devdata.StateOK, devdata.Reference)
-	if err != nil {
-		t.Fatal(err)
-	}
+	set := loadSet(t, devdata.StateOK)
 	reached := map[string]bool{}
 	for _, s := range render(t, devdata.StateOK, false) {
 		reached[s.Hash] = true
 	}
-	for _, img := range set.Images.Images {
-		if h := imageHash(img.Ref); !reached[h] {
-			t.Errorf("the crawl did not reach %s", h)
+	reach := func(hash string) {
+		t.Helper()
+		if !reached[hash] {
+			t.Errorf("the crawl did not reach %s", hash)
 		}
 	}
+	for _, img := range set.Images.Images {
+		reach(imageHash(img.Ref))
+	}
 	for _, p := range set.Profiles.Profiles {
-		if h := "#p-" + p.Name + "@" + p.Version; !reached[h] {
-			t.Errorf("the crawl did not reach %s", h)
-		}
+		reach("#p-" + p.Name + "@" + p.Version)
 		for _, k := range p.Packs {
-			if h := "#k-" + p.Name + "@" + p.Version + "/" + k.Layer + "/" + k.Name; !reached[h] {
-				t.Errorf("the crawl did not reach %s", h)
-			}
+			reach("#k-" + p.Name + "@" + p.Version + "/" + k.Layer + "/" + k.Name)
 		}
 	}
 }
@@ -801,10 +870,7 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
-			set, err := devdata.Load(os.DirFS("testdata/api"), c.state, devdata.Reference)
-			if err != nil {
-				t.Fatal(err)
-			}
+			set := loadSet(t, c.state)
 			var want []string
 			for _, p := range set.Profiles.Profiles {
 				if slices.ContainsFunc(p.Packs, func(k model.Pack) bool { return k.Newer != "" }) {
@@ -814,7 +880,7 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 			if len(want) != c.count || set.Cluster.Counts.NewerProfiles != c.count {
 				t.Fatalf("the set has %d profiles with a newer pack and %d in the tile, want %d", len(want), set.Cluster.Counts.NewerProfiles, c.count)
 			}
-			button := regexp.MustCompile(`data-filter="newer"[^>]*>Newer ` + strconv.Itoa(c.count) + `<`)
+			button := filterButton(string(model.StatusNewer), "Newer "+strconv.Itoa(c.count), false)
 			var shown bool
 			for _, s := range render(t, c.state, false) {
 				if s.Hash != "#profiles" {
@@ -822,24 +888,20 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 				}
 				switch s.Variant {
 				case "":
-					if !button.MatchString(s.HTML) {
-						t.Errorf("the button of the filter does not say Newer %d", c.count)
-					}
-				case "filter newer":
+					mustHold(t, "the screen of the profiles", s.HTML, button)
+				case "filter " + string(model.StatusNewer):
 					shown = true
-					if rows := strings.Count(s.HTML, `data-go="#p-`); rows != len(want) {
+					if rows := strings.Count(s.HTML, goToStart+"#p-"); rows != len(want) {
 						t.Errorf("the filter shows %d profiles, want %d", rows, len(want))
 					}
+					var links []string
 					for _, h := range want {
-						if !strings.Contains(s.HTML, `href="`+h+`"`) {
-							t.Errorf("the filter does not show %s", h)
-						}
+						links = append(links, `href="`+h+`"`)
 					}
 					for _, name := range c.names {
-						if !strings.Contains(s.HTML, `href="#p-`+name+`@`) {
-							t.Errorf("the filter does not show %s", name)
-						}
+						links = append(links, `href="#p-`+name+`@`)
 					}
+					mustHold(t, "the filter", s.HTML, links...)
 				}
 			}
 			if !shown {
@@ -849,8 +911,8 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 	}
 }
 
-// chipCount reads the number of a chip of the filter: <button data-filter="drift">Drift 2</button>.
-var chipCount = regexp.MustCompile(`data-filter="[a-z-]+"[^>]*>[A-Za-z ]+ ([^<]*)</button>`)
+// chipCount reads the number of a chip of the filter: <button data-filter="drift" class="">Drift 2</button>.
+var chipCount = regexp.MustCompile(filterButtonClass(`[a-z-]+`, `[A-Za-z ]+ ([^<]*)`, `[^"]*`))
 
 // The chips of the filter show a number after a good check. A page with nothing read shows a splash in place of the table of
 // profiles, so it shows no chip, and a count of 0 would claim a check that did not happen.
@@ -876,7 +938,7 @@ func TestTheChipsOfTheFilterShowANumberAfterAGoodCheckAndNoChipBefore(t *testing
 						t.Errorf("%s %s: a chip says %q, want a number", s.Hash, s.Variant, m[1])
 					}
 				}
-				if !c.chips && strings.Contains(s.HTML, "data-filter=") {
+				if !c.chips && strings.Contains(s.HTML, filterOpen) {
 					t.Errorf("%s %s shows a filter before a check ended well", s.Hash, s.Variant)
 				}
 			}
@@ -941,10 +1003,7 @@ func TestAgoLeavesOutMinutesThatAreZero(t *testing.T) {
 	for _, c := range cases {
 		extra = append(extra, strconv.Itoa(c.seconds))
 	}
-	var got []string
-	if err := json.Unmarshal(runNode(t, devdata.StateOK, extra...), &got); err != nil {
-		t.Fatalf("the output of render.js is no JSON: %v", err)
-	}
+	got := nodeJSON[[]string](t, runNode(t, devdata.StateOK, extra...))
 	if len(got) != len(cases) {
 		t.Fatalf("ago gave %d answers for %d ages", len(got), len(cases))
 	}
@@ -967,41 +1026,62 @@ func ruleOf(css, selector string) string {
 	return out.String()
 }
 
-// tabRowProblems lists what is missing in the rule of the row of tabs. A tab has a margin of -1px, so
-// the row overflows on the vertical axis, and a scrollbar shows. The row scrolls sideways on a phone.
-func tabRowProblems(css string) []string {
+// ruleProblem gives the problem of the rule of the selector in css when its declarations are not want, or "".
+func ruleProblem(css, selector, want string) string {
+	if got := ruleOf(css, selector); got != want {
+		return fmt.Sprintf("the rule of %s is %q, want %q", selector, got, want)
+	}
+	return ""
+}
+
+// lackProblem gives the problem of the rule of the selector in css when it lacks the declaration want, or "".
+func lackProblem(css, selector, want string) string {
+	if got := ruleOf(css, selector); !strings.Contains(got, want) {
+		return fmt.Sprintf("the rule of %s is %q, and it lacks %s", selector, got, want)
+	}
+	return ""
+}
+
+// ruleIs fails when the rule of the selector in css does not hold exactly the declarations want.
+func ruleIs(t *testing.T, css, selector, want string) {
+	t.Helper()
+	noProblems(t, "the style", []string{ruleProblem(css, selector, want)})
+}
+
+// rulesHold fails when the rule of a selector in css lacks one of the declarations that the map gives it.
+func rulesHold(t *testing.T, css string, rules map[string][]string) {
+	t.Helper()
+	noProblems(t, "the style", rulesProblems(css, rules))
+}
+
+// rulesProblems lists each declaration of the map that the rule of its selector in css lacks.
+func rulesProblems(css string, rules map[string][]string) []string {
 	var out []string
-	rule := ruleOf(css, ".tabs")
-	for _, want := range []string{"overflow-x:auto;", "overflow-y:hidden;"} {
-		if !strings.Contains(rule, want) {
-			out = append(out, "the rule of .tabs has no "+strings.TrimSuffix(want, ";"))
+	for selector, want := range rules {
+		for _, w := range want {
+			out = append(out, lackProblem(css, selector, w))
 		}
 	}
 	return out
 }
 
+// tabRow is what the rule of the row of tabs holds. A tab has a margin of -1px, so the row overflows on the vertical
+// axis, and a scrollbar shows. The row scrolls sideways on a phone.
+var tabRow = map[string][]string{".tabs": {"overflow-x:auto;", "overflow-y:hidden;"}}
+
 func TestTheRowOfTabsHasNoVerticalScrollbar(t *testing.T) {
-	css, err := fs.ReadFile(files(t), "app.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := tabRowProblems(string(css)); len(got) != 0 {
-		t.Errorf("%s", strings.Join(got, "\n"))
-	}
+	rulesHold(t, string(readPage(t, "app.css")), tabRow)
 	// The check can fail.
+	const noX, noY = "lacks overflow-x:auto;", "lacks overflow-y:hidden;"
 	for css, want := range map[string]string{
-		`.tabs{display:flex;overflow-x:auto}`:                         "no overflow-y:hidden",
-		`.tabs{display:flex;overflow-y:hidden}`:                       "no overflow-x:auto",
-		`.tab{overflow-y:hidden}`:                                     "no overflow-x:auto",
-		`@media (max-width:760px){.tabs{overflow-x:auto}} .tabs{a:b}`: "no overflow-y:hidden",
+		`.tabs{display:flex;overflow-x:auto}`:                         noY,
+		`.tabs{display:flex;overflow-y:hidden}`:                       noX,
+		`.tab{overflow-y:hidden}`:                                     noX,
+		`@media (max-width:760px){.tabs{overflow-x:auto}} .tabs{a:b}`: noY,
 	} {
-		if got := strings.Join(tabRowProblems(css), "\n"); !strings.Contains(got, want) {
-			t.Errorf("problems %q for %s, want one with %q", got, css, want)
-		}
+		findsProblem(t, css, rulesProblems(css, tabRow), want)
 	}
-	if got := tabRowProblems(`.tabs{display:flex; overflow-x: auto; overflow-y: hidden}`); len(got) != 0 {
-		t.Errorf("a good rule has problems: %q", got)
-	}
+	rulesHold(t, `.tabs{display:flex; overflow-x: auto; overflow-y: hidden}`, tabRow)
 }
 
 /* The tests below hold the look of the page: the logo, the choice of a theme, and the colors. */
@@ -1013,9 +1093,12 @@ const (
 	bookFavicon = "../../../docs/theme/favicon.svg"
 )
 
+// markLight and markDark are the marks of the logo for a light and for a dark background.
+const markLight, markDark = "strata-mark-light.svg", "strata-mark-dark.svg"
+
 var logoFiles = []string{
-	"strata-mark-light.svg",
-	"strata-mark-dark.svg",
+	markLight,
+	markDark,
 	"strata-lockup-horizontal-light.svg",
 	"strata-lockup-horizontal-dark.svg",
 	"strata-lockup-stacked-light.svg",
@@ -1026,15 +1109,6 @@ var (
 	markPath = regexp.MustCompile(`<path [^>]*/>`)
 	markDiv  = regexp.MustCompile(`(?s)<div class="logo">(.*?)</div>`)
 )
-
-func readFile(t *testing.T, name string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return raw
-}
 
 func readPage(t *testing.T, name string) []byte {
 	t.Helper()
@@ -1092,17 +1166,15 @@ func readScripts(t *testing.T) string {
 func copyScripts(t *testing.T, change func(string) string) string {
 	t.Helper()
 	dir := t.TempDir()
-	write := func(name, text string) {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("index.html", string(readPage(t, "index.html")))
+	testkit.WriteIn(t, dir, "index.html", string(readPage(t, "index.html")))
 	for _, name := range screenScripts(t) {
-		write(name, change(string(readPage(t, name))))
+		testkit.WriteIn(t, dir, name, change(string(readPage(t, name))))
 	}
 	return dir
 }
+
+// differsAt is the problem of a copy of the logo that is not its source.
+const differsAt = "differs from its source at byte"
 
 // copyProblem says how a copy differs from its source, or gives "" when it is the same, byte for byte.
 func copyProblem(name string, source, copy []byte) string {
@@ -1113,27 +1185,23 @@ func copyProblem(name string, source, copy []byte) string {
 	for at < len(source) && at < len(copy) && source[at] == copy[at] {
 		at++
 	}
-	return fmt.Sprintf("%s differs from its source at byte %d (%d bytes, the source has %d)", name, at, len(copy), len(source))
+	return fmt.Sprintf("%s "+differsAt+" %d (%d bytes, the source has %d)", name, at, len(copy), len(source))
 }
 
 func TestEachCopyOfTheLogoIsItsSourceByteForByte(t *testing.T) {
 	for _, name := range logoFiles {
-		if raw := readFile(t, logoDir+name); !bytes.Contains(raw, []byte("<title>strata</title>")) {
-			t.Errorf("%s is not a logo of strata", name)
-		}
+		mustHold(t, name, string(testkit.ReadFile(t, logoDir+name)), "<title>strata</title>")
 	}
-	light, dark := readFile(t, logoDir+"strata-mark-light.svg"), readFile(t, logoDir+"strata-mark-dark.svg")
+	light, dark := testkit.ReadFile(t, logoDir+markLight), testkit.ReadFile(t, logoDir+markDark)
 	for _, c := range []struct {
 		name         string
 		source, copy []byte
 	}{
-		{"favicon-light.svg", light, readPage(t, "favicon-light.svg")},
-		{"favicon-dark.svg", dark, readPage(t, "favicon-dark.svg")},
-		{"the favicon of the book", light, readFile(t, bookFavicon)},
+		{testkit.FaviconLight, light, readPage(t, testkit.FaviconLight)},
+		{testkit.FaviconDark, dark, readPage(t, testkit.FaviconDark)},
+		{"the favicon of the book", light, testkit.ReadFile(t, bookFavicon)},
 	} {
-		if problem := copyProblem(c.name, c.source, c.copy); problem != "" {
-			t.Error(problem)
-		}
+		noProblems(t, c.name, []string{copyProblem(c.name, c.source, c.copy)})
 	}
 	// The nav is dark in both schemes, so the inline mark is the dark mark.
 	div := markDiv.FindSubmatch(readPage(t, "index.html"))
@@ -1149,63 +1217,53 @@ func TestEachCopyOfTheLogoIsItsSourceByteForByte(t *testing.T) {
 // The check of a copy must be able to fail.
 func TestTheCheckOfACopyFindsAByteThatDiffers(t *testing.T) {
 	source := []byte(`<svg><path fill="#5b2fc4"/></svg>`)
-	if got := copyProblem("copy", source, slices.Clone(source)); got != "" {
-		t.Errorf("a copy that is the same has the problem %q", got)
-	}
+	otherColor := bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1)
+	noProblems(t, "a copy that is the same", []string{copyProblem("copy", source, slices.Clone(source))})
 	for name, copy := range map[string][]byte{
-		"a byte of a color":   bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1),
+		"a byte of a color":   otherColor,
 		"a missing last byte": source[:len(source)-1],
 		"a byte at the end":   append(slices.Clone(source), '\n'),
 	} {
-		if got := copyProblem("copy", source, copy); !strings.Contains(got, "differs from its source at byte") {
-			t.Errorf("%s: the problem is %q", name, got)
-		}
+		findsProblem(t, name, []string{copyProblem("copy", source, copy)}, differsAt)
 	}
-	if got := copyProblem("copy", source, bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1)); !strings.Contains(got, "at byte 23 ") {
-		t.Errorf("the problem is %q, want the byte 23", got)
-	}
+	findsProblem(t, "a byte of a color", []string{copyProblem("copy", source, otherColor)}, "at byte 23 ")
 }
 
 // driftRed is the red of a drift. A drift is white on this red in both schemes, so its rule holds the
 // color itself: a token would take a second value in the dark scheme.
 const driftRed = "#c9252f"
 
+// redBadge starts the rule of the badge of a drift.
+const redBadge = ".badge.r{background:"
+
 // driftProblems lists what is wrong in the two rules that paint a drift: the pill and the count in the nav.
 func driftProblems(css string) []string {
 	var out []string
 	for _, selector := range []string{".badge.r", ".cnt.r"} {
-		if got, want := ruleOf(css, selector), "background:"+driftRed+";color:#fff;"; got != want {
-			out = append(out, fmt.Sprintf("the rule of %s is %q, want %q", selector, got, want))
-		}
+		out = append(out, ruleProblem(css, selector, "background:"+driftRed+";color:#fff;"))
 	}
 	return out
 }
 
 func TestADriftIsWhiteOnRedInBothSchemes(t *testing.T) {
-	if got := driftProblems(string(readPage(t, "app.css"))); len(got) != 0 {
-		t.Errorf("%s", strings.Join(got, "\n"))
-	}
+	noProblems(t, "app.css", driftProblems(string(readPage(t, "app.css"))))
+	// The two rules as the check wants them.
+	const goodBadge, goodCount = redBadge + driftRed + ";color:#fff}", ".cnt.r{background:" + driftRed + ";color:#fff}"
 	for name, css := range map[string]string{
-		"a token":            `.badge.r{background:var(--red);color:#fff}.cnt.r{background:#c9252f;color:#fff}`,
-		"another red":        `.badge.r{background:#d92d3a;color:#fff}.cnt.r{background:#c9252f;color:#fff}`,
-		"a dark copy":        `.badge.r{background:#c9252f;color:#fff}.cnt.r{background:#c9252f;color:#fff}@media (x){.badge.r{background:#ff6b77}}`,
-		"another text color": `.badge.r{background:#c9252f;color:#eee}.cnt.r{background:#c9252f;color:#fff}`,
-		"no count rule":      `.badge.r{background:#c9252f;color:#fff}`,
+		"a token":            redBadge + `var(--red);color:#fff}` + goodCount,
+		"another red":        redBadge + `#d92d3a;color:#fff}` + goodCount,
+		"a dark copy":        goodBadge + goodCount + `@media (x){` + redBadge + `#ff6b77}}`,
+		"another text color": redBadge + driftRed + `;color:#eee}` + goodCount,
+		"no count rule":      goodBadge,
 	} {
-		if got := driftProblems(css); len(got) == 0 {
-			t.Errorf("%s: the check found nothing", name)
-		}
+		findsProblem(t, name, driftProblems(css), "")
 	}
-	if got := driftProblems(`.badge.r{ background: #c9252f; color: #fff } .cnt.r{background:#c9252f;color:#fff;}`); len(got) != 0 {
-		t.Errorf("a good rule has problems: %q", got)
-	}
+	noProblems(t, "a good rule", driftProblems(`.badge.r{ background: `+driftRed+`; color: #fff } .cnt.r{background:`+driftRed+`;color:#fff;}`))
 }
 
 // The chip "new" is pink, which no status uses. It has the class fresh on each screen that shows it.
 func TestTheChipNewHasTheClassFreshAndItsPink(t *testing.T) {
-	if got, want := ruleOf(string(readPage(t, "app.css")), ".badge.fresh"), "background:light-dark(#fde8f0,#3f1830);color:light-dark(#b01b57,#ff9dbd);"; got != want {
-		t.Errorf("the rule of .badge.fresh is %q, want %q", got, want)
-	}
+	ruleIs(t, string(readPage(t, "app.css")), ".badge.fresh", "background:light-dark(#fde8f0,#3f1830);color:light-dark(#b01b57,#ff9dbd);")
 	chips := regexp.MustCompile(`<span class="([^"]*)">new</span>`).FindAllSubmatch([]byte(readScripts(t)), -1)
 	if len(chips) == 0 {
 		t.Error("the scripts have no chip new")
@@ -1219,27 +1277,41 @@ func TestTheChipNewHasTheClassFreshAndItsPink(t *testing.T) {
 
 var lightDark = regexp.MustCompile(`light-dark\(([^()]*)\)`)
 
+// lightTheme and darkTheme are the rules of the choice of a theme. schemeQuery is the media query of the scheme of the system.
+// twoColors is the problem of a light-dark() that holds one color.
+const (
+	lightTheme  = `:root[data-theme="light"]`
+	darkTheme   = `:root[data-theme="dark"]`
+	schemeQuery = "prefers-color-scheme"
+	twoColors   = "does not hold two colors that differ"
+	// schemeOfRoot is the scheme that the root sets, and noSchemeOnRoot is that scheme as ruleOf gives it, which a
+	// root with no scheme lacks. lightChoice is the rule of the choice of light. notAChoice is the problem of a rule of a
+	// theme that sets more than its scheme.
+	schemeOfRoot   = "color-scheme:light dark;"
+	lightChoice    = "{color-scheme:light}"
+	noSchemeOnRoot = "color-scheme:lightdark;"
+	notAChoice     = "is not a choice of color-scheme"
+)
+
 // themeProblems lists what is wrong in the way that a stylesheet holds the two color schemes. A color has
 // one line, `light-dark(light, dark)`, so that no color has a second copy for the dark scheme. A person
 // who chooses a theme sets data-theme on the root, and that sets color-scheme and no color.
 func themeProblems(css string) []string {
 	css = cssComment.ReplaceAllString(css, "")
 	var out []string
-	if strings.Contains(css, "prefers-color-scheme") {
-		out = append(out, "it has a prefers-color-scheme rule: a color would have a second copy")
+	if strings.Contains(css, schemeQuery) {
+		out = append(out, "it has a "+schemeQuery+" rule: a color would have a second copy")
 	}
-	if !strings.Contains(ruleOf(css, ":root"), "color-scheme:lightdark;") {
-		out = append(out, "the rule of :root does not set color-scheme to light dark")
-	}
+	out = append(out, rulesProblems(css, map[string][]string{":root": {noSchemeOnRoot}})...)
 	choices := map[string]string{
-		`:root[data-theme="light"]`: "color-scheme:light;",
-		`:root[data-theme="dark"]`:  "color-scheme:dark;",
+		lightTheme: "color-scheme:light;",
+		darkTheme:  "color-scheme:dark;",
 	}
 	tokens := map[string]int{}
 	for _, rule := range cssRule.FindAllStringSubmatch(css, -1) {
 		selector := strings.TrimSpace(rule[1])
 		if _, ok := choices[selector]; !ok && strings.Contains(selector, "data-theme") {
-			out = append(out, "the rule of "+selector+" is not a choice of color-scheme")
+			out = append(out, "the rule of "+selector+" "+notAChoice)
 		}
 		for _, declaration := range strings.Split(rule[2], ";") {
 			if name, _, ok := strings.Cut(strings.TrimSpace(declaration), ":"); ok && strings.HasPrefix(name, "--") {
@@ -1248,9 +1320,7 @@ func themeProblems(css string) []string {
 		}
 	}
 	for selector, want := range choices {
-		if got := ruleOf(css, selector); got != want {
-			out = append(out, fmt.Sprintf("the rule of %s is %q, want %q", selector, got, want))
-		}
+		out = append(out, ruleProblem(css, selector, want))
 	}
 	for name, n := range tokens {
 		if n > 1 {
@@ -1260,7 +1330,7 @@ func themeProblems(css string) []string {
 	for _, m := range lightDark.FindAllStringSubmatch(css, -1) {
 		parts := strings.Split(m[1], ",")
 		if len(parts) != 2 || strings.TrimSpace(parts[0]) == strings.TrimSpace(parts[1]) {
-			out = append(out, "light-dark("+m[1]+") does not hold two colors that differ")
+			out = append(out, "light-dark("+m[1]+") "+twoColors)
 		}
 	}
 	return out
@@ -1268,36 +1338,31 @@ func themeProblems(css string) []string {
 
 func TestNoColorHasTwoCopies(t *testing.T) {
 	css := string(readPage(t, "app.css"))
-	if got := themeProblems(css); len(got) != 0 {
-		t.Errorf("%s", strings.Join(got, "\n"))
-	}
+	noProblems(t, "app.css", themeProblems(css))
 	// A token that differs between the schemes is a light-dark() and not a plain color.
-	root := ruleOf(css, ":root")
+	var twoSchemes []string
 	for _, token := range []string{"--bg", "--panel", "--ink", "--nav", "--accent", "--red", "--amb", "--violet", "--grn", "--add", "--addw", "--del", "--delw", "--gut"} {
-		if !regexp.MustCompile(token + `:light-dark\(`).MatchString(root) {
-			t.Errorf("the token %s is not a light-dark()", token)
-		}
+		twoSchemes = append(twoSchemes, token+":light-dark(")
 	}
-	const good = `:root{color-scheme:light dark;--bg:light-dark(#fff,#000);--navink:#ccc}
-:root[data-theme="light"]{color-scheme:light}
-:root[data-theme="dark"]{color-scheme:dark}`
-	if got := themeProblems(good); len(got) != 0 {
-		t.Errorf("a good stylesheet has problems: %q", got)
-	}
+	rulesHold(t, css, map[string][]string{":root": twoSchemes})
+	// twoTones is the one color of the good stylesheet, with a light and a dark value.
+	const twoTones = "light-dark(#fff,#000)"
+	const good = `:root{` + schemeOfRoot + `--bg:` + twoTones + `;--navink:#ccc}
+` + lightTheme + lightChoice + `
+` + darkTheme + `{color-scheme:dark}`
+	noProblems(t, "a good stylesheet", themeProblems(good))
 	for name, c := range map[string]struct{ css, want string }{
-		"a media query":         {good + `@media (prefers-color-scheme:dark){:root{--bg:#000}}`, "prefers-color-scheme"},
-		"a dark token":          {good + `:root[data-theme="dark"]{--bg:#000}`, `the rule of :root[data-theme="dark"]`},
-		"a dark rule":           {good + `:root[data-theme="dark"] .x{color:#fff}`, "is not a choice of color-scheme"},
+		"a media query":         {good + `@media (` + schemeQuery + `:dark){:root{--bg:#000}}`, schemeQuery},
+		"a dark token":          {good + darkTheme + `{--bg:#000}`, "the rule of " + darkTheme},
+		"a dark rule":           {good + darkTheme + ` .x{color:#fff}`, notAChoice},
 		"a second line":         {good + `:root{--bg:#eee}`, "has 2 lines"},
-		"one color twice":       {strings.Replace(good, "light-dark(#fff,#000)", "light-dark(#fff,#fff)", 1), "does not hold two colors that differ"},
-		"one color only":        {strings.Replace(good, "light-dark(#fff,#000)", "light-dark(#fff)", 1), "does not hold two colors that differ"},
-		"no scheme on the root": {strings.Replace(good, "color-scheme:light dark;", "", 1), "does not set color-scheme to light dark"},
-		"no choice of light":    {strings.Replace(good, `:root[data-theme="light"]{color-scheme:light}`, "", 1), `the rule of :root[data-theme="light"]`},
-		"a choice with a color": {strings.Replace(good, `{color-scheme:dark}`, `{color-scheme:dark;--bg:#000}`, 1), `the rule of :root[data-theme="dark"]`},
+		"one color twice":       {strings.Replace(good, twoTones, "light-dark(#fff,#fff)", 1), twoColors},
+		"one color only":        {strings.Replace(good, twoTones, "light-dark(#fff)", 1), twoColors},
+		"no scheme on the root": {strings.Replace(good, schemeOfRoot, "", 1), noSchemeOnRoot},
+		"no choice of light":    {strings.Replace(good, lightTheme+lightChoice, "", 1), "the rule of " + lightTheme},
+		"a choice with a color": {strings.Replace(good, `{color-scheme:dark}`, `{color-scheme:dark;--bg:#000}`, 1), "the rule of " + darkTheme},
 	} {
-		if got := strings.Join(themeProblems(c.css), "\n"); !strings.Contains(got, c.want) {
-			t.Errorf("%s: problems %q, want one with %q", name, got, c.want)
-		}
+		findsProblem(t, name, themeProblems(c.css), c.want)
 	}
 }
 
@@ -1308,16 +1373,12 @@ func TestTheOldBlueIsGone(t *testing.T) {
 			return err
 		}
 		text := strings.ToLower(string(readPage(t, name)))
-		for _, old := range []string{"2f6fde", "6ea2f7", "4d8df0", "--blue"} {
-			if strings.Contains(text, old) {
-				t.Errorf("%s still has %s", name, old)
-			}
-		}
+		mustNotHold(t, name, text, []string{"2f6fde", "6ea2f7", "4d8df0", "--blue"}...)
 		return nil
 	})
 }
 
-var themeButton = regexp.MustCompile(`<button type="button" data-theme-choice="([a-z]+)" aria-pressed="(true|false)">([A-Za-z]+)</button>`)
+var themeButton = regexp.MustCompile(buttonOpen + pressedAttrsOf("theme-choice", `([a-z]+)`, `(true|false)`) + `>([A-Za-z]+)</button>`)
 
 // The foot of the nav has three buttons, Auto, Light, and Dark. Each says its state with aria-pressed,
 // and Auto is pressed until theme.js reads the choice. theme.js is a file of its own in the head, so
@@ -1334,52 +1395,22 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 			t.Errorf("button %d is %q, want %q", i, b[1:], want[i])
 		}
 	}
-	nav, foot, last, end := strings.Index(index, `id="navl"`), strings.Index(index, `<div class="navfoot">`), strings.Index(index, `data-theme-choice="dark"`), strings.Index(index, "</aside>")
-	if nav < 0 || foot < nav || last < foot || end < last {
-		t.Error("the control of the theme is not at the foot of the nav, after the sections")
-	}
+	mustHoldInOrder(t, "the nav of index.html", index, `id="navl"`, `<div class="navfoot">`, viewAttr("theme-choice", "dark"), "</aside>")
 	head, body, _ := strings.Cut(index, "</head>")
-	if !strings.Contains(head, `<script src="theme.js"></script>`) || strings.Contains(body, "theme.js") {
-		t.Error("theme.js must be a plain script in the head, and only there")
+	mustHold(t, "the head", head, `<script src="`+themeScript+`"></script>`)
+	mustNotHold(t, "the body", body, themeScript)
+	for _, scheme := range [][2]string{{"light", testkit.FaviconLight}, {"dark", testkit.FaviconDark}} {
+		icon := `<link rel="icon" type="image/svg+xml" href="` + scheme[1] + `" media="(` + schemeQuery + `: ` + scheme[0] + `)">`
+		mustHold(t, "the head", head, icon)
 	}
-	for _, icon := range []string{
-		`<link rel="icon" type="image/svg+xml" href="favicon-light.svg" media="(prefers-color-scheme: light)">`,
-		`<link rel="icon" type="image/svg+xml" href="favicon-dark.svg" media="(prefers-color-scheme: dark)">`,
-	} {
-		if !strings.Contains(head, icon) {
-			t.Errorf("the head has no %s", icon)
-		}
-	}
-	script := string(readPage(t, "theme.js"))
-	for _, word := range []string{`"strata-observer-theme"`, "localStorage.removeItem", "aria-pressed", "data-theme-choice", "catch"} {
-		if !strings.Contains(script, word) {
-			t.Errorf("theme.js has no %s", word)
-		}
-	}
-	if strings.Contains(readScripts(t), "localStorage") {
-		t.Error("a script of the screens reads the storage: the choice of a theme is in theme.js")
-	}
+	script := string(readPage(t, themeScript))
+	mustHold(t, themeScript, script, []string{`"strata-observer-theme"`, "localStorage.removeItem", "aria-pressed", "data-theme-choice", "catch"}...)
+	mustNotHold(t, "the five scripts of the page", readScripts(t), "localStorage")
 }
 
 /* The tests below hold the screens of the pods: the list of images, the page of an image, the finding of
 an image, the tile, the nav, and the words for a read that is off or failed. They run with node as the
 tests above do. */
-
-// With the variable CI set, a missing node fails the test. Else it skips. This test needs no node.
-func TestWithCISetAMissingNodeFailsTheTest(t *testing.T) {
-	for _, c := range []struct {
-		name, ci      string
-		failed, skips bool
-	}{{"no CI", "", false, true}, {"CI is true", "true", true, false}, {"CI is 1", "1", true, false}} {
-		t.Run(c.name, func(t *testing.T) {
-			var failed, skipped bool
-			whenNodeIsMissing(c.ci, func(...any) { failed = true }, func(...any) { skipped = true })
-			if failed != c.failed || skipped != c.skips {
-				t.Errorf("failed %v and skipped %v, want %v and %v", failed, skipped, c.failed, c.skips)
-			}
-		})
-	}
-}
 
 // encodeURIComponent writes a text as the function of the same name does in the page. The page keeps
 // the @ of a name.
@@ -1431,47 +1462,99 @@ func rowWith(t *testing.T, html, text string) string {
 	return ""
 }
 
-func mustHold(t *testing.T, where, html string, words ...string) {
+// linkRowStart starts a row of a table that leads to a screen. linkRow gives the start of the row that leads to the screen hash.
+const linkRowStart = `<tr class="link"`
+
+func linkRow(hash string) string { return linkRowStart + ` ` + goTo(hash) + `>` }
+
+// goTo gives the data attribute of an element that leads to the screen hash.
+func goTo(hash string) string { return goToStart + hash + `"` }
+
+// goToStart starts the data attribute of an element that leads to a screen, before the hash.
+const goToStart = `data-go="`
+
+// rowTo finds the row of a table that leads to the screen hash.
+func rowTo(t *testing.T, html, hash string) string {
 	t.Helper()
-	for _, w := range words {
-		if !strings.Contains(html, w) {
-			t.Errorf("%s has no %q", where, w)
-		}
-	}
+	return rowWith(t, html, goTo(hash))
 }
 
-func mustNotHold(t *testing.T, where, html string, words ...string) {
-	t.Helper()
-	for _, w := range words {
-		if strings.Contains(html, w) {
-			t.Errorf("%s holds %q", where, w)
-		}
-	}
+// tileLabel gives the label of a tile of the overview. tileLink gives the address of the link of a tile to the screen
+// hash, with its label, and tileHref gives the address alone.
+func tileLabel(label string) string { return tileLabelStart + label + `</div>` }
+
+func tileLink(hash, label string) string { return tileHref(hash) + tileLabel(label) }
+
+func tileHref(hash string) string { return `href="` + hash + `">` }
+
+// tileLabelStart starts the label of a tile. tileOpen starts the link of a tile, and tileStart starts the link of a tile
+// of the tone, before its address.
+const (
+	tileLabelStart = `<div class="l">`
+	tileOpen       = `<a class="tile `
+)
+
+func tileStart(tone string) string { return tileOpen + tone + `" ` }
+
+// tileValue gives the value of a tile of the overview, and tileSub gives the line under the value.
+func tileValue(value string) string { return `<div class="v">` + value + `</div>` }
+
+func tileSub(sub string) string { return `<div class="s">` + sub + `</div>` }
+
+// badgeOf is the start of a badge of the class, and badge is the badge of the class with its word. badgeOpen starts a
+// badge, before its class.
+func badgeOf(class string) string { return badgeOpen + class + `">` }
+
+const badgeOpen = `<span class="badge `
+
+func badge(class, word string) string { return badgeOf(class) + word + "</span>" }
+
+// navLink is the start of the link of the nav to the screen hash.
+func navLink(hash string) string { return `<a href="` + hash + `" class=` }
+
+// navCount gives the label and the count of an item of the nav. class follows the class cnt of the count, such as " r".
+func navCount(label, class, count string) string { return span(label) + countSpan(class, count) }
+
+// countSpan gives the count of an item of the nav. class follows the class cnt, such as " r".
+func countSpan(class, count string) string {
+	return `<span class="cnt` + class + `">` + count + `</span>`
+}
+
+// navItem gives the pattern of the item of the nav to the screen hash, with its label. The count is a group of the
+// pattern, and class follows the class cnt of the count.
+func navItem(hash, label, class string) *regexp.Regexp {
+	return regexp.MustCompile(navItemText(hash, `[^"]*`, label, class, `([^<]*)`))
+}
+
+// navItemText gives the text of the item of the nav to the screen hash. link is the class of the link, and label, class,
+// and count are as navCount takes them.
+func navItemText(hash, link, label, class, count string) string {
+	return navLink(hash) + `"` + link + `">` + navCount(label, class, count) + `</a>`
 }
 
 // The badge of an image, and the badge of one digest, as the page draws them.
 var (
 	imageBadges = map[model.ImageStatus]string{
-		model.ImageStatusSteady:     `<span class="badge g">First digest</span>`,
-		model.ImageStatusMoved:      `<span class="badge a">Image moved</span>`,
-		model.ImageStatusSplit:      `<span class="badge r">Two digests</span>`,
-		model.ImageStatusNotChecked: `<span class="badge y">Not checked</span>`,
+		model.ImageStatusSteady:     badge("g", "First digest"),
+		model.ImageStatusMoved:      badge("a", testkit.ImageMoved),
+		model.ImageStatusSplit:      badge("r", twoDigests),
+		model.ImageStatusNotChecked: badge("y", wordNotChecked),
 	}
 	digestBadges = map[model.DigestStatus]string{
-		model.FirstDigest:   `<span class="badge g">First digest</span>`,
-		model.AnotherDigest: `<span class="badge r">Another digest</span>`,
-		model.NoRepoDigest:  `<span class="badge y">Not checked</span> <span class="mut">No repo digest</span>`,
-		model.NotStarted:    `<span class="badge y">Not checked</span> <span class="mut">Not started</span>`,
+		model.FirstDigest:   badge("g", "First digest"),
+		model.AnotherDigest: badge("r", "Another digest"),
+		model.NoRepoDigest:  badge("y", wordNotChecked) + ` <span class="mut">No repo digest</span>`,
+		model.NotStarted:    badge("y", wordNotChecked) + ` <span class="mut">Not started</span>`,
 	}
 )
 
 // profileBadges is the badge of the status of a profile. The row Record of an image shows it.
 var profileBadges = map[model.Status]string{
-	model.StatusDrift:      `<span class="badge r">Drift</span>`,
-	model.StatusNewer:      `<span class="badge b">Newer</span>`,
-	model.StatusNotChecked: `<span class="badge y">Not checked</span>`,
-	model.StatusOK:         `<span class="badge g">OK</span>`,
-	model.StatusNoRecord:   `<span class="badge y">No record</span>`,
+	model.StatusDrift:      badge("r", "Drift"),
+	model.StatusNewer:      badge("b", "Newer"),
+	model.StatusNotChecked: badge("y", wordNotChecked),
+	model.StatusOK:         badge("g", "OK"),
+	model.StatusNoRecord:   badge("y", "No record"),
 }
 
 // cutDigest writes a digest as the page does: sha256: and 12 digits.
@@ -1483,6 +1566,31 @@ func packName(key string) string { _, name, _ := strings.Cut(key, "/"); return n
 // The sets that hold images that a pod runs.
 var imageSets = []devdata.State{devdata.StateOK, devdata.StateImages, devdata.StateImagesSplit}
 
+// sortHead starts the head of a column of the list of the images that sorts by text and is not sorted now. class is
+// the class of the head, col names the column, and label is its word.
+func sortHead(class, col, label string) string {
+	return sortTh(class, "none") + sortButton("it", col, "", label) + `<`
+}
+
+// sortTh gives the start tag of the head of a column that sorts its table. class is the class of the head, and state is
+// as sortAria takes it.
+func sortTh(class, state string) string { return `<th class="` + class + `" ` + sortAria(state) + `>` }
+
+// sortAria gives the attribute that says how a head sorts its table now: none, ascending, or descending.
+func sortAria(state string) string { return `aria-sort="` + state + `"` }
+
+// sortButton gives the button of the head of a column that sorts the table by col, up to its label. on follows the
+// class sort: "" for a column that is not sorted now, " on asc", or " on desc".
+func sortButton(table, col, on, label string) string {
+	return buttonOpen + `class="sort` + on + `" data-sort="` + table + `" ` + sortCol(col, label)
+}
+
+// sortCol gives the end of the button of a column that sorts by col, up to its label. sortIcon starts the icon of the
+// button.
+func sortCol(col, label string) string { return `data-col="` + col + `">` + label }
+
+const sortIcon = `<svg class="sorti"`
+
 // The list shows the count line, and one row for each image: its status, its reference, its pack, the
 // number of its pods, and its digest. An image with no digest of a repo reads Not checked and never OK.
 func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.T) {
@@ -1492,13 +1600,13 @@ func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.
 			o := set.Images
 			list := pageOf(t, render(t, state, false), "#images", "")
 			mustHold(t, "the list", list, fmt.Sprintf(`<h2>Images <span class="sub">%d images. %d match a pack. %d do not.</span></h2>`, o.Counts.Images, o.Counts.Matched, o.Counts.Images-o.Counts.Matched),
-				`data-col="status">Status<`, `data-col="image">Image<`, `<th class="narrow-hide" aria-sort="none"><button type="button" class="sort" data-sort="it" data-col="pack">Pack<`,
-				`<th class="n narrow-hide" aria-sort="none"><button type="button" class="sort" data-sort="it" data-col="pods">Pods<`, `<th>Digest</th></tr></thead>`)
-			if got := strings.Count(list, `<tr class="link"`); got != len(o.Images) {
+				sortCol("status", "Status")+"<", sortCol("image", "Image")+"<", sortHead("narrow-hide", "pack", "Pack"),
+				sortHead("n narrow-hide", "pods", "Pods"), `<th>Digest</th></tr></thead>`)
+			if got := strings.Count(list, linkRowStart); got != len(o.Images) {
 				t.Errorf("the list has %d rows for %d images", got, len(o.Images))
 			}
 			for _, img := range o.Images {
-				row := rowWith(t, list, `data-go="`+imageHash(img.Ref)+`"`)
+				row := rowTo(t, list, imageHash(img.Ref))
 				mustHold(t, img.Ref, row, imageBadges[img.Status], `<td class="m wrap"><a href="`+imageHash(img.Ref)+`">`+img.Ref+`</a>`)
 				var pods int
 				var real []string
@@ -1511,7 +1619,7 @@ func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.
 				mustHold(t, img.Ref, row, fmt.Sprintf(`<td class="n narrow-hide">%d</td>`, pods))
 				switch {
 				case len(real) == 0:
-					mustHold(t, img.Ref, row, `<td class="m nw"><span class="mut">Not checked</span></td>`)
+					mustHold(t, img.Ref, row, mutedCell+wordNotChecked+`</span></td>`)
 					mustNotHold(t, img.Ref, row, ">OK<", "sha256:")
 				case len(real) == 1:
 					mustHold(t, img.Ref, row, `>`+cutDigest(real[0])+`</span></td>`)
@@ -1520,12 +1628,12 @@ func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.
 				}
 				if img.Match == model.MatchNone {
 					mustHold(t, img.Ref, row, `<span class="mut">no pack</span>`)
-					mustNotHold(t, img.Ref, row, "<i>pack=</i>", "matched by name and tag")
+					mustNotHold(t, img.Ref, row, "<i>pack=</i>", matchedByName)
 				} else {
 					mustHold(t, img.Ref, row, `<i>pack=</i>"`+packName(img.Packs[0].Key)+`"`)
 				}
-				if (img.Match == model.MatchNameAndTag) != strings.Contains(row, "matched by name and tag") {
-					t.Errorf("%s has the match %s, and the row says %v about name and tag", img.Ref, img.Match, strings.Contains(row, "matched by name and tag"))
+				if says := strings.Contains(row, matchedByName); (img.Match == model.MatchNameAndTag) != says {
+					t.Errorf("%s has the match %s, and the row says %v about name and tag", img.Ref, img.Match, says)
 				}
 			}
 		})
@@ -1535,7 +1643,7 @@ func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.
 // At 760 pixels and below, the columns Pack and Pods go, and the pack moves under the image, so that
 // the row fits: the block with the class narrow-show holds what the cell with the class narrow-hide holds.
 func TestTheListOfImagesMovesThePackUnderTheImageOnAPhone(t *testing.T) {
-	cell := regexp.MustCompile(`<td class="narrow-hide">(.*?)</td>`)
+	cell := regexp.MustCompile(narrowCell + `(.*?)</td>`)
 	list := pageOf(t, render(t, devdata.StateImages, false), "#images", "")
 	var rows int
 	for _, row := range strings.Split(list, "</tr>") {
@@ -1544,9 +1652,7 @@ func TestTheListOfImagesMovesThePackUnderTheImageOnAPhone(t *testing.T) {
 			continue
 		}
 		rows++
-		if !strings.Contains(row, `<div class="narrow-show">`+m[1]+`</div>`) {
-			t.Errorf("the row has no block narrow-show with %q: %s", m[1], row)
-		}
+		mustHold(t, "the row", row, `<div class="narrow-show">`+m[1]+`</div>`)
 	}
 	if rows == 0 {
 		t.Error("no row of the list has a pack cell")
@@ -1573,9 +1679,9 @@ func TestThePageOfAnImageShowsTheRecordAndEachDigestOfThePods(t *testing.T) {
 				case model.MatchNone:
 					match = "No pack"
 				}
-				mustHold(t, img.Ref, page, `<h1 class="m h1m">`+img.Ref+`</h1>`+imageBadges[img.Status], "<span>Named by</span>"+named+"</div>", "<span>Match</span>"+match+"</div>",
-					`<nav class="crumbs" aria-label="Where you are"><a href="#images">Images</a> <span>/</span> <b>`+img.Ref+`</b></nav>`,
-					`data-k="this">This image</button>`, `data-k="catch">What pods do catch</button>`,
+				mustHold(t, img.Ref, page, `<h1 class="m h1m">`+img.Ref+`</h1>`+imageBadges[img.Status], labelRow("Named by", named), labelRow("Match", match),
+					`<nav class="crumbs" aria-label="Where you are"><a href="#images">Images</a> `+span("/")+` <b>`+img.Ref+`</b></nav>`,
+					tabAttrs("image-"+img.Ref, "this")+">This image</button>", tabAttrs("image-"+img.Ref, "catch")+">"+catchTab,
 					`<th>Where</th><th class="narrow-hide">Reference</th><th>Digest</th><th>Status</th>`)
 				mustNotHold(t, img.Ref, page, "Your real case", "With a source read")
 				for _, p := range img.Packs {
@@ -1589,7 +1695,7 @@ func TestThePageOfAnImageShowsTheRecordAndEachDigestOfThePods(t *testing.T) {
 					if img.ByDigest {
 						mustHold(t, img.Ref, record, `<td class="m nw">digest</td>`)
 					} else {
-						mustHold(t, img.Ref, record, `<td class="m nw"><span class="mut">tag only</span></td>`)
+						mustHold(t, img.Ref, record, mutedCell+`tag only</span></td>`)
 					}
 					for _, x := range set.Profiles.Profiles {
 						if model.Subject(x.Name, x.Version) == p.Profile {
@@ -1609,7 +1715,7 @@ func TestThePageOfAnImageShowsTheRecordAndEachDigestOfThePods(t *testing.T) {
 				for i, d := range img.Digests {
 					mustHold(t, img.Ref, pods[i], fmt.Sprintf("<td>Pods (%d)</td>", d.Pods), digestBadges[d.Status], `<td class="m wrap narrow-hide">`+img.Ref+`</td>`)
 					if d.Digest == "" {
-						mustHold(t, img.Ref, pods[i], `<td class="m nw"><span class="mut">none</span></td>`)
+						mustHold(t, img.Ref, pods[i], mutedCell+`none</span></td>`)
 					} else {
 						mustHold(t, img.Ref, pods[i], `<td class="m nw"><span title="`+d.Digest+`">`+cutDigest(d.Digest)+`</span></td>`)
 					}
@@ -1634,15 +1740,15 @@ func TestTheTabWhatPodsDoCatchIsTheSameForEachImage(t *testing.T) {
 		for _, img := range set.Images.Images {
 			id := "tab image-" + img.Ref
 			catch, this := pageOf(t, screens, imageHash(img.Ref), id+" catch"), pageOf(t, screens, imageHash(img.Ref), id+" this")
-			mustHold(t, img.Ref, catch, `<button class="tab on" role="tab" aria-selected="true" data-tab="image-`+img.Ref+`" data-k="catch">What pods do catch</button>`,
-				"<b>When this happens</b>", "A tag pulled directly from a mutable registry, when a pod lands on a node with no cached copy.",
+			mustHold(t, img.Ref, catch, tabOn("image-"+img.Ref, "catch")+catchTab,
+				whenThisHappens, "A tag pulled directly from a mutable registry, when a pod lands on a node with no cached copy.",
 				`<span class="m">imagePullPolicy: Always</span> or <span class="m">:latest</span>, at any restart.`, "A mutable mirror, or a pipeline that copies over the same tag.",
 				"Needs read access to pods, and no registry and no credential. No Palette route has this digest.",
 				"<b>What it does not catch</b>", "A move with no new pull.", "An image that no pod runs.", "A difference between clusters.",
 				"It stays silent when the pods pull an unchanged digest from a mirror")
 			mustNotHold(t, img.Ref, catch, "<th>Where</th>", "<th>Digest</th>")
-			mustHold(t, img.Ref, this, `<button class="tab on" role="tab" aria-selected="true" data-tab="image-`+img.Ref+`" data-k="this">This image</button>`, "<th>Where</th>")
-			mustNotHold(t, img.Ref, this, "<b>When this happens</b>")
+			mustHold(t, img.Ref, this, tabOn("image-"+img.Ref, "this")+"This image</button>", "<th>Where</th>")
+			mustNotHold(t, img.Ref, this, whenThisHappens)
 		}
 	}
 }
@@ -1651,18 +1757,18 @@ func TestTheTabWhatPodsDoCatchIsTheSameForEachImage(t *testing.T) {
 // of the image. The Drift tile does not count it.
 func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
 	for state, c := range map[devdata.State]struct{ badge, title string }{
-		devdata.StateImages:      {`<span class="badge a">Image moved</span>`, "A tag runs another digest than the first one seen"},
-		devdata.StateImagesSplit: {`<span class="badge r">Two digests</span>`, "One tag runs with two digests"},
+		devdata.StateImages:      {badge("a", testkit.ImageMoved), tagMoved},
+		devdata.StateImagesSplit: {badge("r", twoDigests), tagSplit},
 	} {
 		t.Run(string(state), func(t *testing.T) {
 			overview := pageOf(t, render(t, state, false), "#overview", "")
-			href := imageHash("vendor.example/product:2026.2")
-			row := rowWith(t, overview, `data-go="`+href+`"`)
+			href := imageHash(testkit.VendorRef)
+			row := rowTo(t, overview, href)
 			mustHold(t, "the finding", row, `<td class="w90">`+c.badge+`</td>`, `<a href="`+href+`">`+c.title+`</a>`,
-				`<span class="lab"><i>profile=</i>"wilma-gateway@3.1.2"</span>`, `<span class="lab wrap"><i>image=</i>"vendor.example/product:2026.2"</span>`)
+				`<span class="lab"><i>profile=</i>"`+testkit.GatewayProfile+`"</span>`, `<span class="lab wrap"><i>image=</i>"`+testkit.VendorRef+`"</span>`)
 			mustNotHold(t, "the finding", row, ">Drift<")
-			mustHold(t, "the tile", overview, `<a class="tile r" href="#findings"><div class="l">Drift</div><div class="v">1</div>`)
-			mustHold(t, "the nav", overview, `<span class="cnt r">2</span>`)
+			mustHold(t, "the tile", overview, tileStart("r")+tileLink("#findings", "Drift")+tileValue("1"))
+			mustHold(t, "the nav", overview, countSpan(" r", "2"))
 		})
 	}
 }
@@ -1670,8 +1776,8 @@ func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
 // A profile that drifts, and a profile that does not, both say the finding of an image in the list.
 func TestTheListOfProfilesSaysTheFindingOfAnImage(t *testing.T) {
 	profiles := pageOf(t, render(t, devdata.StateImages, false), "#profiles", "")
-	row := rowWith(t, profiles, `data-go="#p-wilma-gateway@3.1.2"`)
-	mustHold(t, "the row", row, `traefik<span class="ver">@38.0.1</span>`, "<div>vendor-product ran another digest in pods than the first one seen.</div>")
+	row := rowTo(t, profiles, wilmaHash)
+	mustHold(t, "the row", row, traefikPin, "<div>vendor-product"+ranAnotherDigest+"</div>")
 }
 
 // Issue #707. The row of a profile names the newer published version of the profile itself. Its words
@@ -1680,20 +1786,20 @@ func TestTheListOfProfilesSaysTheFindingOfAnImage(t *testing.T) {
 func TestTheRowOfAProfileNamesItsNewerProfileVersionInWordsOfItsOwn(t *testing.T) {
 	screens := render(t, devdata.StateOK, false)
 	profiles := pageOf(t, screens, "#profiles", "")
-	wilma := rowWith(t, profiles, `data-go="#p-wilma-gateway@3.1.2"`)
+	wilma := rowTo(t, profiles, wilmaHash)
 	mustHold(t, "the row of wilma-gateway", wilma,
-		`Newer profile version wilma-gateway<span class="ver">@3.2.0</span>. <span class="badge fresh">new</span>`,
-		`traefik<span class="ver">@38.0.1</span>`)
+		newerProfile+" "+wilmaNewest+". "+badge("fresh", "new"),
+		traefikPin)
 	// a profile with a pack that has a newer version, and no newer version of its own
-	barney := rowWith(t, profiles, `data-go="#p-barney-base@1.5.0"`)
-	mustNotHold(t, "the row of barney-base", barney, "Newer profile version")
+	barney := rowTo(t, profiles, barneyHash)
+	mustNotHold(t, "the row of barney-base", barney, newerProfile)
 	overview := pageOf(t, screens, "#overview", "")
 	mustHold(t, "the tile", overview, ` · 1 newer profile version</div>`)
 }
 
 var (
-	tileOfImages = regexp.MustCompile(`<a class="tile (\w+)" href="#images"><div class="l">Image changes</div><div class="v">([^<]*)</div><div class="s">([^<]*)</div></a>`)
-	navOfImages  = regexp.MustCompile(`<a href="#images" class="[^"]*"><span>Images</span><span class="cnt">([^<]*)</span></a>`)
+	tileOfImages = regexp.MustCompile(tileStart(`(\w+)`) + tileLink("#images", imageChanges) + tileValue(`([^<]*)`) + tileSub(`([^<]*)`) + `</a>`)
+	navOfImages  = navItem("#images", "Images", "")
 )
 
 // The tile "Image changes" sits between Drift and Newer versions. The nav item Images sits between Newer
@@ -1705,14 +1811,14 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 		cls, value, sub, counted string
 		noTile                   bool
 	}{
-		{devdata.StateOK, "g", "0", "8 images in pods", "8", false},
-		{devdata.StateImages, "a", "1", "Moved or split", "8", false},
-		{devdata.StateImagesSplit, "a", "1", "Moved or split", "8", false},
+		{devdata.StateOK, "g", "0", podImages, "8", false},
+		{devdata.StateImages, "a", "1", movedOrSplit, "8", false},
+		{devdata.StateImagesSplit, "a", "1", movedOrSplit, "8", false},
 		{devdata.StateQuiet, "", "", "", "Off", true},
 		{devdata.StateNoRecords, "", "", "", "Off", true},
 		{devdata.StateReadError, "", "", "", "Off", true},
 		{devdata.StateImagesOff, "", "", "", "Off", true},
-		{devdata.StateImagesUnread, "y", "-", "Not read yet", "-", false},
+		{devdata.StateImagesUnread, "y", "-", notReadYet, "-", false},
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
@@ -1731,17 +1837,15 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 				t.Errorf("the nav item is %q, want the count %q", n, c.counted)
 			}
 			// The tiles and the nav keep one order: findings, images, newer versions, not checked, profiles.
-			tiles := []string{`href="#findings"><div class="l">Drift`, `href="#newer"><div class="l">Newer versions`, `href="#notchecked"><div class="l">Not checked`, `href="#profiles"><div class="l">Profiles`}
+			tiles := []string{tileLink("#findings", "Drift"), tileLink("#newer", newerVersions), tileLink("#notchecked", wordNotChecked), tileLink("#profiles", "Profiles")}
 			if !c.noTile {
-				tiles = slices.Insert(tiles, 1, `href="#images"><div class="l">Image changes`)
+				tiles = slices.Insert(tiles, 1, tileLink("#images", imageChanges))
 			}
-			if at := indexes(overview, tiles); tileSection.MatchString(overview) && (!slices.IsSorted(at) || slices.Contains(at, -1)) {
-				t.Errorf("the tiles are not in the order of the sections: %v", at)
+			if tileSection.MatchString(overview) {
+				mustHoldInOrder(t, "the tiles", overview, tiles...)
 			}
-			nav := []string{`<a href="#findings" class=`, `<a href="#images" class=`, `<a href="#newer" class=`, `<a href="#notchecked" class=`, `<a href="#profiles" class=`}
-			if at := indexes(overview, nav); !slices.IsSorted(at) || slices.Contains(at, -1) {
-				t.Errorf("the nav is not in the order of the sections: %v", at)
-			}
+			nav := []string{navLink("#findings"), navLink("#images"), navLink("#newer"), navLink("#notchecked"), navLink("#profiles")}
+			mustHoldInOrder(t, "the nav", overview, nav...)
 		})
 	}
 }
@@ -1755,6 +1859,14 @@ func indexes(s string, words []string) []int {
 	return at
 }
 
+// mustHoldInOrder fails when the html does not hold each of the words, or holds them in another order.
+func mustHoldInOrder(t *testing.T, where, html string, words ...string) {
+	t.Helper()
+	if at := indexes(html, words); !slices.IsSorted(at) || slices.Contains(at, -1) {
+		t.Errorf("%s does not hold %q in this order: %v", where, words, at)
+	}
+}
+
 var tileSection = regexp.MustCompile(`(?s)<section class="tiles".*?</section>`)
 
 // With no read of the pods, the tile "Image changes" is not there, and the other four tiles fill the row. The nav item stays and
@@ -1765,15 +1877,15 @@ func TestWithNoReadOfThePodsTheTileIsGoneAndTheNavItemSaysOff(t *testing.T) {
 			screens := render(t, state, false)
 			overview := pageOf(t, screens, "#overview", "")
 			tiles := tileSection.FindString(overview)
-			if got := strings.Count(tiles, `<a class="tile `); got != 4 {
+			if got := strings.Count(tiles, tileOpen); got != 4 {
 				t.Errorf("the overview has %d tiles, want 4", got)
 			}
-			mustHold(t, "the tiles", tiles, `<div class="l">Drift</div>`, `<div class="l">Newer versions</div>`, `<div class="l">Not checked</div>`, `<div class="l">Profiles</div>`)
-			mustNotHold(t, "the overview", overview, "Image changes", `href="#images"><div class="l">`)
+			mustHold(t, "the tiles", tiles, tileLabel("Drift"), tileLabel(newerVersions), tileLabel(wordNotChecked), tileLabel("Profiles"))
+			mustNotHold(t, "the overview", overview, imageChanges, tileHref("#images")+tileLabelStart)
 			if n := navOfImages.FindStringSubmatch(overview); n == nil || n[1] != "Off" {
 				t.Errorf("the nav item is %q, want the count Off", n)
 			}
-			mustHold(t, "the images", pageOf(t, screens, "#images", ""), "Pods are not on the menu here", `<a href="#images" class="on"><span>Images</span><span class="cnt">Off</span></a>`)
+			mustHold(t, "the images", pageOf(t, screens, "#images", ""), podsOffTitle, navItemText("#images", "on", "Images", "", "Off"))
 		})
 	}
 }
@@ -1781,19 +1893,19 @@ func TestWithNoReadOfThePodsTheTileIsGoneAndTheNavItemSaysOff(t *testing.T) {
 // With the read of the pods on, the tile is there, also when the last read failed: after a good read, and before the first one.
 func TestWithTheReadOfThePodsOnTheTileShowsAlsoAfterAFailedRead(t *testing.T) {
 	failed := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{
-		"images.json": editImages(t, func(o *model.Observed) { o.Error = &model.ErrorRef{Kind: "kube-api", Status: 403} }),
+		"images.json": podsRefused(t),
 	})
 	for name, overview := range map[string]string{
-		"a good read":                         pagesOf(t, writeSet(t, devdata.StateOK, nil), "#overview")[0],
+		"a good read":                         shown(t, devdata.StateOK, "#overview")[0],
 		"a read that failed after a good one": pagesOf(t, failed, "#overview")[0],
 		"a read that never ended well":        pageOf(t, render(t, devdata.StateImagesUnread, false), "#overview", ""),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if got := strings.Count(tileSection.FindString(overview), `<a class="tile `); got != 5 {
+			if got := strings.Count(tileSection.FindString(overview), tileOpen); got != 5 {
 				t.Errorf("the overview has %d tiles, want 5", got)
 			}
 			if tileOfImages.FindStringSubmatch(overview) == nil {
-				t.Error("the overview has no tile Image changes")
+				t.Error("the overview has no tile " + imageChanges)
 			}
 			if n := navOfImages.FindStringSubmatch(overview); n == nil || n[1] == "Off" {
 				t.Errorf("the nav item is %q, and it must not say Off", n)
@@ -1808,10 +1920,10 @@ func TestWithThePodsOffTheScreenOfTheImagesSaysHowToTurnTheReadOn(t *testing.T) 
 	for _, state := range []devdata.State{devdata.StateImagesOff, devdata.StateQuiet} {
 		t.Run(string(state), func(t *testing.T) {
 			list := pageOf(t, render(t, state, false), "#images", "")
-			mustHold(t, "the screen", list, `<span class="sub">Pods not read</span>`, "Pods are not on the menu here", "This install does not read the pods.",
-				`The read needs a role that can list pods, and that role can also read their <span class="m">env</span>.`,
-				`<b>Next</b> Turn on the read of the pods when you install the observer: with the chart, set readPods to true and upgrade.`, `class="splash md tone-off"`)
-			mustNotHold(t, "the screen", list, "<table", "Compared with the first digest")
+			checkPlace(t, placeNamed(t, placePodsOff), list)
+			mustHold(t, "the screen", list, `<span class="sub">Pods not read</span>`,
+				`The read needs a role that can list pods, and that role can also read their <span class="m">env</span>.`)
+			mustNotHold(t, "the screen", list, "<table", comparedFirst)
 		})
 	}
 }
@@ -1820,11 +1932,9 @@ func TestWithThePodsOffTheScreenOfTheImagesSaysHowToTurnTheReadOn(t *testing.T) 
 // with the words of the error.
 func TestWithAReadThatNeverEndedWellTheScreenOfTheImagesGivesTheError(t *testing.T) {
 	list := pageOf(t, render(t, devdata.StateImagesUnread, false), "#images", "")
-	mustHold(t, "the screen", list, `<span class="sub">Not read yet</span>`, "The pods stay silent",
-		"The last read of the pods failed. <b>HTTP 403, the role of the observer was refused.</b>",
-		"Ask the API server if the role of the observer can list pods.", "<code>kubectl auth can-i list pods --all-namespaces --as=system:serviceaccount:strata-observer:strata-observer</code>",
-		`class="splash md tone-warn"`)
-	mustNotHold(t, "the screen", list, "<table", "This install does not read the pods.")
+	checkPlace(t, placeNamed(t, podsUnread), list)
+	mustHold(t, "the screen", list, `<span class="sub">`+notReadYet+`</span>`)
+	mustNotHold(t, "the screen", list, "<table", podsOffFact)
 }
 
 // The cause pods-not-read has a row with no profile and no pack. The row says "The pods", and a click goes
@@ -1832,40 +1942,42 @@ func TestWithAReadThatNeverEndedWellTheScreenOfTheImagesGivesTheError(t *testing
 func TestTheCauseOfPodsNotReadHasARowWithNoProfileAndOpensTheImages(t *testing.T) {
 	screens := render(t, devdata.StateImagesUnread, false)
 	notChecked := pageOf(t, screens, "#notchecked", "")
-	row := rowWith(t, notChecked, `data-go="#images"`)
+	row := rowTo(t, notChecked, "#images")
 	mustHold(t, "the row", row, `<td class="m"><span class="mut">The pods</span></td>`, `<td class="m"><span class="mut">-</span></td>`,
 		"<td>The observer could not read the pods, so the list of images is old or empty.</td>")
-	mustHold(t, "the other rows", notChecked, `data-go="#p-gazoo-backup@1.2.0"`, `data-go="#p-hoppy-autoscale@1.3.0"`)
-	mustHold(t, "the heading", notChecked, `Not checked on this run <span class="sub">3.`)
+	mustHold(t, "the other rows", notChecked, goTo("#p-"+testkit.GazooProfile), goTo("#p-hoppy-autoscale@1.3.0"))
+	mustHold(t, "the heading", notChecked, wordNotChecked+` on this run <span class="sub">3.`)
 }
 
 // The row "Image behind a tag" says what the check does. With a read of the pods it links the images.
 // The card keeps its four rows.
 func TestTheCoverageRowOfTheImagesFollowsTheRead(t *testing.T) {
-	const compared, named = `<a href="#images">Compared with the first digest seen in pods</a>`, "Strata compares the name and the tag."
 	for state, read := range map[devdata.State]bool{devdata.StateOK: true, devdata.StateImages: true, devdata.StateImagesOff: false, devdata.StateImagesUnread: false, devdata.StateQuiet: false} {
 		t.Run(string(state), func(t *testing.T) {
 			for _, hash := range []string{"#overview", "#notchecked"} {
 				page := pageOf(t, render(t, state, false), hash, "")
 				mustHold(t, hash, page, "Image behind a tag", "Bytes of a chart", "Masked values", "Edits with kubectl")
 				if read {
-					mustHold(t, hash, page, compared)
-					mustNotHold(t, hash, page, named)
+					mustHold(t, hash, page, comparedLink)
+					mustNotHold(t, hash, page, byNameAndTag)
 				} else {
-					mustHold(t, hash, page, named)
-					mustNotHold(t, hash, page, "Compared with the first digest")
+					mustHold(t, hash, page, byNameAndTag)
+					mustNotHold(t, hash, page, comparedFirst)
 				}
 			}
 		})
 	}
 }
 
+// scratch is the set that writeSet writes in a new directory of sets.
+const scratch = "scratch"
+
 // writeSet copies a set into a new directory of sets, as the set "scratch", with the files that edit
 // names changed. It gives the directory.
 func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []byte) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.MkdirAll(path.Join(dir, "scratch"), 0o755); err != nil {
+	if err := os.MkdirAll(path.Join(dir, scratch), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// The files alerts.json and replies.json are optional. A set without alerts.json is the page of an observer
@@ -1881,69 +1993,74 @@ func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []b
 		if f := edit[name]; f != nil {
 			raw = f(raw)
 		}
-		if err := os.WriteFile(path.Join(dir, "scratch", name), raw, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		testkit.WriteIn(t, path.Join(dir, scratch), name, string(raw))
 	}
 	return dir
 }
 
-// editImages changes the document of the pods of a set.
-func editImages(t *testing.T, change func(*model.Observed)) func([]byte) []byte {
+// editJSON gives an edit of a file of a set for writeSet. It decodes the file into a T, calls change on it, and
+// encodes it again.
+func editJSON[T any](t *testing.T, change func(*T)) func([]byte) []byte {
 	return func(raw []byte) []byte {
-		var o model.Observed
-		if err := devdata.Decode(raw, &o); err != nil {
-			t.Fatal(err)
-		}
-		change(&o)
-		out, err := json.Marshal(o)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
-}
-
-// editFindings changes the findings of a set.
-func editFindings(t *testing.T, change func(*api.FindingsView)) func([]byte) []byte {
-	return func(raw []byte) []byte {
-		var v api.FindingsView
+		var v T
 		if err := devdata.Decode(raw, &v); err != nil {
 			t.Fatal(err)
 		}
 		change(&v)
-		out, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
+		return testkit.MustJSON(t, v)
 	}
 }
 
-// pagesOf shows some screens of a set in a directory of sets, with no crawl.
+// replaceText gives an edit of a file of a set for writeSet. It puts to in place of each from in the text.
+func replaceText(from, to string) func([]byte) []byte {
+	return func(raw []byte) []byte { return []byte(strings.ReplaceAll(string(raw), from, to)) }
+}
+
+// wholeFile gives an edit of a file of a set for writeSet. It puts text in place of the whole file.
+func wholeFile(text string) func([]byte) []byte {
+	return func([]byte) []byte { return []byte(text) }
+}
+
+// chain gives a writeSet edit that makes each edit, in order.
+func chain(edits ...func([]byte) []byte) func([]byte) []byte {
+	return func(raw []byte) []byte {
+		for _, edit := range edits {
+			raw = edit(raw)
+		}
+		return raw
+	}
+}
+
+// podsRefused edits the document of the pods of a set: the last read failed, because the API server refused it with a 403.
+func podsRefused(t *testing.T) func([]byte) []byte {
+	return podsFailedWith(t, model.ErrorRef{Kind: docs.KindKubeAPI, Status: 403})
+}
+
+// podsFailedWith edits the document of the pods of a set: the last read failed with the error.
+func podsFailedWith(t *testing.T, err model.ErrorRef) func([]byte) []byte {
+	return editJSON(t, func(o *model.Observed) { o.Error = &err })
+}
+
+// pagesOf shows some screens of the set that writeSet wrote in dir, with no crawl.
 func pagesOf(t *testing.T, dir string, hashes ...string) []string {
 	t.Helper()
-	var out []string
-	if err := json.Unmarshal(runNodeIn(t, dir, "scratch", append([]string{"show"}, hashes...)...), &out); err != nil || len(out) != len(hashes) {
-		t.Fatalf("the output of render.js: %v, %d screens for %d hashes", err, len(out), len(hashes))
-	}
-	return out
+	return showIn(t, dir, scratch, hashes...)
 }
 
 // A read that failed after a good one keeps the list of the good read. Each screen says so in an amber
 // bar, with the words of the error and the time of the read that the list shows.
 func TestAReadThatFailedAfterAGoodOneShowsAnAmberBarOnEachScreen(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{
-		"images.json": editImages(t, func(o *model.Observed) { o.Error = &model.ErrorRef{Kind: "kube-api", Status: 403} }),
+		"images.json": podsRefused(t),
 	})
-	const bar = `<div class="alertbar a">The last read of the pods failed: HTTP 403, the role of the observer was refused. <span>The list shows the read of 11:54Z.</span></div>`
-	pages := pagesOf(t, dir, "#overview", "#images", imageHash("vendor.example/product:2026.2"))
+	bar := amberBar + podsFailed + `: ` + roleRefused + `. ` + span("The list shows the read of 11:54Z.") + `</div>`
+	pages := pagesOf(t, dir, "#overview", "#images", imageHash(testkit.VendorRef))
 	for i, page := range pages {
-		mustHold(t, []string{"the overview", "the list", "the page of the image"}[i], page, bar)
+		mustHold(t, imageScreens[i], page, bar)
 	}
-	mustHold(t, "the list", pages[1], "8 images", `<tr class="link"`)
+	mustHold(t, imageScreens[1], pages[1], "8 images", linkRowStart)
 	for _, hash := range []string{"#overview", "#images"} {
-		mustNotHold(t, hash, pagesOf(t, writeSet(t, devdata.StateOK, nil), hash)[0], "The last read of the pods failed")
+		mustNotHold(t, hash, shown(t, devdata.StateOK, hash)[0], podsFailed)
 	}
 }
 
@@ -1953,21 +2070,21 @@ func TestTheWordsOfAFailedReadOfThePodsNameTheApiServer(t *testing.T) {
 		err  model.ErrorRef
 		want string
 	}{
-		{model.ErrorRef{Kind: "kube-api", Status: 401}, "HTTP 401, the role of the observer was refused"},
-		{model.ErrorRef{Kind: "kube-api", Status: 403}, "HTTP 403, the role of the observer was refused"},
-		{model.ErrorRef{Kind: "kube-api", Status: 500}, "HTTP 500, the API server gave an error"},
-		{model.ErrorRef{Kind: "kube-transport"}, "the link to the API server failed"},
-		{model.ErrorRef{Kind: "kube-config"}, "the observer could not read its token or its CA file"},
-		{model.ErrorRef{Kind: "not-json"}, "the API server sent an answer that is not JSON"},
-		{model.ErrorRef{Kind: "timeout"}, "the API server did not answer in time"},
+		{model.ErrorRef{Kind: docs.KindKubeAPI, Status: 401}, "HTTP 401, the role of the observer was refused"},
+		{model.ErrorRef{Kind: docs.KindKubeAPI, Status: 403}, roleRefused},
+		{model.ErrorRef{Kind: docs.KindKubeAPI, Status: 500}, "HTTP 500, the API server gave an error"},
+		{model.ErrorRef{Kind: docs.KindKubeTransport}, "the link to the API server failed"},
+		{model.ErrorRef{Kind: docs.KindKubeConfig}, "the observer could not read its token or its CA file"},
+		{model.ErrorRef{Kind: docs.KindNotJSON}, "the API server sent " + testkit.NotJSONAnswer},
+		{model.ErrorRef{Kind: docs.KindTimeout}, "the API server did not answer in time"},
 	} {
 		t.Run(c.err.Kind+strconv.Itoa(c.err.Status), func(t *testing.T) {
 			dir := writeSet(t, devdata.StateImagesUnread, map[string]func([]byte) []byte{
-				"images.json": editImages(t, func(o *model.Observed) { o.Error = &c.err }),
+				"images.json": podsFailedWith(t, c.err),
 			})
 			list := pagesOf(t, dir, "#images")[0]
-			mustHold(t, "the list", list, "The last read of the pods failed. <b>"+c.want+".</b>")
-			mustNotHold(t, "the list", list, "Palette")
+			mustHold(t, imageScreens[1], list, podsFailed+". <b>"+c.want+".</b>")
+			mustNotHold(t, imageScreens[1], list, "Palette")
 		})
 	}
 }
@@ -1975,25 +2092,22 @@ func TestTheWordsOfAFailedReadOfThePodsNameTheApiServer(t *testing.T) {
 // An image reference with the text of a tag shows as text on the list, on the page of the image, and in
 // the finding. No screen holds the tag.
 func TestAnImageReferenceWithAnImgTagShowsAsText(t *testing.T) {
-	const evil = "<img src=x onerror=alert(1)>"
-	swap := func(raw []byte) []byte {
-		return []byte(strings.ReplaceAll(string(raw), "vendor.example/product:2026.2", evil))
-	}
+	swap := replaceText(testkit.VendorRef, evil)
 	dir := writeSet(t, devdata.StateImages, map[string]func([]byte) []byte{"images.json": swap, "findings.json": swap, "profiles.json": swap})
 	pages := pagesOf(t, dir, "#overview", "#images", imageHash(evil), imageHash(evil))
 	for i, page := range pages {
-		where := []string{"the overview", "the list", "the page of the image", "the page of the image"}[i]
+		where := imageScreens[min(i, 2)]
 		checkMarkup(t, screen{Hash: where, HTML: page})
 		mustHold(t, where, page, injection)
 		mustNotHold(t, where, page, "<img")
 	}
-	mustHold(t, "the page of the image", pages[2], `<h1 class="m h1m">`+injection+`</h1>`)
+	mustHold(t, imageScreens[2], pages[2], `<h1 class="m h1m">`+injection+`</h1>`)
 }
 
 // An image that the data does not hold shows the page of a missing item, under the nav item Images.
 func TestAnImageThatNoPodRunsShowsAMissingPage(t *testing.T) {
-	page := pagesOf(t, writeSet(t, devdata.StateOK, nil), imageHash("nobody.example/none:0"))[0]
-	mustHold(t, "the page", page, "No pod runs this image", `<span class="m">nobody.example/none:0</span> runs in no pod now.`, `<a class="btn" href="#images">All images</a>`, `<a href="#images" class="on">`)
+	page := shown(t, devdata.StateOK, imageHash(testkit.NoImage))[0]
+	mustHold(t, "the page", page, "No pod runs this image", `<span class="m">`+testkit.NoImage+`</span> runs in no pod now.`, `<a class="btn" href="#images">All images</a>`, imagesOn)
 }
 
 // The line of a profile for a finding reads right for one pack and for many. The line of an image id
@@ -2004,20 +2118,20 @@ func TestTheLineOfAFindingReadsRightForOneOrManyPacks(t *testing.T) {
 		packs []string
 		want  string
 	}{
-		{model.ImageIDChanged, []string{"addon/dex"}, "dex changed the machine image on this cluster."},
-		{model.ImageIDChanged, []string{"addon/dex", "addon/reloader"}, "dex, reloader changed the machine image on this cluster."},
-		{model.ImageMoved, []string{"addon/dex"}, "dex ran another digest in pods than the first one seen."},
-		{model.ImageMoved, []string{"addon/dex", "addon/reloader"}, "dex, reloader ran another digest in pods than the first one seen."},
-		{model.ImageSplit, []string{"addon/dex"}, "dex ran with two digests in pods at one time."},
-		{model.ImageSplit, []string{"addon/dex", "addon/reloader"}, "dex, reloader ran with two digests in pods at one time."},
+		{model.ImageIDChanged, []string{testkit.DexKey}, "dex " + machineImage},
+		{model.ImageIDChanged, []string{testkit.DexKey, "addon/reloader"}, "dex, reloader " + machineImage},
+		{model.ImageMoved, []string{testkit.DexKey}, "dex" + ranAnotherDigest},
+		{model.ImageMoved, []string{testkit.DexKey, "addon/reloader"}, "dex, reloader" + ranAnotherDigest},
+		{model.ImageSplit, []string{testkit.DexKey}, "dex" + ranTwoDigests},
+		{model.ImageSplit, []string{testkit.DexKey, "addon/reloader"}, "dex, reloader" + ranTwoDigests},
 	} {
 		t.Run(string(c.kind)+strconv.Itoa(len(c.packs)), func(t *testing.T) {
-			add := editFindings(t, func(v *api.FindingsView) {
-				v.Findings = append(v.Findings, model.Finding{ID: model.FindingID(c.kind, "fred-identity@2.3.0"), Kind: c.kind, Profile: "fred-identity@2.3.0", Packs: c.packs,
-					Images: []string{"a/b:1"}, FirstSeen: devdata.Reference, LastSeen: devdata.Reference, Who: []docs.Who{}})
+			add := editJSON(t, func(v *api.FindingsView) {
+				v.Findings = append(v.Findings, model.Finding{ID: model.FindingID(c.kind, testkit.DexProfile), Kind: c.kind, Profile: testkit.DexProfile, Packs: c.packs,
+					Images: []string{testkit.ImageRef}, FirstSeen: devdata.Reference, LastSeen: devdata.Reference, Who: []docs.Who{}})
 			})
 			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"findings.json": add})
-			row := rowWith(t, pagesOf(t, dir, "#profiles")[0], `data-go="#p-fred-identity@2.3.0"`)
+			row := rowTo(t, pagesOf(t, dir, "#profiles")[0], fredHash)
 			mustHold(t, "the row", row, c.want)
 		})
 	}
@@ -2027,17 +2141,13 @@ func TestTheLineOfAFindingReadsRightForOneOrManyPacks(t *testing.T) {
 func TestTheLineOfAnImageIdNoLongerSaysNameAnotherMachineImage(t *testing.T) {
 	script := readScripts(t)
 	mustNotHold(t, "the scripts", script, "name another machine image")
-	mustHold(t, "the scripts", script, "changed the machine image on this cluster.")
+	mustHold(t, "the scripts", script, machineImage)
 }
 
 // The rules that let a long reference wrap are in the style: the reference of an image has no space, and
 // it must not push a table out of its card.
 func TestALongReferenceCanWrap(t *testing.T) {
 	css := string(readPage(t, "app.css"))
-	if got := ruleOf(css, ".wrap"); got != "overflow-wrap:anywhere;" {
-		t.Errorf("the rule of .wrap is %q", got)
-	}
-	if got := ruleOf(css, ".lab.wrap"); got != "white-space:normal;" {
-		t.Errorf("the rule of .lab.wrap is %q", got)
-	}
+	ruleIs(t, css, ".wrap", wrapAnywhere)
+	ruleIs(t, css, ".lab.wrap", "white-space:normal;")
 }

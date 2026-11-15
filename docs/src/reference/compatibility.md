@@ -1286,6 +1286,13 @@ field, a value, an input, or an option is in the sections above.
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
     `counts.profiles`.
+- **The click "Ask Palette" of the observer shows the checks of strata.** An answer can hold
+  the new field `updateChecks`, the `bump.updateChecks` of `behind`. The reply of the click and
+  `/v1/asks` give it. The column "Palette" and the card "Move to" show each check beside the
+  answer of Palette. Before, the card said only that Palette gave no error, also for a move of
+  Kubernetes that skips a minor version. A check that reads the words of the page must read the
+  new lines. See
+  [Ask Palette about a move](../automation/observer.md#ask-palette-about-a-move).
 - **The rows of the observer name the registry of the record.** Before, `registry` held the
   name in a pin of `behind`, or the uid. This holds for a pack of `/v1/profiles` and a row of
   `/v1/newer`. A record of strata 0.33.0 and before names no registry, so its rows keep the

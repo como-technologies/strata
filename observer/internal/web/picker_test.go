@@ -2,7 +2,6 @@ package web
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 )
 
@@ -20,35 +19,24 @@ func TestTheListOfTheCompareDropdownTakesTheTokensOfTheTheme(t *testing.T) {
 	if inside == "" {
 		t.Fatalf("app.css has no block %q", baseSelect)
 	}
+	// pickerRule is the rule of the list that a select opens.
+	const pickerRule = "select.search::picker(select)"
 	// ruleOf removes the spaces of a value, so the border reads border:1pxsolidvar(--line).
-	for selector, want := range map[string][]string{
-		"select.search,select.search::picker(select)":                   {"appearance:base-select;"},
-		"select.search::picker(select)":                                 {"background:var(--panel);", "color:var(--ink);", "border:1pxsolidvar(--line);"},
+	rulesHold(t, inside, map[string][]string{
+		"select.search," + pickerRule: {"appearance:base-select;"},
+		pickerRule:                    {"background:var(--panel);", "color:var(--ink);", "border:1pxsolidvar(--line);"},
 		"select.search option:hover,select.search option:focus-visible": {"background:var(--violet-t);", "color:var(--violet);"},
-	} {
-		got := ruleOf(inside, selector)
-		for _, w := range want {
-			if !strings.Contains(got, w) {
-				t.Errorf("the rule of %s is %q, and it lacks %s", selector, got, w)
-			}
-		}
-	}
+	})
 	// A color of the list is a token, and never a literal that holds one theme only.
 	if m := regexp.MustCompile(`#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(`).FindString(inside); m != "" {
 		t.Errorf("the block of the dropdown holds the color %q: use a token", m)
 	}
 	// Nothing outside the block names the list, so a browser with no support sees no rule of it.
-	if strings.Contains(without(css, baseSelect), "::picker") {
-		t.Error("a rule outside the block names ::picker")
-	}
+	mustNotHold(t, "the style outside the block", without(css, baseSelect), "::picker")
 }
 
 // The dropdown needs no script: the change of a side still goes through the one handler of the page.
 func TestTheDropdownCompareHasNoScriptForItsList(t *testing.T) {
 	script := readScripts(t)
-	for _, word := range []string{"showPicker", "picker", "base-select"} {
-		if strings.Contains(script, word) {
-			t.Errorf("the scripts hold %q: the style draws the list", word)
-		}
-	}
+	mustNotHold(t, "the scripts", script, []string{"showPicker", "picker", "base-select"}...)
 }

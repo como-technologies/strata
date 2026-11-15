@@ -11,6 +11,9 @@ import (
 
 var t0 = time.Date(2026, 11, 3, 14, 0, 0, 0, time.UTC)
 
+// currentVersion is the failure of a check of a profile version that is current, and of its newer version.
+const currentVersion = "a current version: %+v"
+
 // allKinds lists every kind of finding. A test that walks the kinds uses it, so a new kind fails the
 // tests that did not learn it.
 var allKinds = []Kind{PublishedChanged, Overwritten, Renamed, Gone, ClusterDiffers, ImageIDChanged, ImageMoved, ImageSplit}
@@ -18,7 +21,7 @@ var allKinds = []Kind{PublishedChanged, Overwritten, Renamed, Gone, ClusterDiffe
 // pk makes a pack of a record: layer/name.
 func pk(layer, name, version string) docs.RecordPack {
 	return docs.RecordPack{Key: layer + "/" + name, Layer: layer, Name: name, Version: version, Type: "spectro", RegistryUID: "reg1",
-		RegistryProviderType: "spectro", Images: []string{"a/b:1", "a/c@sha256:abc"}, Hash: docs.PackHash{UpstreamRaw: "sha256:" + name, UpstreamSource: "packRef.digest"}}
+		RegistryProviderType: "spectro", Images: []string{testkit.ImageRef, testkit.DigestImage}, Hash: docs.PackHash{UpstreamRaw: "sha256:" + name, UpstreamSource: "packRef.digest"}}
 }
 
 // rec makes a record that the cluster runs, with a `verify` row of the given status. The compare with
@@ -30,6 +33,11 @@ func rec(name, version, status string, packs ...docs.RecordPack) Record {
 	r.Doc.Source.Name, r.Doc.Source.Version, r.Doc.Source.Type = name, version, "cluster"
 	r.Doc.Packs = packs
 	return r
+}
+
+// aws gives the record of aws-stack 1.1.0 with the pack csi-aws-ebs 1.65.0, with no change.
+func aws() Record {
+	return rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"))
 }
 
 // drifted makes a `verify` row that drifted, with a diff that changes one pack.
@@ -72,17 +80,22 @@ func content(t *testing.T, records ...Record) Content {
 			profiles = append(profiles, r.subject())
 		}
 	}
-	return Content{At: t0, Strata: "0.29.0", Cluster: testkit.Cluster("payments", profiles...), Meta: baseline.Meta{Baseline: baseline.Approved, Revision: "4e1c7a2"}, Records: records}
+	return Content{At: t0, Strata: "0.29.0", Cluster: testkit.Cluster(testkit.PaymentsName, profiles...), Meta: baseline.Meta{Baseline: baseline.Approved, Revision: testkit.Revision}, Records: records}
 }
 
 func goodClock(every time.Duration, at time.Time) Clock {
 	return Clock{Every: every, Last: &at}
 }
 
+// goodInput is the input of a build at t0 plus one minute, with good clocks.
+func goodInput(c *Content, v *Versions) Input {
+	return Input{Now: t0.Add(time.Minute), ClusterUID: testkit.PaymentsUID, StartedAt: t0, Files: 2, FilesKnown: true, Content: c, Versions: v,
+		ContentClock: goodClock(testkit.ContentEvery, t0), VersionsClock: goodClock(testkit.VersionsEvery, t0)}
+}
+
 // build builds a summary at t0 plus one minute, with good clocks.
 func build(c *Content, v *Versions) Summary {
-	return Build(Input{Now: t0.Add(time.Minute), ClusterUID: "c1", StartedAt: t0, Files: 2, FilesKnown: true, Content: c, Versions: v,
-		ContentClock: goodClock(15*time.Minute, t0), VersionsClock: goodClock(6*time.Hour, t0)})
+	return Build(goodInput(c, v))
 }
 
 func ptr[T any](v T) *T { return &v }

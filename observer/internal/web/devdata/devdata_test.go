@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"reflect"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,7 +21,9 @@ import (
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/baseline"
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // sets is the directory of the sets, as the dev server reads it.
@@ -36,23 +38,34 @@ func load(t *testing.T, state State) *Set {
 	return s
 }
 
-// normal reads JSON into plain values, so that two documents compare with no regard to the layout.
-func normal(t *testing.T, raw []byte) any {
+// sameAsOK fails when a part of the set s of the state differs from the same part of the set ok. changed points to each
+// part of s that the state changes, such as &s.Asks, and the test does not compare it.
+func sameAsOK(t *testing.T, ok, s *Set, state State, changed ...any) {
 	t.Helper()
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		t.Fatalf("%v: %s", err, raw)
+	want, got := reflect.ValueOf(ok).Elem(), reflect.ValueOf(s).Elem()
+	skipped := 0
+	for i := range got.NumField() {
+		if !got.Type().Field(i).IsExported() {
+			continue
+		}
+		at := got.Field(i).Addr().Pointer()
+		if slices.ContainsFunc(changed, func(p any) bool { return reflect.ValueOf(p).Pointer() == at }) {
+			skipped++
+			continue
+		}
+		if !reflect.DeepEqual(want.Field(i).Interface(), got.Field(i).Interface()) {
+			t.Errorf("%s changes %s of ok", state, got.Type().Field(i).Name)
+		}
 	}
-	return v
+	if skipped != len(changed) {
+		t.Fatalf("%s: %d of the %d parts that change are parts of the set", state, skipped, len(changed))
+	}
 }
 
-func encoded(t *testing.T, v any) any {
+// sameAsFile fails when the type v encodes to another document than the file raw holds.
+func sameAsFile(t *testing.T, v any, raw []byte) {
 	t.Helper()
-	raw, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return normal(t, raw)
+	testkit.SamePlain(t, "the type", v, json.RawMessage(raw))
 }
 
 // Each file of each set decodes into the type of its route, and the decode refuses a field that the
@@ -71,17 +84,13 @@ func TestEachFileOfEachSetMatchesTheTypeOfItsRoute(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if got, want := encoded(t, f.v), normal(t, raw); !reflect.DeepEqual(got, want) {
-					t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
-				}
+				sameAsFile(t, f.v, raw)
 			})
 		}
 		// The file of the replies is optional, and it has the shape of asks.json.
 		if raw, err := Read(sets(), state, fileReplies); err == nil {
 			t.Run(string(state)+"/"+fileReplies, func(t *testing.T) {
-				if got, want := encoded(t, s.Replies), normal(t, raw); !reflect.DeepEqual(got, want) {
-					t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
-				}
+				sameAsFile(t, s.Replies, raw)
 			})
 		} else if !errors.Is(err, fs.ErrNotExist) || len(s.Replies.Asks) != 0 {
 			t.Errorf("%s: the read of the replies gave %v and %d replies", state, err, len(s.Replies.Asks))
@@ -89,9 +98,7 @@ func TestEachFileOfEachSetMatchesTheTypeOfItsRoute(t *testing.T) {
 		// The file of the alerts is optional too, and it has the shape of the answer of /v1/alerts.
 		if raw, err := Read(sets(), state, fileAlerts); err == nil {
 			t.Run(string(state)+"/"+fileAlerts, func(t *testing.T) {
-				if got, want := encoded(t, s.AlertRules), normal(t, raw); !reflect.DeepEqual(got, want) {
-					t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
-				}
+				sameAsFile(t, s.AlertRules, raw)
 			})
 		} else if !errors.Is(err, fs.ErrNotExist) || s.AlertRules.Set {
 			t.Errorf("%s: the read of the alerts gave %v and the view %+v", state, err, s.AlertRules)
@@ -115,45 +122,37 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 	for _, state := range States {
 		s := load(t, state)
 		h := (&api.Server{Source: s}).Handler()
-		get := func(path string) (int, any) {
-			req := httptest.NewRequest(http.MethodGet, path, nil)
-			req.Host = "127.0.0.1:8080"
-			rec := httptest.NewRecorder()
-			h.ServeHTTP(rec, req)
-			var v any
-			_ = json.Unmarshal(rec.Body.Bytes(), &v)
-			return rec.Code, v
+		// serves fails when the route of path does not give the document want.
+		serves := func(path string, want any) {
+			t.Helper()
+			rec := testkit.Get(h, path)
+			if rec.Code != http.StatusOK {
+				t.Errorf("%s: %s gave %d", state, path, rec.Code)
+			}
+			testkit.SamePlain(t, string(state)+": "+path, json.RawMessage(rec.Body.Bytes()), want)
 		}
 		for route, file := range map[string]string{"/v1/cluster": fileCluster, "/v1/findings": fileFindings, "/v1/profiles": fileProfiles,
-			"/v1/newer": fileNewer, "/v1/notchecked": fileNotChecked, "/v1/events": fileEvents, "/v1/images": fileImages, "/v1/asks": fileAsks} {
+			"/v1/newer": fileNewer, "/v1/notchecked": fileNotChecked, "/v1/events": fileEvents, "/v1/images": fileImages, testkit.AsksRoute: fileAsks} {
 			raw, err := Read(sets(), state, file)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if code, got := get(route); code != http.StatusOK || !reflect.DeepEqual(got, normal(t, raw)) {
-				t.Errorf("%s: %s gave %d and\n%v\nthe file holds\n%v", state, route, code, got, normal(t, raw))
-			}
+			serves(route, json.RawMessage(raw))
 		}
-		if code, got := get("/v1/alerts"); code != http.StatusOK || !reflect.DeepEqual(got, encoded(t, s.AlertRules)) {
-			t.Errorf("%s: /v1/alerts gave %d and\n%v\nthe set holds\n%v", state, code, got, encoded(t, s.AlertRules))
-		}
+		serves("/v1/alerts", s.AlertRules)
 		for _, img := range s.Images.Images {
 			view, _ := s.Images.ImageOf(img.Ref)
 			path := "/v1/images/" + url.PathEscape(img.Ref)
-			if code, got := get(path); code != http.StatusOK || !reflect.DeepEqual(got, encoded(t, view)) {
-				t.Errorf("%s: %s gave %d and\n%v\nthe file holds\n%v", state, path, code, got, encoded(t, view))
-			}
+			serves(path, view)
 		}
-		if code, _ := get("/v1/images/" + url.PathEscape("nobody.example/none:0")); code != http.StatusNotFound {
+		if code := testkit.Get(h, "/v1/images/"+url.PathEscape(testkit.NoImage)).Code; code != http.StatusNotFound {
 			t.Errorf("%s: an image that no pod runs gave %d", state, code)
 		}
 		for _, d := range s.Diffs {
 			path := "/v1/packs/" + d.Profile + "/" + d.Key + "/diff?side=" + string(d.Side)
-			if code, got := get(path); code != http.StatusOK || !reflect.DeepEqual(got, encoded(t, d)) {
-				t.Errorf("%s: %s gave %d and\n%v\nthe file holds\n%v", state, path, code, got, encoded(t, d))
-			}
+			serves(path, d)
 		}
-		if _, found, _ := s.PackDiff(context.Background(), "nobody@1.0.0", "addon/none", model.SideNewer); found {
+		if _, found, _ := s.PackDiff(context.Background(), testkit.NobodyProfile, testkit.NoneKey, model.SideNewer); found {
 			t.Errorf("%s: a pack that no entry names has a diff", state)
 		}
 	}
@@ -166,7 +165,7 @@ func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 		StateStaleUnchecked: model.PageStale, StateLostUnchecked: model.PageLost, StateReadError: model.PageOK,
 		StateImages: model.PageOK, StateImagesSplit: model.PageOK, StateImagesOff: model.PageOK, StateImagesUnread: model.PageOK,
 		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK, StateAlerts: model.PageOK, StateAlertsUnset: model.PageOK,
-		StateMovedDrift: model.PageOK}
+		StateMovedDrift: model.PageOK, StateUpdateChecks: model.PageOK}
 	if len(pages) != len(States) {
 		t.Fatalf("States lists %d sets, and the table of pages %d", len(States), len(pages))
 	}
@@ -243,16 +242,14 @@ func TestFirstSeenIsTheOKSetWithAFirstSeenBaseline(t *testing.T) {
 	if first.Cluster.Records.Baseline != baseline.FirstSeen || first.Cluster.Records.FirstSeenFrom == "" || first.Cluster.Records.Revision != "" {
 		t.Errorf("records %+v", first.Cluster.Records)
 	}
-	if !reflect.DeepEqual(ok.Profiles, first.Profiles) {
-		t.Error("first-seen does not take the profiles of ok")
-	}
+	sameAsOK(t, ok, first, StateFirstSeen, &first.Cluster)
 }
 
 // The set moved-drift holds the record of ok of a version that the cluster no longer runs, wilma-gateway@3.0.4, with a finding. A
 // finding wins, so its status is drift, and its copy is not on this cluster. It and its packs have no newer version, and no row of the
 // newer versions names it, as the summary gives them. The record that the cluster runs, wilma-gateway@3.1.2, has a newer pack.
 func TestMovedDriftHoldsADriftOfAVersionThatTheClusterDoesNotRun(t *testing.T) {
-	const moved, runs = "wilma-gateway@3.0.4", "wilma-gateway@3.1.2"
+	const moved, runs = testkit.GatewayMoved, testkit.GatewayProfile
 	set := load(t, StateMovedDrift)
 	p, mock, here := profileOf(set, moved), profileOf(load(t, StateOK), moved), profileOf(set, runs)
 	if p == nil || mock == nil || here == nil {
@@ -548,28 +545,23 @@ func TestTheSetsOfThePodsHoldTheirStates(t *testing.T) {
 	for state, want := range map[State]model.ImageStatus{StateImages: model.ImageStatusMoved, StateImagesSplit: model.ImageStatusSplit} {
 		s := load(t, state)
 		img := s.Images.Images[0]
-		if img.Ref != "vendor.example/product:2026.2" || img.Status != want || len(s.Findings.Findings) != 2 || s.Cluster.Counts.Findings != 2 ||
-			s.Cluster.Counts.Drift != 1 || s.Images.Counts.Changed != 1 || img.Packs[0].Profile != "wilma-gateway@3.1.2" || img.Packs[0].Key != "addon/vendor-product" {
+		if img.Ref != testkit.VendorRef || img.Status != want || len(s.Findings.Findings) != 2 || s.Cluster.Counts.Findings != 2 ||
+			s.Cluster.Counts.Drift != 1 || s.Images.Counts.Changed != 1 || img.Packs[0].Profile != testkit.GatewayProfile || img.Packs[0].Key != testkit.VendorPack {
 			t.Errorf("%s: first image %+v, %d findings, counts %+v", state, img, len(s.Findings.Findings), s.Cluster.Counts)
 		}
 	}
-	// Images and images-split change the findings, the events, and the profile of the image. The off and unread sets do not.
-	for _, state := range []State{StateImagesOff, StateImagesUnread} {
-		s := load(t, state)
-		if !reflect.DeepEqual(s.Profiles, ok.Profiles) || !reflect.DeepEqual(s.Findings, ok.Findings) || !reflect.DeepEqual(s.Events, ok.Events) {
-			t.Errorf("%s changes more than the pods", state)
-		}
-	}
-	unread := load(t, StateImagesUnread)
+	// Images and images-split change the findings, the events, and the profile of the image. The off set changes only the
+	// pods. The unread set also changes the cluster and the list of what was not checked.
+	off, unread := load(t, StateImagesOff), load(t, StateImagesUnread)
+	sameAsOK(t, ok, off, StateImagesOff, &off.Images)
+	sameAsOK(t, ok, unread, StateImagesUnread, &unread.Cluster, &unread.Images, &unread.NotChecked)
 	row := model.NotChecked{Cause: model.PodsNotRead, Profiles: []string{}, Packs: []string{}}
-	if unread.Images.Pods != model.PodsUnread || unread.Images.Error == nil || unread.Images.Error.Kind != "kube-api" || unread.Images.Error.Status != 403 ||
+	if unread.Images.Pods != model.PodsUnread || unread.Images.Error == nil || unread.Images.Error.Kind != docs.KindKubeAPI || unread.Images.Error.Status != 403 ||
 		!slices.ContainsFunc(unread.NotChecked.NotChecked, func(r model.NotChecked) bool { return reflect.DeepEqual(r, row) }) ||
 		unread.Cluster.Counts.NotChecked != ok.Cluster.Counts.NotChecked+1 || unread.Cluster.Counts.PacksInFull != ok.Cluster.Counts.PacksInFull {
 		t.Errorf("images-unread: %+v, counts %+v", unread.Images, unread.Cluster.Counts)
 	}
 }
-
-var hunkHead = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@$`)
 
 // lineCount reads the count of a hunk head. A head with no count means one line.
 func lineCount(s string) int {
@@ -579,6 +571,13 @@ func lineCount(s string) int {
 	n, _ := strconv.Atoi(s)
 	return n
 }
+
+// beforeHunk is the problem of a line of a unified text that comes before the first hunk. hunkLines ends the problem of
+// a hunk that has more or fewer lines than its head names.
+const (
+	beforeHunk = "before the first hunk"
+	hunkLines  = " hunk does not hold the lines that its head names"
+)
 
 // unifiedProblem says what is wrong in a unified text, or it gives "". The text has two header lines,
 // and each hunk has as many lines on each side as its head says.
@@ -593,16 +592,16 @@ func unifiedProblem(text string) string {
 	var old, now, wantOld, wantNow, hunks int
 	closed := func() bool { return old == wantOld && now == wantNow }
 	for _, l := range lines[2:] {
-		if m := hunkHead.FindStringSubmatch(l); m != nil {
+		if m := testkit.HunkHead.FindStringSubmatch(l); m != nil {
 			if hunks > 0 && !closed() {
-				return "a hunk does not hold the lines that its head names"
+				return "a" + hunkLines
 			}
 			hunks, old, now, wantOld, wantNow = hunks+1, 0, 0, lineCount(m[2]), lineCount(m[4])
 			continue
 		}
 		switch {
 		case hunks == 0:
-			return "a line comes before the first hunk"
+			return "a line comes " + beforeHunk
 		case strings.HasPrefix(l, "\\ "):
 		case strings.HasPrefix(l, "-"):
 			old++
@@ -615,7 +614,7 @@ func unifiedProblem(text string) string {
 		}
 	}
 	if hunks == 0 || !closed() {
-		return "the last hunk does not hold the lines that its head names"
+		return "the last" + hunkLines
 	}
 	return ""
 }
@@ -633,9 +632,7 @@ func TestEachUnifiedTextOfEachSetAgreesWithItsHunkHeads(t *testing.T) {
 				if text != "" {
 					texts++
 				}
-				if p := unifiedProblem(text); p != "" {
-					t.Errorf("%s: %s %s %s of %s: %s", state, d.Profile, d.Key, d.Side, what, p)
-				}
+				testkit.NoProblems(t, fmt.Sprintf("%s: %s %s %s of %s", state, d.Profile, d.Key, d.Side, what), []string{unifiedProblem(text)})
 			}
 		}
 	}
@@ -646,15 +643,11 @@ func TestEachUnifiedTextOfEachSetAgreesWithItsHunkHeads(t *testing.T) {
 		"--- a: x\n+++ b: x\n@@ -1,2 +1,2 @@\n a\n-b\n": "the last hunk",
 		"--- a: x\n+++ b: x\n@@ -1 +1 @@\n-a\n+b\nc\n":  "no sign",
 		"@@ -1 +1 @@\n-a\n+b\n":                         "header lines",
-		"--- a: x\n+++ b: x\n-a\n":                      "before the first hunk",
+		"--- a: x\n+++ b: x\n-a\n":                      beforeHunk,
 	} {
-		if got := unifiedProblem(text); !strings.Contains(got, want) {
-			t.Errorf("the check gave %q for %q, want %q", got, text, want)
-		}
+		testkit.FindsProblem(t, fmt.Sprintf("%q", text), []string{unifiedProblem(text)}, want)
 	}
-	if got := unifiedProblem("--- a: x\n+++ b: x\n@@ -0,0 +1,2 @@\n+a\n+b\n\\ No newline at end of file\n"); got != "" {
-		t.Errorf("a good text has the problem %q", got)
-	}
+	testkit.NoProblems(t, "a good text", []string{unifiedProblem("--- a: x\n+++ b: x\n@@ -0,0 +1,2 @@\n+a\n+b\n" + testkit.NoEOL + "\n")})
 }
 
 // The set ok holds text for the values of dex, for its manifest, and for the values of kubernetes. The
@@ -667,22 +660,22 @@ func TestTheOKSetHoldsTheTextOfTheViewer(t *testing.T) {
 				return d
 			}
 		}
-		t.Fatalf("no diff for %s %s %s", profile, key, side)
+		t.Fatalf(testkit.NoDiff, profile, key, side)
 		return api.PackDiff{}
 	}
-	dex := find("fred-identity@2.3.0", "addon/dex", model.SidePublished)
-	if !strings.HasPrefix(dex.Values.Unified, "--- a: addon/dex values\n+++ b: addon/dex values\n@@ -15,8 +15,8 @@\n") ||
+	dex := find(testkit.DexProfile, testkit.DexKey, model.SidePublished)
+	if !strings.HasPrefix(dex.Values.Unified, testkit.DexValuesHead+"@@ -15,8 +15,8 @@\n") ||
 		len(dex.Manifests) != 1 || dex.Manifests[0].Name != "fred-realm-config" || !strings.Contains(dex.Manifests[0].Unified, "+  sessionIdleMinutes: \"480\"\n") {
 		t.Errorf("the text of dex: %+v", dex)
 	}
-	if k := find("barney-base@1.5.0", "k8s/kubernetes", model.SideNewer); strings.Count(k.Values.Unified, "\n@@ ") != 3 {
-		t.Errorf("the values of kubernetes hold %d hunks, want 3", strings.Count(k.Values.Unified, "\n@@ "))
+	if k := find(testkit.BaseProfile, testkit.KubernetesKey, model.SideNewer); strings.Count(k.Values.Unified, "\n@@ ") != 3 {
+		t.Errorf(testkit.KubernetesValues+" hold %d hunks, want 3", strings.Count(k.Values.Unified, "\n@@ "))
 	}
 	ops := map[string]bool{}
 	var noEnd bool
-	for _, m := range find("fred-identity@2.3.0", "addon/dex", model.SideNewer).Manifests {
+	for _, m := range find(testkit.DexProfile, testkit.DexKey, model.SideNewer).Manifests {
 		ops[m.Op] = true
-		noEnd = noEnd || strings.Contains(m.Unified, "\n\\ No newline at end of file\n")
+		noEnd = noEnd || strings.Contains(m.Unified, "\n"+testkit.NoEOL+"\n")
 	}
 	if !ops["added"] || !ops["removed"] || !noEnd {
 		t.Errorf("the manifests of the newer side of dex: ops %v, no end of line %v", ops, noEnd)
@@ -736,9 +729,22 @@ func movesOf(s *Set) []model.Answer {
 	return out
 }
 
-// isMove says whether an answer is about a move of the Newer table.
+// moveOf gives the index of the move of the Newer table that an answer is about, or -1.
+func moveOf(moves []model.Answer, a model.Answer) int {
+	return slices.IndexFunc(moves, func(m model.Answer) bool { return m.Profile == a.Profile && m.Key == a.Key })
+}
+
+// notAMove is the failure of a check of an answer or a reply that is not about a move of the Newer table. clickGave is the
+// failure of a check of a click and of the answers that the set holds after it.
+const (
+	notAMove  = "the %s for %s is not about a move of the table"
+	clickGave = "the %s gave %+v and the set holds %d answers"
+)
+
+// isMove says whether an answer is about a move of the Newer table, to the newest version of the row.
 func isMove(moves []model.Answer, a model.Answer) bool {
-	return slices.ContainsFunc(moves, func(m model.Answer) bool { return m.Profile == a.Profile && m.Key == a.Key && m.Newest == a.Newest })
+	i := moveOf(moves, a)
+	return i >= 0 && moves[i].Newest == a.Newest
 }
 
 // The set asks holds one answer of each verdict, for three different moves of the Newer table, and it
@@ -758,14 +764,14 @@ func TestTheSetAsksHoldsOneAnswerOfEachVerdict(t *testing.T) {
 		got[a.Verdict] = a
 		seen[a.Profile+" "+a.Key] = true
 		if !isMove(moves, a) {
-			t.Errorf("the answer for %s %s %s is not about a move of the table", a.Profile, a.Key, a.Newest)
+			t.Errorf(notAMove, "answer", a.Profile+" "+a.Key+" "+a.Newest)
 		}
 	}
 	if len(got) != 3 || len(seen) != 3 {
 		t.Fatalf("the verdicts are %v on %d moves, want 3 and 3", got, len(seen))
 	}
 	refuses := got[model.VerdictRefuses]
-	if len(refuses.Refusals) != 1 || refuses.Refusals[0].Code != "DependencyPackUpgradeNotSupported" || refuses.Refusals[0].Message == "" ||
+	if len(refuses.Refusals) != 1 || refuses.Refusals[0].Code != testkit.CodeDependency || refuses.Refusals[0].Message == "" ||
 		len(refuses.Refusals[0].Clusters) == 0 || refuses.Status != 0 {
 		t.Errorf("the refusal %+v", refuses)
 	}
@@ -777,46 +783,86 @@ func TestTheSetAsksHoldsOneAnswerOfEachVerdict(t *testing.T) {
 	}
 	for _, r := range asks.Replies.Asks {
 		if !isMove(moves, r) {
-			t.Errorf("the reply for %s %s %s is not about a move of the table", r.Profile, r.Key, r.Newest)
+			t.Errorf(notAMove, "reply", r.Profile+" "+r.Key+" "+r.Newest)
 		}
 	}
 	if len(ok.Replies.Asks) == 0 || len(ok.Replies.Asks) >= len(moves) {
 		t.Errorf("ok holds %d replies for %d moves: a move with no reply must stay", len(ok.Replies.Asks), len(moves))
 	}
-	if !reflect.DeepEqual(asks.Cluster, ok.Cluster) || !reflect.DeepEqual(asks.Profiles, ok.Profiles) || !reflect.DeepEqual(asks.Newer, ok.Newer) ||
-		!reflect.DeepEqual(asks.Findings, ok.Findings) {
-		t.Error("asks changes more than the answers")
+	sameAsOK(t, ok, asks, StateAsks, &asks.Asks)
+}
+
+// The set update-checks holds the answers of the set asks, each with the checks of the update that strata gives beside
+// it, and it changes nothing else of ok. The registry gained kubernetes 1.37.0 after the versions cycle: the answer of that
+// move is for 1.37.0, and the move from the pin of the row skips a minor version to the newest version of the row.
+func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
+	ok, asks, checks := load(t, StateOK), load(t, StateAsks), load(t, StateUpdateChecks)
+	moves := movesOf(checks)
+	if len(checks.Asks.Asks) != len(asks.Asks.Asks) {
+		t.Fatalf("%s holds %d answers, and asks %d", StateUpdateChecks, len(checks.Asks.Asks), len(asks.Asks.Asks))
 	}
+	var skips, variables int
+	for i, a := range checks.Asks.Asks {
+		held := asks.Asks.Asks[i]
+		if a.Profile != held.Profile || a.Key != held.Key || a.Verdict != held.Verdict || a.Status != held.Status || !reflect.DeepEqual(a.Refusals, held.Refusals) {
+			t.Errorf("the answer %+v is not the answer %+v of asks", a, held)
+		}
+		row := moveOf(moves, a)
+		if row < 0 {
+			t.Fatalf(notAMove, "answer", a.Profile+" "+a.Key)
+		}
+		if a.UpdateChecks == nil {
+			t.Fatalf("the answer for %s %s holds no check", a.Profile, a.Key)
+		}
+		if s := a.UpdateChecks.SkippedMinor; s != nil {
+			skips++
+			if a.Key != testkit.KubernetesKey || s.To != a.Newest || s.NextStep != moves[row].Newest || a.Newest == moves[row].Newest {
+				t.Errorf("the skip %+v of %s %s, the row gives %s", s, a.Profile, a.Key, moves[row].Newest)
+			}
+		} else if !isMove(moves, a) {
+			t.Errorf("the answer for %s %s is for %s, and the row for %s", a.Profile, a.Key, a.Newest, moves[row].Newest)
+		}
+		if v := a.UpdateChecks.RequiredVariables; v != nil {
+			variables += len(v.Names)
+			if v.Code != testkit.CodeVariable || len(v.Names) == 0 || !slices.IsSorted(v.Names) {
+				t.Errorf("the variables %+v of %s %s", v, a.Profile, a.Key)
+			}
+		}
+	}
+	if skips != 1 || variables != 3 {
+		t.Errorf("%d skips and %d variables, want 1 and 3", skips, variables)
+	}
+	sameAsOK(t, ok, checks, StateUpdateChecks, &checks.Asks)
 }
 
 // A click gives the answer that the set holds. A move with no answer gets its reply, and the set keeps
 // it. A request that failed gets its reply, and a move with no reply is not found.
 func TestAClickOnAMoveGivesItsReplyAndTheSetKeepsIt(t *testing.T) {
 	ctx := context.Background()
-	const dex, csi, longhorn = "fred-identity@2.3.0", "barney-base@1.5.0", "dino-storage@1.1.0"
+	const dex, csi, longhorn = testkit.DexProfile, testkit.BaseProfile, testkit.LonghornProfile
 	s := load(t, StateOK)
-	a, found, err := s.Ask(ctx, dex, "addon/dex")
+	a, found, err := s.Ask(ctx, dex, testkit.DexKey)
 	if err != nil || !found || a.Verdict != model.VerdictNoError || a.Newest != "2.44.0" {
 		t.Fatalf("the first click gave %+v, %v, %v", a, found, err)
 	}
 	if got := s.Answers(); len(got) != 1 || !reflect.DeepEqual(got[0], a) {
 		t.Errorf("the set holds %+v after the click", got)
 	}
-	if again, found, _ := s.Ask(ctx, dex, "addon/dex"); !found || !reflect.DeepEqual(again, a) || len(s.Answers()) != 1 {
-		t.Errorf("the second click gave %+v and the set holds %d answers", again, len(s.Answers()))
+	if again, found, _ := s.Ask(ctx, dex, testkit.DexKey); !found || !reflect.DeepEqual(again, a) || len(s.Answers()) != 1 {
+		t.Errorf(clickGave, "second click", again, len(s.Answers()))
 	}
 	// A reply that is a request that failed: the next click asks again, and the set keeps one entry.
-	failed, found, _ := s.Ask(ctx, csi, "csi/csi-aws-ebs")
+	failed, found, _ := s.Ask(ctx, csi, testkit.CSIKey)
 	if !found || failed.Verdict != model.VerdictNoAnswer || failed.Status != 403 {
 		t.Fatalf("the click on a move with a failed reply gave %+v", failed)
 	}
-	if again, found, _ := s.Ask(ctx, csi, "csi/csi-aws-ebs"); !found || !reflect.DeepEqual(again, failed) || len(s.Answers()) != 2 {
-		t.Errorf("the next click gave %+v and the set holds %d answers", again, len(s.Answers()))
+	if again, found, _ := s.Ask(ctx, csi, testkit.CSIKey); !found || !reflect.DeepEqual(again, failed) || len(s.Answers()) != 2 {
+		t.Errorf(clickGave, "next click", again, len(s.Answers()))
 	}
-	if a, found, err := s.Ask(ctx, longhorn, "addon/longhorn"); found || err != nil || a.Profile != "" || len(s.Answers()) != 2 {
+	if a, found, err := s.Ask(ctx, longhorn, testkit.LonghornKey); found || err != nil || a.Profile != "" || len(s.Answers()) != 2 {
 		t.Errorf("a move with no reply gave %+v, %v, %v", a, found, err)
 	}
-	if _, found, _ := load(t, StateReadError).Ask(ctx, dex, "addon/dex"); found {
+	if _, found, _ := load(t, StateReadError).Ask(ctx, dex, testkit.DexKey); found {
 		t.Error("a set with no replies found a move")
 	}
 
@@ -825,12 +871,12 @@ func TestAClickOnAMoveGivesItsReplyAndTheSetKeepsIt(t *testing.T) {
 	if got := held.Answers(); len(got) != 3 {
 		t.Fatalf("asks holds %d answers", len(got))
 	}
-	if refused, found, _ := held.Ask(ctx, "wilma-gateway@3.1.2", "addon/traefik"); !found || refused.Verdict != model.VerdictRefuses {
+	if refused, found, _ := held.Ask(ctx, testkit.GatewayProfile, testkit.TraefikKey); !found || refused.Verdict != model.VerdictRefuses {
 		t.Errorf("a held answer gave %+v", refused)
 	}
-	again, found, _ := held.Ask(ctx, dex, "addon/dex")
+	again, found, _ := held.Ask(ctx, dex, testkit.DexKey)
 	if !found || again.Verdict != model.VerdictNoError || len(held.Answers()) != 3 {
-		t.Errorf("the click on the failed request gave %+v and the set holds %d answers", again, len(held.Answers()))
+		t.Errorf(clickGave, "click on the failed request", again, len(held.Answers()))
 	}
 	for _, a := range held.Answers() {
 		if a.Profile == dex && a.Verdict != model.VerdictNoError {
@@ -858,42 +904,20 @@ func TestClicksThatComeTogetherLeaveOneAnswerForEachMove(t *testing.T) {
 	}
 }
 
-// The routes: a POST with the header of the page gives the reply, and /v1/asks lists it after.
+// The routes: a POST with the header of the page gives the reply, and /v1/asks lists it after, as testkit.AskFlow
+// checks.
 func TestThePostOfTheAskRouteGivesTheReplyAndTheListShowsIt(t *testing.T) {
 	s := load(t, StateOK)
 	h := (&api.Server{Source: s}).Handler()
-	do := func(method, path string, same bool) (int, []byte) {
-		req := httptest.NewRequest(method, path, nil)
-		req.Host = "127.0.0.1:8080"
-		if same {
-			req.Header.Set("Sec-Fetch-Site", "same-origin")
+	answer := func(rec *httptest.ResponseRecorder) (int, string) { return rec.Code, rec.Body.String() }
+	post := func(path string, page bool) (int, string) {
+		site := ""
+		if page {
+			site = testkit.SameOrigin
 		}
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
-		return rec.Code, rec.Body.Bytes()
+		return answer(testkit.Serve(h, http.MethodPost, path, testkit.LoopbackHost, site))
 	}
-	const ask = "/v1/packs/fred-identity@2.3.0/addon/dex/ask"
-	if code, _ := do(http.MethodPost, ask, false); code != http.StatusForbidden {
-		t.Errorf("a POST with no header gave %d", code)
-	}
-	if code, body := do(http.MethodGet, "/v1/asks", true); code != http.StatusOK || string(body) != "{\"asks\":[]}\n" {
-		t.Errorf("the list before the click: %d %s", code, body)
-	}
-	code, body := do(http.MethodPost, ask, true)
-	var a model.Answer
-	if err := json.Unmarshal(body, &a); err != nil || code != http.StatusOK || a.Verdict != model.VerdictNoError {
-		t.Fatalf("the click gave %d %s", code, body)
-	}
-	var list api.AsksView
-	_, body = do(http.MethodGet, "/v1/asks", true)
-	if err := json.Unmarshal(body, &list); err != nil || len(list.Asks) != 1 || !reflect.DeepEqual(list.Asks[0], a) {
-		t.Errorf("the list after the click: %s", body)
-	}
-	for _, path := range []string{"/v1/packs/dino-storage@1.1.0/addon/longhorn/ask", "/v1/packs/nobody@1.0.0/addon/dex/ask"} {
-		if code, _ := do(http.MethodPost, path, true); code != http.StatusNotFound {
-			t.Errorf("%s gave %d", path, code)
-		}
-	}
+	testkit.AskFlow(t, func(path string) (int, string) { return answer(testkit.Get(h, path)) }, post)
 }
 
 // The set alerts holds rules in each state. Their states are those that the engine gives for the findings
@@ -906,14 +930,11 @@ func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
 	for _, name := range v.Channels {
 		channels[name] = map[string]string{"urlFile": "f"}
 	}
-	list, _ := encoded(t, v.Rules).([]any)
+	list, _ := testkit.Plain(t, v.Rules).([]any)
 	for _, r := range list {
 		delete(r.(map[string]any), "state")
 	}
-	file, err := json.Marshal(map[string]any{"channels": channels, "rules": list})
-	if err != nil {
-		t.Fatal(err)
-	}
+	file := testkit.MustJSON(t, map[string]any{"channels": channels, "rules": list})
 	parsed, err := alert.Parse(file)
 	if err != nil {
 		t.Fatalf("the rules of the set do not parse: %v", err)
@@ -921,7 +942,7 @@ func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
 	if got := parsed.Names(); !slices.Equal(got, v.Channels) {
 		t.Errorf("the channels of the set are %v, and the rules name %v", v.Channels, got)
 	}
-	engine := alert.New(parsed, nil, 7*24*time.Hour, nil)
+	engine := alert.New(parsed, nil, testkit.DigestEvery, nil)
 	store := alert.NewStore()
 	recent := Reference
 	store.DigestAt = &recent
@@ -930,9 +951,7 @@ func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
 	queue := slices.Clone(store.Outbox)
 	store.Settle(queue, slices.Repeat([]bool{true}, len(queue)), Reference)
 	want := engine.View(store, subjects, s.Cluster.Cluster.Name, Reference)
-	if !reflect.DeepEqual(encoded(t, v), encoded(t, want)) {
-		t.Errorf("the set holds\n%v\nthe engine gives\n%v", encoded(t, v), encoded(t, want))
-	}
+	testkit.SamePlain(t, "the view of the set", v, want)
 	seen := map[alert.State]bool{}
 	for _, r := range v.Rules {
 		seen[r.State] = true
@@ -943,7 +962,5 @@ func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
 }
 
 func TestTheSetAlertsUnsetIsAnObserverStartedWithoutAlerts(t *testing.T) {
-	if got, want := encoded(t, load(t, StateAlertsUnset).AlertRules), encoded(t, alert.Unset()); !reflect.DeepEqual(got, want) {
-		t.Errorf("the set holds\n%v\nthe observer gives\n%v", got, want)
-	}
+	testkit.SamePlain(t, "the alerts of the set", load(t, StateAlertsUnset).AlertRules, alert.Unset())
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -46,12 +47,12 @@ func TestEachBuilderOfACommandQuotesItsValues(t *testing.T) {
 	for _, name := range builders {
 		if line, ok := builder[name]; !ok {
 			t.Errorf("the scripts have no builder %s", name)
-		} else if !strings.Contains(line, "shq(") {
-			t.Errorf("the builder %s puts a value in a command with no shq(): %s", name, line)
+		} else {
+			mustHold(t, "the builder "+name, line, "shq(")
 		}
 	}
 	// A line that is no builder writes a command with the file of the record and a quoted word only.
-	command := regexp.MustCompile("`((?:strata (?:compare|behind|verify)|scripts/ci/observer-records\\.sh)[^`]*)`")
+	command := regexp.MustCompile("`((?:strata (?:compare|behind|verify)|" + regexp.QuoteMeta(testkit.RecordsTool) + ")[^`]*)`")
 	for _, l := range linesOf(script) {
 		if startsBuilder(strings.TrimSpace(l)) {
 			continue
@@ -119,30 +120,19 @@ func TestNoTextOfThePageSaysBehindForANewerVersion(t *testing.T) {
 // The check of a copy of this cluster writes the badge of "same-content" in the words of the book, "Same content", in the card of the
 // versions and in the card "Check this yourself". It is not a drift, and it does not read OK.
 func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
-	book := strings.Join(strings.Fields(string(readFile(t, "../../../docs/src/development/observer-api.md"))), " ")
+	book := unwrapped(string(testkit.ReadFile(t, serverPage)))
 	mustHold(t, "observer-api.md", book, "`same-content` reads \"Same content\" on the row of the cluster copy.")
-	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": func(raw []byte) []byte {
-		var v api.ProfilesView
-		if err := devdata.Decode(raw, &v); err != nil {
-			t.Fatal(err)
-		}
+	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i := range v.Profiles {
 			if v.Profiles[i].ClusterCopy != nil {
 				v.Profiles[i].ClusterCopy.Status = model.CopySameContent
 			}
 		}
-		return mustJSON(t, v)
-	}})
-	const same = `<span class="badge g">Same content</span>`
-	page := pagesOf(t, dir, "#p-"+dexSubject)[0]
+	})})
+	same := badge("g", "Same content")
+	page := pagesOf(t, dir, fredHash)[0]
 	mustHold(t, "the card of the versions", page, `<div class="h">This cluster's copy in Palette `+same+`</div>`)
-	var answer string
-	for _, r := range termRows(t, page) {
-		if r.question == "Does this cluster still run the record?" {
-			answer = r.answer
-		}
-	}
-	if answer != same {
+	if answer := rowAsking(t, page, qClusterRuns).answer; answer != same {
 		t.Errorf("the card Check this yourself says %q for the copy, want %q", answer, same)
 	}
 }
@@ -150,20 +140,21 @@ func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
 // The note of a finding about a published version that changed agrees with the use case "A published version is edited in place": the
 // book gives the reason, so the note says not to repair the version in place, and to publish a new version through review.
 func TestTheNoteOfAFindingAgreesWithTheUseCaseOfTheEditInPlace(t *testing.T) {
-	useCase := strings.Join(strings.Fields(string(readFile(t, "../../../docs/src/use-cases/edited-in-place.md"))), " ")
+	useCase := unwrapped(string(testkit.ReadFile(t, "../../../docs/src/use-cases/edited-in-place.md")))
 	script := readScripts(t)
-	for _, sentence := range []string{
-		"Do not repair the edited version in place: that is a second edit.",
-		"Publish a new version with the change through review, and move the clusters to it.",
-	} {
+	const (
+		noRepair   = "Do not repair the edited version in place: that is a second edit."
+		publishNew = "Publish a new version with the change through review, and move the clusters to it."
+		restore    = "Restore the version"
+	)
+	for _, sentence := range []string{noRepair, publishNew} {
 		mustHold(t, "the use case", useCase, sentence)
 		mustHold(t, "the scripts", script, sentence)
 	}
-	mustNotHold(t, "the scripts", script, "Restore the version first")
-	mustNotHold(t, "the use case", useCase, "Restore the version first")
-	page := shown(t, devdata.StateOK, "#p-"+dexSubject)[0]
-	mustHold(t, "the profile", page, `<div class="note r small"><b>What to do.</b> Do not repair the edited version in place: that is a second edit. `+
-		`Publish a new version with the change through review, and move the clusters to it. A new cluster gets this edit at once. `+
+	mustNotHold(t, "the scripts", script, restore)
+	mustNotHold(t, "the use case", useCase, restore)
+	page := shown(t, devdata.StateOK, fredHash)[0]
+	mustHold(t, "the profile", page, `<div class="note r small"><b>What to do.</b> `+noRepair+` `+publishNew+` A new cluster gets this edit at once. `+
 		`The finding clears when the version goes back to its record.`)
-	mustNotHold(t, "the profile", page, "Restore the version")
+	mustNotHold(t, "the profile", page, restore)
 }

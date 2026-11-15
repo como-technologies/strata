@@ -1,35 +1,23 @@
 package web
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
 const (
-	barneyHash = "#p-barney-base@1.5.0"
-	ubuntuHash = "#k-barney-base@1.5.0/os/ubuntu-aws"
-	ubuntuSide = "side-barney-base@1.5.0-os/ubuntu-aws"
+	barneyHash = "#p-" + testkit.BaseProfile
+	ubuntuHash = "#k-" + testkit.BaseProfile + "/" + testkit.UbuntuAWSKey
+	// unchangedWords say that the published version of a profile is the same as its record.
+	unchangedWords = "Unchanged since the record"
 )
 
-// editProfiles changes the profiles of a set.
-func editProfiles(t *testing.T, change func(*api.ProfilesView)) func([]byte) []byte {
-	return func(raw []byte) []byte {
-		var v api.ProfilesView
-		if err := devdata.Decode(raw, &v); err != nil {
-			t.Fatal(err)
-		}
-		change(&v)
-		out, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
-}
+// ubuntuSide is the list of the sides of the pack ubuntu-aws of barney-base@1.5.0.
+var ubuntuSide = sideSelect(testkit.BaseProfile, testkit.UbuntuAWSKey)
 
 // carriedSet is the set read-error, where the last read of barney-base@1.5.0 failed in part and the cause
 // read-error names the profile and its packs. The summary keeps the last good answer of the part, and it
@@ -37,7 +25,7 @@ func editProfiles(t *testing.T, change func(*api.ProfilesView)) func([]byte) []b
 // and not not-checked. This copy also says that the cluster copy is the same as the record.
 func carriedSet(t *testing.T) string {
 	t.Helper()
-	return writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"profiles.json": editProfiles(t, func(v *api.ProfilesView) {
+	return writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i, p := range v.Profiles {
 			if p.Name == "barney-base" {
 				v.Profiles[i].ClusterCopy = &model.ClusterCopy{Status: model.CopySame, RootB: p.Published.RootRecorded}
@@ -50,11 +38,11 @@ func carriedSet(t *testing.T) string {
 // it is no "Identical", no "Undisturbed", and no "Same", also when the pack has a newer version.
 func TestACarriedAnswerOnAPackWithANewerVersionIsNotIdenticalUndisturbedOrSame(t *testing.T) {
 	dir := carriedSet(t)
-	for _, side := range []string{"published", "cluster"} {
+	for _, side := range []string{string(model.SidePublished), string(model.SideCluster)} {
 		t.Run(side, func(t *testing.T) {
-			page := pageWith(t, dir, "scratch", ubuntuHash, `S.side["`+ubuntuSide+`"] = "`+side+`"`)
-			mustHold(t, side, page, `<option value="`+side+`" selected>`, "Part of this layer is hidden", "Strata could not read the record.")
-			mustNotHold(t, side, page, "Identical", "Undisturbed", `<b class="ok">Same</b>`, "tone-calm")
+			page := pageWith(t, dir, scratch, ubuntuHash, `S.side["`+ubuntuSide+`"] = "`+side+`"`)
+			mustHold(t, side, page, `<option value="`+side+`" selected>`, hiddenTitle, "Strata could not read the record.")
+			mustNotHold(t, side, page, "Identical", "Undisturbed", sameBadge, "tone-calm")
 		})
 	}
 }
@@ -63,11 +51,11 @@ func TestACarriedAnswerOnAPackWithANewerVersionIsNotIdenticalUndisturbedOrSame(t
 func TestACarriedAnswerIsNoOKOnTheProfilePageAndInCheckThisYourself(t *testing.T) {
 	dir := carriedSet(t)
 	for _, page := range pagesOf(t, dir, barneyHash, ubuntuHash) {
-		mustNotHold(t, "the page", page, "Unchanged since the record", "Same content")
-		for _, question := range []string{"Does Palette still have this version?", "Does this cluster still run the record?", "What changed?"} {
-			row := rowWith(t, page, question)
-			mustNotHold(t, question, row, `<span class="badge g">`)
-			mustHold(t, question, row, `<span class="badge y">`)
+		mustNotHold(t, "the page", page, unchangedWords, "Same content")
+		for _, question := range []string{qPaletteHas, qClusterRuns, "What changed?"} {
+			answer := rowAsking(t, page, question).answer
+			mustNotHold(t, question, answer, badgeOf("g"))
+			mustHold(t, question, answer, badgeOf("y"))
 		}
 	}
 }
@@ -76,6 +64,6 @@ func TestACarriedAnswerIsNoOKOnTheProfilePageAndInCheckThisYourself(t *testing.T
 func TestAProfileWithNoCauseKeepsTheWordsOfItsSides(t *testing.T) {
 	dir := carriedSet(t)
 	page := pagesOf(t, dir, "#p-bambam-secrets@2.0.1")[0]
-	mustHold(t, "the profile", page, "Unchanged since the record")
-	mustHold(t, "the row", rowWith(t, page, "Does Palette still have this version?"), `<span class="badge g">OK</span>`)
+	mustHold(t, "the profile", page, unchangedWords)
+	mustHold(t, "the row", rowAsking(t, page, qPaletteHas).answer, badge("g", "OK"))
 }

@@ -118,11 +118,9 @@ func TestAChangeOfTheRecordsStartsAContentCycle(t *testing.T) {
 		return w.count(runner.CmdVerify) == 1 && w.count(runner.CmdBehind) == 1
 	})
 	// the kubelet changes a mounted Secret in one step, so the test writes a new file and renames it
-	newMeta := filepath.Join(t.TempDir(), "meta.json")
-	if err := os.WriteFile(newMeta, []byte(`{"baseline":"approved","revision":"5f2d8b3c"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(newMeta, filepath.Join(r.records, "meta.json")); err != nil {
+	next := t.TempDir()
+	testkit.WriteMeta(t, next, testkit.ApprovedMeta(testkit.NewRevision))
+	if err := os.Rename(filepath.Join(next, testkit.MetaFile), filepath.Join(r.records, testkit.MetaFile)); err != nil {
 		t.Fatal(err)
 	}
 	// a change during a cycle starts one more cycle after it, so the count can pass 2
@@ -131,9 +129,7 @@ func TestAChangeOfTheRecordsStartsAContentCycle(t *testing.T) {
 	if n := w.count(runner.CmdBehind); n != 1 {
 		t.Errorf("the change ran %d behinds", n)
 	}
-	if !strings.Contains(r.log.String(), "records changed") {
-		t.Errorf("the log:\n%s", r.log.String())
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "records changed")
 }
 
 // The look at the records compares with the mark that Run took before the first content cycle, and not
@@ -144,7 +140,7 @@ func TestTheLookAtTheRecordsComparesWithTheMarkOfTheStartOfRun(t *testing.T) {
 	o := r.observer(&world{})
 	o.recordsPoll = time.Millisecond
 	mark := baseline.Mark(r.records)
-	r.meta(`{"baseline":"approved","revision":"5f2d8b3c"}`)
+	r.meta(testkit.ApprovedMeta(testkit.NewRevision))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { o.watchRecords(ctx, mark); close(done) }()
@@ -156,19 +152,13 @@ func TestTheLookAtTheRecordsComparesWithTheMarkOfTheStartOfRun(t *testing.T) {
 // The versions cycle runs `behind` on each record by itself, so the progress counts the records.
 func TestTheVersionsCycleRunsBehindOnEachRecord(t *testing.T) {
 	r, w := withBehind(t)
-	r.record("aws-stack", "1.1.0", "k8s/kubernetes")
+	r.record("aws-stack", "1.1.0", testkit.KubernetesKey)
 	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	w.mu.Lock()
+	versions(t, o)
 	var files [][]string
-	for _, c := range w.calls {
-		if c[0] == runner.CmdBehind {
-			files = append(files, slices.DeleteFunc(slices.Clone(c[1:]), func(a string) bool { return strings.HasPrefix(a, "-") }))
-		}
+	for _, c := range w.behindCalls() {
+		files = append(files, slices.DeleteFunc(slices.Clone(c[1:]), func(a string) bool { return strings.HasPrefix(a, "-") }))
 	}
-	w.mu.Unlock()
 	if len(files) != 2 || len(files[0]) != 1 || len(files[1]) != 1 || files[0][0] == files[1][0] {
 		t.Fatalf("behind ran on %v", files)
 	}
@@ -210,7 +200,7 @@ func TestMergeBehindKeepsOnePinForEachKeyWithEachRecordThatPinsIt(t *testing.T) 
 		}
 		by = append(by, strings.Join(subjects, ","))
 	}
-	if !slices.Equal(keys, []string{"kubernetes@1.36.2#", "kubernetes@1.36.2#1.36.x", "ubuntu-aws@22.04#"}) {
+	if !slices.Equal(keys, []string{testkit.KubernetesTo + "#", testkit.KubernetesTo + "#1.36.x", "ubuntu-aws@22.04#"}) {
 		t.Errorf("keys %v", keys)
 	}
 	if !slices.Equal(by, []string{"a@1", "b@1", "a@1,b@1"}) {
@@ -234,11 +224,11 @@ func TestMergeBehindKeepsOneProfileVersionForEachSubjectWithEachRecordThatHoldsI
 		return p
 	}
 	a := docs.Behind{Schema: docs.BehindSchema, Profiles: []docs.ProfilePin{
-		held("barney-addons", "1.3.1", "barney-addons@1.3.1", true),
+		held("barney-addons", "1.3.1", testkit.BarneyAddons, true),
 	}}
 	b := docs.Behind{Schema: docs.BehindSchema, Profiles: []docs.ProfilePin{
-		held("barney-base", "1.5.0", "barney-base@1.5.0", false),
-		held("barney-addons", "1.3.1", "barney-addons@1.3.1", false),
+		held("barney-base", "1.5.0", testkit.BaseProfile, false),
+		held("barney-addons", "1.3.1", testkit.BarneyAddons, false),
 	}}
 	got := mergeBehind([]docs.Behind{a, b}).Profiles
 	if len(got) != 2 || got[0].Name != "barney-addons" || got[1].Name != "barney-base" {
@@ -266,9 +256,9 @@ func TestMergeBehindKeepsTheCarriersOfEachAnswer(t *testing.T) {
 			Behind: err == nil, Error: err, Carriers: carriers}
 	}
 	answers := []docs.Behind{
-		{Schema: docs.BehindSchema, Pins: []docs.Pin{pin("barney-addons@1.3.1", failed, carrier("barney-addons", "1.3.1", "", failed))}},
-		{Schema: docs.BehindSchema, Pins: []docs.Pin{pin("barney-addons@1.3.0", nil, carrier("barney-addons", "1.3.0", "", nil))}},
-		{Schema: docs.BehindSchema, Pins: []docs.Pin{pin("barney-addons@1.3.1", nil, carrier("barney-addons", "1.3.1", "1.4.0", nil))}},
+		{Schema: docs.BehindSchema, Pins: []docs.Pin{pin(testkit.BarneyAddons, failed, carrier("barney-addons", "1.3.1", "", failed))}},
+		{Schema: docs.BehindSchema, Pins: []docs.Pin{pin(testkit.BarneyAddonsOld, nil, carrier("barney-addons", "1.3.0", "", nil))}},
+		{Schema: docs.BehindSchema, Pins: []docs.Pin{pin(testkit.BarneyAddons, nil, carrier("barney-addons", "1.3.1", "1.4.0", nil))}},
 	}
 	got := mergeBehind(answers).Pins
 	if len(got) != 1 || got[0].Error != nil {
@@ -282,7 +272,7 @@ func TestMergeBehindKeepsTheCarriersOfEachAnswer(t *testing.T) {
 		}
 		named = append(named, fmt.Sprintf("%s@%s:%s:%v", c.Profile, c.Version, by, c.Error != nil))
 	}
-	if want := []string{"barney-addons@1.3.1:1.4.0:false", "barney-addons@1.3.0:none:false"}; !slices.Equal(named, want) {
+	if want := []string{testkit.BarneyAddons + ":1.4.0:false", testkit.BarneyAddonsOld + ":none:false"}; !slices.Equal(named, want) {
 		t.Errorf("carriers %v, want %v", named, want)
 	}
 }

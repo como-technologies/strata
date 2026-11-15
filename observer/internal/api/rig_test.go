@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -36,13 +35,34 @@ const (
 	sentinelText = "SENTINEL-TEXT"
 )
 
-// The paths of the routes, with the profile aws-stack@1.1.0 of testdata/.
+// compareFixture is the fixture of the compare of a record with the cluster.
+const compareFixture = "compare-cluster.json"
+
+// csiChart starts the path of a value of the chart of the pack csi-aws-ebs. replicaPath is the path of the setting that
+// the fixtures change, after the chart.
 const (
-	pathPublished = "/v1/packs/aws-stack@1.1.0/csi/csi-aws-ebs/diff?side=published"
-	pathCluster   = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=cluster"
-	pathNewer     = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=newer"
-	pathAsk       = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/ask"
+	csiChart    = "charts.aws-ebs-csi-driver."
+	replicaPath = "controller.replicaCount"
 )
+
+// noSuchSide names a side of a diff that does not exist, in the names of the cases.
+const noSuchSide = "a side that does not exist"
+
+// The paths of the routes, with the profile aws-stack@1.1.0 of testdata/. awsPacks starts the route of a pack of the
+// profile, and kubernetesDiff is the route of the diff of its pack kubernetes, with no side.
+const (
+	awsPacks       = "/v1/packs/" + testkit.AWSStackProfile
+	kubernetesDiff = awsPacks + testkit.KubernetesDiff
+	pathHealth     = "/healthz"
+	pathPublished  = awsPacks + "/" + testkit.CSIKey + "/diff?side=" + string(model.SidePublished)
+	pathCluster    = kubernetesDiff + "?side=" + string(model.SideCluster)
+	pathNewer      = kubernetesDiff + "?side=" + string(model.SideNewer)
+	// pathProfileByName names the profile with no version.
+	pathProfileByName = "/v1/profiles/aws-stack"
+)
+
+// pathAsk is the route of the question to Palette for the move of the pack kubernetes of aws-stack@1.1.0.
+var pathAsk = testkit.AskPath(testkit.AWSStackProfile, testkit.KubernetesKey)
 
 // fixtures copies testdata/ to a directory of the test. The times of the documents are relative to
 // the clock, so the events of the last 7 days are in the window.
@@ -60,13 +80,8 @@ func fixtures(t *testing.T) string {
 		t.Fatal(err)
 	}
 	for _, e := range list {
-		raw, err := os.ReadFile(filepath.Join("testdata", e.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, e.Name()), []byte(times.Replace(string(raw))), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		raw := testkit.ReadFile(t, filepath.Join("testdata", e.Name()))
+		testkit.WriteIn(t, dir, e.Name(), times.Replace(string(raw)))
 	}
 	return dir
 }
@@ -91,6 +106,9 @@ const (
 	askNoError = "ask-no-error.json"
 	askRefuses = "ask-refuses.json"
 	ask403     = "ask-403.json"
+	// askChecks holds the checks of the update that strata gives beside the answer of Palette. The registry gained
+	// 1.37.0 after the versions cycle, and the move to it skips a minor version.
+	askChecks = "ask-checks.json"
 )
 
 // answer prints a fixture and exits with the code exit.
@@ -118,7 +136,7 @@ func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.
 		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), res.Stdout, 0o600)
 	case runner.CmdCompare:
 		if !strings.HasPrefix(args[1], "pack:") {
-			return f.answer(1, "compare-cluster.json")
+			return f.answer(1, compareFixture)
 		}
 		f.moves++
 		if f.failMoves {
@@ -135,9 +153,9 @@ func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.
 		if f.failBehind {
 			return runner.Result{}, &runner.RunError{Kind: docs.KindAPI, Status: 500}
 		}
-		return f.answer(1, "behind.json")
+		return f.answer(1, testkit.BehindDoc)
 	}
-	return runner.Result{}, fmt.Errorf("the fake does not know %q", args[0])
+	return runner.Result{}, testkit.Unknown(args)
 }
 
 // questions gives the arguments of each question about a move that the fake got.
@@ -178,28 +196,16 @@ type rig struct {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{t: t, records: t.TempDir(), work: t.TempDir(), state: filepath.Join(t.TempDir(), "state"), log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
-	record, err := json.Marshal(map[string]any{
-		"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r1",
-		"source": map[string]any{"uid": "u1", "name": "aws-stack", "version": "1.1.0", "type": "cluster"},
-		"packs": []map[string]any{
-			{"key": "k8s/kubernetes", "layer": "k8s", "name": "kubernetes", "version": "1.35.3", "registryUid": "reg1", "images": []string{"a/b:1"}},
-			{"key": "csi/csi-aws-ebs", "layer": "csi", "name": "csi-aws-ebs", "version": "1.63.1", "registryUid": "reg1", "images": []string{"a/c@sha256:abc"}},
-		},
-		"variables": []map[string]any{{"name": "team", "value": sentinelVariable}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	testkit.WriteGzip(t, r.records, "aws-stack@1.1.0.json.gz", string(record))
-	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(`{"baseline":"approved","revision":"4e1c7a2"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	d := testkit.NewRigDirs(t)
+	r := &rig{t: t, records: d.Records, work: d.Work, state: d.State, log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
+	packs := []map[string]any{testkit.RigPack(testkit.KubernetesKey, "1.35.3", testkit.ImageRef), testkit.RigPack(testkit.CSIKey, "1.63.1", testkit.DigestImage)}
+	testkit.WriteRecord(t, r.records, "aws-stack", "1.1.0", packs, sentinelVariable)
+	testkit.WriteMeta(t, r.records, testkit.ApprovedMeta(testkit.Revision))
 	return r
 }
 
 func (r *rig) config() check.Config {
-	return check.Config{ClusterUID: "c1", Records: r.records, Work: r.work, State: r.state, ContentEvery: 15 * time.Minute, VersionsEvery: 6 * time.Hour}
+	return check.Config{ClusterUID: testkit.PaymentsUID, Records: r.records, Work: r.work, State: r.state, ContentEvery: testkit.ContentEvery, VersionsEvery: testkit.VersionsEvery}
 }
 
 // observer makes an observer on the directories. A second call is a restart of the process.
@@ -212,36 +218,32 @@ func (r *rig) observer(s check.Strata) *check.Observer {
 	return o
 }
 
-// imageDigest is the digest that the pod of oneImage runs.
-const imageDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-
-// oneImage is a read of the pods with one pod that runs a/b:1, the image that the record names.
+// oneImage is a read of the pods with one pod that runs a/b:1, the image that the record names, with testkit.Digest1.
 var oneImage = check.PodsFunc(func(context.Context) ([]kube.Container, error) {
-	return []kube.Container{{Pod: "ns/web-1", Image: "a/b:1", ImageID: "a/b@" + imageDigest}}, nil
+	return []kube.Container{{Pod: "ns/web-1", Image: testkit.ImageRef, ImageID: testkit.ImageRan}}, nil
 })
 
 // cycled makes an observer that ran one content cycle and one versions cycle.
 func (r *rig) cycled(s check.Strata) *check.Observer {
 	r.t.Helper()
 	o := r.observer(s)
-	if _, err := o.Once(context.Background()); err != nil {
-		r.t.Fatalf("the cycles failed: %v\n%s", err, r.log.String())
-	}
+	r.once(o)
 	return o
 }
 
-// get makes a request to the handler. The Host is a loopback address, as a port-forward gives.
-func get(h http.Handler, path string) *httptest.ResponseRecorder {
-	return do(h, http.MethodGet, path, "127.0.0.1:8080")
+// once runs one content cycle and one versions cycle of o, and gives the summary. It fails the test when a cycle
+// fails.
+func (r *rig) once(o *check.Observer) model.Summary {
+	r.t.Helper()
+	s, err := o.Once(context.Background())
+	if err != nil {
+		r.t.Fatalf(testkit.CyclesFailed+"\n%s", err, r.log.String())
+	}
+	return s
 }
 
-func do(h http.Handler, method, path, host string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, nil)
-	req.Host = host
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	return rec
-}
+// get makes a request to the handler with testkit.Get. The Host is a loopback address, as a port-forward gives.
+var get = testkit.Get
 
 func handlerOf(src Source) http.Handler {
 	return (&Server{Source: src}).Handler()
@@ -250,9 +252,7 @@ func handlerOf(src Source) http.Handler {
 // decode reads the body of an answer into v.
 func decode(t *testing.T, rec *httptest.ResponseRecorder, v any) {
 	t.Helper()
-	if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
-		t.Fatalf("status %d, body %q: %v", rec.Code, rec.Body.String(), err)
-	}
+	testkit.Decode(t, fmt.Sprintf("the body of the answer of status %d", rec.Code), rec.Body.Bytes(), v)
 }
 
 // stub is a Source with a fixed summary and no detail.

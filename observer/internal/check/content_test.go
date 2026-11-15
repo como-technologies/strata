@@ -2,14 +2,13 @@ package check
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
@@ -19,33 +18,33 @@ import (
 // drift reads the real `verify` document that the stand-in gave for an edit in place.
 func drift(t *testing.T) docs.VerifyRow {
 	t.Helper()
-	raw, err := os.ReadFile("../docs/testdata/verify-summary-drift.json")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var s docs.VerifySummary
-	if err := json.Unmarshal(raw, &s); err != nil {
-		t.Fatal(err)
-	}
+	testkit.ReadDoc(t, testkit.DriftSummary, &s)
 	return s.Records[0]
+}
+
+// awsRecord writes the record of aws-stack 1.1.0 with the packs csi-aws-ebs and ubuntu. A test calls it again to
+// restore the record, as the pipeline does after it fixed the file.
+func awsRecord(r *rig) {
+	r.record("aws-stack", "1.1.0", testkit.CSIKey, testkit.UbuntuKey)
 }
 
 // oneRecord makes a world with one record, aws-stack@1.1.0, that the cluster runs.
 func oneRecord(t *testing.T, row docs.VerifyRow) (*rig, *world) {
 	t.Helper()
 	r := newRig(t)
-	r.record("aws-stack", "1.1.0", "csi/csi-aws-ebs", "os/ubuntu")
-	r.meta(`{"baseline":"approved","revision":"4e1c7a2"}`)
-	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: testkit.Cluster("payments", "aws-stack@1.1.0")}
+	awsRecord(r)
+	r.meta(testkit.ApprovedMeta(testkit.Revision))
+	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: testkit.Payments()}
 }
 
 // addPlatformAddons adds a second record that the cluster runs, platform-addons@1.0.0, with a good row.
 // A row that fails for one of the two records is a cause and not a failed cycle, because the other row is good.
 func addPlatformAddons(t *testing.T, r *rig, w *world) {
 	t.Helper()
-	r.record("platform-addons", "1.0.0", "addon/cert-manager")
+	r.record("platform-addons", "1.0.0", testkit.CertManagerKey)
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	w.cluster = testkit.Payments(testkit.AddonsProfile)
 }
 
 // twoRecords makes a world with the two records aws-stack@1.1.0 and platform-addons@1.0.0.
@@ -55,6 +54,12 @@ func twoRecords(t *testing.T) (*rig, *world) {
 	addPlatformAddons(t, r, w)
 	return r, w
 }
+
+// publishedCSI is the finding of a drift of the published version of csi-aws-ebs, as TestContentCases writes it.
+const publishedCSI = string(model.PublishedChanged) + " " + testkit.CSIKey
+
+// pageAndContent is the failure of a check of the page and of the content cycle.
+const pageAndContent = "page %q, content %+v"
 
 func changedPack(key string) docs.Pack {
 	// The pack holds the marker in a changed value, and in the unified text of the values and of a manifest.
@@ -74,40 +79,37 @@ func TestContentCases(t *testing.T) {
 	}{
 		{name: "no change", setup: func(t *testing.T, w *world) {}, copy: model.CopySame},
 		{name: "published changed with who", setup: func(t *testing.T, w *world) { w.rows[0] = drift(t) }, copy: model.CopySame,
-			want: []string{"published-changed csi/csi-aws-ebs"}, who: 1},
+			want: []string{publishedCSI}, who: 1},
 		{name: "published changed and the same on the cluster", setup: func(t *testing.T, w *world) {
 			w.rows[0] = drift(t)
-			w.compares = map[int]docs.Diff{0: {RootB: w.rows[0].RootLive, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
-		}, copy: model.CopyDiffers, want: []string{"published-changed csi/csi-aws-ebs"}, also: true, who: 1},
+			w.compares = map[int]docs.Diff{0: {RootB: w.rows[0].RootLive, Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
+		}, copy: model.CopyDiffers, want: []string{publishedCSI}, also: true, who: 1},
 		{name: "cluster differs only", setup: func(t *testing.T, w *world) {
-			w.compares = map[int]docs.Diff{0: {RootB: "e06b", Summary: docs.DiffSummary{MaxImpact: "cluster-wide"}, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
-		}, copy: model.CopyDiffers, want: []string{"cluster-differs csi/csi-aws-ebs"}},
+			w.compares = map[int]docs.Diff{0: {RootB: "e06b", Summary: docs.DiffSummary{MaxImpact: "cluster-wide"}, Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
+		}, copy: model.CopyDiffers, want: []string{string(model.ClusterDiffers) + " " + testkit.CSIKey}},
 		{name: "same content", setup: func(t *testing.T, w *world) {
-			w.compares = map[int]docs.Diff{0: {SameContent: true, Packs: []docs.Pack{{Key: "os/ubuntu", Status: docs.PackChanged}}}}
+			w.compares = map[int]docs.Diff{0: {SameContent: true, Packs: []docs.Pack{{Key: testkit.UbuntuKey, Status: docs.PackChanged}}}}
 		}, copy: model.CopySameContent},
 		{name: "image id changed with same true", setup: func(t *testing.T, w *world) {
-			w.compares = map[int]docs.Diff{0: {Same: true, SameContent: true, ImageIDsChanged: []docs.KeyOnly{{Key: "os/ubuntu"}}}}
-		}, copy: model.CopySame, want: []string{"image-id-changed os/ubuntu"}},
+			w.compares = map[int]docs.Diff{0: {Same: true, SameContent: true, ImageIDsChanged: []docs.KeyOnly{{Key: testkit.UbuntuKey}}}}
+		}, copy: model.CopySame, want: []string{string(model.ImageIDChanged) + " " + testkit.UbuntuKey}},
 		{name: "overwritten", setup: func(t *testing.T, w *world) {
 			w.rows[0].Status = docs.VerifyDrifted
-			w.rows[0].Diff = &docs.Diff{Verify: &docs.Verify{OverwrittenBy: "aws-stack@1.1.1"}}
-		}, copy: model.CopySame, want: []string{"overwritten "}},
+			w.rows[0].Diff = &docs.Diff{Verify: &docs.Verify{OverwrittenBy: testkit.AWSStackNewer}}
+		}, copy: model.CopySame, want: []string{string(model.Overwritten) + " "}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r, w := oneRecord(t, unchanged())
 			c.setup(t, w)
 			o := r.observer(w)
-			s, err := o.Once(context.Background())
-			if err != nil {
-				t.Fatalf("error %v", err)
-			}
+			s := once(t, o)
 			var got []string
 			for _, f := range s.Findings {
 				got = append(got, string(f.Kind)+" "+strings.Join(f.Packs, ","))
 			}
 			if !slices.Equal(got, c.want) {
-				t.Fatalf("findings %v, want %v", got, c.want)
+				t.Fatalf(testkit.FindingsWant, got, c.want)
 			}
 			if s.Profiles[0].ClusterCopy.Status != c.copy {
 				t.Errorf("clusterCopy %+v", s.Profiles[0].ClusterCopy)
@@ -115,7 +117,7 @@ func TestContentCases(t *testing.T) {
 			if len(s.Findings) > 0 && (s.Findings[0].AlsoOnCluster != c.also || len(s.Findings[0].Who) != c.who) {
 				t.Errorf("finding %+v", s.Findings[0])
 			}
-			if s.Page != model.PageOK || s.Cluster.Name != "payments" || s.StrataVersion != "0.29.0" {
+			if s.Page != model.PageOK || s.Cluster.Name != testkit.PaymentsName || s.StrataVersion != "0.29.0" {
 				t.Errorf("page %q, cluster %+v, strata %q", s.Page, s.Cluster, s.StrataVersion)
 			}
 		})
@@ -124,9 +126,9 @@ func TestContentCases(t *testing.T) {
 
 func TestARecordForAVersionThatTheClusterDoesNotRunHasNoSide(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	r.record("aws-stack", "1.0.0", "csi/csi-aws-ebs")
+	r.record("aws-stack", "1.0.0", testkit.CSIKey)
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	s, _ := r.observer(w).Once(context.Background())
+	s := once(t, r.observer(w))
 	// The files come in the order of their names: 1.0.0 before 1.1.0.
 	if len(s.Profiles) != 2 || s.Profiles[0].Version != "1.0.0" || s.Profiles[0].ClusterCopy.Status != model.CopyNotOnThisCluster || s.Profiles[1].ClusterCopy.Status != model.CopySame {
 		t.Fatalf("profiles %+v", s.Profiles)
@@ -138,8 +140,8 @@ func TestARecordForAVersionThatTheClusterDoesNotRunHasNoSide(t *testing.T) {
 
 func TestAProfileWithNoRecordIsACauseAndAddsNoPack(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
-	s, _ := r.observer(w).Once(context.Background())
+	w.cluster = testkit.Payments(testkit.AddonsProfile)
+	s := once(t, r.observer(w))
 	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.NoRecord || s.Profiles[1].Status != model.StatusNoRecord || s.Counts.Packs != 2 {
 		t.Errorf("notChecked %+v, profiles %+v, counts %+v", s.NotChecked, s.Profiles, s.Counts)
 	}
@@ -147,12 +149,12 @@ func TestAProfileWithNoRecordIsACauseAndAddsNoPack(t *testing.T) {
 
 func TestAnOlderToolVersionNeedsARebaseline(t *testing.T) {
 	r, w := oneRecord(t, drift(t))
-	s, _ := r.observer(w).Once(context.Background())
+	s := once(t, r.observer(w))
 	if len(s.Findings) != 1 || !s.Findings[0].ReBaselineNeeded {
 		t.Fatalf("findings %+v", s.Findings)
 	}
 	w.verifyTool = "0.28.3"
-	s, _ = r.observer(w).Once(context.Background())
+	s = once(t, r.observer(w))
 	if len(s.Findings) != 1 || s.Findings[0].ReBaselineNeeded {
 		t.Fatalf("findings %+v", s.Findings)
 	}
@@ -160,33 +162,30 @@ func TestAnOlderToolVersionNeedsARebaseline(t *testing.T) {
 
 func TestAnUnreadableRecordIsACauseAndStopsNoOther(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	if err := os.WriteFile(filepath.Join(r.records, "zz.json.gz"), []byte("not gzip"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	s, _ := r.observer(w).Once(context.Background())
-	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.ReadError || s.NotChecked[0].Profiles[0] != "zz.json.gz" || s.Records.Count != 1 || s.Page != model.PageOK {
+	testkit.WriteIn(t, r.records, "zz.json.gz", "not gzip")
+	s := once(t, r.observer(w))
+	readErrorNames(t, s, "zz.json.gz")
+	if len(s.NotChecked) != 1 || s.Records.Count != 1 || s.Page != model.PageOK {
 		t.Errorf("summary %+v", s)
 	}
 }
 
 func TestARowWithAnErrorBesideGoodRowsIsACauseAndNotAFailedCycle(t *testing.T) {
 	r, w := twoRecords(t)
-	w.rows[1] = docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 404}}
-	s, _ := r.observer(w).Once(context.Background())
-	if s.Content.FailedRuns != 0 || len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.ReadError || s.NotChecked[0].Profiles[0] != "platform-addons@1.0.0" {
+	w.rows[1] = testkit.ErrorRow(docs.KindAPI, 404)
+	s := once(t, r.observer(w))
+	readErrorNames(t, s, testkit.AddonsProfile)
+	if s.Content.FailedRuns != 0 || len(s.NotChecked) != 1 {
 		t.Errorf("content %+v, notChecked %+v", s.Content, s.NotChecked)
 	}
 }
 
 func TestNoRecordRunsNoVerifyAndNoBehind(t *testing.T) {
 	r := newRig(t)
-	w := &world{cluster: testkit.Cluster("payments", "aws-stack@1.1.0")}
-	s, err := r.observer(w).Once(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s.Page != model.PageNoRecords || w.count(runner.CmdVerify) != 0 || w.count(runner.CmdBehind) != 0 || s.Records.Baseline != "unknown" || s.Records.Count != 0 {
-		t.Errorf("page %q, verify %d, behind %d, records %+v", s.Page, w.count(runner.CmdVerify), w.count(runner.CmdBehind), s.Records)
+	w := &world{cluster: testkit.Payments()}
+	s := once(t, r.observer(w))
+	if s.Page != model.PageNoRecords || w.count(runner.CmdVerify) != 0 || w.count(runner.CmdBehind) != 0 || s.Records.Baseline != baseline.Unknown || s.Records.Count != 0 {
+		t.Errorf("page %q, "+verifyBehind+", records %+v", s.Page, w.count(runner.CmdVerify), w.count(runner.CmdBehind), s.Records)
 	}
 }
 
@@ -205,7 +204,7 @@ func TestAMissingRecordsDirectoryFailsTheCycleWithTheKindIO(t *testing.T) {
 }
 
 func TestACycleFailsWhenEachRowOfTheVerifyHasAnError(t *testing.T) {
-	r, w := oneRecord(t, docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindTransport}})
+	r, w := oneRecord(t, testkit.ErrorRow(docs.KindTransport, 0))
 	w.verifyExit = 2
 	o := r.observer(w)
 	if err := o.RunContent(context.Background()); err == nil {
@@ -235,32 +234,28 @@ func TestAVerifyThatExitsTwoWithNoDocumentGivesTheKindOfItsError(t *testing.T) {
 func TestACycleThatFailsTwiceWithStatus401IsLost(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	good := o.Summary()
 	w.verifyErr = &runner.RunError{Kind: docs.KindAPI, Status: 401}
 	_ = o.RunContent(context.Background())
 	if s := o.Summary(); s.Page != model.PageOK || s.Content.FailedRuns != 1 || s.Profiles[0].Name != "aws-stack" {
-		t.Errorf("after one failure: page %q, content %+v", s.Page, s.Content)
+		t.Errorf("after one failure: "+pageAndContent, s.Page, s.Content)
 	}
 	_ = o.RunContent(context.Background())
 	s := o.Summary()
 	if s.Page != model.PageLost || s.Content.FailedRuns != 2 || len(s.Profiles) != 1 || s.Content.CheckedAt == nil || !s.Content.CheckedAt.Equal(*good.Content.CheckedAt) {
-		t.Errorf("page %q, content %+v", s.Page, s.Content)
+		t.Errorf(pageAndContent, s.Page, s.Content)
 	}
 	// A good cycle sets the failed runs to 0.
 	w.verifyErr = nil
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	if s := o.Summary(); s.Page != model.PageOK || s.Content.FailedRuns != 0 || s.Content.LastError != nil {
-		t.Errorf("page %q, content %+v", s.Page, s.Content)
+		t.Errorf(pageAndContent, s.Page, s.Content)
 	}
 }
 
 func TestAWrongKeyWithNoFinishedCycleIsLost(t *testing.T) {
-	r, w := oneRecord(t, docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 401}})
+	r, w := oneRecord(t, testkit.ErrorRow(docs.KindAPI, 401))
 	w.verifyExit = 2
 	o := r.observer(w)
 	_ = o.RunContent(context.Background())
@@ -281,13 +276,12 @@ func TestASnapshotThatFailsWithAPlainLineTakesTheKindOfTheRowsOfTheVerify(t *tes
 		rows []docs.VerifyRow
 		want string
 	}{
-		{"the rows name transport", []docs.VerifyRow{unchanged(), {Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindTransport}}}, docs.KindTransport},
+		{"the rows name transport", []docs.VerifyRow{unchanged(), testkit.ErrorRow(docs.KindTransport, 0)}, docs.KindTransport},
 		{"the rows are good", []docs.VerifyRow{unchanged(), unchanged()}, docs.KindUnknown},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r, w := oneRecord(t, unchanged())
-			r.record("platform-addons", "1.0.0", "addon/cert-manager")
+			r, w := twoRecords(t)
 			w.rows, w.clusterErr = c.rows, plain
 			o := r.observer(w)
 			_ = o.RunContent(context.Background())
@@ -306,7 +300,7 @@ func TestAWrongClusterUIDIsStaleWithTheLastError(t *testing.T) {
 	_ = o.RunContent(context.Background())
 	s := o.Summary()
 	if s.Page != model.PageStale || s.Content.LastError == nil || s.Content.LastError.Kind != docs.KindUnknown || s.Content.FailedRuns != 2 {
-		t.Errorf("page %q, content %+v", s.Page, s.Content)
+		t.Errorf(pageAndContent, s.Page, s.Content)
 	}
 }
 
@@ -332,9 +326,7 @@ func TestACycleFailsWhenEverySideFails(t *testing.T) {
 	w.sideErr = nil
 	fails := &failOnce{world: w, name: "aws-stack"}
 	o = r.observer(fails)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	s := o.Summary()
 	if s.Profiles[0].ClusterCopy.Status != model.CopyNotRead || s.Profiles[1].ClusterCopy.Status != model.CopySame {
 		t.Errorf("profiles %+v", s.Profiles)
@@ -356,70 +348,51 @@ func (f *failOnce) Run(ctx context.Context, dir string, args ...string) (runner.
 
 func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *testing.T) {
 	const reason = `HTTP 403: {"code":"AccessDenied"}`
-	r, w := oneRecord(t, unchanged())
-	w.rows[0] = drift(t)
+	r, w := oneRecord(t, drift(t))
 	// strata keeps the verdict, and gives the reason in place of the writes
 	w.rows[0].Diff.Verify.Who = nil
 	w.rows[0].Diff.Verify.WhoError = reason
 	w.rows[0].Name, w.rows[0].Version = "aws-stack", "1.1.0"
-	s, err := r.observer(w).Once(context.Background())
-	if err != nil {
-		t.Fatalf("error %v", err)
-	}
+	s := once(t, r.observer(w))
 	if len(s.Findings) != 1 || s.Findings[0].Kind != model.PublishedChanged || !s.Findings[0].WhoUnread || len(s.Findings[0].Who) != 0 {
 		t.Fatalf("findings %+v", s.Findings)
 	}
 	if len(s.NotChecked) != 0 || s.Content.FailedRuns != 0 || s.Counts.Drift != 1 {
 		t.Errorf("notChecked %+v, content %+v, counts %+v", s.NotChecked, s.Content, s.Counts)
 	}
-	raw, err := json.Marshal(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "AccessDenied") {
-		t.Errorf("the summary holds the text of the error: %s", raw)
-	}
+	raw := testkit.MustJSON(t, s)
+	testkit.HoldsNone(t, "the document", string(raw), "AccessDenied")
 	// the log of the pod names the status and the profile, and never the body of the answer
-	if line := r.log.String(); !strings.Contains(line, "the audit log could not be read") || !strings.Contains(line, `reason="HTTP 403"`) || !strings.Contains(line, "profile=aws-stack@1.1.0") {
-		t.Errorf("log %q", line)
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "the audit log could not be read", `reason="HTTP 403"`, "profile="+testkit.AWSStackProfile)
 }
 
 // The reason of strata is HTTP <status>: <body>, or the message of a request that did not complete.
 // The body can hold output of Palette, and the message can hold an address. So the line of the log
 // holds the status, or the words no answer, and never more of the text.
 func TestTheLineAboutAnUnreadAuditLogHoldsTheStatusAndNoOtherText(t *testing.T) {
+	const refusal = "HTTP 403: AUDIT-BODY-MARKER"
 	for _, c := range []struct{ name, whoError, want string }{
-		{"a refusal with a body", "HTTP 403: AUDIT-BODY-MARKER", `reason="HTTP 403"`},
+		{"a refusal with a body", refusal, `reason="HTTP 403"`},
 		{"a server error with a body", "HTTP 500: AUDIT-BODY-MARKER", `reason="HTTP 500"`},
 		{"a status with no body", "HTTP 502", `reason="HTTP 502"`},
 		{"a request that did not complete", "error sending request for url (https://AUDIT-BODY-MARKER.example/v1/audits)", `reason="no answer"`},
 		{"a status that has no three digits", "HTTP 4: AUDIT-BODY-MARKER", `reason="no answer"`},
-		{"a status that does not start the text", "the answer was HTTP 403: AUDIT-BODY-MARKER", `reason="no answer"`},
+		{"a status that does not start the text", "the answer was " + refusal, `reason="no answer"`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			r, w := oneRecord(t, unchanged())
-			w.rows[0] = drift(t)
+			r, w := oneRecord(t, drift(t))
 			w.rows[0].Diff.Verify.Who = nil
 			w.rows[0].Diff.Verify.WhoError = c.whoError
 			w.rows[0].Name, w.rows[0].Version = "aws-stack", "1.1.0"
-			if _, err := r.observer(w).Once(context.Background()); err != nil {
-				t.Fatalf("error %v", err)
-			}
-			if line := r.log.String(); strings.Contains(line, "AUDIT-BODY-MARKER") || !strings.Contains(line, c.want) {
-				t.Errorf("want %s, log %q", c.want, line)
-			}
+			once(t, r.observer(w))
+			testkit.HoldsAll(t, "the log", r.log.String(), c.want)
+			testkit.HoldsNone(t, "the log", r.log.String(), "AUDIT-BODY-MARKER")
 		})
 	}
 }
 
 func TestARecordWhoseAuditLogWasReadWritesNoLineAboutIt(t *testing.T) {
-	r, w := oneRecord(t, unchanged())
-	w.rows[0] = drift(t)
-	if _, err := r.observer(w).Once(context.Background()); err != nil {
-		t.Fatalf("error %v", err)
-	}
-	if strings.Contains(r.log.String(), "audit log") {
-		t.Errorf("log %q", r.log.String())
-	}
+	r, w := oneRecord(t, drift(t))
+	once(t, r.observer(w))
+	testkit.HoldsNone(t, "the log", r.log.String(), "audit log")
 }

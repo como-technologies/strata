@@ -2,10 +2,6 @@ package check
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -15,12 +11,6 @@ import (
 	"github.com/como-technologies/strata/observer/internal/kube"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
-)
-
-const (
-	imageRef = "a/b:1"
-	digest1  = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-	digest2  = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
 )
 
 // fakePods answers the read of the pods with a list or an error, and counts the calls.
@@ -46,7 +36,7 @@ func (f *fakePods) set(containers []kube.Container, err error) {
 
 // runs makes a container of a pod that runs the image of the records with the digest.
 func runs(pod, digest string) kube.Container {
-	return kube.Container{Pod: "ns/" + pod, Image: imageRef, ImageID: "a/b@" + digest}
+	return kube.Container{Pod: "ns/" + pod, Image: testkit.ImageRef, ImageID: testkit.ImageName + "@" + digest}
 }
 
 // podRig is a world with one record whose two packs name a/b:1, an observer that reads the pods, and
@@ -58,11 +48,33 @@ func podRig(t *testing.T, containers ...kube.Container) (*rig, *world, *Observer
 	return r, w, r.observer(w).WithPods(pods), pods
 }
 
+// findingsLeft is the failure of a check of the kinds of the findings that an event of a cycle leaves.
+const findingsLeft = "%s leaves the findings %v"
+
+// cycle runs a content cycle of o, and fails the test when it fails.
 func cycle(t *testing.T, o *Observer) {
 	t.Helper()
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatalf("the content cycle failed: %v", err)
 	}
+}
+
+// versions runs a versions cycle of o, and fails the test when it fails.
+func versions(t *testing.T, o *Observer) {
+	t.Helper()
+	if err := o.RunVersions(context.Background()); err != nil {
+		t.Fatalf("the versions cycle failed: %v", err)
+	}
+}
+
+// once runs a content cycle and a versions cycle of o, and gives the summary. It fails the test when a cycle fails.
+func once(t *testing.T, o *Observer) model.Summary {
+	t.Helper()
+	s, err := o.Once(context.Background())
+	if err != nil {
+		t.Fatalf(testkit.CyclesFailed, err)
+	}
+	return s
 }
 
 func imageKindsOf(s model.Summary) []model.Kind {
@@ -82,6 +94,12 @@ func readState(t *testing.T, r *rig) State {
 	return s
 }
 
+// stateText gives the text of the state file.
+func stateText(t *testing.T, r *rig) string {
+	t.Helper()
+	return testkit.StateText(t, r.state)
+}
+
 func TestWithoutPodsTheObserverReadsNoPodAndTheDocumentIsOff(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
 	o := r.observer(w)
@@ -98,7 +116,7 @@ func TestWithoutPodsTheObserverReadsNoPodAndTheDocumentIsOff(t *testing.T) {
 }
 
 func TestAGoodReadFillsTheDocumentAndTheStateKeepsTheFirstDigestByIdOnly(t *testing.T) {
-	r, _, o, pods := podRig(t, runs("web-1", digest1), runs("web-2", digest1))
+	r, _, o, pods := podRig(t, runs("web-1", testkit.Digest1), runs("web-2", testkit.Digest1))
 	cycle(t, o)
 	if pods.calls != 1 {
 		t.Errorf("%d reads in one cycle", pods.calls)
@@ -109,39 +127,31 @@ func TestAGoodReadFillsTheDocumentAndTheStateKeepsTheFirstDigestByIdOnly(t *test
 		t.Fatalf("document %+v", doc)
 	}
 	st := readState(t, r)
-	if st.Images.Revision != "4e1c7a2" || st.Images.First[model.ImageKey(imageRef)] != digest1 || len(st.Images.First) != 1 {
+	if st.Images.Revision != testkit.Revision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest1 || len(st.Images.First) != 1 {
 		t.Errorf("state %+v", st.Images)
 	}
-	raw, err := os.ReadFile(filepath.Join(r.state, stateFile))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, banned := range []string{imageRef, "web-1", "ns/"} {
-		if strings.Contains(string(raw), banned) {
-			t.Errorf("the state holds %q: %s", banned, raw)
-		}
-	}
+	testkit.StateHoldsNone(t, r.state, testkit.ImageRef, "web-1", "ns/")
 }
 
 func TestADigestOtherThanTheFirstIsImageMovedUntilTheDigestComesBack(t *testing.T) {
-	_, _, o, pods := podRig(t, runs("web-1", digest1))
+	_, _, o, pods := podRig(t, runs("web-1", testkit.Digest1))
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); len(got) != 0 {
 		t.Fatalf("the first sight makes findings %v", got)
 	}
-	pods.set([]kube.Container{runs("web-1", digest2)}, nil)
+	pods.set([]kube.Container{runs("web-1", testkit.Digest2)}, nil)
 	cycle(t, o)
 	s := o.Summary()
 	if got := imageKindsOf(s); !slices.Equal(got, []model.Kind{model.ImageMoved}) || s.Counts.Findings != 1 || s.Counts.Drift != 0 {
 		t.Fatalf("findings %v, counts %+v", got, s.Counts)
 	}
-	if f := s.Findings[0]; f.Profile != "aws-stack@1.1.0" || !slices.Equal(f.Packs, []string{"csi/csi-aws-ebs", "os/ubuntu"}) || !slices.Equal(f.Images, []string{imageRef}) {
+	if f := s.Findings[0]; f.Profile != testkit.AWSStackProfile || !slices.Equal(f.Packs, []string{testkit.CSIKey, testkit.UbuntuKey}) || !slices.Equal(f.Images, []string{testkit.ImageRef}) {
 		t.Errorf("finding %+v", f)
 	}
 	if doc := o.Observed(); doc.Counts.Changed != 1 || doc.Images[0].Status != model.ImageStatusMoved || doc.Images[0].Digests[0].Status != model.AnotherDigest {
 		t.Errorf("document %+v", doc)
 	}
-	pods.set([]kube.Container{runs("web-1", digest1)}, nil)
+	pods.set([]kube.Container{runs("web-1", testkit.Digest1)}, nil)
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); len(got) != 0 {
 		t.Errorf("the digest came back, and the findings are %v", got)
@@ -149,9 +159,9 @@ func TestADigestOtherThanTheFirstIsImageMovedUntilTheDigestComesBack(t *testing.
 }
 
 func TestTwoDigestsAtOneTimeAreImageSplit(t *testing.T) {
-	_, _, o, pods := podRig(t, runs("web-1", digest1))
+	_, _, o, pods := podRig(t, runs("web-1", testkit.Digest1))
 	cycle(t, o)
-	pods.set([]kube.Container{runs("web-1", digest1), runs("web-2", digest2)}, nil)
+	pods.set([]kube.Container{runs("web-1", testkit.Digest1), runs("web-2", testkit.Digest2)}, nil)
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageSplit}) {
 		t.Errorf("findings %v", got)
@@ -162,29 +172,29 @@ func TestTwoDigestsAtOneTimeAreImageSplit(t *testing.T) {
 }
 
 func TestANewRevisionOfTheRecordsResetsTheFirstDigest(t *testing.T) {
-	r, w, o, pods := podRig(t, runs("web-1", digest1))
+	r, w, o, pods := podRig(t, runs("web-1", testkit.Digest1))
 	cycle(t, o)
-	pods.set([]kube.Container{runs("web-1", digest2)}, nil)
+	pods.set([]kube.Container{runs("web-1", testkit.Digest2)}, nil)
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
 		t.Fatalf("findings %v", got)
 	}
-	r.meta(`{"baseline":"approved","revision":"5f2d8b1"}`)
+	r.meta(testkit.ApprovedMeta(testkit.NewRevision))
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); len(got) != 0 {
-		t.Errorf("a new revision leaves the findings %v", got)
+		t.Errorf(findingsLeft, "a new revision", got)
 	}
 	st := readState(t, r)
-	if st.Images.Revision != "5f2d8b1" || st.Images.First[model.ImageKey(imageRef)] != digest2 {
+	if st.Images.Revision != testkit.NewRevision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest2 {
 		t.Errorf("state %+v", st.Images)
 	}
 	_ = w
 }
 
 func TestARestartKeepsTheFirstDigestsOfTheState(t *testing.T) {
-	r, w, o, pods := podRig(t, runs("web-1", digest1))
+	r, w, o, pods := podRig(t, runs("web-1", testkit.Digest1))
 	cycle(t, o)
-	pods.set([]kube.Container{runs("web-1", digest2)}, nil)
+	pods.set([]kube.Container{runs("web-1", testkit.Digest2)}, nil)
 	again := r.restart(w).WithPods(pods)
 	cycle(t, again)
 	if got := imageKindsOf(again.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
@@ -193,8 +203,8 @@ func TestARestartKeepsTheFirstDigestsOfTheState(t *testing.T) {
 }
 
 func TestAnImageWithNoRepoDigestAndAContainerThatNeverStartedReadNotCheckedAndMakeNoFinding(t *testing.T) {
-	local := kube.Container{Pod: "ns/a", Image: imageRef, ImageID: "sha256:" + strings.Repeat("e", 64)}
-	never := kube.Container{Pod: "ns/b", Image: imageRef}
+	local := kube.Container{Pod: "ns/a", Image: testkit.ImageRef, ImageID: "sha256:" + strings.Repeat("e", 64)}
+	never := kube.Container{Pod: "ns/b", Image: testkit.ImageRef}
 	_, _, o, _ := podRig(t, local, never)
 	cycle(t, o)
 	doc := o.Observed()
@@ -222,15 +232,14 @@ func TestAFailedReadGivesTheCausePodsNotReadAndTheCycleEndsWell(t *testing.T) {
 		t.Errorf("document %+v", doc)
 	}
 	logged := r.log.String()
-	if !strings.Contains(logged, "kube-api") || strings.Contains(logged, "forbidden") {
-		t.Errorf("log %s", logged)
-	}
+	testkit.HoldsAll(t, "the log line", logged, docs.KindKubeAPI)
+	testkit.HoldsNone(t, "the log line", logged, "forbidden")
 }
 
 func TestAFailedReadKeepsTheLastGoodImagesAndTheFindings(t *testing.T) {
-	r, w, o, pods := podRig(t, runs("web-1", digest1))
+	r, w, o, pods := podRig(t, runs("web-1", testkit.Digest1))
 	cycle(t, o)
-	pods.set([]kube.Container{runs("web-1", digest2)}, nil)
+	pods.set([]kube.Container{runs("web-1", testkit.Digest2)}, nil)
 	cycle(t, o)
 	id := o.Summary().Findings[0].ID
 	pods.set(nil, &kube.Error{Kind: docs.KindKubeTransport})
@@ -245,9 +254,7 @@ func TestAFailedReadKeepsTheLastGoodImagesAndTheFindings(t *testing.T) {
 	// A restart that cannot read the pods holds the first sight of the finding in the state.
 	again := r.restart(w).WithPods(pods)
 	cycle(t, again)
-	if _, ok := readState(t, r).Findings[id]; !ok {
-		t.Error("the state lost the finding")
-	}
+	keepsFirstSight(t, r, id)
 	if doc := again.Observed(); doc.Pods != model.PodsUnread || len(doc.Images) != 0 {
 		t.Errorf("document %+v", doc)
 	}
@@ -255,9 +262,7 @@ func TestAFailedReadKeepsTheLastGoodImagesAndTheFindings(t *testing.T) {
 
 func TestTheRealClientFeedsTheCycleAndNoValueOfAPodReachesTheOutput(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	kubeAPI := testkit.NewKubeAPI(t, func(rw http.ResponseWriter, _ *http.Request) {
-		_, _ = rw.Write([]byte(testkit.PodList("", testkit.PodJSON("NS-MARKER", "POD-MARKER", imageRef, "a/b@"+digest1))))
-	})
+	kubeAPI := testkit.MarkerPods(t)
 	client := kube.New(kube.Config{Host: kubeAPI.Host, TokenFile: kubeAPI.TokenFile, CAFile: kubeAPI.CAFile})
 	o := r.observer(w).WithPods(client)
 	cycle(t, o)
@@ -267,20 +272,11 @@ func TestTheRealClientFeedsTheCycleAndNoValueOfAPodReachesTheOutput(t *testing.T
 	}
 	var outputs []string
 	for _, v := range []any{o.Summary(), doc} {
-		raw, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := testkit.MustJSON(t, v)
 		outputs = append(outputs, string(raw))
 	}
-	state, err := os.ReadFile(filepath.Join(r.state, stateFile))
-	if err != nil {
-		t.Fatal(err)
-	}
-	outputs = append(outputs, string(state), r.log.String())
+	outputs = append(outputs, stateText(t, r), r.log.String())
 	for _, out := range outputs {
-		if strings.Contains(out, "MARKER") {
-			t.Errorf("a value of a pod reached the output: %s", out)
-		}
+		testkit.HoldsNone(t, "an output", out, "MARKER")
 	}
 }

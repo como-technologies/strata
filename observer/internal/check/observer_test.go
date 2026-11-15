@@ -2,11 +2,9 @@ package check
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +19,7 @@ import (
 func edited(t *testing.T) (*rig, *world) {
 	t.Helper()
 	r, w := oneRecord(t, drift(t))
-	w.compares = map[int]docs.Diff{0: {RootB: w.rows[0].RootLive, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
+	w.compares = map[int]docs.Diff{0: {RootB: w.rows[0].RootLive, Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
 	return r, w
 }
 
@@ -78,9 +76,7 @@ func TestWorkIsEmptyAfterAVersionsCycleToo(t *testing.T) {
 func TestACycleWritesTheRecordsAfterTheUnzipAndNothingOutlivesIt(t *testing.T) {
 	r, w := edited(t)
 	seen := &fileSeer{world: w}
-	if err := r.observer(seen).RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, r.observer(seen))
 	if !seen.sawRecord || !seen.sawClearValue {
 		t.Errorf("record %v, clear value %v", seen.sawRecord, seen.sawClearValue)
 	}
@@ -111,10 +107,7 @@ func TestADirectoryThatAStoppedProcessLeftIsRemovedAtTheStart(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(stale, "raw"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	keep := filepath.Join(r.work, "other")
-	if err := os.WriteFile(keep, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteIn(t, r.work, "other", "x")
 	r.observer(&world{})
 	if got := entries(t, r.work); len(got) != 1 || got[0] != "other" {
 		t.Errorf("work holds %v", got)
@@ -124,35 +117,24 @@ func TestADirectoryThatAStoppedProcessLeftIsRemovedAtTheStart(t *testing.T) {
 func TestTheStateHoldsTheFirstSightAndNoValue(t *testing.T) {
 	r, w := edited(t)
 	o := r.observer(w)
-	if _, err := o.Once(context.Background()); err != nil {
-		t.Fatal(err)
+	once(t, o)
+	testkit.StateHoldsNone(t, r.state, sentinel, "charts.a.b", "Betty", "John", "csi-aws-ebs")
+	keepsFirstSight(t, r, model.FindingID(model.PublishedChanged, testkit.AWSStackProfile))
+	if state := readState(t, r); state.StartedAt != t0 {
+		t.Errorf("state %+v", state)
 	}
-	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, banned := range []string{sentinel, "charts.a.b", "Betty", "John", "csi-aws-ebs"} {
-		if strings.Contains(string(raw), banned) {
-			t.Errorf("the state holds %q: %s", banned, raw)
-		}
-	}
-	id := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
-	state, err := loadState(r.state)
-	if err != nil || state.Findings[id].FirstSeen != t0 || state.StartedAt != t0 {
-		t.Errorf("state %+v, error %v", state, err)
-	}
-	if entries := entries(t, r.state); len(entries) != 1 || entries[0] != "state.json" {
+	if entries := entries(t, r.state); len(entries) != 1 || entries[0] != testkit.StateFile {
 		t.Errorf("the state directory holds %v", entries)
 	}
 }
 
 func TestASecondRunAfterARestartReadsFirstSeenFromTheState(t *testing.T) {
 	r, w := edited(t)
-	first, _ := r.observer(w).Once(context.Background())
+	first := once(t, r.observer(w))
 	again := r.restart(w)
 	later := t0.Add(2 * time.Hour)
 	again.now = func() time.Time { return later }
-	second, _ := again.Once(context.Background())
+	second := once(t, again)
 	if len(first.Findings) != 1 || len(second.Findings) != 1 {
 		t.Fatalf("findings %v %v", first.Findings, second.Findings)
 	}
@@ -168,29 +150,25 @@ func TestASecondRunAfterARestartReadsFirstSeenFromTheState(t *testing.T) {
 func TestAFindingThatGoesLeavesTheState(t *testing.T) {
 	r, w := edited(t)
 	o := r.observer(w)
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	cycle(t, o)
 	w.rows[0], w.compares = unchanged(), nil
-	if err := o.RunContent(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if state, _ := loadState(r.state); len(state.Findings) != 0 {
+	cycle(t, o)
+	if state := readState(t, r); len(state.Findings) != 0 {
 		t.Errorf("findings %+v", state.Findings)
 	}
 }
 
 func TestTwoRunsWithOneStateDirectoryReachLost(t *testing.T) {
-	r, w := oneRecord(t, docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindTransport}})
+	r, w := oneRecord(t, testkit.ErrorRow(docs.KindTransport, 0))
 	w.verifyExit = 2
 	w.behindErr = &runner.RunError{Kind: docs.KindTransport}
 	first, err := r.observer(w).Once(context.Background())
 	if err == nil || first.Page != model.PageFirstLoad || first.Content.FailedRuns != 1 {
-		t.Fatalf("first: page %q, content %+v, error %v", first.Page, first.Content, err)
+		t.Fatalf("first: "+pageAndContent+", error %v", first.Page, first.Content, err)
 	}
 	second, err := r.restart(w).Once(context.Background())
 	if err == nil || second.Page != model.PageLost || second.Content.LastError.Kind != docs.KindTransport || second.Versions.LastError.Kind != docs.KindTransport {
-		t.Fatalf("second: page %q, content %+v, error %v", second.Page, second.Content, err)
+		t.Fatalf("second: "+pageAndContent+", error %v", second.Page, second.Content, err)
 	}
 }
 
@@ -199,13 +177,10 @@ func TestAStateThatCannotBeReadIsALogLineAndAnEmptyState(t *testing.T) {
 	if err := os.MkdirAll(r.state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(r.state, "state.json"), []byte("{"+sentinel), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteIn(t, r.state, testkit.StateFile, "{"+sentinel)
 	o := r.observer(&world{})
-	if !strings.Contains(r.log.String(), "the state cannot be read") || strings.Contains(r.log.String(), sentinel) {
-		t.Errorf("log %q", r.log.String())
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "the state cannot be read")
+	testkit.HoldsNone(t, "the log", r.log.String(), sentinel)
 	if s := o.Summary(); s.Content.FailedRuns != 0 || s.Records.StartedAt.IsZero() {
 		t.Errorf("summary %+v", s)
 	}
@@ -213,29 +188,17 @@ func TestAStateThatCannotBeReadIsALogLineAndAnEmptyState(t *testing.T) {
 
 func TestNothingThatTheObserverWritesHoldsAValueOfTheCluster(t *testing.T) {
 	r, w := edited(t)
-	s, err := r.observer(w).Once(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, err := json.Marshal(s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := once(t, r.observer(w))
+	raw := testkit.MustJSON(t, s)
 	summary := string(raw)
 	for name, text := range map[string]string{"summary": summary, "log": r.log.String()} {
-		if strings.Contains(text, sentinel) || strings.Contains(text, "OLD") {
-			t.Errorf("the %s holds a value: %s", name, text)
-		}
+		testkit.HoldsNone(t, "the "+name, text, sentinel, "OLD")
 	}
 	// A line of the log holds a command, an exit code, a duration, and an error kind.
 	for _, line := range strings.Split(strings.TrimSpace(r.log.String()), "\n") {
-		if strings.Contains(line, "record-0") || strings.Contains(line, "cluster:") {
-			t.Errorf("a log line holds an argument: %s", line)
-		}
+		testkit.HoldsNone(t, "the line", line, "record-0", "cluster:")
 	}
-	if !strings.Contains(r.log.String(), "command=verify exit=0") {
-		t.Errorf("log %s", r.log.String())
-	}
+	testkit.HoldsAll(t, "the log", r.log.String(), "command="+runner.CmdVerify+" exit=0")
 }
 
 func TestTheWaitAddsZeroToTenPercent(t *testing.T) {
@@ -268,13 +231,13 @@ func TestTheFirstCycleOfEachTimerRunsAtTheStartAndThePoolBoundsTheProcesses(t *t
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { o.Run(ctx); close(done) }()
-	testkit.WaitFor(t, "the first cycle of each timer", func() bool {
+	testkit.WaitFor(t, testkit.FirstCycles, func() bool {
 		return w.count(runner.CmdVerify) >= 1 && w.count(runner.CmdBehind) >= 1 && w.countMoves() >= 4
 	})
 	cancel()
 	<-done
 	if w.count(runner.CmdVerify) != 1 || w.count(runner.CmdBehind) != 1 {
-		t.Errorf("verify %d, behind %d", w.count(runner.CmdVerify), w.count(runner.CmdBehind))
+		t.Errorf(verifyBehind, w.count(runner.CmdVerify), w.count(runner.CmdBehind))
 	}
 	if most := w.overlap.Most(); most < 2 || most > defaultProcesses {
 		t.Errorf("%d processes ran at once, want from 2 to %d", most, defaultProcesses)
@@ -313,9 +276,7 @@ func TestACycleThatIsCanceledIsNoFailedRun(t *testing.T) {
 
 func TestASnapshotWritesOnlyIntoTheDirectoryOfTheCycle(t *testing.T) {
 	r, w := edited(t)
-	if _, err := r.observer(w).Once(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	once(t, r.observer(w))
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	snapshots := 0
@@ -324,7 +285,10 @@ func TestASnapshotWritesOnlyIntoTheDirectoryOfTheCycle(t *testing.T) {
 			continue
 		}
 		snapshots++
-		out := call[slices.Index(call, "-o")+1]
+		out, err := testkit.OutFile(call)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !filepath.IsLocal(out) || filepath.Dir(w.dirs[i]) != r.work {
 			t.Errorf("a snapshot writes %q from %s", out, w.dirs[i])
 		}
@@ -367,6 +331,7 @@ func (g *gatedStrata) Run(ctx context.Context, dir string, args ...string) (runn
 // summary shows the progress of the versions cycle while it runs, and drops it at the end. The log has
 // a line for the start and the end of each cycle, with the number of processes.
 func TestAContentCycleNeverWaitsForAVersionsCycleAndTheProgressShows(t *testing.T) {
+	const stillRunning = "the %s cycle ended, and the summary still shows its progress"
 	r, w := withBehind(t)
 	g := gated(w)
 	o := r.observer(g)
@@ -374,27 +339,21 @@ func TestAContentCycleNeverWaitsForAVersionsCycleAndTheProgressShows(t *testing.
 	versions := make(chan error, 1)
 	go func() { versions <- o.RunVersions(ctx) }()
 	<-g.waiting // the versions cycle holds its slot, and its `behind` runs
-	if err := o.RunContent(ctx); err != nil {
-		t.Fatalf("the content cycle: %v", err)
-	}
+	cycle(t, o)
 	running := o.Summary().Versions.Running
 	if running == nil || running.Done != 0 || running.Total != 1 {
 		t.Fatalf("the progress of the versions cycle during its behind: %+v", running)
 	}
 	if o.Summary().Content.Running != nil {
-		t.Error("the content cycle ended, and the summary still shows its progress")
+		t.Errorf(stillRunning, "content")
 	}
 	close(g.gate)
 	if err := <-versions; err != nil {
 		t.Fatalf("the versions cycle: %v", err)
 	}
 	if o.Summary().Versions.Running != nil {
-		t.Error("the versions cycle ended, and the summary still shows its progress")
+		t.Errorf(stillRunning, "versions")
 	}
 	log := r.log.String()
-	for _, want := range []string{"cycle=versions phase=start", "cycle=content phase=start", "cycle=content phase=end verdict=ok processes=", "cycle=versions phase=end verdict=ok processes="} {
-		if !strings.Contains(log, want) {
-			t.Errorf("the log has no %q", want)
-		}
-	}
+	testkit.HoldsAll(t, "the log", log, []string{"cycle=" + cycleVersions + " phase=start", "cycle=" + cycleContent + " phase=start", "cycle=" + cycleContent + " phase=end verdict=ok processes=", "cycle=" + cycleVersions + " phase=end verdict=ok processes="}...)
 }

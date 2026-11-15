@@ -11,8 +11,6 @@ import (
 	"errors"
 	"math/big"
 	"net/http"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -39,7 +37,7 @@ func TestThePodsFollowTheContinueTokenUntilTheListEnds(t *testing.T) {
 		{"ns2/b", "repo/b:2-init", "repo/b@sha256:bb-init"}, {"ns2/b", "repo/b:2", "repo/b@sha256:bb"}, {"ns2/b", "idle:1", ""},
 	}
 	if !slices.Equal(got, want) {
-		t.Errorf("containers %+v, want %+v", got, want)
+		t.Errorf(containersWant, got, want)
 	}
 	seen := a.Requests()
 	if len(seen) != 2 || seen[0].Query != "limit=500" || seen[1].Query != "continue=page-2&limit=500" {
@@ -55,23 +53,21 @@ func TestThePodsFollowTheContinueTokenUntilTheListEnds(t *testing.T) {
 // The image of the status differs from the image of the spec for a container that the runtime
 // rewrote. The match uses the image of the spec, and the container joins its status by name.
 func TestAContainerKeepsTheImageOfItsSpecAndJoinsItsStatusByName(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(testkit.PodList("", `{"metadata":{"name":"p","namespace":"n"},
-		 "spec":{"containers":[{"name":"one","image":"docker.io/library/nginx:1"},{"name":"two","image":"two:2"}]},
-		 "status":{"containerStatuses":[{"name":"two","image":"rewritten/two:2","imageID":"two@sha256:22"},{"name":"one","image":"nginx:1","imageID":"nginx@sha256:11"}]}}`)))
-	})
+	a := testkit.PodsAPI(t, `{"metadata":{"name":"p","namespace":"n"},
+		 "spec":{"containers":[{"name":"one","image":"`+testkit.NginxImage+`:1"},{"name":"two","image":"two:2"}]},
+		 "status":{"containerStatuses":[{"name":"two","image":"rewritten/two:2","imageID":"two@sha256:22"},{"name":"one","image":"nginx:1","imageID":"nginx@sha256:11"}]}}`)
 	got, err := New(cfgOf(a)).Pods(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []Container{{"n/p", "docker.io/library/nginx:1", "nginx@sha256:11"}, {"n/p", "two:2", "two@sha256:22"}}
+	want := []Container{{"n/p", testkit.NginxImage + ":1", "nginx@sha256:11"}, {"n/p", "two:2", "two@sha256:22"}}
 	if !slices.Equal(got, want) {
-		t.Errorf("containers %+v, want %+v", got, want)
+		t.Errorf(containersWant, got, want)
 	}
 }
 
 func TestTheTokenIsReadAtEachCall(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
+	a := testkit.PodsAPI(t)
 	c := New(cfgOf(a))
 	if _, err := c.Pods(context.Background()); err != nil {
 		t.Fatal(err)
@@ -87,18 +83,19 @@ func TestTheTokenIsReadAtEachCall(t *testing.T) {
 }
 
 func TestTheCAIsReadAtEachCall(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
+	a := testkit.PodsAPI(t)
 	c := New(cfgOf(a))
 	if _, err := c.Pods(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(a.CAFile, []byte("not a certificate"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, a.CAFile, "not a certificate")
 	if _, err := c.Pods(context.Background()); kindOf(err) != docs.KindKubeConfig {
 		t.Errorf("a CA that is not a certificate: %v", err)
 	}
 }
+
+// containersWant is the failure of a check of the containers of the pods.
+const containersWant = "containers %+v, want %+v"
 
 // cfgOf gives the Config that points at the stand-in.
 func cfgOf(a *testkit.KubeAPI) Config {
@@ -133,7 +130,7 @@ func TestAFailureHasAKindAndAStatusAndNeverTheBodyOfTheAnswer(t *testing.T) {
 		{"an expired continue token", func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, testkit.EnvMarker, http.StatusGone)
 		}, docs.KindKubeAPI, 410},
-		{"an answer that is not JSON", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>" + testkit.EnvMarker)) }, docs.KindNotJSON, 0},
+		{testkit.NotJSONAnswer, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>" + testkit.EnvMarker)) }, docs.KindNotJSON, 0},
 		{"a list that stops", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"items":[{"metadata":`)) }, docs.KindNotJSON, 0},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -143,9 +140,7 @@ func TestAFailureHasAKindAndAStatusAndNeverTheBodyOfTheAnswer(t *testing.T) {
 			if !errors.As(err, &e) || e.Kind != c.kind || e.Status != c.status {
 				t.Fatalf("error %v", err)
 			}
-			if strings.Contains(err.Error(), testkit.EnvMarker) {
-				t.Errorf("the error holds the body: %v", err)
-			}
+			testkit.HoldsNone(t, "stderr", err.Error(), testkit.EnvMarker)
 		})
 	}
 }
@@ -178,11 +173,8 @@ func anotherCA(t *testing.T) []byte {
 }
 
 func TestAServerThatTheCADoesNotSignIsATransportFailure(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
-	other := filepath.Join(t.TempDir(), "ca.crt")
-	if err := os.WriteFile(other, anotherCA(t), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	a := testkit.PodsAPI(t)
+	other := testkit.WriteIn(t, t.TempDir(), "ca.crt", string(anotherCA(t)))
 	cfg := cfgOf(a)
 	cfg.CAFile = other
 	if _, err := New(cfg).Pods(context.Background()); kindOf(err) != docs.KindKubeTransport {
@@ -191,7 +183,7 @@ func TestAServerThatTheCADoesNotSignIsATransportFailure(t *testing.T) {
 }
 
 func TestACredentialThatIsMissingIsAConfigFailure(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
+	a := testkit.PodsAPI(t)
 	for name, edit := range map[string]func(*Config){
 		"no token file": func(c *Config) { c.TokenFile += ".missing" },
 		"no CA file":    func(c *Config) { c.CAFile += ".missing" },
@@ -202,9 +194,7 @@ func TestACredentialThatIsMissingIsAConfigFailure(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if err := os.WriteFile(a.TokenFile, []byte(" \n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	a.SetToken(" ")
 	if _, err := New(cfgOf(a)).Pods(context.Background()); kindOf(err) != docs.KindKubeConfig {
 		t.Errorf("an empty token: %v", err)
 	}

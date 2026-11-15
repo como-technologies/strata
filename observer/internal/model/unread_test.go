@@ -5,11 +5,31 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
+
+// carries fails when the record does not carry its row and its side as row and side say.
+func carries(t *testing.T, r Record, row, side bool) {
+	t.Helper()
+	if r.RowCarried != row || r.SideCarried != side {
+		t.Errorf("carried: row %v, side %v", r.RowCarried, r.SideCarried)
+	}
+}
+
+// dexIDs gives the ids of the findings of each kind of the profile testkit.DexProfile, in order.
+func dexIDs(kinds ...Kind) []string {
+	var out []string
+	for _, kind := range kinds {
+		out = append(out, FindingID(kind, testkit.DexProfile))
+	}
+	slices.Sort(out)
+	return out
+}
 
 // notRead makes a `verify` row that strata could not read.
 func notRead(r Record) Record {
-	r.Row = &docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 429}}
+	row := testkit.NotReadRow()
+	r.Row = &row
 	return r
 }
 
@@ -21,14 +41,14 @@ func TestASideThatWasNotReadIsNotCheckedForTheProfileAndItsPacks(t *testing.T) {
 	s := build(ptr(content(t, r, other)), nil)
 	p := s.Profiles[0]
 	if p.Status != StatusNotChecked || p.ClusterCopy.Status != CopyNotRead {
-		t.Errorf("profile %q, clusterCopy %+v", p.Status, p.ClusterCopy)
+		t.Errorf(testkit.ProfileCopy, p.Status, p.ClusterCopy)
 	}
 	for _, k := range p.Packs {
 		if k.Status != StatusNotChecked {
 			t.Errorf("pack %s is %q", k.Key, k.Status)
 		}
 	}
-	want := NotChecked{Cause: ReadError, Profiles: []string{"fred-identity@2.3.0"}, Packs: []string{"addon/cert-manager", "addon/dex"}}
+	want := NotChecked{Cause: ReadError, Profiles: []string{testkit.DexProfile}, Packs: []string{testkit.CertManagerKey, testkit.DexKey}}
 	if len(s.NotChecked) != 1 || !equalRow(s.NotChecked[0], want) {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
@@ -46,13 +66,13 @@ func TestAPackWithChangesUnderAFindingWithNoPackKeyDoesNotReadOK(t *testing.T) {
 		v    docs.Verify
 		kind Kind
 	}{
-		{"overwritten", docs.Verify{OverwrittenBy: "aws-stack@1.1.1"}, Overwritten},
+		{"overwritten", docs.Verify{OverwrittenBy: testkit.AWSStackNewer}, Overwritten},
 		{"renamed", docs.Verify{RenamedTo: "aws-stack-2@1.1.0"}, Renamed},
 		{"gone", docs.Verify{Gone: true}, Gone},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"), pk("os", "ubuntu", "22.04")), &c.v, "csi/csi-aws-ebs")
+			r := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"), pk("os", "ubuntu", "22.04")), &c.v, testkit.CSIKey)
 			s := build(ptr(content(t, r)), &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}})
 			if len(s.Findings) != 1 || s.Findings[0].Kind != c.kind || len(s.Findings[0].Packs) != 0 {
 				t.Fatalf("findings %+v", s.Findings)
@@ -64,15 +84,15 @@ func TestAPackWithChangesUnderAFindingWithNoPackKeyDoesNotReadOK(t *testing.T) {
 				t.Errorf("the pack with no change is %q", got)
 			}
 			if s.Profiles[0].Status != StatusDrift || s.Counts.Findings != 1 || s.Counts.Drift != 1 {
-				t.Errorf("profile %q, counts %+v", s.Profiles[0].Status, s.Counts)
+				t.Errorf(testkit.ProfileCounts, s.Profiles[0].Status, s.Counts)
 			}
 		})
 	}
 }
 
 func TestAMoveThatWasNotReadIsACauseAndKeepsItsRow(t *testing.T) {
-	read := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "aws-stack@1.1.0")
-	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", "aws-stack@1.1.0")
+	read := pin("kubernetes", "k8s", "1.35.3", "1.36.2", testkit.AWSStackProfile)
+	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", testkit.AWSStackProfile)
 	move := Move{Impact: "repave", Flags: []string{docs.FlagIdentity}, Fold: Fold{Settings: 2}, Images: 8}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{read, unread},
 		Moves: map[string]Move{MoveKey(read): move}, Unread: map[string]bool{MoveKey(unread): true}}
@@ -87,15 +107,15 @@ func TestAMoveThatWasNotReadIsACauseAndKeepsItsRow(t *testing.T) {
 	if got := s.Newer[1]; got.Name != "cert-manager" || got.Newest != "1.21.1" || got.Impact != "" || got.Images != 0 || got.Fold != (Fold{}) {
 		t.Errorf("the move that was not read has counts: %+v", got)
 	}
-	want := NotChecked{Cause: PinError, Profiles: []string{"aws-stack@1.1.0"}, Packs: []string{"addon/cert-manager"}}
+	want := NotChecked{Cause: PinError, Profiles: []string{testkit.AWSStackProfile}, Packs: []string{testkit.CertManagerKey}}
 	if len(s.NotChecked) != 1 || !equalRow(s.NotChecked[0], want) {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 }
 
 func TestAMoveThatWasNotReadKeepsTheCauseOfAnOlderRegistryCopy(t *testing.T) {
-	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", "aws-stack@1.1.0")
-	unread.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
+	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", testkit.AWSStackProfile)
+	unread.RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{unread}, Moves: map[string]Move{}, Unread: map[string]bool{MoveKey(unread): true}}
 	var causes []Cause
 	for _, row := range build(nil, v).NotChecked {
@@ -108,8 +128,8 @@ func TestAMoveThatWasNotReadKeepsTheCauseOfAnOlderRegistryCopy(t *testing.T) {
 
 func TestCarryPutsTheLastGoodAnswerInPlaceOfAReadThatFailed(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
-	drift := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
-	differs := onCluster(drift, docs.Diff{RootB: "r3", Packs: []docs.Pack{changed("addon/dex", "charts.a.b")}})
+	drift := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, testkit.DexKey)
+	differs := onCluster(drift, docs.Diff{RootB: "r3", Packs: []docs.Pack{changed(testkit.DexKey, "charts.a.b")}})
 	last := content(t, differs)
 	unreadSide := func(r Record) Record {
 		r.Cluster = ClusterSide{Runs: true}
@@ -134,15 +154,13 @@ func TestCarryPutsTheLastGoodAnswerInPlaceOfAReadThatFailed(t *testing.T) {
 			now := content(t, c.now)
 			now.Carry(&last)
 			r := now.Records[0]
-			if r.RowCarried != c.rowCarried || r.SideCarried != c.sideCarried {
-				t.Errorf("carried: row %v, side %v", r.RowCarried, r.SideCarried)
-			}
+			carries(t, r, c.rowCarried, c.sideCarried)
 			var kinds []Kind
 			for _, f := range FindingsOf(now, nil) {
 				kinds = append(kinds, f.Kind)
 			}
 			if !slices.Equal(kinds, c.wantFindings) {
-				t.Errorf("findings %v, want %v", kinds, c.wantFindings)
+				t.Errorf(testkit.FindingsWant, kinds, c.wantFindings)
 			}
 		})
 	}
@@ -150,7 +168,7 @@ func TestCarryPutsTheLastGoodAnswerInPlaceOfAReadThatFailed(t *testing.T) {
 
 func TestCarryTakesNothingFromAnAnswerThatIsNotGood(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
-	good := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
+	good := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, testkit.DexKey)
 	changedRecord := good
 	changedRecord.Doc.Root = "r-new"
 	cases := []struct {
@@ -159,7 +177,7 @@ func TestCarryTakesNothingFromAnAnswerThatIsNotGood(t *testing.T) {
 	}{
 		{"no last cycle", nil},
 		{"a last row that failed too", ptr(content(t, notRead(good)))},
-		{"another profile", ptr(content(t, drifted(rec("other", "1.0.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")))},
+		{"another profile", ptr(content(t, drifted(rec("other", "1.0.0", docs.VerifyUnchanged, dex), &docs.Verify{}, testkit.DexKey)))},
 		{"a record that changed", ptr(content(t, changedRecord))},
 	}
 	for _, c := range cases {
@@ -178,7 +196,7 @@ func TestCarryTakesNothingFromAnAnswerThatIsNotGood(t *testing.T) {
 
 func TestCarryKeepsTheAnswerThroughTwoFailedCycles(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
-	last := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex"))
+	last := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, testkit.DexKey))
 	second := content(t, notRead(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex)))
 	second.Carry(&last)
 	third := content(t, notRead(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex)))
@@ -190,13 +208,13 @@ func TestCarryKeepsTheAnswerThroughTwoFailedCycles(t *testing.T) {
 
 func TestAReadThatFailedIsACauseAlsoWhenItsAnswerIsCarried(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
-	last := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex"))
+	last := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, testkit.DexKey))
 	now := content(t, notRead(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex)))
 	now.Carry(&last)
 	s := build(&now, nil)
-	want := NotChecked{Cause: ReadError, Profiles: []string{"fred-identity@2.3.0"}, Packs: []string{"addon/dex"}}
+	want := NotChecked{Cause: ReadError, Profiles: []string{testkit.DexProfile}, Packs: []string{testkit.DexKey}}
 	if len(s.Findings) != 1 || len(s.NotChecked) != 1 || !equalRow(s.NotChecked[0], want) {
-		t.Fatalf("findings %+v, notChecked %+v", s.Findings, s.NotChecked)
+		t.Fatalf(testkit.FindingsNotChecked, s.Findings, s.NotChecked)
 	}
 	if s.Profiles[0].Status != StatusDrift || s.Profiles[0].Packs[0].Status != StatusDrift || s.Counts.PacksInFull != 0 {
 		t.Errorf("profile %+v, counts %+v", s.Profiles[0], s.Counts)
@@ -205,14 +223,6 @@ func TestAReadThatFailedIsACauseAlsoWhenItsAnswerIsCarried(t *testing.T) {
 
 func TestHeldIDsNameTheFindingsOfAPartThatWasNotRead(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
-	id := func(k ...Kind) []string {
-		var out []string
-		for _, kind := range k {
-			out = append(out, FindingID(kind, "fred-identity@2.3.0"))
-		}
-		slices.Sort(out)
-		return out
-	}
 	sideless := rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex)
 	sideless.Cluster = ClusterSide{Runs: true}
 	cases := []struct {
@@ -222,13 +232,13 @@ func TestHeldIDsNameTheFindingsOfAPartThatWasNotRead(t *testing.T) {
 	}{
 		{"a read that worked", rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), nil},
 		{"a row that failed", notRead(onCluster(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), docs.Diff{Same: true})),
-			id(PublishedChanged, Overwritten, Renamed, Gone)},
-		{"a side that failed", sideless, id(ClusterDiffers, ImageIDChanged)},
+			dexIDs(PublishedChanged, Overwritten, Renamed, Gone)},
+		{"a side that failed", sideless, dexIDs(ClusterDiffers, ImageIDChanged)},
 		{"a cluster that does not run the profile", func() Record {
 			r := notRead(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex))
 			r.Cluster = ClusterSide{}
 			return r
-		}(), id(PublishedChanged, Overwritten, Renamed, Gone)},
+		}(), dexIDs(PublishedChanged, Overwritten, Renamed, Gone)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -268,7 +278,7 @@ func bad(t *testing.T, file string, records ...Record) Content {
 
 func TestCarryPutsTheLastRecordOfAFileThatCannotBeReadInPlaceOfTheFile(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
-	drift := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
+	drift := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, testkit.DexKey)
 	other := rec("zed", "1.0.0", docs.VerifyUnchanged, dex)
 	first := rec("alpha", "1.0.0", docs.VerifyUnchanged, dex)
 	last := content(t, first, drift, other)
@@ -282,18 +292,19 @@ func TestCarryPutsTheLastRecordOfAFileThatCannotBeReadInPlaceOfTheFile(t *testin
 		t.Fatalf("the records are %v: the carried record keeps the order of the files", files)
 	}
 	r := now.Records[1]
-	if !r.RowCarried || !r.SideCarried || !r.readError() {
-		t.Errorf("carried: row %v, side %v", r.RowCarried, r.SideCarried)
+	carries(t, r, true, true)
+	if !r.readError() {
+		t.Error("the carried record is no read error")
 	}
-	if got := FindingsOf(now, nil); len(got) != 1 || got[0].Kind != PublishedChanged || got[0].Profile != "fred-identity@2.3.0" {
+	if got := FindingsOf(now, nil); len(got) != 1 || got[0].Kind != PublishedChanged || got[0].Profile != testkit.DexProfile {
 		t.Errorf("findings %+v", got)
 	}
 	if now.Blind() {
 		t.Error("a file with a last record is not blind")
 	}
-	for _, kind := range publishedKinds {
-		if !slices.Contains(HeldIDs(now), FindingID(kind, "fred-identity@2.3.0")) {
-			t.Errorf("HeldIDs lacks %s", kind)
+	for _, id := range dexIDs(publishedKinds...) {
+		if !slices.Contains(HeldIDs(now), id) {
+			t.Errorf("HeldIDs lacks %s", id)
 		}
 	}
 	s := build(&now, nil)
@@ -309,7 +320,7 @@ func TestCarryPutsTheLastRecordOfAFileThatCannotBeReadInPlaceOfTheFile(t *testin
 
 func TestCarryTakesNoRecordForAFileThatCannotBeReadWhenTheLastCycleHeldNone(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
-	drift := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
+	drift := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, testkit.DexKey)
 	cases := []struct {
 		name string
 		last *Content
@@ -331,8 +342,7 @@ func TestCarryTakesNoRecordForAFileThatCannotBeReadWhenTheLastCycleHeldNone(t *t
 func TestABlindContentHoldsEachKnownIDThatNoReadableRecordGives(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
 	readable := rec("zed", "1.0.0", docs.VerifyUnchanged, dex)
-	known := []string{FindingID(PublishedChanged, "fred-identity@2.3.0"), FindingID(ImageMoved, "fred-identity@2.3.0"),
-		FindingID(PublishedChanged, "zed@1.0.0"), FindingID(ClusterDiffers, "zed@1.0.0"), FindingID(ImageSplit, "zed@1.0.0")}
+	known := append(dexIDs(PublishedChanged, ImageMoved), FindingID(PublishedChanged, "zed@1.0.0"), FindingID(ClusterDiffers, "zed@1.0.0"), FindingID(ImageSplit, "zed@1.0.0"))
 	now := bad(t, "fred-identity.json.gz", readable)
 	got := BlindIDs(now, known)
 	if !slices.Equal(got, known[:2]) {
@@ -345,7 +355,7 @@ func TestABlindContentHoldsEachKnownIDThatNoReadableRecordGives(t *testing.T) {
 
 func TestCarryTakesNoSecondRecordForAProfileThatAnotherFileGives(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
-	old := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
+	old := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, testkit.DexKey)
 	again := rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex)
 	again.File = "fred-identity-again.json.gz"
 	now := bad(t, old.File, again)
