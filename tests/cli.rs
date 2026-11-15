@@ -2432,6 +2432,61 @@ fn snapshot_of_one_ref_with_json_gives_its_error_as_one_json_line_with_the_exit_
     assert_eq!(r.err.trim_end(), error_text(&several.to_string()));
 }
 
+/// Issue #917. A record is always JSON, so `--json` of one ref changes only its error. A snapshot
+/// that succeeds writes the same record, also with `-o`, and standard error gets no JSON line.
+#[test]
+fn snapshot_of_one_ref_that_succeeds_with_json_writes_the_same_record_and_no_json_line() {
+    let pack = common::listed_pack("csi", "1.0.0", common::PUBLIC_REGISTRY);
+    let tags = serde_json::json!({"tags": [{"tag": "1.0.0", "packUid": pack["metadata"]["uid"]}]});
+    let routes = std::collections::BTreeMap::from([
+        (REGISTRY_LISTING.to_string(), common::two_registries()),
+        (
+            common::pack_listing_route("csi"),
+            common::pack_listing_answer(serde_json::json!([pack])),
+        ),
+        (
+            common::pack_entity_route("csi", common::PUBLIC_REGISTRY),
+            tags,
+        ),
+    ]);
+    let stand = Stand::new(routes, "p-dev");
+    let file = stand.home.path().join("csi.json");
+    // the record on standard output, or in the file of -o. The read removes the file, so each run
+    // must write it again. The time of the fetch is the one field that two runs can write differently.
+    let record = |r: &Run, to_file: bool| {
+        let text = if to_file {
+            assert_eq!(r.out, "", "-o: no record on standard output");
+            let text = std::fs::read_to_string(&file).unwrap();
+            std::fs::remove_file(&file).unwrap();
+            text
+        } else {
+            r.out.clone()
+        };
+        let mut v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        v["source"].as_object_mut().unwrap().remove("fetchedAt");
+        v
+    };
+    for more in [&[][..], &["-o", "csi.json"][..]] {
+        let args = [&["snapshot", "pack:csi@1.0.0"][..], more].concat();
+        let text = stand.run_loud(&args);
+        assert_eq!(text.code, 0, "{args:?}: {}", text.err);
+        let without = record(&text, !more.is_empty());
+
+        let args = [&args[..], &["--json"]].concat();
+        let r = stand.run_loud(&args);
+        assert_eq!(r.code, 0, "{args:?}: {}", r.err);
+        assert_eq!(record(&r, !more.is_empty()), without, "{args:?}");
+        assert!(
+            r.err
+                .lines()
+                .all(|l| serde_json::from_str::<serde_json::Value>(l).is_err()),
+            "{args:?}: no JSON line: {}",
+            r.err
+        );
+        assert_eq!(r.err, text.err, "{args:?}: the same progress notes");
+    }
+}
+
 /// `--format` is the format of the report of a set, so each argument that refuses `--dir` refuses
 /// it. Issue #917: `--json` of one object makes its error one JSON line, so each such argument
 /// takes it.
@@ -2466,7 +2521,7 @@ fn snapshot_refuses_format_with_each_argument_that_refuses_dir_and_takes_json_wi
         let r = run_in(
             &json,
             &[("HOME", dir.path().to_str().unwrap())],
-            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+            &strata::config::KEY_VARS,
         );
         assert_eq!(r.code, 2, "{json:?}: {}", r.err);
         assert_eq!(r.out, "", "{json:?}");

@@ -84,8 +84,7 @@ Without `--json`, the line is the message after `strata: error:`:
 ```
 
 `kind` is stable. [Errors](../reference/errors.md) lists each kind and its
-fields. `snapshot` of one object takes `--json` for the same line, also with
-`-o`.
+fields.
 
 ## Progress messages
 
