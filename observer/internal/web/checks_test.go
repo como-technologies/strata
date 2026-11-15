@@ -238,7 +238,8 @@ func TestTheCardMoveToOfAProfileNamesEachCheckOfTheMove(t *testing.T) {
 }
 
 // A code, a version, and the name of a variable of a check on the move of a profile show as text on the card. render.js adds the
-// injection to the name and to the version of each profile, so the hash of the page of barney-base holds it two times.
+// injection to the name and to the version of each profile, so the hash of the page of barney-base holds it two times. The list
+// of packs also shows the newer version of kubernetes, so the test reads the card alone.
 func TestACheckOfTheMoveOfAProfileWithMarkupShowsAsText(t *testing.T) {
 	name, version, _ := strings.Cut(testkit.BaseProfile, "@")
 	hash := "#p-" + encodeURIComponent(name+evilText+"@"+version+evilText)
@@ -249,8 +250,8 @@ func TestACheckOfTheMoveOfAProfileWithMarkupShowsAsText(t *testing.T) {
 		}
 		reached++
 		checkMarkup(t, s)
-		mustHold(t, s.Hash, s.HTML, `<span class="m">node_owner`+injection, `<span class="m">`+testkit.CodeVariable+injection,
-			`@1.37.0`+injection, "a version of 1.36"+injection)
+		mustHold(t, s.Hash, cardOf(t, s.HTML, moveCardHead), `<span class="m">node_owner`+injection,
+			`<span class="m">`+testkit.CodeVariable+injection, `@1.37.0`+injection, "a version of 1.36"+injection)
 		mustNotHold(t, s.Hash, s.HTML, "<img")
 	}
 	if reached == 0 {
