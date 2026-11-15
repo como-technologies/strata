@@ -73,7 +73,7 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 			}
 		}
 	})})
-	same := pageWith(t, dir, scratch, vendorHash, `S.side["side-`+testkit.GatewayProfile+`-`+testkit.VendorPack+`"] = "newest"`)
+	same := pageWith(t, dir, scratch, vendorHash, `S.side["`+sideSelect(testkit.GatewayProfile, testkit.VendorPack)+`"] = "`+string(model.SideNewest)+`"`)
 	mustHold(t, "a pack that the move does not change", same, badge("g", "Identical"),
 		"The newest version of the profile holds what the record holds for this pack.")
 

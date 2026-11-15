@@ -12,10 +12,12 @@ import (
 const (
 	barneyHash = "#p-" + testkit.BaseProfile
 	ubuntuHash = "#k-" + testkit.BaseProfile + "/" + testkit.UbuntuAWSKey
-	ubuntuSide = "side-" + testkit.BaseProfile + "-" + testkit.UbuntuAWSKey
 	// unchangedWords say that the published version of a profile is the same as its record.
 	unchangedWords = "Unchanged since the record"
 )
+
+// ubuntuSide is the list of the sides of the pack ubuntu-aws of barney-base@1.5.0.
+var ubuntuSide = sideSelect(testkit.BaseProfile, testkit.UbuntuAWSKey)
 
 // carriedSet is the set read-error, where the last read of barney-base@1.5.0 failed in part and the cause
 // read-error names the profile and its packs. The summary keeps the last good answer of the part, and it

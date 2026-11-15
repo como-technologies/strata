@@ -525,7 +525,7 @@ func TestEachPackPageHasOneCompareDropdownWithItsOptionsAndItsDefault(t *testing
 					if got := strings.Count(page, "<select"); got != 1 {
 						t.Errorf("%s: %d dropdowns", where, got)
 					}
-					mustHold(t, where, page, compareLabel+`<select id="side" class="search auto" data-id="side-`+subject+`-`+k.Key+`" aria-label="Compare">`)
+					mustHold(t, where, page, compareLabel+`<select id="side" class="search auto" data-id="`+sideSelect(subject, k.Key)+`" aria-label="Compare">`)
 					options, labels, _, open := expectedSides(set, x, k)
 					var gotOptions []string
 					for _, m := range optionPattern.FindAllStringSubmatch(page, -1) {
@@ -644,8 +644,11 @@ func tabId(d api.PackDiff) string {
 	if d.Side == model.SideNewer {
 		return "move-" + d.Profile + "-" + d.Key
 	}
-	return "side-" + d.Profile + "-" + d.Key + "-" + string(d.Side)
+	return sideSelect(d.Profile, d.Key) + "-" + string(d.Side)
 }
+
+// sideSelect is the id of the list of the sides of the pack key of the profile subject, and the key of its choice in S.side.
+func sideSelect(subject, key string) string { return "side-" + subject + "-" + key }
 
 // tabOf gives the data attribute of the tabs id, and tabAttrs adds the tab k: values, manifests, images, or charts.
 func tabOf(id string) string { return `data-tab="` + id + `"` }

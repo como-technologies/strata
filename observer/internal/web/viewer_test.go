@@ -256,15 +256,19 @@ func diffOf(t *testing.T, set *devdata.Set, profile, key string, side model.Side
 
 const (
 	dexHash       = "#k-" + testkit.DexProfile + "/" + testkit.DexKey
-	dexPublished  = "side-" + testkit.DexProfile + "-" + testkit.DexKey + "-published"
-	dexMove       = "move-" + testkit.DexProfile + "-" + testkit.DexKey
 	k8sHash       = "#k-" + testkit.BaseProfile + "/" + testkit.KubernetesKey
-	k8sMove       = "move-" + testkit.BaseProfile + "-" + testkit.KubernetesKey
 	traefikHash   = "#k-" + testkit.GatewayProfile + "/" + testkit.TraefikKey
-	traefikMove   = "move-" + testkit.GatewayProfile + "-" + testkit.TraefikKey
 	vendorHash    = "#k-" + testkit.GatewayProfile + "/" + testkit.VendorPack
 	layoutUnified = "unified"
 	layoutSplit   = "split"
+)
+
+// The ids of the tabs of the published side of dex, and of the moves of dex, kubernetes, and traefik.
+var (
+	dexPublished = tabId(api.PackDiff{Profile: testkit.DexProfile, Key: testkit.DexKey, Side: model.SidePublished})
+	dexMove      = tabId(api.PackDiff{Profile: testkit.DexProfile, Key: testkit.DexKey, Side: model.SideNewer})
+	k8sMove      = tabId(api.PackDiff{Profile: testkit.BaseProfile, Key: testkit.KubernetesKey, Side: model.SideNewer})
+	traefikMove  = tabId(api.PackDiff{Profile: testkit.GatewayProfile, Key: testkit.TraefikKey, Side: model.SideNewer})
 )
 
 // fredHash is the hash of the page of the profile of dex. dexManifest is the head of the manifest of dex that the change of the

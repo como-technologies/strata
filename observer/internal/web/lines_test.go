@@ -22,7 +22,7 @@ differ, and the text of the values below it keeps the whole diff. */
 const contentPath = "kubeadmconfig.files[2].content"
 
 // textID is the id of the text of the values on the Values tab of the move of kubernetes.
-const textID = k8sMove + "-text"
+var textID = k8sMove + "-text"
 
 // lineValue makes a value of n lines. Line i is "  key-ii: v", and v is tag for the lines from first to last,
 // else "same".
