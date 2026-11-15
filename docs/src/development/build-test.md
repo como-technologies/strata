@@ -317,10 +317,16 @@ these rules, a test gives the same result on each run, on a fast machine and on 
 ### The stand-in of strata in a live script test
 
 A stage of `tests/live_scripts.rs` gives the script a stand-in for strata in `STRATA_BIN`. The
-stand-in answers each command line from the rules of the test, and refuses none. So it cannot
-show that strata takes a command line. The stage also gives the binary of the tests in
-`REAL_STRATA`, with no send of the report. A stand-in can give a call to that binary, which asks
-a stand-in Palette. The test of `slash-several` of `registry-kinds.sh` does this (#916).
+stand-in answers each command line from the rules of the test. It refuses the two old names of
+`list --detail` that
+[release 0.35.0 removes](../reference/compatibility.md#release-0350-changes-that-need-action)
+(#862). As strata does, it gives the exit code `2` and the text `unexpected argument`. It takes
+each other call, and gives the exit code `0` and no output when no rule matches. So it cannot
+show that strata takes a command line.
+
+The stage also gives the binary of the tests in `REAL_STRATA`, with no send of the report. A
+stand-in can give a call to that binary, which asks a stand-in Palette. The test of
+`slash-several` of `registry-kinds.sh` does this (#916).
 
 ### The fuzzing
 

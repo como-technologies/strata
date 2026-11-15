@@ -1176,6 +1176,12 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the command line or of a document
 
+- **`strata list` refuses the old names `--packs` and `--applied`.** Each one is an unexpected
+  argument now, with the exit code `2` and no request. With `--json` too, the refusal is text
+  and not an error document. Use `--detail` in place of each one. Name a kind to read that kind
+  alone, such as `strata list clusters --detail`. The tip of the refusal of `--packs` names
+  `--pack`, which keeps the versions with a pack whose name holds its text. See
+  [Read each row deeper](../commands/list.md#read-each-row-deeper).
 - **`compare` of two versions of one profile names the checks of the move.** The report gives a
   `note` line for each check. One names the required variables with no default value that side B
   adds. Another names a move of Kubernetes that skips a minor version. Before, only
@@ -1296,7 +1302,7 @@ field, a value, an input, or an option is in the sections above.
   - When the key cannot see the registry, or when its name holds a `/`, the ref gives its uid.
     A pack with no registry reads `pack <name> <version> (no registry)`.
   - With `--format markdown`, the pack ends with `in` and the registry.
-- **A record, `compare`, `same-release`, and `list --packs` read the registry listing.** This
+- **A record, `compare`, `same-release`, and `list --detail` read the registry listing.** This
   is one more request, `GET /v1/registries/metadata`, when a pack names a registry. `compare`
   and `same-release` send it for each side that Palette answers, and `snapshot` of a set for
   each project of the set. A key needs the permission
@@ -1683,9 +1689,9 @@ field, a value, an input, or an option is in the sections above.
 - **`list --detail` replaces `--packs` and `--applied`.** `--detail` reads each profile
   version for its packs and each cluster for the profiles that it applies. `--packs` still
   reads the versions alone, and `--applied` the clusters alone. Each one also writes a note on
-  standard error that names `--detail`, and the help no longer shows them. Release 0.35.0
-  removes them. Use `--detail`, and name a kind to read that kind alone, such as
-  `strata list profiles --detail`. See
+  standard error that names `--detail`, and the help no longer shows them.
+  [Release 0.35.0](#release-0350-changes-that-need-action) removes them. Name a kind with
+  `--detail` to read that kind alone, such as `strata list profiles --detail`. See
   [Read each row deeper](../commands/list.md#read-each-row-deeper).
 - **`strata list packs` gives the error `usage` with a message of its own.** Before, the
   command line refused the value with `invalid value 'packs'`. The exit code stays `2`, and

@@ -392,7 +392,7 @@ one after the other, on AWS or GCP.
 | `release-doc`, `release-names-template` | 0 | #66: the version names the template that uses it, and no cluster |
 | `release-record-template`, `release-record-root` | 0 | #260: a record of the linked release version has no `source.clusterTemplates`, and has the root from before the link |
 | `release-consumers`, `release-consumers-template` | 1, 0 | #147: `strata consumers` of the linked version names the template with `kind: template`, and exits `1`. |
-| `release-list-consumers`, `release-list-consumers-template` | 0 | #176: `strata list --packs --json` gives each linked version `consumers` 1, with `consumersByKind` `{"clusters": 0, "templates": 1}`. `consumers` counts the same template |
+| `release-list-consumers`, `release-list-consumers-template` | 0 | #176: `strata list profiles --detail --json` gives each linked version `consumers` 1, with `consumersByKind` `{"clusters": 0, "templates": 1}`. `consumers` counts the same template |
 | `release-delete`, `release-delete-says` | 2, 0 | #147: Palette refuses the delete of the linked version, `DeletionResourceInUseError`. |
 | `lock-edit`, `lock-edit-says` | 2, 0 | #66: an edit in place of a linked version, a `PUT` of the whole version, is refused, and the refusal carries the code `ClusterProfileUpdateValidationFailure` |
 | `lock-verify` | 0 | #66: the version is unchanged |
@@ -531,7 +531,7 @@ version with no publish, lists it, and deletes it. This is the source for
 | `record` | 0 | record the add-on version |
 | `no-draft`, `no-draft-says` | 2, 0 | #155: a version with no draft: `<uid>@draft` exits `2`, and says that the version has no draft |
 | `api-draft` | 0 | #155: a `PUT` of the version with no publish |
-| `list-published` | 0 | #114: `list --packs` gives `published` true for the version while its draft waits |
+| `list-published` | 0 | #114: `list --detail` gives `published` true for the version while its draft waits |
 | `version-holds` | 0 | #155: the version keeps its content while the draft waits: its record verifies |
 | `draft-record`, `draft-template` | 0 | #155: `<uid>@draft` records the draft: `source.template` `draft`, and the edit in the manifest |
 | `version-record` | 0 | #155: a record of the version, read while the draft waits, holds the published manifest |
@@ -547,7 +547,7 @@ version with no publish, lists it, and deletes it. This is the source for
 | `no-draft-after-publish` | 2 | #155: the publish empties the draft |
 | `restored` | 0 | the edit is put back, and the first record verifies again |
 | `unpublished-create` | 0 | #114: a create of `strata-live-unpublished` with the packs of the add-on version, and no publish |
-| `unpublished-listed`, `unpublished-mark` | 0 | #114: the profile listing names the version. `list --packs` gives `published` false, the packs of its draft, and the mark `draft` at the end of its row |
+| `unpublished-listed`, `unpublished-mark` | 0 | #114: the profile listing names the version. `list --detail` gives `published` false, the packs of its draft, and the mark `draft` at the end of its row |
 | `unpublished-delete` | 0 | #114: the delete of `strata-live-unpublished` |
 
 ## scope.sh
@@ -568,7 +568,7 @@ for the search of each project in
 | `annotation-tenant`, `annotation-project` | 0 | #113: in the project, the document of the tenant version gives `metadata.annotations.scope` `tenant`, and the document of the release version gives `project` |
 | `versions-tenant`, `versions-project` | 0 | #707: `spec.versions[]` of each document names the versions of its own scope. The tenant version lists its own uid and not the uid of the release. The release lists its own uid and not the uid of the tenant version. |
 | `list-scope` | 0 | #113: `list --json` gives `scope` `tenant` for the tenant version and `project` for the release version |
-| `list-mark`, `list-packs-mark` | 0 | #113: the row of the tenant version ends with `tenant`, with and without `--packs` |
+| `list-mark`, `list-packs-mark` | 0 | #113: the row of the tenant version ends with `tenant`, with and without `--detail` |
 | `ambiguous`, `ambiguous-says` | 2, 0 | #113: `snapshot <name>@<version>` exits `2` with `profile-name-ambiguous`. The error names each uid with its scope, and tells you to give the uid |
 | `by-uid` | 0 | #113: `snapshot <uid>` records the tenant version |
 | `tenant-list`, `tenant-list-no-mark` | 0 | #113: at tenant scope, `list --json` gives `scope` `tenant` for the version, and its row has no mark |
@@ -715,7 +715,7 @@ makes one change in place and puts it back, so it ends at the baseline.
 | `addon-edit`, `addon-pending`, `addon-record`, `addon-names` | 0 | #70: an edit in place of a manifest of the add-on version opens an update. The record says `updatesPending: true`, and `pendingUpdates` names the add-on and `Manifest ... is updated` |
 | `addon-root` | 0 | #70: the root of that record is the root at the baseline: the statement is outside the root |
 | `addon-release-only` | 0 | #70: a record of the release profile alone says that no update waits for it |
-| `addon-list`, `addon-list-says` | 0 | #70: `list clusters --applied` marks the add-on `behind: an update waits` |
+| `addon-list`, `addon-list-says` | 0 | #70: `list clusters --detail` marks the add-on `behind: an update waits` |
 | `addon-compare`, `addon-compare-says` | 1, 0 | #70: `compare` of the add-on version with its copy on cluster A says `cluster ... is behind` |
 | `addon-at-pending`, `addon-pending-root` | 0 | #78: after the edit, the record of `@pending` has another root than the copy that runs |
 | `addon-pending-compare`, `addon-pending-compare-says` | 1, 0 | #78: `compare cluster:<uid> cluster:<uid>@pending` names the pack of the add-on `AUTHORED`, and no pack of the release |
@@ -2415,7 +2415,7 @@ See [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registr
 
 A read by hand, with cluster A of `live-up` and no write: no script holds it.
 `strata list clusters --json` gives cluster A the `clusterType` `PureManage`.
-`strata list clusters --applied` gives the release profile and the add-on
+`strata list clusters --detail` gives the release profile and the add-on
 profile of cluster A. No run imports a cluster: see
 [An imported cluster](../internals/palette/clusters.md#an-imported-cluster).
 

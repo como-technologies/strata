@@ -51,8 +51,8 @@ check no-draft-says 0 '#155: the error says that the version has no draft' -- \
   grep -q 'has no draft' no-draft.err
 check api-draft 0 "#155: edit the manifest of $addon@1.0.0 through the API, with no publish" -- \
   "$live/api.sh" draft "$AD" "$addon_from" "$addon_to"
-check list-published 0 '#114: list --packs gives published true for a published version while its draft waits' -- \
-  bash -c "\"$strata\" list --packs --json | jq -e --arg u '$AD' '[.profiles[] | select(.uid == \$u)][0].published == true'"
+check list-published 0 '#114: list --detail gives published true for a published version while its draft waits' -- \
+  bash -c "\"$strata\" list profiles --detail --json | jq -e --arg u '$AD' '[.profiles[] | select(.uid == \$u)][0].published == true'"
 check version-holds 0 '#155: the version keeps its content while the draft waits: its record verifies' -- \
   "$strata" verify addon.json
 check draft-record 0 '#155: <uid>@draft records the draft' -- "$strata" snapshot "$AD@draft" -o draft.json
@@ -102,11 +102,11 @@ check restored 0 'the edit is put back, and the first record verifies again' -- 
 check unpublished-create 0 "#114: create $unpublished with the packs of the add-on, and no publish" -- \
   "$live/api.sh" create-unpublished "$AD" "$unpublished"
 UN=$(cat unpublished-create.out)
-check unpublished-listed 0 '#114: list --packs gives published false for the version, with the packs of its draft' -- \
-  bash -c "\"$strata\" list --packs --json | jq -e --arg u '$UN' \
+check unpublished-listed 0 '#114: list --detail gives published false for the version, with the packs of its draft' -- \
+  bash -c "\"$strata\" list profiles --detail --json | jq -e --arg u '$UN' \
     '[.profiles[] | select(.uid == \$u and .published == false and (.packs | length) > 0)] | length == 1'"
 check unpublished-mark 0 '#114: the terminal row of the version says draft' -- \
-  bash -c "\"$strata\" list --packs --no-color | grep -qE '^  $unpublished@1\.0\.0 .* draft\$'"
+  bash -c "\"$strata\" list profiles --detail --no-color | grep -qE '^  $unpublished@1\.0\.0 .* draft\$'"
 check unpublished-delete 0 "#114: delete $unpublished" -- "$live/api.sh" delete-named "$unpublished"
 
 echo
