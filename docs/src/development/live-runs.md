@@ -1021,11 +1021,11 @@ mark `disabled`. These are the stages and the options:
 | `variables-accepts`, `variables-says` | 0 | #623: the route accepts the packs, and `updateChecks.requiredVariables.names` holds the required variables that the move adds. A live run passed. |
 | `variables-update`, `variables-refused` | 0 | #623: Palette refuses the update with HTTP 500 and `InvalidVariable`, the code that `requiredVariables.code` names. The message names a variable of `requiredVariables.names`. A live run passed: Palette refused the update with HTTP 500 and `InvalidVariable`, and the message named the variable. |
 
-Each check of stage 6 but `bump-text-says` and `bump-text-skip` passes on
-cluster A, built on Kubernetes 1.35.8. That version is two minor versions under
-the newest version of the registry, 1.37.0. The stage exits `0`. The two checks
-have no result yet: no live window ran their new forms. `bump-text-says` reads
-the place of the line, and `bump-text-skip` reads the new words of #919.
+Each check of stage 6 but `bump-text-says` and `bump-text-skip` passes on cluster A, built on
+Kubernetes 1.35.8. That version is two minor versions under the newest version
+of the registry, 1.37.0. The stage exits `0`. `bump-text-says` has no result
+yet: no live window ran the form of the check that reads the place of the line.
+`bump-text-skip` has no result yet: no live window ran the new words of #919.
 
 Stage 7 can use cluster A on Kubernetes 1.35.8 too. `SKIP` is then a version of
 the release profile with Kubernetes 1.37.0. `VARIABLES` is a version of the
