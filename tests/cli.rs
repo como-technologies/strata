@@ -1311,6 +1311,14 @@ fn detail_reads_each_row_deeper_and_the_old_names_packs_and_applied_are_unknown_
                 "{args:?}: {}",
                 r.err
             );
+            // the tip names `--pack`, as the line of release 0.35.0 on the compatibility page says
+            if old == "--packs" {
+                assert!(
+                    r.err.contains("tip: a similar argument exists: '--pack'"),
+                    "{args:?}: {}",
+                    r.err
+                );
+            }
             // the refusal is text, also with `--json`: no document, and no JSON line of an error
             assert_eq!(r.out, "", "{args:?}");
             assert!(

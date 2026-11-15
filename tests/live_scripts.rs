@@ -3974,7 +3974,8 @@ fn baseline_stage() -> Stage {
 /// refuses each one as strata does. Each step of a live script that reads the rows deeper calls
 /// `--detail`, so it passes against the stand-in. The steps are `list-packs` of packs.sh,
 /// `addon-list` and `addon-list-says` of stage 2 of pending.sh, and `list-applied` and
-/// `list-applied-json` of verify.sh.
+/// `list-applied-json` of verify.sh. For verify.sh, the stand-in answers `list clusters` only with
+/// `--detail`, so a call with no `--detail` fails its step.
 #[test]
 fn each_live_step_that_reads_the_rows_deeper_calls_detail_and_passes_against_the_stand_in() {
     let mut stage = Stage::new(serde_json::json!({
@@ -4005,6 +4006,22 @@ fn each_live_step_that_reads_the_rows_deeper_calls_detail_and_passes_against_the
     // cluster A is at the baseline
     let live = stage.copy_live();
     executable(&live.join("baseline.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    stage.strata(
+        "list clusters --detail",
+        0,
+        "1 cluster\n  cluster:c-a  fred  Running  aws\n    strata-live-profile@1.0.0  r-1  cluster\n",
+    );
+    stage.strata(
+        "list clusters --detail --json",
+        0,
+        r#"{"clusters":[{"uid":"c-a","name":"fred","profiles":[{"uid":"r-1","name":"strata-live-profile","version":"1.0.0"}]}]}"#,
+    );
+    // the first rule that matches gives the answer, so this rule takes each other `list clusters`
+    stage.strata_err(
+        "list clusters*",
+        1,
+        "the stand-in answers list clusters only with --detail\n",
+    );
     let (_, steps) = stage.run("verify.sh", &[]);
     passed(&steps, &["list-applied", "list-applied-json"]);
 }

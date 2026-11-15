@@ -138,16 +138,7 @@ fn the_address_of_the_book_is_the_public_pages_site_of_the_repository() {
 fn no_tracked_file_names_the_host_of_a_private_pages_site() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let host = concat!("pages", ".github.io");
-    let faults: Vec<String> = tracked_files(root, &[])
-        .into_iter()
-        .filter(|file| std::fs::read_to_string(file).is_ok_and(|text| text.contains(host)))
-        .map(|file| {
-            file.strip_prefix(root)
-                .unwrap_or(&file)
-                .display()
-                .to_string()
-        })
-        .collect();
+    let faults = tracked_files_whose_text(root, &[], |text| text.contains(host));
     assert!(
         faults.is_empty(),
         "these files name {host}; give the address of strata::BOOK_URL:\n{}",
@@ -1374,6 +1365,25 @@ fn tracked_files(root: &Path, paths: &[&str]) -> Vec<PathBuf> {
         .split('\0')
         .filter(|path| !path.is_empty())
         .map(|path| root.join(path))
+        .collect()
+}
+
+/// The path in the repository of each file of [`tracked_files`] whose text `matches`. A file that
+/// is not text, such as an image, does not match.
+fn tracked_files_whose_text(
+    root: &Path,
+    paths: &[&str],
+    matches: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    tracked_files(root, paths)
+        .into_iter()
+        .filter(|file| std::fs::read_to_string(file).is_ok_and(|text| matches(&text)))
+        .map(|file| {
+            file.strip_prefix(root)
+                .unwrap_or(&file)
+                .display()
+                .to_string()
+        })
         .collect()
 }
 
@@ -3487,12 +3497,8 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
 fn only_the_compatibility_page_names_the_old_names_packs_and_applied_of_list() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let names_old = |text: &str| text.contains("--packs") || text.contains("--applied");
-    let named: Vec<String> = tracked_files(root, &["src", "examples", "scripts", "docs/src"])
-        .iter()
-        // a file that is not text, such as an image, names no flag
-        .filter(|f| std::fs::read_to_string(f).is_ok_and(|text| names_old(&text)))
-        .map(|f| f.strip_prefix(root).unwrap().display().to_string())
-        .collect();
+    let named =
+        tracked_files_whose_text(root, &["src", "examples", "scripts", "docs/src"], names_old);
     assert_eq!(named, ["docs/src/reference/compatibility.md"]);
 
     let page = read(&docs().join("reference/compatibility.md"));
