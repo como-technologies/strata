@@ -458,8 +458,8 @@ the Rust code, and these rules are for the Go code.
 - No local name hides a package that its file imports, such as a variable `api` in
   a file that imports `internal/api`. A test makes sure of it.
 - `internal/testkit` holds each helper that the tests of two packages use, such
-  as the script that stands for `strata`. It also holds each value of the test
-  data and each message of a failure that the tests of two packages use. Only
+  as the script that stands for `strata`. It also holds the profiles and the keys
+  of packs, and the messages of a failure, that the tests of two packages use. Only
   test files import it. A helper or a value that one package uses stays in that
   package. The tests of `internal/docs` keep their own copy, because testkit
   imports `internal/docs`.

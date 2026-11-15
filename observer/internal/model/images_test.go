@@ -345,7 +345,7 @@ func TestAnImageFindingIsNotADriftOfTheContent(t *testing.T) {
 	if s.Counts.Drift != 0 || s.Profiles[0].Status != StatusOK || s.Profiles[0].Packs[0].Status != StatusOK {
 		t.Errorf("profile %q, pack %q, counts %+v", s.Profiles[0].Status, s.Profiles[0].Packs[0].Status, s.Counts)
 	}
-	if len(s.Events) != 1 || s.Events[0].Reason != "ImageMoved" || s.Events[0].Type != EventDrift {
+	if len(s.Events) != 1 || s.Events[0].Reason != eventKinds[ImageMoved].reason || s.Events[0].Type != EventDrift {
 		t.Errorf("events %+v", s.Events)
 	}
 }

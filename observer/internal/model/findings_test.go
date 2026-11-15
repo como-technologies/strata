@@ -139,7 +139,7 @@ func TestTheFindingsComeInTheOrderOfTheProfileAndTheKind(t *testing.T) {
 	for _, f := range got {
 		order = append(order, f.Profile+" "+string(f.Kind))
 	}
-	want := []string{"a-stack@1.0.0 cluster-differs", "a-stack@1.0.0 published-changed", "b-stack@1.0.0 published-changed"}
+	want := []string{"a-stack@1.0.0 " + string(ClusterDiffers), "a-stack@1.0.0 " + string(PublishedChanged), "b-stack@1.0.0 " + string(PublishedChanged)}
 	if !slices.Equal(order, want) {
 		t.Fatalf("order %v", order)
 	}

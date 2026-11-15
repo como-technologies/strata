@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
@@ -180,12 +181,12 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 			ok := renamedSet(t, devdata.StateOK, [][2]string{{"fred-identity", profile}, {"quarry-1", cluster}, {`"dex"`, pack}, {`"` + testkit.DexKey + `"`, "addon/" + pack}})
 			pages := pagesOf(t, ok, "#p-"+encodeURIComponent(subject), packPage(subject, "addon", pack))
 			want := map[string][]string{
-				qPaletteHas:                  {"verify", "record.json"},
-				"Who changed it?":            {"verify", "record.json", "--who"},
-				"What changed?":              {"compare", "record.json", subject, "--full"},
-				qClusterRuns:                 {"compare", "record.json", "cluster:" + cluster + "/" + profile},
-				"What does the move change?": {"compare", "pack:" + dex + "/" + pack + "@2.42.0", "pack:" + dex + "/" + pack + "@2.44.0", "--full"},
-				"Which newer versions does Palette list?": {"behind", "record.json", "--pin", "addon/" + pack},
+				qPaletteHas:                  {runner.CmdVerify, "record.json"},
+				"Who changed it?":            {runner.CmdVerify, "record.json", "--who"},
+				"What changed?":              {runner.CmdCompare, "record.json", subject, runner.FlagFull},
+				qClusterRuns:                 {runner.CmdCompare, "record.json", "cluster:" + cluster + "/" + profile},
+				"What does the move change?": {runner.CmdCompare, "pack:" + dex + "/" + pack + "@2.42.0", "pack:" + dex + "/" + pack + "@2.44.0", runner.FlagFull},
+				"Which newer versions does Palette list?": {runner.CmdBehind, "record.json", runner.FlagPin, "addon/" + pack},
 			}
 			seen := map[string]bool{}
 			for i, page := range pages {
@@ -214,9 +215,9 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 			// The splash of a text above the cap: the published side of dex, and the move of kubernetes.
 			large := renamedSet(t, devdata.StateTextTooLarge, [][2]string{{"fred-identity", profile}, {`"dex"`, pack}, {`"` + testkit.DexKey + `"`, "addon/" + pack}, {`"kubernetes"`, kubernetes}, {`"` + testkit.KubernetesKey + `"`, "k8s/" + kubernetes}})
 			splashes := pagesOf(t, large, packPage(subject, "addon", pack), packPage(testkit.BaseProfile, "k8s", kubernetes))
-			check("the splash of dex", commandAfter(t, splashes[0], tooLargeTitle), []string{"compare", "record.json", subject, "--full"})
+			check("the splash of dex", commandAfter(t, splashes[0], tooLargeTitle), []string{runner.CmdCompare, "record.json", subject, runner.FlagFull})
 			check("the splash of kubernetes", commandAfter(t, splashes[1], tooLargeTitle),
-				[]string{"compare", "pack:" + k8s + "/" + kubernetes + "@1.35.3", "pack:" + k8s + "/" + kubernetes + "@1.36.2", "--full"})
+				[]string{runner.CmdCompare, "pack:" + k8s + "/" + kubernetes + "@1.35.3", "pack:" + k8s + "/" + kubernetes + "@1.36.2", runner.FlagFull})
 
 			// The splash of a page with no records names the cluster by its uid.
 			first := renamedSet(t, devdata.StateNoRecords, [][2]string{{testkit.ClusterUID, uid}})

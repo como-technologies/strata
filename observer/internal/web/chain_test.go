@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
@@ -71,9 +72,9 @@ func TestTheCompareBadgeOfANewerVersionIsTheNeutralBadgeNewer(t *testing.T) {
 	for _, c := range []struct {
 		where, hash, variant, option, badge string
 	}{
-		{"the newer version of traefik", traefikHash, "", `<option value="newer" selected>`, badge("b", "Newer")},
+		{"the newer version of traefik", traefikHash, "", `<option value="` + string(model.SideNewer) + `" selected>`, badge("b", "Newer")},
 		{"the newest profile version of vendor-product", vendorHash, "", newestSelected, badge("b", "Newer")},
-		{"the published side of dex", dexHash, "", `<option value="published" selected>`, badge("r", "Changed")},
+		{"the published side of dex", dexHash, "", `<option value="` + string(model.SidePublished) + `" selected>`, badge("r", "Changed")},
 	} {
 		head := compareHead(t, pageOf(t, screens, c.hash, c.variant))
 		mustHold(t, c.where, head, c.option, c.badge)

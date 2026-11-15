@@ -174,14 +174,13 @@ these three:
 - **Palette gave no answer.** A request failed. The page shows the HTTP status. This
   is no finding, and it raises no severity.
 
-Palette checks two rules only at the update, and the question does not check them. Strata
-checks them with no request, and the page shows each check that finds something beside
-each of the three answers:
+The question does not check two rules of a move. Strata checks them with no request, and
+the page shows each check that finds something beside each of the three answers:
 
 - **A move of Kubernetes that skips a minor version.** The column "Palette" adds "Skips a
-  minor version". The card says that Palette refuses the update with
-  `K8sUpgradeNotSupported`, and it names the next step, such as `kubernetes@1.36.2`. Move
-  to that version first: see [A move that skips a minor
+  minor version". The card names the rule of Kubernetes, "Kubernetes moves one minor
+  version at each upgrade", and the next step, such as `kubernetes@1.36.2`. It gives no
+  code of Palette. Move to that version first: see [A move that skips a minor
   version](../commands/behind.md#a-move-that-skips-a-minor-version).
 - **A move that adds a required variable with no default value.** The column adds "Adds a
   required variable", and the card names the variable. Give it a value at the update, or

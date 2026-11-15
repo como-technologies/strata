@@ -181,12 +181,12 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 	// twoProfiles is the empty registry and the two profiles of a row of velero and of cilium.
 	const twoProfiles = "  " + testkit.DexProfile + "," + testkit.GazooProfile + " "
 	want := []string{
-		"no-upstream-digest  " + testkit.DexProfile + " " + testkit.DexKey,
-		"no-upstream-digest" + twoProfiles + testkit.VeleroKey,
-		"older-registry-copy Public Repo broken@1.0.0 " + testkit.KubernetesKey,
-		"read-error  broken@1.0.0 " + testkit.KubernetesKey + "," + testkit.UbuntuKey,
-		"read-error  zz.json.gz ",
-		"pin-error" + twoProfiles + "cni/cilium",
+		string(NoUpstreamDigest) + "  " + testkit.DexProfile + " " + testkit.DexKey,
+		string(NoUpstreamDigest) + twoProfiles + testkit.VeleroKey,
+		string(OlderRegistryCopy) + " Public Repo broken@1.0.0 " + testkit.KubernetesKey,
+		string(ReadError) + "  broken@1.0.0 " + testkit.KubernetesKey + "," + testkit.UbuntuKey,
+		string(ReadError) + "  zz.json.gz ",
+		string(PinError) + twoProfiles + "cni/cilium",
 	}
 	// The rows keep the order of the table of the causes, and then the order of the group.
 	if !slices.Equal(got, want) {
@@ -357,7 +357,7 @@ func TestEachFindingMakesOneEventTheNewestFirst(t *testing.T) {
 	young := drifted(rec("b-stack", "1.0.0", docs.VerifyUnchanged), &docs.Verify{Gone: true})
 	c := content(t, old, young)
 	events := eventsAt(&c, nil, map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-time.Hour)})
-	if len(events) != 2 || events[0].Object != "b-stack@1.0.0" || events[0].Reason != "Gone" || events[1].Reason != "DriftFound" || events[1].Type != EventDrift {
+	if len(events) != 2 || events[0].Object != "b-stack@1.0.0" || events[0].Reason != eventKinds[Gone].reason || events[1].Reason != eventKinds[PublishedChanged].reason || events[1].Type != EventDrift {
 		t.Errorf("events %+v", events)
 	}
 	for kind := range eventKinds {
@@ -470,7 +470,7 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 		t.Errorf("counts %+v", s.Counts)
 	}
 	got := reasons(s.Events)
-	addonsEvent, baseEvent := "newer "+reasonNewProfile+" "+testkit.BarneyAddons, "newer "+reasonNewProfile+" "+testkit.BaseProfile
+	addonsEvent, baseEvent := string(EventNewer)+" "+reasonNewProfile+" "+testkit.BarneyAddons, string(EventNewer)+" "+reasonNewProfile+" "+testkit.BaseProfile
 	if !slices.Contains(got, addonsEvent) || slices.Contains(got, baseEvent) {
 		t.Errorf("events %q", got)
 	}

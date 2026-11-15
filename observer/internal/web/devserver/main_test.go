@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/testkit"
+	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
 // exitsTwo runs the server with args, and fails when it does not exit 2 with each of the words on stderr.
@@ -20,7 +21,7 @@ func exitsTwo(t *testing.T, args []string, words ...string) {
 }
 
 func TestAnUnknownStateExitsTwoAndNamesTheSets(t *testing.T) {
-	exitsTwo(t, []string{"-state", "nope"}, "first-seen")
+	exitsTwo(t, []string{"-state", "nope"}, string(devdata.StateFirstSeen))
 }
 
 func TestAnAddressThatIsNotLoopbackExitsTwo(t *testing.T) {
@@ -33,7 +34,7 @@ func TestADirectoryWithNoSetExitsTwo(t *testing.T) {
 
 // The server gives the page and the routes, with the headers of the real server.
 func TestTheServerGivesThePageAndTheRoutesOfTheSet(t *testing.T) {
-	addr, stop := startSet(t, "lost")
+	addr, stop := startSet(t, string(devdata.StateLost))
 	resp, body := request(t, http.MethodGet, "http://"+addr+"/v1/cluster", false)
 	if resp.StatusCode != 200 || !strings.Contains(body, `"page":"lost"`) || resp.Header.Get(testkit.HeaderPolicy) == "" {
 		t.Errorf("status %d, headers %v, body %s", resp.StatusCode, resp.Header, body)
@@ -96,7 +97,7 @@ func request(t *testing.T, method, url string, fromPage bool) (*http.Response, s
 // A person can click: a POST for a move gives the reply of the set, and the list of answers shows it after.
 // testkit.AskFlow makes the checks.
 func TestAClickOnAMoveGivesTheReplyOfTheSetAndTheListShowsIt(t *testing.T) {
-	base := "http://" + serveSet(t, "ok")
+	base := "http://" + serveSet(t, string(devdata.StateOK))
 	testkit.AskFlow(t, func(path string) (int, string) { return send(t, http.MethodGet, base+path, false) },
 		func(path string, page bool) (int, string) { return send(t, http.MethodPost, base+path, page) })
 }
@@ -104,7 +105,7 @@ func TestAClickOnAMoveGivesTheReplyOfTheSetAndTheListShowsIt(t *testing.T) {
 // The set asks shows one answer of each verdict from the start, and a click on a move that it holds gives
 // the answer again.
 func TestTheSetAsksListsOneAnswerOfEachVerdictAtTheStart(t *testing.T) {
-	base := "http://" + serveSet(t, "asks")
+	base := "http://" + serveSet(t, string(devdata.StateAsks))
 	code, list := send(t, http.MethodGet, base+testkit.AsksRoute, false)
 	if code != 200 {
 		t.Fatalf("the list gave %d", code)

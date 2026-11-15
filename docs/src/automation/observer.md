@@ -490,8 +490,8 @@ shows the long one:
 | Refuses | `Palette refuses: <code>` | Palette gave the error `<code>`. The card shows the message of Palette and the clusters that the message names. |
 | No answer | Palette gave no answer. | A request failed. The card adds the HTTP status, when the failure has one. A button "Ask again" follows. |
 
-Palette checks two more rules only at the update, and the question does not check them. So
-strata checks them, and `behind` gives each check that finds something in `bump.updateChecks`:
+The question does not check two more rules of a move. So strata checks them, and `behind`
+gives each check that finds something in `bump.updateChecks`:
 see [What the update checks](../internals/palette/validate-routes.md#what-the-update-checks).
 The page shows each check beside the answer of Palette, with each verdict. The column
 "Palette" adds a short line under the word of the answer. The card "Move to" adds an amber note
@@ -499,7 +499,7 @@ under the answer:
 
 | The column "Palette" | The card "Move to" | Meaning |
 | --- | --- | --- |
-| Skips a minor version | `The move skips a minor version: <pack>@<from> → <pack>@<to>` | The move of the Kubernetes pack skips a minor version. The card says that Palette refuses the update with `K8sUpgradeNotSupported`. It names the next step: the newest version of the next minor version in the registry, or `a version of <minor>`. See [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version). |
+| Skips a minor version | `The move skips a minor version: <pack>@<from> → <pack>@<to>` | The move of the Kubernetes pack skips a minor version. The card names the rule of Kubernetes: `Kubernetes moves one minor version at each upgrade`. It names the next step: the newest version of the next minor version in the registry, or `a version of <minor>`. The card gives no code of Palette. See [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version). |
 | Adds a required variable | `The move adds a required variable: <name>` | The move adds a required variable with no default value. The card says that Palette refuses an update that gives it no value, with `InvalidVariable`. With more variables, the words name the count and each variable. |
 
 - **A check comes from strata, and not from Palette.** The note says so. A check keeps its line

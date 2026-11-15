@@ -15,6 +15,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
+	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
 // at moves the clock of the observer and runs a content cycle.
@@ -265,11 +266,11 @@ func TestNoRecordLeavesTheVersionsClockEmpty(t *testing.T) {
 // The set no-records of the test data for the page holds the output that the observer gives with no
 // record. The page shows the set, so the set must be the output.
 func TestTheRealOutputWithNoRecordIsTheSetNoRecords(t *testing.T) {
-	raw := testkit.ReadFile(t, filepath.Join("..", "web", "testdata", "api", "no-records", "cluster.json"))
+	raw := testkit.ReadFile(t, filepath.Join("..", "web", "testdata", "api", string(devdata.StateNoRecords), "cluster.json"))
 	var setProfiles struct {
 		Profiles []model.Profile `json:"profiles"`
 	}
-	testkit.DecodeFile(t, filepath.Join("..", "web", "testdata", "api", "no-records", "profiles.json"), &setProfiles)
+	testkit.DecodeFile(t, filepath.Join("..", "web", "testdata", "api", string(devdata.StateNoRecords), "profiles.json"), &setProfiles)
 	var names []string
 	for _, p := range setProfiles.Profiles {
 		names = append(names, model.Subject(p.Name, p.Version))

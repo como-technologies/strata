@@ -96,7 +96,7 @@ func TestAfterARestartTheNewerSideAsksForOneCompareAtATimeAndKeepsTheAnswer(t *t
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	last := w.calls[len(w.calls)-1]
-	if last[0] != runner.CmdCompare || last[1] != "pack:"+registryUID+"/"+testkit.KubernetesFrom || last[2] != "pack:"+registryUID+"/"+testkit.KubernetesTo {
+	if last[0] != runner.CmdCompare || last[1]+" "+last[2] != move("kubernetes", "1.35.3", "1.36.2") {
 		t.Errorf("the last command is %v", last)
 	}
 	if slices.Contains(last, "POST") {

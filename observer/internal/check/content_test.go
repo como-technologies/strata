@@ -56,7 +56,7 @@ func twoRecords(t *testing.T) (*rig, *world) {
 }
 
 // publishedCSI is the finding of a drift of the published version of csi-aws-ebs, as TestContentCases writes it.
-const publishedCSI = "published-changed " + testkit.CSIKey
+const publishedCSI = string(model.PublishedChanged) + " " + testkit.CSIKey
 
 // pageAndContent is the failure of a check of the page and of the content cycle.
 const pageAndContent = "page %q, content %+v"
@@ -86,17 +86,17 @@ func TestContentCases(t *testing.T) {
 		}, copy: model.CopyDiffers, want: []string{publishedCSI}, also: true, who: 1},
 		{name: "cluster differs only", setup: func(t *testing.T, w *world) {
 			w.compares = map[int]docs.Diff{0: {RootB: "e06b", Summary: docs.DiffSummary{MaxImpact: "cluster-wide"}, Packs: []docs.Pack{changedPack(testkit.CSIKey)}}}
-		}, copy: model.CopyDiffers, want: []string{"cluster-differs " + testkit.CSIKey}},
+		}, copy: model.CopyDiffers, want: []string{string(model.ClusterDiffers) + " " + testkit.CSIKey}},
 		{name: "same content", setup: func(t *testing.T, w *world) {
 			w.compares = map[int]docs.Diff{0: {SameContent: true, Packs: []docs.Pack{{Key: testkit.UbuntuKey, Status: docs.PackChanged}}}}
 		}, copy: model.CopySameContent},
 		{name: "image id changed with same true", setup: func(t *testing.T, w *world) {
 			w.compares = map[int]docs.Diff{0: {Same: true, SameContent: true, ImageIDsChanged: []docs.KeyOnly{{Key: testkit.UbuntuKey}}}}
-		}, copy: model.CopySame, want: []string{"image-id-changed " + testkit.UbuntuKey}},
+		}, copy: model.CopySame, want: []string{string(model.ImageIDChanged) + " " + testkit.UbuntuKey}},
 		{name: "overwritten", setup: func(t *testing.T, w *world) {
 			w.rows[0].Status = docs.VerifyDrifted
 			w.rows[0].Diff = &docs.Diff{Verify: &docs.Verify{OverwrittenBy: testkit.AWSStackNewer}}
-		}, copy: model.CopySame, want: []string{"overwritten "}},
+		}, copy: model.CopySame, want: []string{string(model.Overwritten) + " "}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

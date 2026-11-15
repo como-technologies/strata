@@ -10,6 +10,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
@@ -228,7 +229,7 @@ func sameRows(t *testing.T, where string, got, want []string) {
 
 // layoutRows gives the rows that a layout must show for a text, and the variant of the crawl that sets it.
 func layoutRows(layout, text string) []string {
-	if layout == "split" {
+	if layout == layoutSplit {
 		return splitRowsOf(text)
 	}
 	return unifiedRowsOf(text)
@@ -305,11 +306,11 @@ func variantOf(side, layout, tab, k string) string {
 	}
 	switch {
 	case tab == "" && layout == layoutSplit:
-		return prefix + "split"
+		return prefix + layoutSplit
 	case tab == "":
 		return strings.TrimSuffix(prefix, " ")
 	case layout == layoutSplit:
-		return prefix + "split tab " + tab + " " + k
+		return prefix + layoutSplit + " tab " + tab + " " + k
 	}
 	return prefix + "tab " + tab + " " + k
 }
@@ -328,7 +329,7 @@ func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 		open                    string
 	}{
 		{dexHash, dexPublished, testkit.DexProfile, testkit.DexKey, model.SidePublished, ""},
-		{dexHash, dexMove, testkit.DexProfile, testkit.DexKey, model.SideNewer, "newer"},
+		{dexHash, dexMove, testkit.DexProfile, testkit.DexKey, model.SideNewer, string(model.SideNewer)},
 		{k8sHash, k8sMove, testkit.BaseProfile, testkit.KubernetesKey, model.SideNewer, ""},
 		{traefikHash, traefikMove, testkit.GatewayProfile, testkit.TraefikKey, model.SideNewer, ""},
 	} {
@@ -370,7 +371,7 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 		open         string
 	}{
 		{dexPublished, testkit.DexProfile, model.SidePublished, nil, ""},
-		{dexMove, testkit.DexProfile, model.SideNewer, []string{`<td class="m">added</td><td>Parameter</td><td class="m">dex_hostname</td>`}, "newer"},
+		{dexMove, testkit.DexProfile, model.SideNewer, []string{`<td class="m">added</td><td>Parameter</td><td class="m">dex_hostname</td>`}, string(model.SideNewer)},
 	} {
 		d := diffOf(t, set, c.profile, testkit.DexKey, c.side)
 		var want, wantSplit []string
@@ -523,7 +524,7 @@ func viewAttr(attr, view string) string { return `data-` + attr + `="` + view + 
 func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *testing.T) {
 	const seg = `<span class="seg" role="group" aria-label="Diff layout">`
 	screens := render(t, devdata.StateOK, false)
-	for _, c := range []struct{ variant, where string }{{"", "values"}, {"tab " + dexPublished + " manifests", "manifests"}, {"side newer tab " + dexMove + " manifests", "manifests of the move"}} {
+	for _, c := range []struct{ variant, where string }{{"", "values"}, {variantOf("", layoutUnified, dexPublished, "manifests"), "manifests"}, {variantOf(string(model.SideNewer), layoutUnified, dexMove, "manifests"), "manifests of the move"}} {
 		page := pageOf(t, screens, dexHash, c.variant)
 		heads := strings.Count(page, diffHeadTag)
 		if heads == 0 || strings.Count(page, seg) != heads {
@@ -532,7 +533,7 @@ func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *te
 		mustHold(t, c.where, page, pressedButton("view", layoutUnified, "Unified", true)+pressedButton("view", layoutSplit, "Split", false))
 		mustNotHold(t, c.where, page, pressedButton("view", layoutSplit, "Split", true))
 	}
-	split := pageOf(t, screens, dexHash, "split")
+	split := pageOf(t, screens, dexHash, layoutSplit)
 	mustHold(t, "split", split, pressedButton("view", layoutUnified, "Unified", false)+pressedButton("view", layoutSplit, "Split", true))
 	mustNotHold(t, "split", split, `<td class="c">`)
 
@@ -601,24 +602,24 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	checkPlace(t, tooLarge, published)
 	mustNotHold(t, where, published, diffHead, diffBody, `data-view=`)
 	// The manifest keeps its row in the small table, because it has no text, and the splash comes with the command.
-	manifests := cardOf(t, pageOf(t, screens, dexHash, "tab "+dexPublished+" manifests"), tabAttrs(dexPublished, "manifests"))
+	manifests := cardOf(t, pageOf(t, screens, dexHash, variantOf("", layoutUnified, dexPublished, "manifests")), tabAttrs(dexPublished, "manifests"))
 	where = "the manifests of dex"
 	checkPlace(t, tooLarge, manifests)
 	mustHold(t, where, manifests, `<tr><td class="m">changed</td>`+manifestCell+`fred-realm-config</td></tr>`)
 	mustNotHold(t, where, manifests, diffHead, diffBody)
 	// The newer side of the same pack keeps its text.
-	move := cardOf(t, pageOf(t, screens, dexHash, "side newer"), tabOf(dexMove))
+	move := cardOf(t, pageOf(t, screens, dexHash, variantOf(string(model.SideNewer), layoutUnified, "", "")), tabOf(dexMove))
 	where = "the move of dex"
 	mustHold(t, where, move, diffHead)
 	mustNotHold(t, where, move, tooLargeTitle)
 	// The newer side of kubernetes has the command with the two versions of the pack.
 	k8s := cardOf(t, pageOf(t, screens, k8sHash, ""), tabOf(k8sMove))
 	where = testkit.KubernetesValues
-	tooLarge.steps = []string{"<code>" + comparePacks + uid + "/" + testkit.KubernetesFrom + " pack:" + uid + "/" + testkit.KubernetesTo + " --full</code>"}
+	tooLarge.steps = []string{"<code>" + comparePacks + uid + "/" + testkit.KubernetesFrom + " pack:" + uid + "/" + testkit.KubernetesTo + " " + runner.FlagFull + "</code>"}
 	checkPlace(t, tooLarge, k8s)
 	mustNotHold(t, where, k8s, diffHead)
 	// The pack has no manifest, so the Manifests tab says so, links to the tab with the change, and shows no splash of a large text.
-	none := cardOf(t, pageOf(t, screens, k8sHash, "tab "+k8sMove+" manifests"), tabAttrs(k8sMove, "manifests"))
+	none := cardOf(t, pageOf(t, screens, k8sHash, variantOf("", layoutUnified, k8sMove, "manifests")), tabAttrs(k8sMove, "manifests"))
 	where = "the manifests of kubernetes"
 	mustHold(t, where, none, "No manifest"+changedHere, tabLink(k8sMove, "values", "Values"))
 	mustNotHold(t, where, none, tooLargeTitle)
@@ -644,8 +645,8 @@ func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"diffs.json": dexClusterTooLarge(t)})
 	command := compareCluster + set.Cluster.Cluster.Name + "/fred-identity"
 	r := clickIn(t, dir, scratch, dexHash, "0")
-	card := cardOf(t, r.After, tabOf("side-"+testkit.DexProfile+"-"+testkit.DexKey+"-cluster"))
-	mustHold(t, "the cluster side", card, tooLargeNote, "<code>"+command+" --full</code>")
+	card := cardOf(t, r.After, tabOf(tabId(api.PackDiff{Profile: testkit.DexProfile, Key: testkit.DexKey, Side: model.SideCluster})))
+	mustHold(t, "the cluster side", card, tooLargeNote, "<code>"+command+" "+runner.FlagFull+"</code>")
 	mustNotHold(t, "the cluster side", card, diffHead)
 	// The profile page shows the same command, with the pack name left out and no flag.
 	profile := pagesOf(t, dir, fredHash)[0]
@@ -658,7 +659,7 @@ func TestTheCommandOfATextAboveTheCapShowsNamesAsText(t *testing.T) {
 	swap := replaceText("quarry-1", evil)
 	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"cluster.json": swap, "diffs.json": dexClusterTooLarge(t)})
 	page := clickIn(t, dir, scratch, dexHash, "0").After
-	mustHold(t, "the command", page, `&#39;cluster:`+injection+`/fred-identity&#39; --full`)
+	mustHold(t, "the command", page, `&#39;cluster:`+injection+`/fred-identity&#39; `+runner.FlagFull)
 	mustNotHold(t, "the command", page, "<img")
 }
 
@@ -1055,7 +1056,7 @@ func TestAnAnswerWithMarkupShowsAsText(t *testing.T) {
 				lines++
 			}
 		}
-		if s.Variant == "split" || strings.HasPrefix(s.Variant, "split tab") {
+		if s.Variant == layoutSplit || strings.HasPrefix(s.Variant, layoutSplit+" tab") {
 			mustNotHold(t, s.Hash+" "+s.Variant, s.HTML, "<img")
 		}
 	}

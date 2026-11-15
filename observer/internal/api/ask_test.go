@@ -118,7 +118,7 @@ func TestTheChecksOfStrataReachTheDetailTierBesideTheAnswerAndNoOtherRoute(t *te
 	if got.Verdict != model.VerdictNoError || got.Newest != "1.37.0" || skip == nil || variables == nil {
 		t.Fatalf("answer %+v", got)
 	}
-	if skip.Code != testkit.CodeMinorSkip || skip.From != "1.35.3" || skip.To != "1.37.0" || skip.NextMinor != "1.36" || skip.NextStep != "1.36.2" {
+	if skip.From != "1.35.3" || skip.To != "1.37.0" || skip.NextMinor != "1.36" || skip.NextStep != "1.36.2" {
 		t.Fatalf("the skip %+v", skip)
 	}
 	if variables.Code != testkit.CodeVariable || !slices.Equal(variables.Names, []string{"platform_owner"}) {
@@ -128,7 +128,7 @@ func TestTheChecksOfStrataReachTheDetailTierBesideTheAnswerAndNoOtherRoute(t *te
 	if len(list.Asks) != 1 || !reflect.DeepEqual(list.Asks[0].UpdateChecks, got.UpdateChecks) {
 		t.Errorf(listOfAnswers, list)
 	}
-	noSummaryRouteStateOrLogHolds(t, r, h, skip.Code, variables.Code, variables.Names[0], "nextStep")
+	noSummaryRouteStateOrLogHolds(t, r, h, "skippedMinor", variables.Code, variables.Names[0], "nextStep")
 }
 
 func TestA403FromPaletteReadsNoAnswerWithItsStatusAndMakesNoFinding(t *testing.T) {
@@ -329,12 +329,12 @@ func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.
 	var behind int
 	for _, line := range cycles {
 		switch {
-		case strings.HasPrefix(line, "behind "):
+		case strings.HasPrefix(line, runner.CmdBehind+" "):
 			behind++
-			testkit.HoldsAll(t, "the line", line, " --no-impact ")
-			testkit.HoldsNone(t, "the line", line, "--pin")
-		case strings.HasPrefix(line, "compare "), strings.HasPrefix(line, "verify "):
-			testkit.HoldsAll(t, "the line", line, " --full ")
+			testkit.HoldsAll(t, "the line", line, " "+runner.FlagNoImpact+" ")
+			testkit.HoldsNone(t, "the line", line, runner.FlagPin)
+		case strings.HasPrefix(line, runner.CmdCompare+" "), strings.HasPrefix(line, runner.CmdVerify+" "):
+			testkit.HoldsAll(t, "the line", line, " "+runner.FlagFull+" ")
 			testkit.HoldsNone(t, "the line", line, "--validate", "--repave")
 		}
 	}
@@ -345,7 +345,7 @@ func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	after := lines()[len(cycles):]
-	if len(after) != 1 || after[0] != "behind record-0.json --pin "+testkit.KubernetesKey+" --json --compact -q" {
+	if len(after) != 1 || after[0] != runner.CmdBehind+" record-0.json "+runner.FlagPin+" "+testkit.KubernetesKey+" --json --compact -q" {
 		t.Errorf("the click ran %v", after)
 	}
 }

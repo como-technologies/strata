@@ -110,7 +110,7 @@ func TestAskRunsBehindForOnePackOnTheRecordOfTheProfileAndKeepsTheAnswer(t *test
 	if names := entries(t, r.work); len(names) != 0 {
 		t.Errorf("work holds %v", names)
 	}
-	testkit.HoldsAll(t, "the log", r.log.String(), "verdict=no-error")
+	testkit.HoldsAll(t, "the log", r.log.String(), "verdict="+string(model.VerdictNoError))
 	testkit.HoldsNone(t, "the log", r.log.String(), testkit.KubernetesKey)
 }
 
@@ -204,7 +204,7 @@ func TestAnAnswerStaysInMemoryAndTheStateHoldsNone(t *testing.T) {
 	if len(o.state.Moves) == 0 {
 		t.Error("the state holds no move")
 	}
-	testkit.StateHoldsNone(t, r.state, "RefusalCode", "refuses")
+	testkit.StateHoldsNone(t, r.state, "RefusalCode", string(model.VerdictRefuses))
 	if left := r.restart(&world{}).Answers(); len(left) != 0 {
 		t.Errorf("a restart kept %+v", left)
 	}

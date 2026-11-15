@@ -536,7 +536,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 	go func() {
 		defer close(answered)
 		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Get("http://" + addr + "/v1/packs/" + subject + testkit.KubernetesDiff + "?side=newer")
+		resp, err := client.Get("http://" + addr + "/v1/packs/" + subject + testkit.KubernetesDiff + "?side=" + string(model.SideNewer))
 		if err == nil {
 			resp.Body.Close()
 		}

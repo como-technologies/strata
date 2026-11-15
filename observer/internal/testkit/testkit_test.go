@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/runner"
 )
 
 func TestOutFileGivesTheArgumentAfterTheFlagAndAnErrorWhenThereIsNone(t *testing.T) {
@@ -15,9 +16,9 @@ func TestOutFileGivesTheArgumentAfterTheFlagAndAnErrorWhenThereIsNone(t *testing
 		want string
 		ok   bool
 	}{
-		{[]string{"snapshot", "a", "-o", "out.json", "-q"}, "out.json", true},
-		{[]string{"snapshot", "a", "-q"}, "", false},
-		{[]string{"snapshot", "a", "-o"}, "", false},
+		{[]string{runner.CmdSnapshot, "a", "-o", "out.json", "-q"}, "out.json", true},
+		{[]string{runner.CmdSnapshot, "a", "-q"}, "", false},
+		{[]string{runner.CmdSnapshot, "a", "-o"}, "", false},
 	} {
 		got, err := OutFile(c.args)
 		if got != c.want || (err == nil) != c.ok {
@@ -82,7 +83,7 @@ func TestMustJSONEncodesAValue(t *testing.T) {
 }
 
 func TestUnknownNamesTheCommandThatTheFakeDoesNotKnow(t *testing.T) {
-	if err := Unknown([]string{"compare", "a"}); err == nil || err.Error() != `the fake does not know "compare"` {
+	if err := Unknown([]string{runner.CmdCompare, "a"}); err == nil || err.Error() != `the fake does not know "`+runner.CmdCompare+`"` {
 		t.Errorf("got %v", err)
 	}
 }

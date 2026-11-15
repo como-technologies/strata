@@ -12,6 +12,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
@@ -153,7 +154,7 @@ const (
 	alertsOffTitle = "Nobody gets paged yet"
 	hiddenTitle    = "Part of this layer is hidden"
 	sameFact       = "The published version holds what the record holds."
-	dexCompare     = compareRecord + testkit.DexProfile + " --full"
+	dexCompare     = compareRecord + testkit.DexProfile + " " + runner.FlagFull
 	dexFullCompare = "<code>" + dexCompare + "</code>"
 	checkTheKey    = "Check the key in the Secret"
 	reachPalette   = "Check that the observer can reach Palette"
@@ -197,7 +198,7 @@ const (
 	// matchesRecord names a pack that matches its record, in the names of the cases.
 	matchesRecord = "a pack that matches its record"
 	// newestOption is the choice of the newest version in the list of a compare, and newestLabel its words.
-	newestOption   = `<option value="newest"`
+	newestOption   = `<option value="` + string(model.SideNewest) + `"`
 	newestSelected = newestOption + " selected>"
 	newestLabel    = "Record → Newest version"
 	// comparePacks starts the command that compares two packs. cardHead names the head of a card in a check.
@@ -455,10 +456,10 @@ var optionPattern = regexp.MustCompile(`<option value="([a-z]+)" (selected)?>([^
 // that hold a change. The page opens on the first side with a change, and on the published side when none has one.
 func expectedSides(set *devdata.Set, x api.ProfileView, k model.Pack) (options []string, labels map[string]string, changed map[string]bool, open string) {
 	subject := model.Subject(x.Name, x.Version)
-	labels = map[string]string{"published": "Record → Published now", "cluster": "Record → This cluster's copy"}
-	options = []string{"published"}
+	labels = map[string]string{string(model.SidePublished): "Record → Published now", string(model.SideCluster): "Record → This cluster's copy"}
+	options = []string{string(model.SidePublished)}
 	if c := x.ClusterCopy; c != nil && (c.Status == model.CopySame || c.Status == model.CopySameContent || c.Status == model.CopyDiffers) {
-		options = append(options, "cluster")
+		options = append(options, string(model.SideCluster))
 	}
 	var row *model.Newer
 	for i, r := range set.Newer.Newer {
@@ -467,10 +468,10 @@ func expectedSides(set *devdata.Set, x api.ProfileView, k model.Pack) (options [
 		}
 	}
 	if row != nil {
-		options = append(options, "newer")
-		labels["newer"] = fmt.Sprintf("%s@%s → %s@%s", row.Name, row.Version, row.Name, row.Newest)
+		options = append(options, string(model.SideNewer))
+		labels[string(model.SideNewer)] = fmt.Sprintf("%s@%s → %s@%s", row.Name, row.Version, row.Name, row.Newest)
 	}
-	changed = map[string]bool{"newer": row != nil}
+	changed = map[string]bool{string(model.SideNewer): row != nil}
 	var ofRecord int
 	for _, f := range x.Findings {
 		if !slices.Contains(f.Packs, k.Key) || f.Kind.IsImage() {
@@ -478,24 +479,24 @@ func expectedSides(set *devdata.Set, x api.ProfileView, k model.Pack) (options [
 		}
 		ofRecord++
 		if f.Kind == model.ClusterDiffers || f.Kind == model.ImageIDChanged {
-			changed["cluster"] = true
+			changed[string(model.SideCluster)] = true
 		} else {
-			changed["published"] = true
+			changed[string(model.SidePublished)] = true
 		}
 		if f.AlsoOnCluster {
-			changed["cluster"] = true
+			changed[string(model.SideCluster)] = true
 		}
 	}
 	if k.Status == model.StatusDrift && ofRecord == 0 {
-		changed["published"] = true
+		changed[string(model.SidePublished)] = true
 	}
 	// issue #708: the record against the newest version of its profile, when strata compared the two
 	if n := x.NewerVersion; n != nil && n.Move != nil {
-		options = append(options, "newest")
-		labels["newest"] = newestLabel
-		changed["newest"] = slices.ContainsFunc(n.Move.Packs, func(q model.MovePack) bool { return q.Key == k.Key })
+		options = append(options, string(model.SideNewest))
+		labels[string(model.SideNewest)] = newestLabel
+		changed[string(model.SideNewest)] = slices.ContainsFunc(n.Move.Packs, func(q model.MovePack) bool { return q.Key == k.Key })
 	}
-	open = "published"
+	open = string(model.SidePublished)
 	for _, side := range options {
 		if changed[side] {
 			open = side
@@ -602,7 +603,7 @@ func mustUnescape(t *testing.T, s string) string {
 func TestASideWithNoChangeShowsUndisturbedAndTheSideWithAChangeShowsItsTabs(t *testing.T) {
 	screens := crawl(t, devdata.StateOK)
 	// Dex has a change on the published side and a newer version, and the copy of the cluster is the record.
-	cluster := pageOf(t, screens, dexHash, "side cluster")
+	cluster := pageOf(t, screens, dexHash, variantOf(string(model.SideCluster), layoutUnified, "", ""))
 	where := "the copy of the cluster"
 	mustHold(t, where, cluster, "Undisturbed", "The copy of this cluster holds what the record holds.",
 		sameCopy, `<b class="">Changed</b>`+publishedNow, `<b class="">2.44.0</b>`+newerSpan)
@@ -690,7 +691,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 	var buildOnly int
 	for _, d := range set.Diffs {
 		layer, name, _ := strings.Cut(d.Key, "/")
-		page := pageOf(t, screens, packPage(d.Profile, layer, name), "side "+string(d.Side))
+		page := pageOf(t, screens, packPage(d.Profile, layer, name), variantOf(string(d.Side), layoutUnified, "", ""))
 		where := d.Profile + " " + d.Key + " " + string(d.Side)
 		if onlyTheBuild(d) {
 			// A change of the build alone shows the build and one line, and no tab: each tab would be empty.
@@ -745,7 +746,7 @@ func TestAnEmptyTabSaysSoAndLinksToTheTabWithTheChange(t *testing.T) {
 var flagPattern = regexp.MustCompile(flagWrap + `(?:` + flagLinkOf(`(b|y off)`, `([^"]*)`, `([^"]*)`, `([^"]*)`, `([A-Z]+)`) + `|` +
 	plainFlag(`(b|y off)`, `([A-Z]+)`) + `)<span class="tip" role="tooltip"><b>([A-Z]+)</b>([^<]*)</span></span>`)
 
-var flagNames = []string{"IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"}
+var flagNames = []string{docs.FlagIdentity, docs.FlagUpstream, docs.FlagAuthored, docs.FlagImages, docs.FlagCharts}
 
 // flagDefinitions reads the table of the flags in docs/src/reference/impact.md: when a flag lights, and what it means.
 func flagDefinitions(t *testing.T) map[string][2]string {
@@ -769,18 +770,18 @@ func flagDefinitions(t *testing.T) map[string][2]string {
 // flagTabOf reads a diff a second time, in Go, and gives the tab that a lit flag opens, or "" for a flag with no tab.
 func flagTabOf(flag string, d api.PackDiff) string {
 	switch flag {
-	case "AUTHORED":
+	case docs.FlagAuthored:
 		if valuesChanged(d) {
 			return "values"
 		}
 		if len(d.Manifests)+len(d.ParamChanges) > 0 {
 			return "manifests"
 		}
-	case "IMAGES":
+	case docs.FlagImages:
 		if len(d.ImageChanges) > 0 {
 			return "images"
 		}
-	case "CHARTS":
+	case docs.FlagCharts:
 		if len(d.ChartChanges) > 0 {
 			return "charts"
 		}
@@ -796,7 +797,7 @@ func TestEachFlagHasItsWordsAndALitFlagWithATabOpensIt(t *testing.T) {
 	for _, d := range set.Diffs {
 		layer, name, _ := strings.Cut(d.Key, "/")
 		where := d.Profile + " " + d.Key + " " + string(d.Side)
-		page := pageOf(t, screens, packPage(d.Profile, layer, name), "side "+string(d.Side))
+		page := pageOf(t, screens, packPage(d.Profile, layer, name), variantOf(string(d.Side), layoutUnified, "", ""))
 		got := flagPattern.FindAllStringSubmatch(page, -1)
 		if n := strings.Count(page, flagWrap); n != len(flagNames) || len(got) != len(flagNames) {
 			t.Fatalf("%s: %d flags in the markup and %d that the pattern reads, want %d", where, n, len(got), len(flagNames))
@@ -863,19 +864,19 @@ func TestTheWordsOfTheFlagsHaveOneCopyAndTheyComeFromTheBook(t *testing.T) {
 func TestAuthoredOpensManifestsWhenOnlyAManifestChanged(t *testing.T) {
 	dir := manifestAlone(t)
 	page := pagesOf(t, dir, dexHash)[0]
-	mustHold(t, "the flag", page, flagLink(dexHash, dexPublished, "manifests", "AUTHORED"))
+	mustHold(t, "the flag", page, flagLink(dexHash, dexPublished, "manifests", docs.FlagAuthored))
 	r := clickIn(t, dir, scratch, dexHash, "0", tabClick(dexPublished, "manifests"))
 	mustHold(t, "after a click on the flag", r.After, tabOn(dexPublished, "manifests"), dexManifest)
 	// The newer side of dex lights all five flags: three open a tab, and two stay plain.
-	move := pageOf(t, crawl(t, devdata.StateOK), dexHash, "side newer")
-	for _, f := range []string{"IDENTITY", "UPSTREAM"} {
+	move := pageOf(t, crawl(t, devdata.StateOK), dexHash, variantOf(string(model.SideNewer), layoutUnified, "", ""))
+	for _, f := range []string{docs.FlagIdentity, docs.FlagUpstream} {
 		mustHold(t, f, move, plainFlag("b", f))
 	}
-	for f, k := range map[string]string{"AUTHORED": "values", "IMAGES": "images", "CHARTS": "charts"} {
+	for f, k := range map[string]string{docs.FlagAuthored: "values", docs.FlagImages: "images", docs.FlagCharts: "charts"} {
 		mustHold(t, f, move, flagLink(dexHash, dexMove, k, f))
 	}
 	// A flag that did not light is dim and plain.
-	mustHold(t, "the dim flags", pageOf(t, crawl(t, devdata.StateOK), dexHash, ""), plainFlag("y off", "IDENTITY"), plainFlag("y off", "CHARTS"))
+	mustHold(t, "the dim flags", pageOf(t, crawl(t, devdata.StateOK), dexHash, ""), plainFlag("y off", docs.FlagIdentity), plainFlag("y off", docs.FlagCharts))
 }
 
 // ---- The card "Check this yourself" and the header of a pack ----
@@ -960,12 +961,12 @@ func TestTheCardCheckThisYourselfHasTheRowsOfTheMockWithRealNames(t *testing.T) 
 	if len(pack) != 7 {
 		t.Fatalf("the pack page of dex has %d rows, want 7: %+v", len(pack), pack)
 	}
-	mustHold(t, "the move", pack[5].command, comparePacks+uid+"/"+testkit.DexFrom+" pack:"+uid+"/"+testkit.DexTo+" --full")
-	mustHold(t, "the question", pack[6].command, "strata behind record.json --pin "+testkit.DexKey)
+	mustHold(t, "the move", pack[5].command, comparePacks+uid+"/"+testkit.DexFrom+" pack:"+uid+"/"+testkit.DexTo+" "+runner.FlagFull)
+	mustHold(t, "the question", pack[6].command, "strata behind record.json "+runner.FlagPin+" "+testkit.DexKey)
 	// A pack with no newer version shows neither, and a profile page shows neither.
 	for _, rows := range [][]termRow{termRows(t, shown(t, devdata.StateOK, reloaderHash)[0]), profile} {
 		for _, r := range rows {
-			mustNotHold(t, "the command", r.command, "compare pack:", "behind")
+			mustNotHold(t, "the command", r.command, runner.CmdCompare+" pack:", runner.CmdBehind)
 		}
 	}
 	// A profile with no drift has no row about who. An old placeholder is gone.
@@ -988,7 +989,7 @@ func TestTheNamesInTheCommandsOfTheCardAreRealNames(t *testing.T) {
 	mustHold(t, testkit.RecordsTool, script, []string{`"\(.source.name)_\(.source.version).json.gz"`, `tr -c 'A-Za-z0-9._\n-' _`, recordsSecret + "$i"}...)
 	app := readScripts(t)
 	mustHold(t, "the scripts", app, "replace(/[^A-Za-z0-9._-]/g, \"_\")")
-	for file, flags := range map[string][]string{"help-behind.txt": {"--pin <LAYER/NAME>"}, "help-verify.txt": {"--who", "--full"}, "help-compare.txt": {"--full"}} {
+	for file, flags := range map[string][]string{"help-behind.txt": {runner.FlagPin + " <LAYER/NAME>"}, "help-verify.txt": {"--who", runner.FlagFull}, "help-compare.txt": {runner.FlagFull}} {
 		help := string(testkit.ReadFile(t, "../../../docs/src/output/"+file))
 		mustHold(t, file, help, flags...)
 	}

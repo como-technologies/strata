@@ -35,7 +35,7 @@ func reasons(events []Event) []string {
 }
 
 // dexDrift is the reason of the event of the drift of fred-identity@2.3.0, as reasons gives it.
-const dexDrift = "drift DriftFound " + testkit.DexProfile
+var dexDrift = string(EventDrift) + " " + eventKinds[PublishedChanged].reason + " " + testkit.DexProfile
 
 // hoppy is a profile that runs an old copy of coredns.
 const hoppy = "hoppy-autoscale@1.0.0"
@@ -52,9 +52,9 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	events := eventsAt(&c, v, map[string]time.Time{FindingID(PublishedChanged, testkit.DexProfile): t0.Add(-5 * time.Hour)})
 	want := []string{
 		dexDrift,
-		"info ProfileUpdated " + testkit.DexProfile,
-		"newer NewVersion " + testkit.GatewayProfile,
-		"not-checked OldCopy " + hoppy + ", rubble-dns@1.0.0",
+		string(EventInfo) + " " + reasonProfileUpdated + " " + testkit.DexProfile,
+		string(EventNewer) + " " + reasonNewVersion + " " + testkit.GatewayProfile,
+		string(EventNotChecked) + " " + reasonOldCopy + " " + hoppy + ", rubble-dns@1.0.0",
 	}
 	if got := reasons(events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
@@ -147,7 +147,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t 
 		t.Errorf("counts %+v", s.Counts)
 	}
 	// the notice is as new as the last sight, and the drift is as old as the first
-	want := []string{"info AuditUnread " + testkit.DexProfile, dexDrift}
+	want := []string{string(EventInfo) + " " + reasonAuditUnread + " " + testkit.DexProfile, dexDrift}
 	if got := reasons(s.Events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
 	}

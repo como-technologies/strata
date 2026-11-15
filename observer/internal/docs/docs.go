@@ -236,9 +236,8 @@ type Bump struct {
 	UpdateChecks           *UpdateChecks `json:"updateChecks"`
 }
 
-// UpdateChecks is what strata checks about a move beside the answer of Palette: the rules that Palette
-// checks only at the update, and that no route of Palette checks before it. Only the detail tier sends
-// it, as strata gives it.
+// UpdateChecks is what strata checks about a move beside the answer of Palette: the rules that no route
+// of Palette checks before the update. Only the detail tier sends it, as strata gives it.
 type UpdateChecks struct {
 	RequiredVariables *RequiredVariables `json:"requiredVariables,omitempty"`
 	SkippedMinor      *MinorSkip         `json:"skippedMinor,omitempty"`
@@ -251,11 +250,10 @@ type RequiredVariables struct {
 	Names []string `json:"names"`
 }
 
-// MinorSkip is a move of the Kubernetes pack that skips a minor version. Palette refuses the update with
-// Code. NextMinor is the minor version that Palette allows next, and NextStep is its newest version in the
-// registry, when the registry has one.
+// MinorSkip is a move of the Kubernetes pack that skips a minor version. Kubernetes moves one minor
+// version at each upgrade, so strata checks the move. NextMinor is the minor version of the next step,
+// and NextStep is its newest version in the registry, when the registry has one.
 type MinorSkip struct {
-	Code      string `json:"code"`
 	Pack      string `json:"pack"`
 	From      string `json:"from"`
 	To        string `json:"to"`

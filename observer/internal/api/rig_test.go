@@ -54,9 +54,9 @@ const (
 	awsPacks       = "/v1/packs/" + testkit.AWSStackProfile
 	kubernetesDiff = awsPacks + testkit.KubernetesDiff
 	pathHealth     = "/healthz"
-	pathPublished  = awsPacks + "/" + testkit.CSIKey + "/diff?side=published"
-	pathCluster    = kubernetesDiff + "?side=cluster"
-	pathNewer      = kubernetesDiff + "?side=newer"
+	pathPublished  = awsPacks + "/" + testkit.CSIKey + "/diff?side=" + string(model.SidePublished)
+	pathCluster    = kubernetesDiff + "?side=" + string(model.SideCluster)
+	pathNewer      = kubernetesDiff + "?side=" + string(model.SideNewer)
 	// pathProfileByName names the profile with no version.
 	pathProfileByName = "/v1/profiles/aws-stack"
 )

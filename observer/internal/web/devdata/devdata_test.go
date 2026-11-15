@@ -816,7 +816,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 		}
 		if s := a.UpdateChecks.SkippedMinor; s != nil {
 			skips++
-			if a.Key != testkit.KubernetesKey || s.Code != testkit.CodeMinorSkip || s.To != a.Newest || s.NextStep != moves[row].Newest || a.Newest == moves[row].Newest {
+			if a.Key != testkit.KubernetesKey || s.To != a.Newest || s.NextStep != moves[row].Newest || a.Newest == moves[row].Newest {
 				t.Errorf("the skip %+v of %s %s, the row gives %s", s, a.Profile, a.Key, moves[row].Newest)
 			}
 		} else if !isMove(moves, a) {

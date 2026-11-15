@@ -159,11 +159,11 @@ func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 		{"the diff of the cluster side", pathCluster, 200, jsonType},
 		{"the diff of the newer side", pathNewer, 200, jsonType},
 		{"an unknown profile", "/v1/profiles/nope", 404, jsonType},
-		{"the diff of an unknown profile", "/v1/packs/nope" + testkit.KubernetesDiff + "?side=cluster", 404, jsonType},
-		{"the diff of an unknown pack", awsPacks + "/" + testkit.NopeKey + "/diff?side=cluster", 404, jsonType},
-		{"the diff of a pack with no change on the side", kubernetesDiff + "?side=published", 404, jsonType},
-		{"the diff of a pack that no pin names", awsPacks + "/" + testkit.CSIKey + "/diff?side=newer", 404, jsonType},
-		{"the diff of " + testkit.NoNewerProfile, kubernetesDiff + "?side=newest", 404, jsonType},
+		{"the diff of an unknown profile", "/v1/packs/nope" + testkit.KubernetesDiff + "?side=" + string(model.SideCluster), 404, jsonType},
+		{"the diff of an unknown pack", awsPacks + "/" + testkit.NopeKey + "/diff?side=" + string(model.SideCluster), 404, jsonType},
+		{"the diff of a pack with no change on the side", kubernetesDiff + "?side=" + string(model.SidePublished), 404, jsonType},
+		{"the diff of a pack that no pin names", awsPacks + "/" + testkit.CSIKey + "/diff?side=" + string(model.SideNewer), 404, jsonType},
+		{"the diff of " + testkit.NoNewerProfile, kubernetesDiff + "?side=" + string(model.SideNewest), 404, jsonType},
 		{"a diff with no side", kubernetesDiff, 400, jsonType},
 		{"a diff with " + noSuchSide, kubernetesDiff + "?side=nope", 400, jsonType},
 		{"an unknown route", "/v1/nope", 404, jsonType},
@@ -183,8 +183,8 @@ func TestAnUnknownProfileOrPackGets404AndNamesNoValue(t *testing.T) {
 	h := handlerOf(o)
 	for _, path := range []string{
 		"/v1/profiles/SENTINEL-PROFILE",
-		"/v1/packs/SENTINEL-PROFILE" + testkit.KubernetesDiff + "?side=cluster",
-		awsPacks + "/SENTINEL-LAYER/SENTINEL-PACK/diff?side=cluster",
+		"/v1/packs/SENTINEL-PROFILE" + testkit.KubernetesDiff + "?side=" + string(model.SideCluster),
+		awsPacks + "/SENTINEL-LAYER/SENTINEL-PACK/diff?side=" + string(model.SideCluster),
 		kubernetesDiff + "?side=SENTINEL-SIDE",
 		"/SENTINEL-PATH",
 	} {
@@ -314,7 +314,7 @@ func TestTheDetailRouteSplitsTheValuesInThreeLists(t *testing.T) {
 	h := handlerOf(o)
 	var got PackDiff
 	decode(t, get(h, pathPublished), &got)
-	if got.Profile != testkit.AWSStackProfile || got.Key != testkit.CSIKey || got.Side != model.SidePublished || got.Status != "changed" || got.Impact.Level != "cluster-wide" {
+	if got.Profile != testkit.AWSStackProfile || got.Key != testkit.CSIKey || got.Side != model.SidePublished || got.Status != docs.PackChanged || got.Impact.Level != "cluster-wide" {
 		t.Errorf("%+v", got)
 	}
 	v := got.Values
@@ -323,7 +323,7 @@ func TestTheDetailRouteSplitsTheValuesInThreeLists(t *testing.T) {
 		len(v.RepeatsTheLists) != 1 || v.RepeatsTheLists[0].Path != testkit.ImagePath || !v.Parseable {
 		t.Errorf("values %+v", v)
 	}
-	if len(got.Flags) != 2 || got.Flags[0] != "AUTHORED" || got.Flags[1] != "IMAGES" ||
+	if len(got.Flags) != 2 || got.Flags[0] != docs.FlagAuthored || got.Flags[1] != docs.FlagImages ||
 		len(got.ImageChanges) != 1 || got.ImageChanges[0].Name != "ebs-csi-driver" || got.ImageChanges[0].Old != sentinelValue ||
 		len(got.ChartChanges) != 0 || got.ChartChanges == nil || len(got.Masked) != 1 ||
 		len(got.Manifests) != 1 || got.Manifests[0].Op != "added" || got.Manifests[0].Name != "storageclass" ||

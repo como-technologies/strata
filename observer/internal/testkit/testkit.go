@@ -105,10 +105,8 @@ const (
 	// ImageItem is the path of the first image of a pack, and ImagePath is the path of its name.
 	ImageItem = "pack.content.images[0]"
 	ImagePath = ImageItem + ".image"
-	// The codes of Palette: CodeDependency refuses a move, CodeMinorSkip refuses a move that skips a minor version, and
-	// CodeVariable refuses a required variable with no value.
+	// The codes of Palette: CodeDependency refuses a move, and CodeVariable refuses a required variable with no value.
 	CodeDependency = "DependencyPackUpgradeNotSupported"
-	CodeMinorSkip  = "K8sUpgradeNotSupported"
 	CodeVariable   = "InvalidVariable"
 	// AuditSentinel is in the reason of a read of the audit log that failed. No route and no log holds it.
 	AuditSentinel = "AUDIT-REASON-SENTINEL"

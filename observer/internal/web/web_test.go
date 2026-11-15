@@ -23,6 +23,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -637,8 +638,8 @@ const (
 	// notSet is the word of the nav item Alerts of an observer that sends no alert.
 	notSet = "Not set"
 	// The pill and the words of the records: with no record read yet, and with first-seen records.
-	unknownRecords = "records: <b>unknown</b>"
-	firstSeenPill  = "records: <b>first-seen</b>"
+	unknownRecords = "records: <b>" + baseline.Unknown + "</b>"
+	firstSeenPill  = "records: <b>" + baseline.FirstSeen + "</b>"
 	firstSeenWords = "No pipeline approved these records yet."
 	// comparedFirst names the compare of each digest with the first digest of its tag. comparedLink is its link on the
 	// overview.
@@ -764,7 +765,7 @@ func TestAPackWithAnErrorRowDoesNotSayIdenticalForThePublishedSide(t *testing.T)
 			continue
 		}
 		switch s.Variant {
-		case "side published":
+		case variantOf(string(model.SidePublished), layoutUnified, "", ""):
 			published = true
 			const where = "the published side of a row with an error"
 			mustNotHold(t, where, s.HTML, "Identical")
@@ -879,7 +880,7 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 			if len(want) != c.count || set.Cluster.Counts.NewerProfiles != c.count {
 				t.Fatalf("the set has %d profiles with a newer pack and %d in the tile, want %d", len(want), set.Cluster.Counts.NewerProfiles, c.count)
 			}
-			button := filterButton("newer", "Newer "+strconv.Itoa(c.count), false)
+			button := filterButton(string(model.StatusNewer), "Newer "+strconv.Itoa(c.count), false)
 			var shown bool
 			for _, s := range render(t, c.state, false) {
 				if s.Hash != "#profiles" {
@@ -888,7 +889,7 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 				switch s.Variant {
 				case "":
 					mustHold(t, "the screen of the profiles", s.HTML, button)
-				case "filter newer":
+				case "filter " + string(model.StatusNewer):
 					shown = true
 					if rows := strings.Count(s.HTML, goToStart+"#p-"); rows != len(want) {
 						t.Errorf("the filter shows %d profiles, want %d", rows, len(want))

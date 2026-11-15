@@ -17,7 +17,7 @@ func pinWith(bump *docs.Bump, err *docs.Error) docs.Pin {
 
 // The checks of the update that strata gives for the move from the pin of pinWith to kubernetes 1.37.0.
 var (
-	skipped    = &docs.MinorSkip{Code: testkit.CodeMinorSkip, Pack: "kubernetes", From: "1.35.3", To: "1.37.0", NextMinor: "1.36", NextStep: "1.36.2"}
+	skipped    = &docs.MinorSkip{Pack: "kubernetes", From: "1.35.3", To: "1.37.0", NextMinor: "1.36", NextStep: "1.36.2"}
 	required   = &docs.RequiredVariables{Code: testkit.CodeVariable, Names: []string{"cost_center", "owner"}}
 	bothChecks = &docs.UpdateChecks{RequiredVariables: required, SkippedMinor: skipped}
 )
@@ -66,7 +66,7 @@ func TestAnAnswerSendsTheChecksAsStrataGivesThem(t *testing.T) {
 	// The skip of bothChecks with no next step: no version of the next minor version is in the registry.
 	noStep := *skipped
 	noStep.NextStep = ""
-	const skipJSON = `{"code":"` + testkit.CodeMinorSkip + `","pack":"kubernetes","from":"1.35.3","to":"1.37.0","nextMinor":"1.36"`
+	const skipJSON = `{"pack":"kubernetes","from":"1.35.3","to":"1.37.0","nextMinor":"1.36"`
 	for _, c := range []struct {
 		checks *docs.UpdateChecks
 		want   string
@@ -95,7 +95,7 @@ func TestTheAnswerOfARealMoveThatSkipsAMinorVersionNamesTheNextStep(t *testing.T
 		t.Fatalf("answer %+v", a)
 	}
 	s := a.UpdateChecks.SkippedMinor
-	if s.Code != skipped.Code || s.Pack != "kubernetes" || s.From != "1.34.9" || s.To != a.Newest || s.NextMinor != "1.35" || s.NextStep != "1.35.6" {
+	if s.Pack != "kubernetes" || s.From != "1.34.9" || s.To != a.Newest || s.NextMinor != "1.35" || s.NextStep != "1.35.6" {
 		t.Errorf("the skip %+v", s)
 	}
 }

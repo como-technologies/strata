@@ -56,7 +56,7 @@ func versionPageOfMoved(t *testing.T, screens []screen, badgeOfStatus string) {
 func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testing.T) {
 	screens := crawl(t, devdata.StateOK)
 	profiles := pageOf(t, screens, "#profiles", "")
-	mustHold(t, "the filters", profiles, filterButton("all", "All 12", true), filterButton("newer", "Newer 6", false))
+	mustHold(t, "the filters", profiles, filterButton("all", "All 12", true), filterButton(string(model.StatusNewer), "Newer 6", false))
 	table, fold, found := strings.Cut(profiles, `<details `+movedFold)
 	if !found {
 		t.Fatal("the screen has no fold of the versions that the cluster does not run")
@@ -65,8 +65,9 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 	mustHold(t, "the fold", fold, "<summary>"+foldWords+"</summary>")
 	row := rowTo(t, fold, movedHash)
 	mustHold(t, "the row", row, badge("y", notOnCluster), `<span class="mut">`+notRunFact+`</span>`)
-	mustNotHold(t, "the row", row, "Newer", "newer")
-	for _, variant := range []string{"filter newer", "filter ok", "filter drift", "filter not-checked"} {
+	mustNotHold(t, "the row", row, "Newer", string(model.StatusNewer))
+	for _, status := range []model.Status{model.StatusNewer, model.StatusOK, model.StatusDrift, model.StatusNotChecked} {
+		variant := "filter " + string(status)
 		mustNotHold(t, "the profiles with the "+variant, pageOf(t, screens, "#profiles", variant), testkit.GatewayMoved, movedFold)
 	}
 	overview := pageOf(t, screens, "#overview", "")
@@ -81,7 +82,7 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 func TestAVersionThatTheClusterNoLongerRunsWithAFindingIsADriftWithNoNewerVersion(t *testing.T) {
 	screens := crawl(t, devdata.StateMovedDrift)
 	profiles := pageOf(t, screens, "#profiles", "")
-	mustHold(t, "the filters", profiles, filterButton("all", "All 2", true), filterButton("drift", "Drift 1", false), filterButton("newer", "Newer 1", false))
+	mustHold(t, "the filters", profiles, filterButton("all", "All 2", true), filterButton(string(model.StatusDrift), "Drift 1", false), filterButton(string(model.StatusNewer), "Newer 1", false))
 	mustNotHold(t, "the profiles", profiles, movedFold)
 	mustHold(t, "the row", rowTo(t, profiles, movedHash), badge("r", "Drift"), "traefik changed in the published version.")
 	overview := pageOf(t, screens, "#overview", "")

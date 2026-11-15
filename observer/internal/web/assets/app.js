@@ -703,8 +703,7 @@ function askCell(subject, p) {
 // refusalLines draws one error that Palette gives: the code, the message, and the clusters.
 const refusalLines = r => h`<div class="mt3"><b>Palette refuses:</b> <span class="m">${r.code}</span></div>${r.message ? h`<div>${r.message}</div>` : ""}${r.clusters && r.clusters.length ? h`<div class="mut">on ${r.clusters.join(", ")}</div>` : ""}`;
 
-/* The checks of the update that strata gives beside the answer: the rules that Palette checks only at the update, and that the question
-   does not check. checksOf gives each check that found something, in the order of strata: the required variables, then the skip of a
+/* The checks of the update that strata gives beside the answer: the rules that the question to Palette does not check. checksOf gives each check that found something, in the order of strata: the required variables, then the skip of a
    minor version. Each check has the words of its row in the table and the lines of the card. An observer of an older release gives none. */
 const codeList = names => names.map((n, i) => h`${i ? ", " : ""}<span class="m">${n}</span>`);
 function variablesCheck(v) {
@@ -716,7 +715,7 @@ function variablesCheck(v) {
 function skipCheck(s) {
   const step = s.nextStep ? h`<span class="m">${ref(s.pack, s.nextStep)}</span>` : `a version of ${s.nextMinor}`;
   const head = h`<div class="mt3"><b>The move skips a minor version:</b> <span class="m">${move(s.pack, s.from, s.to)}</span></div>`;
-  return {row: "Skips a minor version", card: h`${head}<div>Palette refuses the update with <span class="m">${s.code}</span>. Move to ${step} first.</div>`};
+  return {row: "Skips a minor version", card: h`${head}<div>Kubernetes moves one minor version at each upgrade. Move to ${step} first.</div>`};
 }
 const checksOf = a => {
   const c = a.updateChecks || {};

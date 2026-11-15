@@ -22,8 +22,8 @@ const (
 	variablesLine   = "Adds 2 " + variableWords + "s"
 	skipNote        = "The move skips a minor version:"
 	skipHead        = skipNote + " " + testkit.KubernetesFrom + " → kubernetes@1.37.0"
-	skipRefuses     = paletteRefuses + " the update with " + testkit.CodeMinorSkip + "."
-	skipStep        = skipRefuses + " Move to " + testkit.KubernetesTo + " first."
+	skipRule        = "Kubernetes moves one minor version at each upgrade."
+	skipStep        = skipRule + " Move to " + testkit.KubernetesTo + " first."
 	variableNote    = "The move adds a " + variableWords + ":"
 	oneVariable     = variableNote + " gateway_owner"
 	variableRefuses = paletteRefuses + " the update with " + testkit.CodeVariable + "."
@@ -119,7 +119,7 @@ func TestTwoChecksComeInTheOrderOfStrataAndASkipWithNoStepNamesTheMinorVersion(t
 		{"both", docs.UpdateChecks{RequiredVariables: &variable, SkippedMinor: skip},
 			[]string{variableNote + " cluster_owner", oneValue, skipHead, skipStep, twoRules}, cellWith(noErrorCell, variableLine, skipLine)},
 		{"no step", docs.UpdateChecks{SkippedMinor: &noStep},
-			[]string{skipHead, skipRefuses + " Move to a version of 1.36 first.", oneRule}, cellWith(noErrorCell, skipLine)},
+			[]string{skipHead, skipRule + " Move to a version of 1.36 first.", oneRule}, cellWith(noErrorCell, skipLine)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := writeSet(t, devdata.StateUpdateChecks, map[string]func([]byte) []byte{"asks.json": editJSON(t, func(v *api.AsksView) {
@@ -164,7 +164,7 @@ func TestACheckWithMarkupShowsAsText(t *testing.T) {
 		}
 		if strings.Contains(s.HTML, skipNote) {
 			reached++
-			mustHold(t, where, s.HTML, `<span class="m">`+testkit.CodeMinorSkip+injection, `@1.36.2`+injection)
+			mustHold(t, where, s.HTML, `@1.36.2`+injection)
 		}
 		mustNotHold(t, where, s.HTML, "<img")
 	}

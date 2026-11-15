@@ -198,7 +198,7 @@ func TestNothingThatTheObserverWritesHoldsAValueOfTheCluster(t *testing.T) {
 	for _, line := range strings.Split(strings.TrimSpace(r.log.String()), "\n") {
 		testkit.HoldsNone(t, "the line", line, "record-0", "cluster:")
 	}
-	testkit.HoldsAll(t, "the log", r.log.String(), "command=verify exit=0")
+	testkit.HoldsAll(t, "the log", r.log.String(), "command="+runner.CmdVerify+" exit=0")
 }
 
 func TestTheWaitAddsZeroToTenPercent(t *testing.T) {
@@ -355,5 +355,5 @@ func TestAContentCycleNeverWaitsForAVersionsCycleAndTheProgressShows(t *testing.
 		t.Errorf(stillRunning, "versions")
 	}
 	log := r.log.String()
-	testkit.HoldsAll(t, "the log", log, []string{"cycle=versions phase=start", "cycle=content phase=start", "cycle=content phase=end verdict=ok processes=", "cycle=versions phase=end verdict=ok processes="}...)
+	testkit.HoldsAll(t, "the log", log, []string{"cycle=" + cycleVersions + " phase=start", "cycle=" + cycleContent + " phase=start", "cycle=" + cycleContent + " phase=end verdict=ok processes=", "cycle=" + cycleVersions + " phase=end verdict=ok processes="}...)
 }

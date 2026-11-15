@@ -14,6 +14,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
@@ -231,7 +232,7 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 			})})
 			var rows []termRow
 			for _, r := range termRows(t, pagesOf(t, set, k8sHash)[0]) {
-				if strings.Contains(r.command, "compare pack:") || strings.Contains(r.command, "behind") {
+				if strings.Contains(r.command, runner.CmdCompare+" pack:") || strings.Contains(r.command, runner.CmdBehind) {
 					rows = append(rows, r)
 				}
 			}

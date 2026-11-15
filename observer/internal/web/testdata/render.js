@@ -127,7 +127,7 @@ function poison(d) {
     // The checks of strata: each code, version, and name of a variable.
     const v = a.updateChecks && a.updateChecks.requiredVariables, s = a.updateChecks && a.updateChecks.skippedMinor;
     if (v) { v.code = tag(v.code); v.names = v.names.map(tag); }
-    if (s) ["code", "from", "to", "nextMinor", "nextStep"].forEach(k => { s[k] = tag(s[k]); });
+    if (s) ["from", "to", "nextMinor", "nextStep"].forEach(k => { s[k] = tag(s[k]); });
   });
   out.events.events.forEach(e => { e.reason = tag(e.reason); });
   out.alerts.channels = out.alerts.channels.map(tag);

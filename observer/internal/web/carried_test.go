@@ -36,7 +36,7 @@ func carriedSet(t *testing.T) string {
 // it is no "Identical", no "Undisturbed", and no "Same", also when the pack has a newer version.
 func TestACarriedAnswerOnAPackWithANewerVersionIsNotIdenticalUndisturbedOrSame(t *testing.T) {
 	dir := carriedSet(t)
-	for _, side := range []string{"published", "cluster"} {
+	for _, side := range []string{string(model.SidePublished), string(model.SideCluster)} {
 		t.Run(side, func(t *testing.T) {
 			page := pageWith(t, dir, scratch, ubuntuHash, `S.side["`+ubuntuSide+`"] = "`+side+`"`)
 			mustHold(t, side, page, `<option value="`+side+`" selected>`, hiddenTitle, "Strata could not read the record.")

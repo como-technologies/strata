@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
@@ -30,7 +32,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	card := cardOf(t, page, "<h2>Move to ")
 	mustHold(t, cardHead, card, "<h2>Move to "+wilmaNewest+` <span class="sub">Created `,
 		"</h2>"+badge("y", "In place"))
-	for _, flag := range []string{"IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"} {
+	for _, flag := range []string{docs.FlagIdentity, docs.FlagUpstream, docs.FlagAuthored, docs.FlagImages, docs.FlagCharts} {
 		mustHold(t, "the flags", card, plainFlag("b", flag))
 	}
 	mustHold(t, "the version change", rowWith(t, card, testkit.TraefikKey),
@@ -44,7 +46,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	mustHold(t, "the added pack", added, `<td>Added</td>`, `>2.14.0</td>`)
 	mustNotHold(t, "the added pack", added, goToStart, "<a ")
 
-	if r := rowAsking(t, page, moveQuestion); r.command != compareRecord+"wilma-gateway@3.2.0 --full" || r.answer != badge("y", "In place") {
+	if r := rowAsking(t, page, moveQuestion); r.command != compareRecord+"wilma-gateway@3.2.0 "+runner.FlagFull || r.answer != badge("y", "In place") {
 		t.Errorf("the row of the move: %+v", r)
 	}
 	// a profile with no newer version shows no move
@@ -99,7 +101,7 @@ func TestTheCommandOfTheMoveOfAProfilePastesAsTheArgumentsItMeans(t *testing.T) 
 			profile := c.value("p")
 			set := renamedSet(t, devdata.StateOK, [][2]string{{"wilma-gateway", profile}})
 			row := rowAsking(t, pagesOf(t, set, "#p-"+encodeURIComponent(profile+"@3.1.2"))[0], moveQuestion)
-			argsAre(t, "the move", bin, dir, row.command, []string{"compare", "record.json", profile + "@3.2.0", "--full"})
+			argsAre(t, "the move", bin, dir, row.command, []string{runner.CmdCompare, "record.json", profile + "@3.2.0", runner.FlagFull})
 			noMarkers(t, dir)
 		})
 	}
