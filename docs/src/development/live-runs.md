@@ -1844,7 +1844,7 @@ needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 | `control-validate-packs` | 0 | #647: the key of the example sends the validate request, and Palette answers 2xx |
 | `role-validate-packs` | ? | #647: the status and the error code of the same request with the key of the role under test. The click of the observer sends this request. The check records the answer and does not judge it. With Project Viewer, the request answered HTTP 200 |
 | `preflight-control-validate` | 0 | #619: with the key of the example, the rules of the validate route of the create give no `error` on cluster A. A live run passed. |
-| `preflight-role-validate` | ? | #619: the verdict and the first message of the same rules with the key of the role under test. With Project Viewer, each rule must give `error`, with HTTP 403, the code `AccessDenied`, and a message that names `cluster.create`. A live run with Project Viewer gave `error` for each rule, with HTTP 403, the code `AccessDenied`, and the message `cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project`. |
+| `preflight-role-validate` | ? | #619: the verdict and the first message of the same rules with the key of the role under test. With Project Viewer, each rule must give `error`, with HTTP 403, the code `AccessDenied`, and a message that names `cluster.create`. A live run with Project Viewer gave `error` for each rule, with HTTP 403 and the code `AccessDenied`. The message was `cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project`. |
 
 ## observer-chart.sh
 
