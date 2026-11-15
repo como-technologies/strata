@@ -1944,7 +1944,7 @@ func TestTheCauseOfPodsNotReadHasARowWithNoProfileAndOpensTheImages(t *testing.T
 	row := rowTo(t, notChecked, "#images")
 	mustHold(t, "the row", row, `<td class="m"><span class="mut">The pods</span></td>`, `<td class="m"><span class="mut">-</span></td>`,
 		"<td>The observer could not read the pods, so the list of images is old or empty.</td>")
-	mustHold(t, "the other rows", notChecked, goTo("#p-gazoo-backup@1.2.0"), goTo("#p-hoppy-autoscale@1.3.0"))
+	mustHold(t, "the other rows", notChecked, goTo("#p-"+testkit.GazooProfile), goTo("#p-hoppy-autoscale@1.3.0"))
 	mustHold(t, "the heading", notChecked, wordNotChecked+` on this run <span class="sub">3.`)
 }
 

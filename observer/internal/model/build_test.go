@@ -168,7 +168,7 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 			return p
 		}(),
 		func() docs.Pin {
-			p := pin("cilium", "cni", "1.19.6", "", testkit.DexProfile, "gazoo-backup@1.2.0")
+			p := pin("cilium", "cni", "1.19.6", "", testkit.DexProfile, testkit.GazooProfile)
 			p.Error = &docs.Error{Kind: docs.KindAPI, Status: 404}
 			return p
 		}(),
@@ -179,7 +179,7 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 		got = append(got, string(row.Cause)+" "+row.Registry+" "+strings.Join(row.Profiles, ",")+" "+strings.Join(row.Packs, ","))
 	}
 	// twoProfiles is the empty registry and the two profiles of a row of velero and of cilium.
-	const twoProfiles = "  " + testkit.DexProfile + ",gazoo-backup@1.2.0 "
+	const twoProfiles = "  " + testkit.DexProfile + "," + testkit.GazooProfile + " "
 	want := []string{
 		"no-upstream-digest  " + testkit.DexProfile + " " + testkit.DexKey,
 		"no-upstream-digest" + twoProfiles + testkit.VeleroKey,

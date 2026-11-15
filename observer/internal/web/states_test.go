@@ -263,7 +263,7 @@ var places = []place{
 	}, "same", "md", "Undisturbed", []string{sameFact},
 		[]string{samePublished, noNewerVersion}},
 	{"a pack that was not checked", func(t *testing.T) string {
-		return pageOf(t, crawl(t, devdata.StateOK), "#k-gazoo-backup@1.2.0/"+testkit.VeleroKey, "")
+		return pageOf(t, crawl(t, devdata.StateOK), "#k-"+testkit.GazooProfile+"/"+testkit.VeleroKey, "")
 	}, "warn", "md", hiddenTitle,
 		[]string{"This pack was not fully checked. velero has no upstream digest. The content check runs every 15m."}, []string{nextStep + `<a href="#notchecked">Why, on the ` + wordNotChecked + ` page</a></div>`}},
 	{placeBusy, func(t *testing.T) string { return retried(t, dexHash)[0] }, "build", "sm", busyTitle, []string{"The observer answers one read at a time. This page asks again each 30 seconds."},

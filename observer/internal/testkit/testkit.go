@@ -192,6 +192,8 @@ const (
 	BarneyAddonsOld = "barney-addons@1.3.0"
 	// OtherProfile is a second profile that holds a pack of the first profile of a test.
 	OtherProfile = "other@1.0.0"
+	// GazooProfile is the profile of the pack velero in the dev data.
+	GazooProfile = "gazoo-backup@1.2.0"
 	// CSIKey, CertManagerKey, UbuntuKey, UbuntuAWSKey, and VeleroKey are the keys of the packs csi-aws-ebs,
 	// cert-manager, ubuntu, ubuntu-aws, and velero. AddonKubernetesKey has the name of kubernetes in another layer.
 	CSIKey             = "csi/csi-aws-ebs"
