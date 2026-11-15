@@ -545,15 +545,9 @@ pub(crate) struct ListArgs {
     /// published; read each cluster for the profiles it applies
     #[arg(long)]
     pub(crate) detail: bool,
-    /// The old name of --detail for the versions alone. It stays until release 0.35.0
-    #[arg(long, hide = true)]
-    pub(crate) packs: bool,
     /// Keep the versions with a pack whose name holds TEXT; reads each version as --detail does
     #[arg(long, value_name = "TEXT")]
     pub(crate) pack: Option<String>,
-    /// The old name of --detail for the clusters alone. It stays until release 0.35.0
-    #[arg(long, hide = true)]
-    pub(crate) applied: bool,
     /// Keep the clusters with this label, KEY=VALUE or KEY; give it again for each label.
     /// Palette searches every project the key can read
     #[arg(long, value_name = "KEY=VALUE")]

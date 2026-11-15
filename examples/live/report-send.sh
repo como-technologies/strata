@@ -115,7 +115,7 @@ heading "1: the first send"
 before=$(issues_of_value | jq 'length')
 before_lines=$(lines_of_issue 2> /dev/null || echo 0)
 check send-1 0 '#397: a run with STRATA_REPORT=1 posts the report and exits as a run with no send' -- \
-  bash -c "set -o pipefail; \"$strata\" list profiles --packs --json | jq -e '.profiles[] | select(.name == \"aws-stack\")'"
+  bash -c "set -o pipefail; \"$strata\" list profiles --detail --json | jq -e '.profiles[] | select(.name == \"aws-stack\")'"
 check send-1-says 0 '#397: the run says that it sent the report, and the log holds one line' -- \
   bash -c "grep -q '^strata: sent the report of the unknown values\$' send-1.err && [ \$(wc -l < \"$XDG_STATE_HOME/strata/strata-unknown.jsonl\") -eq 1 ]"
 check send-1-marked 0 '#397: the endpoint took the report, so strata marked the line as sent' -- \
@@ -135,7 +135,7 @@ echo "the issue is $repo#$number" | tee -a steps.log
 heading "3: the second send"
 after_first=$(lines_of_issue 2> /dev/null || echo 0)
 check send-2 0 '#397: a second run posts the report again' -- \
-  bash -c "set -o pipefail; \"$strata\" list profiles --packs --json | jq -e '.profiles[] | select(.name == \"aws-stack\")'"
+  bash -c "set -o pipefail; \"$strata\" list profiles --detail --json | jq -e '.profiles[] | select(.name == \"aws-stack\")'"
 wait_for lines_of_issue $((after_first + 1)) || true
 check issue-2 0 '#397: still one issue for the value, and its count grew by the line of the second run' -- \
   bash -c "$(declare -f issues_of_value lines_of_issue); marker='$marker'; lines_row='$lines_row'; repo='$repo'; label='$label'; \

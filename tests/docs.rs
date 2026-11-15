@@ -3313,10 +3313,11 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
     assert!(
-        one_line(opening).contains("Seven sections list the changes that need action"),
-        "the opening does not name seven sections"
+        one_line(opening).contains("Eight sections list the changes that need action"),
+        "the opening does not name eight sections"
     );
     for anchor in [
+        "(#release-0350-changes-that-need-action)",
         "(#release-0340-changes-that-need-action)",
         "(#release-0330-changes-that-need-action)",
         "(#release-0280-changes-that-need-action)",
@@ -3346,6 +3347,47 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
         "Add a `_` arm",
     ] {
         assert!(error.contains(needed), "the item lacks {needed:?}");
+    }
+}
+
+/// Release 0.35.0 removes the old names `--packs` and `--applied` of `strata list` (#862). So no
+/// code, script, or page names them, and each live script calls `--detail`. Only the compatibility
+/// page names them, in the text on the removal. Its section of release 0.35.0 sits above the one of
+/// release 0.34.0.
+#[test]
+fn only_the_compatibility_page_names_the_old_names_packs_and_applied_of_list() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let named: Vec<String> = ["src", "examples", "scripts", "docs/src"]
+        .iter()
+        .flat_map(|tree| walk(&root.join(tree)))
+        .filter(|f| {
+            // a file that is not text, such as an image, names no flag
+            std::fs::read_to_string(f)
+                .is_ok_and(|text| text.contains("--packs") || text.contains("--applied"))
+        })
+        .map(|f| f.strip_prefix(root).unwrap().to_path_buf())
+        .filter(|f| !f.components().any(|c| c.as_os_str() == "target"))
+        .map(|f| f.display().to_string())
+        .collect();
+    assert_eq!(named, ["docs/src/reference/compatibility.md"]);
+
+    let page = read(&docs().join("reference/compatibility.md"));
+    let newer = page
+        .find("\n## Release 0.35.0: changes that need action\n")
+        .expect("the page has no section for release 0.35.0");
+    let older = page
+        .find("\n## Release 0.34.0: changes that need action\n")
+        .expect("the page has no section for release 0.34.0");
+    assert!(newer < older, "release 0.35.0 comes above release 0.34.0");
+    let release = release_section(&page, "0.35.0");
+    for needed in [
+        "`--packs`",
+        "`--applied`",
+        "unexpected argument",
+        "exit code `2`",
+        "`--detail`",
+    ] {
+        assert!(release.contains(needed), "the section lacks {needed:?}");
     }
 }
 

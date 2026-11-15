@@ -1231,10 +1231,10 @@ fn list_refuses_packs_before_any_request_and_names_detail_and_the_packs_command(
 }
 
 /// `--detail` reads each row deeper: each profile version for its packs, and each cluster for
-/// the profiles it applies. `--packs` and `--applied` stay for one release, as the old names of
-/// its two parts. Each one reads what it read before, and a note names `--detail`.
+/// the profiles it applies. A kind reads that kind alone. Release 0.35.0 removes the old names
+/// `--packs` and `--applied`, so each one is an unknown flag, and strata sends no request.
 #[test]
-fn detail_does_what_packs_and_applied_do_and_the_old_names_stay_with_a_note() {
+fn detail_reads_each_row_deeper_and_the_old_names_packs_and_applied_are_unknown_flags() {
     let profile = common::profile_document(
         UID_A,
         "aws-stack",
@@ -1269,10 +1269,11 @@ fn detail_does_what_packs_and_applied_do_and_the_old_names_stay_with_a_note() {
         asked.sort();
         (r.document_without_time(), asked)
     };
+    let (profile_route, cluster_route) =
+        (common::profile_route(UID_A), common::cluster_route("c1"));
     let detail = list(&["--detail"]);
-    assert_eq!(detail, list(&["--packs", "--applied"]));
-    for path in [common::profile_route(UID_A), common::cluster_route("c1")] {
-        assert!(detail.1.contains(&path), "--detail reads {path}");
+    for path in [&profile_route, &cluster_route] {
+        assert!(detail.1.contains(path), "--detail reads {path}");
     }
     assert!(detail.0["profiles"][0]["packs"].is_array(), "{}", detail.0);
     assert!(
@@ -1280,35 +1281,38 @@ fn detail_does_what_packs_and_applied_do_and_the_old_names_stay_with_a_note() {
         "{}",
         detail.0
     );
-    assert_eq!(
-        list(&["profiles", "--detail"]),
-        list(&["profiles", "--packs"])
+
+    // a kind reads that kind alone
+    let (profiles, asked) = list(&["profiles", "--detail"]);
+    assert!(profiles["profiles"][0]["packs"].is_array(), "{profiles}");
+    assert!(
+        asked.contains(&profile_route) && !asked.contains(&cluster_route),
+        "{asked:?}"
     );
-    assert_eq!(
-        list(&["clusters", "--detail"]),
-        list(&["clusters", "--applied"])
+    let (clusters, asked) = list(&["clusters", "--detail"]);
+    assert!(clusters["clusters"][0]["profiles"].is_array(), "{clusters}");
+    assert!(
+        asked.contains(&cluster_route) && !asked.contains(&profile_route),
+        "{asked:?}"
     );
 
-    // an old name reads one kind deeper, as before
-    let (packs, _) = list(&["--packs"]);
-    assert!(packs["profiles"][0]["packs"].is_array(), "{packs}");
-    assert!(packs["clusters"][0].get("profiles").is_none(), "{packs}");
-    let (applied, _) = list(&["--applied"]);
-    assert!(applied["profiles"][0].get("packs").is_none(), "{applied}");
-    assert!(applied["clusters"][0]["profiles"].is_array(), "{applied}");
-
-    for (old, part) in [("--packs", "versions"), ("--applied", "clusters")] {
-        let r = stand.run_loud(&["list", old, "--json"]);
-        assert_eq!(r.code, 0, "{}", r.err);
-        let note = r.err.lines().find(|l| l.contains("old name")).unwrap_or("");
-        for named in [old, "--detail", part, "Release 0.35.0"] {
-            assert!(note.contains(named), "{named} in {note:?}: {}", r.err);
+    for old in ["--packs", "--applied"] {
+        for args in [
+            &["list", old][..],
+            &["list", old, "--json"],
+            &["list", "profiles", old],
+        ] {
+            let r = stand.run_loud(args);
+            assert_eq!(r.code, 2, "{args:?}: {}", r.err);
+            assert!(
+                r.err
+                    .contains(&format!("unexpected argument '{old}' found")),
+                "{args:?}: {}",
+                r.err
+            );
+            assert!(stand.requests().is_empty(), "{args:?} sends no request");
         }
-        let quiet = stand.run_loud(&["list", old, "--json", "-q"]);
-        assert!(!quiet.err.contains("old name"), "{}", quiet.err);
     }
-    let r = stand.run_loud(&["list", "--detail", "--json"]);
-    assert!(!r.err.contains("old name"), "{}", r.err);
 }
 
 /// A field test typed `strata list project`, and strata refused it before it read Palette. Each

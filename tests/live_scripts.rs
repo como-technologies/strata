@@ -7067,7 +7067,7 @@ fn each_live_script_that_lists_the_profiles_of_the_project_matches_them_by_name_
     let matched_later = [
         ("baseline.sh", "list profiles --json >"),
         ("loop.sh", "list --pack \"$pack\" --json"),
-        ("template.sh", "list profiles --packs --json"),
+        ("template.sh", "list profiles --detail --json"),
     ];
     let matches = [".name ==", ".uid ==", "index(", "grep -qE '^  $"];
     let listings = listings_of_profiles();
@@ -7232,7 +7232,7 @@ fn unpublished_stage(un_published: bool) -> Stage {
         r#"{"profiles":[{"name":"strata-live-addon","version":"1.0.0","uid":"ad-1"}]}"#,
     );
     stage.strata(
-        "list --packs --json",
+        "list profiles --detail --json",
         0,
         &serde_json::json!({"profiles": [
             {"uid": "ad-1", "published": true, "packs": [{"name": "config"}]},
@@ -7241,7 +7241,7 @@ fn unpublished_stage(un_published: bool) -> Stage {
         .to_string(),
     );
     stage.strata(
-        "list --packs --no-color",
+        "list profiles --detail --no-color",
         0,
         "  strata-live-addon@1.0.0        ad-1  all  add-on  no consumers\n  \
          strata-live-unpublished@1.0.0  un-1  all  add-on  no consumers  draft\n",
@@ -7406,7 +7406,7 @@ fn scope_stage(tenant_scope: &str) -> Stage {
         "  strata-live-profile@1.0.0  r-1  aws\n  strata-live-profile@1.0.0  t-1  aws  tenant\n",
     );
     stage.strata(
-        "list profiles --packs --no-color",
+        "list profiles --detail --no-color",
         0,
         "  strata-live-profile@1.0.0  r-1  aws  cluster  no consumers\n  \
          strata-live-profile@1.0.0  t-1  aws  cluster  no consumers  tenant\n",
@@ -10757,7 +10757,7 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
             "{run}"
         );
         assert!(words[4].ends_with("/out/state"), "{run}");
-        assert!(run.ends_with("list profiles --packs --json"), "{run}");
+        assert!(run.ends_with("list profiles --detail --json"), "{run}");
     }
     let gh = std::fs::read_to_string(dir.path().join("gh.log")).unwrap();
     assert!(
