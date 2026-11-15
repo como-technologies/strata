@@ -120,7 +120,7 @@ func TestNoTextOfThePageSaysBehindForANewerVersion(t *testing.T) {
 // The check of a copy of this cluster writes the badge of "same-content" in the words of the book, "Same content", in the card of the
 // versions and in the card "Check this yourself". It is not a drift, and it does not read OK.
 func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
-	book := strings.Join(strings.Fields(string(testkit.ReadFile(t, serverPage))), " ")
+	book := unwrapped(string(testkit.ReadFile(t, serverPage)))
 	mustHold(t, "observer-api.md", book, "`same-content` reads \"Same content\" on the row of the cluster copy.")
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i := range v.Profiles {
@@ -140,7 +140,7 @@ func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
 // The note of a finding about a published version that changed agrees with the use case "A published version is edited in place": the
 // book gives the reason, so the note says not to repair the version in place, and to publish a new version through review.
 func TestTheNoteOfAFindingAgreesWithTheUseCaseOfTheEditInPlace(t *testing.T) {
-	useCase := strings.Join(strings.Fields(string(testkit.ReadFile(t, "../../../docs/src/use-cases/edited-in-place.md"))), " ")
+	useCase := unwrapped(string(testkit.ReadFile(t, "../../../docs/src/use-cases/edited-in-place.md")))
 	script := readScripts(t)
 	const (
 		noRepair   = "Do not repair the edited version in place: that is a second edit."

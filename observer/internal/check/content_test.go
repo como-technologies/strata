@@ -128,7 +128,7 @@ func TestARecordForAVersionThatTheClusterDoesNotRunHasNoSide(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
 	r.record("aws-stack", "1.0.0", testkit.CSIKey)
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	s, _ := r.observer(w).Once(context.Background())
+	s := once(t, r.observer(w))
 	// The files come in the order of their names: 1.0.0 before 1.1.0.
 	if len(s.Profiles) != 2 || s.Profiles[0].Version != "1.0.0" || s.Profiles[0].ClusterCopy.Status != model.CopyNotOnThisCluster || s.Profiles[1].ClusterCopy.Status != model.CopySame {
 		t.Fatalf("profiles %+v", s.Profiles)
@@ -141,7 +141,7 @@ func TestARecordForAVersionThatTheClusterDoesNotRunHasNoSide(t *testing.T) {
 func TestAProfileWithNoRecordIsACauseAndAddsNoPack(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
 	w.cluster = testkit.Payments(testkit.AddonsProfile)
-	s, _ := r.observer(w).Once(context.Background())
+	s := once(t, r.observer(w))
 	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.NoRecord || s.Profiles[1].Status != model.StatusNoRecord || s.Counts.Packs != 2 {
 		t.Errorf("notChecked %+v, profiles %+v, counts %+v", s.NotChecked, s.Profiles, s.Counts)
 	}
@@ -149,12 +149,12 @@ func TestAProfileWithNoRecordIsACauseAndAddsNoPack(t *testing.T) {
 
 func TestAnOlderToolVersionNeedsARebaseline(t *testing.T) {
 	r, w := oneRecord(t, drift(t))
-	s, _ := r.observer(w).Once(context.Background())
+	s := once(t, r.observer(w))
 	if len(s.Findings) != 1 || !s.Findings[0].ReBaselineNeeded {
 		t.Fatalf("findings %+v", s.Findings)
 	}
 	w.verifyTool = "0.28.3"
-	s, _ = r.observer(w).Once(context.Background())
+	s = once(t, r.observer(w))
 	if len(s.Findings) != 1 || s.Findings[0].ReBaselineNeeded {
 		t.Fatalf("findings %+v", s.Findings)
 	}
@@ -163,7 +163,7 @@ func TestAnOlderToolVersionNeedsARebaseline(t *testing.T) {
 func TestAnUnreadableRecordIsACauseAndStopsNoOther(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
 	testkit.WriteIn(t, r.records, "zz.json.gz", "not gzip")
-	s, _ := r.observer(w).Once(context.Background())
+	s := once(t, r.observer(w))
 	readErrorNames(t, s, "zz.json.gz")
 	if len(s.NotChecked) != 1 || s.Records.Count != 1 || s.Page != model.PageOK {
 		t.Errorf("summary %+v", s)
@@ -172,8 +172,8 @@ func TestAnUnreadableRecordIsACauseAndStopsNoOther(t *testing.T) {
 
 func TestARowWithAnErrorBesideGoodRowsIsACauseAndNotAFailedCycle(t *testing.T) {
 	r, w := twoRecords(t)
-	w.rows[1] = docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 404}}
-	s, _ := r.observer(w).Once(context.Background())
+	w.rows[1] = testkit.ErrorRow(docs.KindAPI, 404)
+	s := once(t, r.observer(w))
 	readErrorNames(t, s, testkit.AddonsProfile)
 	if s.Content.FailedRuns != 0 || len(s.NotChecked) != 1 {
 		t.Errorf("content %+v, notChecked %+v", s.Content, s.NotChecked)
@@ -204,7 +204,7 @@ func TestAMissingRecordsDirectoryFailsTheCycleWithTheKindIO(t *testing.T) {
 }
 
 func TestACycleFailsWhenEachRowOfTheVerifyHasAnError(t *testing.T) {
-	r, w := oneRecord(t, docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindTransport}})
+	r, w := oneRecord(t, testkit.ErrorRow(docs.KindTransport, 0))
 	w.verifyExit = 2
 	o := r.observer(w)
 	if err := o.RunContent(context.Background()); err == nil {
@@ -255,7 +255,7 @@ func TestACycleThatFailsTwiceWithStatus401IsLost(t *testing.T) {
 }
 
 func TestAWrongKeyWithNoFinishedCycleIsLost(t *testing.T) {
-	r, w := oneRecord(t, docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 401}})
+	r, w := oneRecord(t, testkit.ErrorRow(docs.KindAPI, 401))
 	w.verifyExit = 2
 	o := r.observer(w)
 	_ = o.RunContent(context.Background())
@@ -276,7 +276,7 @@ func TestASnapshotThatFailsWithAPlainLineTakesTheKindOfTheRowsOfTheVerify(t *tes
 		rows []docs.VerifyRow
 		want string
 	}{
-		{"the rows name transport", []docs.VerifyRow{unchanged(), {Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindTransport}}}, docs.KindTransport},
+		{"the rows name transport", []docs.VerifyRow{unchanged(), testkit.ErrorRow(docs.KindTransport, 0)}, docs.KindTransport},
 		{"the rows are good", []docs.VerifyRow{unchanged(), unchanged()}, docs.KindUnknown},
 	}
 	for _, c := range cases {
@@ -348,8 +348,7 @@ func (f *failOnce) Run(ctx context.Context, dir string, args ...string) (runner.
 
 func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *testing.T) {
 	const reason = `HTTP 403: {"code":"AccessDenied"}`
-	r, w := oneRecord(t, unchanged())
-	w.rows[0] = drift(t)
+	r, w := oneRecord(t, drift(t))
 	// strata keeps the verdict, and gives the reason in place of the writes
 	w.rows[0].Diff.Verify.Who = nil
 	w.rows[0].Diff.Verify.WhoError = reason
@@ -381,8 +380,7 @@ func TestTheLineAboutAnUnreadAuditLogHoldsTheStatusAndNoOtherText(t *testing.T) 
 		{"a status that does not start the text", "the answer was " + refusal, `reason="no answer"`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			r, w := oneRecord(t, unchanged())
-			w.rows[0] = drift(t)
+			r, w := oneRecord(t, drift(t))
 			w.rows[0].Diff.Verify.Who = nil
 			w.rows[0].Diff.Verify.WhoError = c.whoError
 			w.rows[0].Name, w.rows[0].Version = "aws-stack", "1.1.0"
@@ -394,8 +392,7 @@ func TestTheLineAboutAnUnreadAuditLogHoldsTheStatusAndNoOtherText(t *testing.T) 
 }
 
 func TestARecordWhoseAuditLogWasReadWritesNoLineAboutIt(t *testing.T) {
-	r, w := oneRecord(t, unchanged())
-	w.rows[0] = drift(t)
+	r, w := oneRecord(t, drift(t))
 	once(t, r.observer(w))
 	testkit.HoldsNone(t, "the log", r.log.String(), "audit log")
 }

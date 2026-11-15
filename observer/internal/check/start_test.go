@@ -155,14 +155,10 @@ func TestTheVersionsCycleRunsBehindOnEachRecord(t *testing.T) {
 	r.record("aws-stack", "1.1.0", testkit.KubernetesKey)
 	o := r.observer(w)
 	versions(t, o)
-	w.mu.Lock()
 	var files [][]string
-	for _, c := range w.calls {
-		if c[0] == runner.CmdBehind {
-			files = append(files, slices.DeleteFunc(slices.Clone(c[1:]), func(a string) bool { return strings.HasPrefix(a, "-") }))
-		}
+	for _, c := range w.behindCalls() {
+		files = append(files, slices.DeleteFunc(slices.Clone(c[1:]), func(a string) bool { return strings.HasPrefix(a, "-") }))
 	}
-	w.mu.Unlock()
 	if len(files) != 2 || len(files[0]) != 1 || len(files[1]) != 1 || files[0][0] == files[1][0] {
 		t.Fatalf("behind ran on %v", files)
 	}

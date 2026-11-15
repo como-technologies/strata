@@ -135,7 +135,7 @@ func TestAMessageHoldsNoValueAndTheStateAndTheLogHoldNone(t *testing.T) {
 	view := testkit.MustJSON(t, o.Alerts())
 	banned := []string{sentinel, "charts.a.b", "Betty", "John", "OLD", "SENTINEL"}
 	testkit.HoldsNone(t, "the messages", strings.Join(sender.texts, "\n"), banned...)
-	stateHoldsNone(t, r, banned...)
+	testkit.StateHoldsNone(t, r.state, banned...)
 	testkit.HoldsNone(t, "the log", r.log.String(), banned...)
 	testkit.HoldsNone(t, "the view of the alerts", string(view), banned...)
 }

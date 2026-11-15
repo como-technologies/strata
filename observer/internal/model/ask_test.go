@@ -10,7 +10,9 @@ import (
 )
 
 func pinWith(bump *docs.Bump, err *docs.Error) docs.Pin {
-	return docs.Pin{Name: "kubernetes", Layer: "k8s", Version: "1.35.3", Newer: []docs.Newer{{Version: "1.36.2"}}, Bump: bump, Error: err}
+	p := pin("kubernetes", "k8s", "1.35.3", "1.36.2")
+	p.Bump, p.Error = bump, err
+	return p
 }
 
 // The checks of the update that strata gives for the move from the pin of pinWith to kubernetes 1.37.0.

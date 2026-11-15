@@ -92,14 +92,14 @@ func TestARefusalHoldsTheCodeTheMessageAndTheClustersOnTheDetailTierAndOnNoOther
 	}
 	noSummaryRouteStateOrLogHolds(t, r, h, f.Code, "SENTINEL")
 	// The answer stays in memory: the state holds none of it. The log names the verdict of each answer.
-	testkit.HoldsNone(t, "the state", r.stateText(), string(model.VerdictRefuses))
+	testkit.StateHoldsNone(t, r.state, string(model.VerdictRefuses))
 }
 
 // noSummaryRouteStateOrLogHolds fails when a summary route, the state, or the log holds one of the words.
 func noSummaryRouteStateOrLogHolds(t *testing.T, r *rig, h http.Handler, words ...string) {
 	t.Helper()
 	noSummaryRouteHolds(t, h, words...)
-	testkit.HoldsNone(t, "the state", r.stateText(), words...)
+	testkit.StateHoldsNone(t, r.state, words...)
 	testkit.HoldsNone(t, "the log", r.log.String(), words...)
 }
 

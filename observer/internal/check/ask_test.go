@@ -20,7 +20,7 @@ import (
 func askable(t *testing.T, bump docs.Bump, prepare ...func(w *world)) (*rig, *world, *Observer) {
 	t.Helper()
 	r, w := withBehind(t)
-	w.behind.Pins[kubernetesPin(t, w)].Bump = &bump
+	askedShape(t, w, func(p *docs.Pin) { p.Bump = &bump })
 	for _, p := range prepare {
 		p(w)
 	}
@@ -48,7 +48,7 @@ func asksOnce(t *testing.T, o *Observer, w *world, got model.Answer) {
 	}
 }
 
-// pinned gives the arguments of each `behind` that the world got.
+// behindCalls gives the arguments of each `behind` that the world got.
 func (w *world) behindCalls() [][]string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -204,7 +204,7 @@ func TestAnAnswerStaysInMemoryAndTheStateHoldsNone(t *testing.T) {
 	if len(o.state.Moves) == 0 {
 		t.Error("the state holds no move")
 	}
-	stateHoldsNone(t, r, "RefusalCode", "refuses")
+	testkit.StateHoldsNone(t, r.state, "RefusalCode", "refuses")
 	if left := r.restart(&world{}).Answers(); len(left) != 0 {
 		t.Errorf("a restart kept %+v", left)
 	}
@@ -268,7 +268,7 @@ func TestAPackAtTheCapKeepsItsText(t *testing.T) {
 	}
 }
 
-// askedShape changes the pin that the world gives to the ask, after the versions cycle read it. The
+// askedShape changes the pin of kubernetes that the world gives. After a versions cycle read the pin, the
 // cycle keeps the pin that it read, so the ask sees a document that differs from it.
 func askedShape(t *testing.T, w *world, change func(p *docs.Pin)) {
 	t.Helper()

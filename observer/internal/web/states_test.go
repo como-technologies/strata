@@ -415,7 +415,7 @@ func TestTheRuleOfACalmToneIsWhatKeepsItOffAPageWithAFinding(t *testing.T) {
 		t.Fatalf("the scripts have %d lines that start with const calmOk, want 1", got)
 	}
 	dir := copyScripts(t, func(script string) string { return gate.ReplaceAllString(script, "const calmOk = () => true;") })
-	quiet := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"events.json": func([]byte) []byte { return []byte(`{"events":[]}`) }})
+	quiet := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"events.json": wholeFile(`{"events":[]}`)})
 	screens := renderIn(t, dir, quiet, scratch)
 	if got := calmScreens(screens); len(got) == 0 {
 		t.Error("without the rule, the page with a finding still shows no calm tone: the test cannot fail")
@@ -675,6 +675,15 @@ func plainFlag(class, f string) string {
 	return badgeOpen + class + `" tabindex="0">` + f + `</span>`
 }
 
+// manifestAlone writes the set ok, where the published side of dex changes in a manifest alone, and gives its folder.
+func manifestAlone(t *testing.T) string {
+	t.Helper()
+	return writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
+		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished)
+		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
+	})})
+}
+
 // The pack page opens on the first tab with a change.
 func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 	set, screens := loadSet(t, devdata.StateOK), crawl(t, devdata.StateOK)
@@ -702,10 +711,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 	mustHold(t, where, ubuntu, labelRow("Content", "<b>The same</b>"), labelRow("Changes", buildWords), "Repave "+repaveHint+"&#39;s table: node repave (OS image change).")
 	mustNotHold(t, where, ubuntu, "of 0 values")
 	// A pack whose change is in a manifest alone opens on Manifests.
-	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished)
-		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
-	})})
+	dir := manifestAlone(t)
 	page := pagesOf(t, dir, dexHash)[0]
 	mustHold(t, "a manifest alone", page, tabOn(dexPublished, "manifests"))
 	mustNotHold(t, "a manifest alone", page, tabOn(dexPublished, "values"), settingsHead)
@@ -713,10 +719,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 
 // An empty tab says so, and it links to the tab that has the change. A click on the link opens that tab.
 func TestAnEmptyTabSaysSoAndLinksToTheTabWithTheChange(t *testing.T) {
-	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished)
-		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
-	})})
+	dir := manifestAlone(t)
 	empty := pageWith(t, dir, scratch, dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
 	link := tabLink(dexPublished, "manifests", "Manifests")
 	mustHold(t, "the empty Values tab", empty, span("No value"+changedHere), link)
@@ -747,10 +750,15 @@ var flagNames = []string{"IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"}
 // flagDefinitions reads the table of the flags in docs/src/reference/impact.md: when a flag lights, and what it means.
 func flagDefinitions(t *testing.T) map[string][2]string {
 	t.Helper()
-	row := regexp.MustCompile("(?m)^\\| `([A-Z]+)` \\| ([^|]*) \\| ([^|]*) \\|$")
 	out := map[string][2]string{}
-	for _, m := range row.FindAllStringSubmatch(string(testkit.ReadFile(t, "../../../docs/src/reference/impact.md")), -1) {
-		out[m[1]] = [2]string{strings.ReplaceAll(m[2], "`", ""), strings.ReplaceAll(m[3], "`", "")}
+	for _, cells := range tableRows(t, string(testkit.ReadFile(t, "../../../docs/src/reference/impact.md"))) {
+		if len(cells) != 3 {
+			t.Fatalf("a row of the table of the flags has %d cells, want 3: %q", len(cells), cells)
+		}
+		for i := range cells {
+			cells[i] = strings.ReplaceAll(cells[i], "`", "")
+		}
+		out[cells[0]] = [2]string{cells[1], cells[2]}
 	}
 	if len(out) != len(flagNames) {
 		t.Fatalf("impact.md defines %d flags, want %d", len(out), len(flagNames))
@@ -853,10 +861,7 @@ func TestTheWordsOfTheFlagsHaveOneCopyAndTheyComeFromTheBook(t *testing.T) {
 
 // AUTHORED opens Manifests when only a manifest changed. IMAGES opens Images, CHARTS opens Charts, and IDENTITY and UPSTREAM stay plain.
 func TestAuthoredOpensManifestsWhenOnlyAManifestChanged(t *testing.T) {
-	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SidePublished)
-		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
-	})})
+	dir := manifestAlone(t)
 	page := pagesOf(t, dir, dexHash)[0]
 	mustHold(t, "the flag", page, flagLink(dexHash, dexPublished, "manifests", "AUTHORED"))
 	r := clickIn(t, dir, scratch, dexHash, "0", tabClick(dexPublished, "manifests"))
@@ -1087,7 +1092,7 @@ func TestAHeadSortsItsTableUpThenDownThenBack(t *testing.T) {
 	sortedUp, sortedDown := sortAria("ascending"), sortAria("descending")
 	natural := newerOrder(pageOf(t, render(t, devdata.StateOK, false), "#newer", ""), testkit.BaseProfile)
 	up := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.sort.nt = {col: "move", dir: 1}`)
-	mustHold(t, "up", up, `<th class="" `+sortedUp+`>`+sortButton("nt", "move", " on asc", "Move")+sortIcon)
+	mustHold(t, "up", up, sortTh("", "ascending")+sortButton("nt", "move", " on asc", "Move")+sortIcon)
 	if got, want := newerOrder(up, testkit.BaseProfile), []string{"cni-cilium-oss", "cert-manager", "kubernetes", "csi-aws-ebs", "ubuntu-aws"}; !slices.Equal(got, want) {
 		t.Errorf("up: %v, want %v", got, want)
 	}

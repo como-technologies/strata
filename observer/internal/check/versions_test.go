@@ -88,7 +88,7 @@ func TestTheCacheOfTheMovesSurvivesARestartAndHoldsNoValue(t *testing.T) {
 		t.Errorf(testkit.PackCompares+" after a restart", got)
 	}
 	// The real compare of the Kubernetes pack changes the value v1.13.1 of dns.imageTag.
-	stateHoldsNone(t, r, "v1.13.1", "v1.14.2", "imageTag", "apiserver")
+	testkit.StateHoldsNone(t, r.state, "v1.13.1", "v1.14.2", "imageTag", "apiserver")
 	testkit.HoldsAll(t, "the state", stateText(t, r), w.behind.Tool.Version+" "+registryUID+testkit.KubernetesMove)
 }
 
@@ -212,5 +212,5 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 	if got := w.countProfileMoves(); got != 4 {
 		t.Errorf("%d compares after two cycles", got)
 	}
-	stateHoldsNone(t, r, sentinel, "u-140", "fred-compositions")
+	testkit.StateHoldsNone(t, r.state, sentinel, "u-140", "fred-compositions")
 }

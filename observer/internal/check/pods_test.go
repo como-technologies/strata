@@ -100,12 +100,6 @@ func stateText(t *testing.T, r *rig) string {
 	return testkit.StateText(t, r.state)
 }
 
-// stateHoldsNone fails when the state file holds one of the words.
-func stateHoldsNone(t *testing.T, r *rig, words ...string) {
-	t.Helper()
-	testkit.HoldsNone(t, "the state", stateText(t, r), words...)
-}
-
 func TestWithoutPodsTheObserverReadsNoPodAndTheDocumentIsOff(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
 	o := r.observer(w)
@@ -136,7 +130,7 @@ func TestAGoodReadFillsTheDocumentAndTheStateKeepsTheFirstDigestByIdOnly(t *test
 	if st.Images.Revision != testkit.Revision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest1 || len(st.Images.First) != 1 {
 		t.Errorf("state %+v", st.Images)
 	}
-	stateHoldsNone(t, r, testkit.ImageRef, "web-1", "ns/")
+	testkit.StateHoldsNone(t, r.state, testkit.ImageRef, "web-1", "ns/")
 }
 
 func TestADigestOtherThanTheFirstIsImageMovedUntilTheDigestComesBack(t *testing.T) {

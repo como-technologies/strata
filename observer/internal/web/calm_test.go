@@ -17,7 +17,7 @@ func calmImages(t *testing.T) func([]byte) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return func([]byte) []byte { return raw }
+	return wholeFile(string(raw))
 }
 
 // The calm words of the set quiet: the tiles, the empty list of findings, and the list of newer versions.

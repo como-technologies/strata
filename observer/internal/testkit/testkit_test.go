@@ -87,11 +87,14 @@ func TestUnknownNamesTheCommandThatTheFakeDoesNotKnow(t *testing.T) {
 	}
 }
 
+// rulesDoc is the part of a file of alert rules that the tests of Rules and OncallRules read.
+type rulesDoc struct {
+	Channels map[string]struct{ URLFile string }
+	Rules    []map[string]string
+}
+
 func TestOncallRulesIsAFileOfRulesInJSON(t *testing.T) {
-	var got struct {
-		Channels map[string]struct{ URLFile string }
-		Rules    []map[string]string
-	}
+	var got rulesDoc
 	if err := json.Unmarshal([]byte(OncallRules("/a/oncall", `{"level": "cluster"}`)), &got); err != nil || got.Channels["oncall"].URLFile != "/a/oncall" || len(got.Rules) != 1 {
 		t.Errorf("got %+v, %v", got, err)
 	}
@@ -99,10 +102,7 @@ func TestOncallRulesIsAFileOfRulesInJSON(t *testing.T) {
 
 func TestRulesHoldsEachChannelAndPutsEachRuleOnALineFromLine4(t *testing.T) {
 	text := Rules([]string{Channel("a", "/a"), Channel("b", "/b")}, DriftNow, LostNow)
-	var got struct {
-		Channels map[string]struct{ URLFile string }
-		Rules    []map[string]string
-	}
+	var got rulesDoc
 	if err := json.Unmarshal([]byte(text), &got); err != nil || got.Channels["a"].URLFile != "/a" || got.Channels["b"].URLFile != "/b" || len(got.Rules) != 2 {
 		t.Errorf("got %+v, %v", got, err)
 	}

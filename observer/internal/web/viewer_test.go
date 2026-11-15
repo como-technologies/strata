@@ -272,19 +272,25 @@ const (
 	dexManifest = "manifest fred-realm-config"
 )
 
-// The hashes of the packs csi-aws-ebs of barney-base and reloader of fred-identity, and the body of a click on "Ask Palette"
-// for a move of the dev data.
+// The hashes of the packs csi-aws-ebs of barney-base and reloader of fred-identity.
 const (
 	csiHash      = "#k-" + testkit.BaseProfile + "/" + testkit.CSIKey
 	reloaderHash = "#k-" + testkit.DexProfile + "/addon/reloader"
-	k8sClick     = `{"ask":"` + testkit.BaseProfile + `","pack":"` + testkit.KubernetesKey + `"}`
-	dexClick     = `{"ask":"` + testkit.DexProfile + `","pack":"` + testkit.DexKey + `"}`
-	ubuntuClick  = `{"ask":"` + testkit.BaseProfile + `","pack":"` + testkit.UbuntuAWSKey + `"}`
-	csiClick     = `{"ask":"` + testkit.BaseProfile + `","pack":"` + testkit.CSIKey + `"}`
 	// splitClick and unifiedClick are the clicks on the two layouts of a diff.
 	splitClick   = `{"view":"split"}`
 	unifiedClick = `{"view":"unified"}`
 )
+
+// The bodies of a click on "Ask Palette" for a move of the dev data.
+var (
+	k8sClick    = askClick(testkit.BaseProfile, testkit.KubernetesKey)
+	dexClick    = askClick(testkit.DexProfile, testkit.DexKey)
+	ubuntuClick = askClick(testkit.BaseProfile, testkit.UbuntuAWSKey)
+	csiClick    = askClick(testkit.BaseProfile, testkit.CSIKey)
+)
+
+// askClick gives the body of a click on "Ask Palette" for the move of the pack key of the profile.
+func askClick(profile, key string) string { return `{"ask":"` + profile + `","pack":"` + key + `"}` }
 
 // tabClick gives the click on the tab k of the tabs id.
 func tabClick(id, k string) string { return `{"tab":"` + id + `","k":"` + k + `"}` }
@@ -621,14 +627,20 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	}
 }
 
+// dexClusterTooLarge edits the diffs of a set: the text of the cluster side of dex is above the cap, so the diff holds no
+// text.
+func dexClusterTooLarge(t *testing.T) func([]byte) []byte {
+	return editDiffs(t, func(ds []api.PackDiff) {
+		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SideCluster)
+		d.Values.Unified, d.TextTooLarge = "", true
+	})
+}
+
 // The cluster side compares the record with the copy of the cluster, and the profile page already names
 // this command.
 func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 	set := loadSet(t, devdata.StateReadError)
-	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SideCluster)
-		d.Values.Unified, d.TextTooLarge = "", true
-	})})
+	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"diffs.json": dexClusterTooLarge(t)})
 	command := compareCluster + set.Cluster.Cluster.Name + "/fred-identity"
 	r := clickIn(t, dir, scratch, dexHash, "0")
 	card := cardOf(t, r.After, tabOf("side-"+testkit.DexProfile+"-"+testkit.DexKey+"-cluster"))
@@ -643,10 +655,7 @@ func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 // and the page escapes each quote.
 func TestTheCommandOfATextAboveTheCapShowsNamesAsText(t *testing.T) {
 	swap := replaceText("quarry-1", evil)
-	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"cluster.json": swap, "diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, testkit.DexProfile, testkit.DexKey, model.SideCluster)
-		d.Values.Unified, d.TextTooLarge = "", true
-	})})
+	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"cluster.json": swap, "diffs.json": dexClusterTooLarge(t)})
 	page := clickIn(t, dir, scratch, dexHash, "0").After
 	mustHold(t, "the command", page, `&#39;cluster:`+injection+`/fred-identity&#39; --full`)
 	mustNotHold(t, "the command", page, "<img")
@@ -812,7 +821,7 @@ func TestAnAnswerRaisesNoSeverityAndANoAnswerIsNoFinding(t *testing.T) {
 	sameScreensWithNoMove(t, ok, asks, wordNoAnswer, wordRefuses, paletteRefuses, paletteGave)
 	table := pageOf(t, asks, "#newer", "")
 	dexRow := rowTo(t, table, dexHash)
-	mustNotHold(t, "the row of a no-answer", dexRow, "badge r", ">Drift<", wordNotChecked)
+	mustNotHold(t, "the row of a no-answer", dexRow, badgeOf("r"), ">Drift<", wordNotChecked)
 	// The same counts on the cards of the pack: one drift pack, as in ok.
 	sameNav(t, "the pack", pageOf(t, ok, dexHash, ""), pageOf(t, asks, dexHash, ""))
 }
@@ -889,10 +898,10 @@ func TestAQuestionThatFailsLeavesANoteAndNoAnswer(t *testing.T) {
 		t.Errorf("the table says the note %d times", got)
 	}
 	// A move with no reply in the dev data is not found, and the page says the same.
-	r = click(t, devdata.StateOK, "#k-"+testkit.LonghornProfile+"/"+testkit.LonghornKey, "0", `{"ask":"`+testkit.LonghornProfile+`","pack":"`+testkit.LonghornKey+`"}`)
+	r = click(t, devdata.StateOK, "#k-"+testkit.LonghornProfile+"/"+testkit.LonghornKey, "0", askClick(testkit.LonghornProfile, testkit.LonghornKey))
 	mustHold(t, "no reply", r.After, askFailed)
 	// A click on a move that the data does not hold sends nothing.
-	r = click(t, devdata.StateOK, "#newer", "0", `{"ask":"`+testkit.NobodyProfile+`","pack":"`+testkit.NoneKey+`"}`)
+	r = click(t, devdata.StateOK, "#newer", "0", askClick(testkit.NobodyProfile, testkit.NoneKey))
 	if len(r.Posts) != 0 {
 		t.Errorf("a click on an unknown move sent %v", r.Posts)
 	}
@@ -924,7 +933,7 @@ func TestAClickThatGetsAnAnswerWithoutAVersionEndsWithTheWordNoAnswer(t *testing
 	for _, newest := range []string{"2.44.0", ""} {
 		t.Run("newest "+newest, func(t *testing.T) {
 			reply := `{"asks":[{"profile":"` + testkit.DexProfile + `","key":"` + testkit.DexKey + `","newest":"` + newest + `",` + testkit.NoAnswerVerdict + `,"refusals":[],"status":502}]}`
-			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": func([]byte) []byte { return []byte(reply) }})
+			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": wholeFile(reply)})
 			r := clickIn(t, dir, scratch, dexHash, "0", dexClick)
 			mustHold(t, "after", textOf(r.After), gaveNoAnswer+": HTTP 502.")
 			mustHold(t, "after", r.After, cardButton+dexMoveAttrs+askAgainEnd)

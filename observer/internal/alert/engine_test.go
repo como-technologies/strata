@@ -264,7 +264,7 @@ func TestADigestWithNothingToListWaitsForTheFirstItem(t *testing.T) {
 	known := Known{Content: true, Newer: true}
 	b.cycle(nil, known)
 	b.later(30 * 24 * time.Hour)
-	b.cycle([]Subject{{ID: "n1", News: NewsNewer, Profile: testkit.DexProfile, Detail: "x"}}, known)
+	b.cycle([]Subject{newerItem("n1", testkit.DexProfile)}, known)
 	if len(b.send.sent) != 1 {
 		t.Errorf("messages %q", b.texts())
 	}
@@ -272,7 +272,7 @@ func TestADigestWithNothingToListWaitsForTheFirstItem(t *testing.T) {
 
 func TestANewerVersionIsNotClearedByACycleThatDidNotReadVersions(t *testing.T) {
 	b := newBench(t, oncall)
-	n := Subject{ID: "n1", News: NewsNewer, Profile: testkit.DexProfile, Detail: "x"}
+	n := newerItem("n1", testkit.DexProfile)
 	b.cycle([]Subject{n}, Known{Content: true, Newer: true})
 	b.cycle(nil, Known{Content: true})
 	if len(b.store.Items) != 1 {
@@ -317,11 +317,11 @@ func TestACycleWithNoRuleForTheNewsSendsNothing(t *testing.T) {
 func TestTheViewShowsFiringPendingInactiveAndMuted(t *testing.T) {
 	b := newBench(t, testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testkit.ImageNow, newerToPlanning, muteBarney,
 		`{"level": "profile", "match": "wilma-gateway", "news": "newer", "muteUntil": "2026-11-01"}`))
-	n := Subject{ID: "n1", News: NewsNewer, Profile: testkit.DexProfile, Detail: "x"}
-	muted := Subject{ID: "n2", News: NewsNewer, Profile: testkit.BaseProfile, Detail: "x"}
+	n := newerItem("n1", testkit.DexProfile)
+	muted := newerItem("n2", testkit.BaseProfile)
 	b.cycle([]Subject{drift, n, muted}, Known{Content: true, Newer: true})
 	// The digest went, so the newer version fires. A second newer version waits for the next digest.
-	later := Subject{ID: "n3", News: NewsNewer, Profile: "betty-observability@4.2.1", Detail: "x"}
+	later := newerItem("n3", "betty-observability@4.2.1")
 	subjects := []Subject{drift, n, muted, later}
 	want := map[int]State{0: StateFiring, 1: StateInactive, 2: StateFiring, 3: StateMuted, 4: StateInactive}
 	v := b.e.View(b.store, subjects, "quarry-1", b.at)

@@ -435,9 +435,8 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 	if sentences != 1 {
 		t.Errorf("events %+v", events)
 	}
-	noSummaryRouteHolds(t, h, testkit.AuditSentinel)
 	// the log of the pod names the status and never the body of the answer
-	testkit.HoldsNone(t, "the log", r.log.String(), testkit.AuditSentinel)
+	noSummaryRouteStateOrLogHolds(t, r, h, testkit.AuditSentinel)
 	testkit.HoldsAll(t, "the log", r.log.String(), `reason="HTTP 403"`)
 }
 

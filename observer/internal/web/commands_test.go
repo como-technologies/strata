@@ -102,6 +102,12 @@ func secretsOf(t *testing.T, record string) string {
 	return secrets
 }
 
+// recordKey gives the key of the record of the profile name at version in the Secrets, as the page writes it: a character
+// outside A-Z a-z 0-9 . _ - becomes an underscore.
+func recordKey(name, version string) string {
+	return regexp.MustCompile(`[^A-Za-z0-9._-]`).ReplaceAllString(name+"_"+version+".json.gz", "_")
+}
+
 // The command of the first row reads a record out of the Secrets that the records script writes. This test runs the script and the
 // command with the tools of the pod (bash, jq, base64, and gzip), and a stand-in for kubectl. The key of a record has the name and
 // the version of its profile, and a character outside A-Z a-z 0-9 . _ - becomes an underscore, as the page writes it.
@@ -111,7 +117,7 @@ func TestTheCommandOfTheFirstRowReadsARecordOutOfTheSecretsOfTheRecordsScript(t 
 	record := testkit.WriteIn(t, t.TempDir(), "release.json", body)
 	bin, dir := checkWork(t, "")
 	fakeKubectl(t, bin, secretsOf(t, record))
-	key := regexp.MustCompile(`[^A-Za-z0-9._-]`).ReplaceAllString("fred identity!_2.3.0.json.gz", "_")
+	key := recordKey("fred identity!", "2.3.0")
 	if key != "fred_identity__2.3.0.json.gz" {
 		t.Fatalf("the key is %q", key)
 	}

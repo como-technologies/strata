@@ -40,22 +40,12 @@ func TestTheFileOfThePlanParses(t *testing.T) {
 	}
 }
 
-// fileWith puts the rules in a file that has the channel platform-oncall.
-func fileWith(rules ...string) string {
-	return testkit.Rules([]string{testkit.Channel(platformOncall, "f")}, rules...)
-}
-
 // The rules of the tests of the parse that send to the channel a.
 const (
 	driftToA  = `{"level": "cluster", "news": "drift", "send": "now", "to": "a"}`
 	lostToA   = `{"level": "cluster", "news": "lost", "send": "now", "to": "a"}`
 	digestToA = `{"level": "profile", "match": "fred-identity", "news": "drift", "send": "digest", "to": "a"}`
 )
-
-// toA gives the text of a file of rules with the one channel a.
-func toA(rules ...string) string {
-	return testkit.Rules([]string{testkit.Channel("a", "f")}, rules...)
-}
 
 // muteLost gives a rule that mutes the loss of contact until the date. muteDex gives a rule that mutes each drift of
 // fred-identity until the date.
@@ -77,19 +67,19 @@ func TestAFileThatCannotBeUsedStopsWithTheLineOfTheFault(t *testing.T) {
 		{"text that is no JSON", "{\n\"rules\": [\n{\"level\": \n]}", 4, "not JSON"},
 		{"a file that is no object", "[1]", 1, "one object"},
 		{"a field of the file that is not known", "{\n\"channel\": {}\n}", 2, "unknown field"},
-		{"a rule with a field that is not known", fileWith(`{"level": "cluster", "news": "drift", "sned": "now", "to": "platform-oncall"}`), 4, "rule 1"},
-		{"a field of the wrong type", fileWith(`{"level": "cluster", "news": 4, "send": "now", "to": "platform-oncall"}`), 4, "the wrong type"},
-		{"a level that is not in the list", fileWith(`{"level": "node", "news": "drift", "send": "now", "to": "platform-oncall"}`), 4, "level must be"},
-		{"news that is not in the list", fileWith(`{"level": "cluster", "news": "health", "send": "now", "to": "platform-oncall"}`), 4, "news must be"},
-		{"a profile rule with no match", fileWith(`{"level": "profile", "news": "drift", "send": "now", "to": "platform-oncall"}`), 4, "needs match"},
-		{"a cluster rule with a match", fileWith(`{"level": "cluster", "match": "x", "news": "drift", "send": "now", "to": "platform-oncall"}`), 4, "no match"},
-		{"lost below the cluster", fileWith(`{"level": "profile", "match": "x", "news": "lost", "send": "now", "to": "platform-oncall"}`), 4, "about the cluster"},
-		{"a way to send that is not in the list", fileWith(`{"level": "cluster", "news": "drift", "send": "soon", "to": "platform-oncall"}`), 4, "send must be"},
-		{"a rule for a channel that the file lacks", fileWith(`{"level": "cluster", "news": "drift", "send": "now", "to": "nobody"}`), 4, "name a channel"},
+		{"a rule with a field that is not known", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "news": "drift", "sned": "now", "to": "platform-oncall"}`), 4, "rule 1"},
+		{"a field of the wrong type", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "news": 4, "send": "now", "to": "platform-oncall"}`), 4, "the wrong type"},
+		{"a level that is not in the list", testkit.OneChannel(platformOncall, "f", `{"level": "node", "news": "drift", "send": "now", "to": "platform-oncall"}`), 4, "level must be"},
+		{"news that is not in the list", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "news": "health", "send": "now", "to": "platform-oncall"}`), 4, "news must be"},
+		{"a profile rule with no match", testkit.OneChannel(platformOncall, "f", `{"level": "profile", "news": "drift", "send": "now", "to": "platform-oncall"}`), 4, "needs match"},
+		{"a cluster rule with a match", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "match": "x", "news": "drift", "send": "now", "to": "platform-oncall"}`), 4, "no match"},
+		{"lost below the cluster", testkit.OneChannel(platformOncall, "f", `{"level": "profile", "match": "x", "news": "lost", "send": "now", "to": "platform-oncall"}`), 4, "about the cluster"},
+		{"a way to send that is not in the list", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "news": "drift", "send": "soon", "to": "platform-oncall"}`), 4, "send must be"},
+		{"a rule for a channel that the file lacks", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "news": "drift", "send": "now", "to": "nobody"}`), 4, "name a channel"},
 		{testkit.NoEndDate.Name, testkit.OncallRules("f", testkit.NoEndDate.Rule), 4, testkit.NoEndDate.Want},
-		{"a mute with an end that is no date", fileWith(`{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "soon"}`), 4, "end date"},
-		{"a mute with a channel", fileWith(`{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01", "to": "platform-oncall"}`), 4, "no to"},
-		{"a rule that sends and mutes", fileWith(`{"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall", "muteUntil": "2026-12-01"}`), 4, "second rule"},
+		{"a mute with an end that is no date", testkit.OneChannel(platformOncall, "f", `{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "soon"}`), 4, "end date"},
+		{"a mute with a channel", testkit.OneChannel(platformOncall, "f", `{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01", "to": "platform-oncall"}`), 4, "no to"},
+		{"a rule that sends and mutes", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall", "muteUntil": "2026-12-01"}`), 4, "second rule"},
 		{testkit.NewerNow.Name, testkit.OncallRules("f", testkit.NewerNow.Rule), 4, testkit.NewerNow.Want},
 		{"two rules for one thing", testkit.OncallRules("f", testkit.DriftNow, `{"level": "cluster", "news": "drift", "send": "digest", "to": "oncall"}`), 5, "rule 2"},
 		{"a channel with no file", testkit.Rules([]string{`"a": {}`}), 2, "needs urlFile"},
@@ -109,7 +99,7 @@ func TestAFileThatCannotBeUsedStopsWithTheLineOfTheFault(t *testing.T) {
 }
 
 func TestAFaultNamesNoValueOfTheFile(t *testing.T) {
-	_, err := Parse([]byte(fileWith(`{"level": "SECRET-LEVEL", "news": "drift", "send": "now", "to": "platform-oncall"}`)))
+	_, err := Parse([]byte(testkit.OneChannel(platformOncall, "f", `{"level": "SECRET-LEVEL", "news": "drift", "send": "now", "to": "platform-oncall"}`)))
 	if err == nil || strings.Contains(err.Error(), "SECRET") {
 		t.Errorf("error %v", err)
 	}
@@ -118,7 +108,7 @@ func TestAFaultNamesNoValueOfTheFile(t *testing.T) {
 var now = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 
 func TestALowerLevelOverridesAHigherOne(t *testing.T) {
-	rules, err := Parse([]byte(toA(driftToA, `{"level": "pack", "match": "dex", "news": "drift", "muteUntil": "2026-12-01"}`, digestToA)))
+	rules, err := Parse([]byte(testkit.OneChannel("a", "f", driftToA, `{"level": "pack", "match": "dex", "news": "drift", "muteUntil": "2026-12-01"}`, digestToA)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +135,7 @@ func TestALowerLevelOverridesAHigherOne(t *testing.T) {
 }
 
 func TestAMuteHoldsThroughTheDayOfItsEndDateAndThenCountsAsNoMute(t *testing.T) {
-	rules, err := Parse([]byte(toA(driftToA, muteDex("2026-12-01"))))
+	rules, err := Parse([]byte(testkit.OneChannel("a", "f", driftToA, muteDex("2026-12-01"))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +171,7 @@ func TestAProfileRuleNamesTheProfileOrNameAndVersion(t *testing.T) {
 }
 
 func TestAMuteBesideASendRuleAtOneLevelParsesAndTheLiveMuteWins(t *testing.T) {
-	rules, err := Parse([]byte(toA(lostToA, muteLost("2026-12-01"), muteDex("2026-12-01"), digestToA)))
+	rules, err := Parse([]byte(testkit.OneChannel("a", "f", lostToA, muteLost("2026-12-01"), muteDex("2026-12-01"), digestToA)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +207,7 @@ func TestTwoRulesThatSendForOneThingAreStillRefusedAndAMuteCountsInNoDuplicate(t
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := Parse([]byte(toA(c.rules...)))
+			_, err := Parse([]byte(testkit.OneChannel("a", "f", c.rules...)))
 			if (err == nil) != c.ok {
 				t.Errorf(testkit.ErrorWantOK, err, c.ok)
 			}

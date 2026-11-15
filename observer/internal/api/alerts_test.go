@@ -16,7 +16,7 @@ import (
 // real sender. The address is in a file, as a Secret gives it.
 func alerting(t *testing.T, r *rig, w *testkit.Receiver, s check.Strata) *check.Observer {
 	t.Helper()
-	file := testkit.OncallFile(t, w.URL+"/"+testkit.AddressMarker+"\n")
+	file := testkit.OncallFile(t, w.MarkedAddress())
 	rules, err := alert.Parse([]byte(testkit.OncallRules(file, testkit.DriftNow, `{"level": "cluster", "news": "newer", "send": "digest", "to": "oncall"}`,
 		`{"level": "profile", "match": "other-profile", "news": "drift", "muteUntil": "2099-01-01"}`)))
 	if err != nil {
@@ -74,6 +74,6 @@ func TestAMessageThatReachesTheReceiverHoldsNoValueAndTheAddressReachesNoRouteNo
 	testkit.HoldsNone(t, "the list of answers", get(h, askRoutes[patternAsks]).Body.String(), testkit.AddressMarker, host)
 	banned := []string{"SENTINEL", sentinelValue, sentinelVariable, sentinelText, "Betty"}
 	testkit.HoldsNone(t, "the messages", got, banned...)
-	testkit.HoldsNone(t, "the state", r.stateText(), banned...)
+	testkit.StateHoldsNone(t, r.state, banned...)
 	testkit.HoldsAll(t, "the log", r.log.String(), "channel=oncall", "verdict=failed", "status=500", "verdict=sent")
 }

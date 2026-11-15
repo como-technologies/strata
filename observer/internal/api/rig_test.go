@@ -197,19 +197,13 @@ func newRig(t *testing.T) *rig {
 	d := testkit.NewRigDirs(t)
 	r := &rig{t: t, records: d.Records, work: d.Work, state: d.State, log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
 	packs := []map[string]any{testkit.RigPack(testkit.KubernetesKey, "1.35.3", testkit.ImageRef), testkit.RigPack(testkit.CSIKey, "1.63.1", testkit.DigestImage)}
-	testkit.WriteGzip(t, r.records, testkit.RecordFile, testkit.RigRecord(t, "aws-stack", "1.1.0", packs, sentinelVariable))
+	testkit.WriteRecord(t, r.records, "aws-stack", "1.1.0", packs, sentinelVariable)
 	testkit.WriteMeta(t, r.records, testkit.ApprovedMeta(testkit.Revision))
 	return r
 }
 
 func (r *rig) config() check.Config {
 	return check.Config{ClusterUID: testkit.PaymentsUID, Records: r.records, Work: r.work, State: r.state, ContentEvery: testkit.ContentEvery, VersionsEvery: testkit.VersionsEvery}
-}
-
-// stateText gives the text of the state file that the observer wrote.
-func (r *rig) stateText() string {
-	r.t.Helper()
-	return testkit.StateText(r.t, r.state)
 }
 
 // observer makes an observer on the directories. A second call is a restart of the process.

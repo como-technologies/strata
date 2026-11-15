@@ -53,11 +53,9 @@ func TestThePodsFollowTheContinueTokenUntilTheListEnds(t *testing.T) {
 // The image of the status differs from the image of the spec for a container that the runtime
 // rewrote. The match uses the image of the spec, and the container joins its status by name.
 func TestAContainerKeepsTheImageOfItsSpecAndJoinsItsStatusByName(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(testkit.PodList("", `{"metadata":{"name":"p","namespace":"n"},
+	a := testkit.PodsAPI(t, `{"metadata":{"name":"p","namespace":"n"},
 		 "spec":{"containers":[{"name":"one","image":"`+testkit.NginxImage+`:1"},{"name":"two","image":"two:2"}]},
-		 "status":{"containerStatuses":[{"name":"two","image":"rewritten/two:2","imageID":"two@sha256:22"},{"name":"one","image":"nginx:1","imageID":"nginx@sha256:11"}]}}`)))
-	})
+		 "status":{"containerStatuses":[{"name":"two","image":"rewritten/two:2","imageID":"two@sha256:22"},{"name":"one","image":"nginx:1","imageID":"nginx@sha256:11"}]}}`)
 	got, err := New(cfgOf(a)).Pods(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +67,7 @@ func TestAContainerKeepsTheImageOfItsSpecAndJoinsItsStatusByName(t *testing.T) {
 }
 
 func TestTheTokenIsReadAtEachCall(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
+	a := testkit.PodsAPI(t)
 	c := New(cfgOf(a))
 	if _, err := c.Pods(context.Background()); err != nil {
 		t.Fatal(err)
@@ -85,7 +83,7 @@ func TestTheTokenIsReadAtEachCall(t *testing.T) {
 }
 
 func TestTheCAIsReadAtEachCall(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
+	a := testkit.PodsAPI(t)
 	c := New(cfgOf(a))
 	if _, err := c.Pods(context.Background()); err != nil {
 		t.Fatal(err)
@@ -175,7 +173,7 @@ func anotherCA(t *testing.T) []byte {
 }
 
 func TestAServerThatTheCADoesNotSignIsATransportFailure(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
+	a := testkit.PodsAPI(t)
 	other := testkit.WriteIn(t, t.TempDir(), "ca.crt", string(anotherCA(t)))
 	cfg := cfgOf(a)
 	cfg.CAFile = other
@@ -185,7 +183,7 @@ func TestAServerThatTheCADoesNotSignIsATransportFailure(t *testing.T) {
 }
 
 func TestACredentialThatIsMissingIsAConfigFailure(t *testing.T) {
-	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
+	a := testkit.PodsAPI(t)
 	for name, edit := range map[string]func(*Config){
 		"no token file": func(c *Config) { c.TokenFile += ".missing" },
 		"no CA file":    func(c *Config) { c.CAFile += ".missing" },

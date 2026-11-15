@@ -330,9 +330,14 @@ func Rules(channels []string, rules ...string) string {
 	return "{\n\"channels\": {" + strings.Join(channels, ", ") + "},\n\"rules\": [\n" + strings.Join(rules, ",\n") + "\n]\n}"
 }
 
+// OneChannel gives the text of a file of alert rules with one channel, name, whose address is in the file address.
+func OneChannel(name, address string, rules ...string) string {
+	return Rules([]string{Channel(name, address)}, rules...)
+}
+
 // OncallRules gives the text of a file of alert rules with one channel, oncall, whose address is in the file address.
 func OncallRules(address string, rules ...string) string {
-	return Rules([]string{Channel("oncall", address)}, rules...)
+	return OneChannel("oncall", address, rules...)
 }
 
 // The rules of the alerts that the tests of more than one package give. Each one sends a drift, a loss of contact, or
@@ -415,7 +420,13 @@ func Strata(t *testing.T, body string) string {
 // WriteFile writes body to the file at path, which only the user can read and write, and fails the test on an error.
 func WriteFile(t *testing.T, path, body string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+	writeMode(t, path, body, 0o600)
+}
+
+// writeMode writes body to the file at path with the mode, and fails the test on an error.
+func writeMode(t *testing.T, path, body string, mode os.FileMode) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), mode); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -431,9 +442,7 @@ func WriteIn(t *testing.T, dir, name, body string) string {
 // WriteExec writes body to the file at path as a program that each user can run, and fails the test on an error.
 func WriteExec(t *testing.T, path, body string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeMode(t, path, body, 0o755)
 }
 
 // WriteGzip writes body, compressed, to the file name of dir.
@@ -447,7 +456,7 @@ func WriteGzip(t *testing.T, dir, name, body string) {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	WriteFile(t, filepath.Join(dir, name), buf.String())
+	WriteIn(t, dir, name, buf.String())
 }
 
 // Cluster makes the read of the cluster PaymentsUID that runs the given profiles, each as name@version. The
@@ -488,6 +497,12 @@ func WriteMeta(t *testing.T, dir, body string) {
 func StateText(t *testing.T, state string) string {
 	t.Helper()
 	return string(ReadFile(t, filepath.Join(state, StateFile)))
+}
+
+// StateHoldsNone fails when the state file in the directory state holds one of the words.
+func StateHoldsNone(t *testing.T, state string, words ...string) {
+	t.Helper()
+	HoldsNone(t, "the state", StateText(t, state), words...)
 }
 
 // ReadFile reads the file at path, and fails the test on an error.
@@ -611,9 +626,15 @@ const (
 
 var VerifyAndSnapshot = "  echo '" + VerifyUnchanged + "' ;;\nsnapshot) echo '" + ClusterPayments + "' > \"$out\" ;;\n"
 
+// ErrorRow is the row of `verify` for a record whose check failed with the kind of an error and the HTTP status. A
+// status of 0 is none.
+func ErrorRow(kind string, status int) docs.VerifyRow {
+	return docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: kind, Status: status}}
+}
+
 // NotReadRow is the row of `verify` for a record that Palette refused to answer for, with a 429.
 func NotReadRow() docs.VerifyRow {
-	return docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 429}}
+	return ErrorRow(docs.KindAPI, 429)
 }
 
 // ErrorLine gives the line of the script of a fake of strata that writes the error document of strata to its stderr.
@@ -674,6 +695,12 @@ func RigRecord(t *testing.T, name, version string, packs []map[string]any, value
 	t.Helper()
 	variables := MustJSON(t, []map[string]string{{"name": "team", "value": value}})
 	return ProfileRecord(name, version, rootR1+`,"packs":`+string(MustJSON(t, packs))+`,"variables":`+string(variables))
+}
+
+// WriteRecord writes the record of RigRecord, compressed, to the file name@version.json.gz of dir.
+func WriteRecord(t *testing.T, dir, name, version string, packs []map[string]any, value string) {
+	t.Helper()
+	WriteGzip(t, dir, name+"@"+version+".json.gz", RigRecord(t, name, version, packs, value))
 }
 
 var (

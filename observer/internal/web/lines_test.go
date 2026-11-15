@@ -79,10 +79,16 @@ func shownLines(cell string) []string {
 	return out
 }
 
+// pathRow gives the row of the table of the settings whose cell of the path holds path.
+func pathRow(t *testing.T, page, path string) string {
+	t.Helper()
+	return rowWith(t, page, `<td class="m">`+path+`</td>`)
+}
+
 // sidesOf gives the lines of the Before cell and of the After cell in the row of a path.
 func sidesOf(t *testing.T, page, path string) (before, after []string) {
 	t.Helper()
-	row := rowWith(t, page, `<td class="m">`+path+`</td>`)
+	row := pathRow(t, page, path)
 	cells := valueCell.FindAllStringSubmatch(row, -1)
 	if len(cells) != 2 {
 		t.Fatalf("the row of %s has %d cells with lines, want 2: %.300s", path, len(cells), row)
@@ -176,7 +182,7 @@ func rowIsShort(t *testing.T, before, after []string) {
 // three changed versions. A line that holds the same text on both sides, between two changed lines, is not marked.
 func TestTheRealKubeadmFileOfKubernetesShowsItsThreeChangedLines(t *testing.T) {
 	set := loadSet(t, devdata.StateOK)
-	leaf := entryOf(t, set.Diffs, testkit.BaseProfile, testkit.KubernetesKey, model.SideNewer).Values.Settings[0]
+	leaf := diffOf(t, set, testkit.BaseProfile, testkit.KubernetesKey, model.SideNewer).Values.Settings[0]
 	if old, _ := leaf.Old.(string); leaf.Path != contentPath || strings.Count(old, "\n") != 21 {
 		t.Fatalf("the set ok must hold the real file of 21 lines as the first setting of kubernetes, not %q", leaf.Path)
 	}
@@ -215,7 +221,7 @@ func TestAValueOfOneLineReadsAsItDid(t *testing.T) {
 	} {
 		leaf := changedLeaf(c.old, c.now)
 		page := pagesOf(t, longSet(t, leaf), k8sHash)[0]
-		row := rowWith(t, page, `<td class="m">`+contentPath+`</td>`)
+		row := pathRow(t, page, contentPath)
 		mustHold(t, c.name, row, c.want)
 		mustNotHold(t, c.name, row, `class="vls"`, "val vm")
 	}
@@ -229,7 +235,7 @@ func TestAValueWithMoreThanFortyChangedLinesSaysHowManyAndLinksToTheText(t *test
 	}{{40, true}, {41, false}, {60, false}} {
 		dir := longSet(t, changedLeaf(lineValue(70, 3, 2+c.differ, "old"), lineValue(70, 3, 2+c.differ, "new")))
 		page := pagesOf(t, dir, k8sHash)[0]
-		row := rowWith(t, page, `<td class="m">`+contentPath+`</td>`)
+		row := pathRow(t, page, contentPath)
 		count := fmt.Sprintf("%d lines differ", c.differ)
 		if c.shows {
 			mustNotHold(t, count, row, count, "data-jump")
@@ -253,7 +259,7 @@ func TestAValueWithMoreThanFortyChangedLinesSaysHowManyAndLinksToTheText(t *test
 // A page that holds no text of the values gives the count and no link.
 func TestAValueWithMoreThanFortyChangedLinesHasNoLinkWhenThePageHoldsNoText(t *testing.T) {
 	dir := longSet(t, changedLeaf(lineValue(70, 3, 50, "old"), lineValue(70, 3, 50, "new")), func(d *api.PackDiff) { d.Values.Unified = "" })
-	row := rowWith(t, pagesOf(t, dir, k8sHash)[0], `<td class="m">`+contentPath+`</td>`)
+	row := pathRow(t, pagesOf(t, dir, k8sHash)[0], contentPath)
 	mustHold(t, "the row", row, `<td class="val" colspan="2">48 lines differ</td>`)
 	mustNotHold(t, "the row", row, "data-jump", "<button")
 }
@@ -308,6 +314,6 @@ func TestTheUnifiedAndSplitViewsDoNotChange(t *testing.T) {
 func TestALineOfAValueOfManyLinesWithMarkupShowsAsText(t *testing.T) {
 	dir := longSet(t, changedLeaf("a: 1\n"+evil+"\n", "a: 2\n"+evil+"\n"))
 	page := pagesOf(t, dir, k8sHash)[0]
-	mustHold(t, "the row", rowWith(t, page, `<td class="m">`+contentPath+`</td>`), `<span class="t">`+injection+`</span>`)
+	mustHold(t, "the row", pathRow(t, page, contentPath), `<span class="t">`+injection+`</span>`)
 	mustNotHold(t, "the page", page, "<img")
 }

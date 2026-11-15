@@ -192,7 +192,7 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 				for j, r := range termRows(t, page) {
 					if j == 0 {
 						// The record is read by its key, which has only safe characters.
-						key := regexp.MustCompile(`[^A-Za-z0-9._-]`).ReplaceAllString(profile+"_2.3.0.json.gz", "_")
+						key := recordKey(profile, "2.3.0")
 						if r.command != fmt.Sprintf(recordRead, key) {
 							t.Errorf("page %d: the first command is %q", i, r.command)
 						}

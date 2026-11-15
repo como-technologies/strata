@@ -362,8 +362,13 @@ func TestOnceExitsOneWhenAFindingExistsAlsoIfTheOtherCycleFailed(t *testing.T) {
 // kernel gives the server a free port.
 func serveArgs(t *testing.T, bin string) []string {
 	t.Helper()
-	args := append([]string{"serve"}, onceArgs(t, bin)[1:]...)
-	return append(args, "--listen", testkit.PortZero)
+	return append(commandArgs(t, "serve", bin), "--listen", testkit.PortZero)
+}
+
+// commandArgs gives the arguments of onceArgs for another command, such as serve.
+func commandArgs(t *testing.T, command, bin string) []string {
+	t.Helper()
+	return append([]string{command}, onceArgs(t, bin)[1:]...)
 }
 
 // startServe runs `serve` until the test stops it. It gives the address of the server, the function that
@@ -378,7 +383,7 @@ func startServe(t *testing.T, args []string) (addr string, stop func() int, stde
 func TestServeRefusesAnAddressThatIsNotLoopbackWithExitTwo(t *testing.T) {
 	for _, addr := range []string{"0.0.0.0:8080", ":8080", "[::]:8080", "10.0.0.5:8080", "localhost:8080", "127.0.0.1"} {
 		t.Run(addr, func(t *testing.T) {
-			args := append([]string{"serve"}, onceArgs(t, "strata")[1:]...)
+			args := commandArgs(t, "serve", "strata")
 			exitsTwoSaying(t, append(args, "--listen="+addr), "--listen", "loopback")
 		})
 	}
@@ -597,10 +602,9 @@ func podsAPI(t *testing.T) *testkit.KubeAPI {
 
 func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 	kubeAPI := podsAPI(t)
-	var out, errs bytes.Buffer
 	args := append(onceArgs(t, fakeStrata(t, testkit.CompareSame, 0, false)), "--kube-dir", kubeAPI.Dir())
-	if code := run(args, &out, &errs); code != 0 {
-		t.Fatalf(testkit.ExitStderr, code, errs.String())
+	if code, _, _, errs := runOnce(t, args); code != 0 {
+		t.Fatalf(testkit.ExitStderr, code, errs)
 	}
 	if n := len(kubeAPI.Requests()); n != 0 {
 		t.Errorf(kubeRequests, n)
@@ -624,16 +628,16 @@ func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 
 func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *testing.T) {
 	kubeAPI := podsAPI(t)
-	var out, errs bytes.Buffer
 	args := append(onceArgs(t, fakeStrata(t, testkit.CompareSame, 0, false)), "--read-pods", "--kube-dir", kubeAPI.Dir())
-	if code := run(args, &out, &errs); code != 0 {
-		t.Fatalf(testkit.ExitStderr, code, errs.String())
+	code, _, out, errs := runOnce(t, args)
+	if code != 0 {
+		t.Fatalf(testkit.ExitStderr, code, errs)
 	}
 	seen := kubeAPI.Requests()
 	if len(seen) != 1 || seen[0].Method != http.MethodGet || seen[0].Path != "/api/v1/pods" || seen[0].Auth != "Bearer token-1" {
 		t.Errorf("requests %+v", seen)
 	}
-	testkit.HoldsNone(t, "the output of a run with --read-pods", out.String()+errs.String(), "MARKER")
+	testkit.HoldsNone(t, "the output of a run with --read-pods", out+errs, "MARKER")
 }
 
 func TestServeWithReadPodsServesTheDigestsOfTheImages(t *testing.T) {
@@ -656,7 +660,7 @@ func TestReadPodsNeedsTheVariablesOfTheKubelet(t *testing.T) {
 	t.Setenv(testkit.KubePort, "")
 	for _, command := range []string{"once", "serve"} {
 		t.Run(command, func(t *testing.T) {
-			args := append([]string{command}, onceArgs(t, "strata")[1:]...)
+			args := commandArgs(t, command, "strata")
 			exitsTwoSaying(t, append(args, "--read-pods"), testkit.KubeHost)
 		})
 	}

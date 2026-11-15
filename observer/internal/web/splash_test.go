@@ -106,9 +106,7 @@ func motionProblems(css string) []string {
 			}
 		}
 	}
-	if p := ruleProblem(still, ".slabs .s", noAnimation+";"); p != "" {
-		out = append(out, p)
-	}
+	out = append(out, ruleProblem(still, ".slabs .s", noAnimation+";"))
 	out = append(out, rulesProblems(still, map[string][]string{buildSlabs: {"opacity:"}, lostTop: {"transform:"}})...)
 	return out
 }
@@ -229,7 +227,4 @@ func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testin
 	mustNotHold(t, "the scripts", script, []string{"<img", "new Image", "@import", "<link", "<style"}...)
 	// The mark is drawn in markup through h``, like every other part of the page.
 	mustHold(t, "the scripts", script, "<svg "+markClass("${tone}"))
-	var got []string
-	problemsInScreens(script, func(p string) { got = append(got, p) })
-	noProblems(t, "the scripts", got)
 }

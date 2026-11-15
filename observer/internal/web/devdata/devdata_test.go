@@ -137,20 +137,20 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			serves(route, testkit.Plain(t, json.RawMessage(raw)))
+			serves(route, json.RawMessage(raw))
 		}
-		serves("/v1/alerts", testkit.Plain(t, s.AlertRules))
+		serves("/v1/alerts", s.AlertRules)
 		for _, img := range s.Images.Images {
 			view, _ := s.Images.ImageOf(img.Ref)
 			path := "/v1/images/" + url.PathEscape(img.Ref)
-			serves(path, testkit.Plain(t, view))
+			serves(path, view)
 		}
 		if code := testkit.Get(h, "/v1/images/"+url.PathEscape(testkit.NoImage)).Code; code != http.StatusNotFound {
 			t.Errorf("%s: an image that no pod runs gave %d", state, code)
 		}
 		for _, d := range s.Diffs {
 			path := "/v1/packs/" + d.Profile + "/" + d.Key + "/diff?side=" + string(d.Side)
-			serves(path, testkit.Plain(t, d))
+			serves(path, d)
 		}
 		if _, found, _ := s.PackDiff(context.Background(), testkit.NobodyProfile, testkit.NoneKey, model.SideNewer); found {
 			t.Errorf("%s: a pack that no entry names has a diff", state)

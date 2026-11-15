@@ -137,9 +137,7 @@ func TestTwoChecksComeInTheOrderOfStrataAndASkipWithNoStepNamesTheMinorVersion(t
 func TestAClickShowsTheChecksOfTheAnswerAtOnce(t *testing.T) {
 	k8s, _ := checkAnswers(t)
 	// The set ok, with one reply: the answer of update-checks for the move of kubernetes.
-	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": func([]byte) []byte {
-		return testkit.MustJSON(t, api.AsksView{Asks: []model.Answer{k8s}})
-	}})
+	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": wholeFile(string(testkit.MustJSON(t, api.AsksView{Asks: []model.Answer{k8s}})))})
 	r := clickIn(t, dir, scratch, k8sHash, "0", k8sClick)
 	mustNotHold(t, "before", r.Before, skipNote, gaveNoError)
 	mustHold(t, "after", textOf(r.After), noErrorCovers, skipHead, skipStep, oneRule)
@@ -188,7 +186,7 @@ func TestTheBookQuotesTheWordsOfEachCheck(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("the table of the checks has %d rows", len(rows))
 	}
-	useCase := strings.Join(strings.Fields(sectionOf(t, useCasePage, "## 5. "+askMove)), " ")
+	useCase := unwrapped(sectionOf(t, useCasePage, "## 5. "+askMove))
 	for _, row := range rows {
 		mustHold(t, "the scripts", script, words(row[0]), words(row[1]))
 		mustHold(t, "the use case", useCase, `"`+row[0]+`"`)

@@ -82,7 +82,7 @@ func TestEachKindOfNewsHasItsTitle(t *testing.T) {
 func TestADigestListsAtMostThirtySubjectsAndSaysHowManyMore(t *testing.T) {
 	var subjects []Subject
 	for i := 0; i < digestLimit+5; i++ {
-		subjects = append(subjects, Subject{News: NewsNewer, Profile: "p@1", Detail: "x"})
+		subjects = append(subjects, newerItem("", "p@1"))
 	}
 	lines := strings.Split(digestText("quarry-1", subjects), "\n")
 	if len(lines) != 2+digestLimit+1 || lines[len(lines)-1] != "and 5 more." {

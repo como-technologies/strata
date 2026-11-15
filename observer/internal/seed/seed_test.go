@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -31,7 +30,10 @@ type fakeStrata struct{ calls [][]string }
 
 func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.Result, error) {
 	f.calls = append(f.calls, args)
-	out := args[slices.Index(args, "-o")+1]
+	out, err := testkit.OutFile(args)
+	if err != nil {
+		return runner.Result{}, err
+	}
 	doc := clusterJSON()
 	if ref := args[1]; !strings.HasPrefix(ref, "cluster:") {
 		name, version, _ := strings.Cut(ref, "@")

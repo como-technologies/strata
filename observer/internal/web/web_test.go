@@ -1058,9 +1058,7 @@ func rulesProblems(css string, rules map[string][]string) []string {
 	var out []string
 	for selector, want := range rules {
 		for _, w := range want {
-			if p := lackProblem(css, selector, w); p != "" {
-				out = append(out, p)
-			}
+			out = append(out, lackProblem(css, selector, w))
 		}
 	}
 	return out
@@ -1218,15 +1216,16 @@ func TestEachCopyOfTheLogoIsItsSourceByteForByte(t *testing.T) {
 // The check of a copy must be able to fail.
 func TestTheCheckOfACopyFindsAByteThatDiffers(t *testing.T) {
 	source := []byte(`<svg><path fill="#5b2fc4"/></svg>`)
+	otherColor := bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1)
 	noProblems(t, "a copy that is the same", []string{copyProblem("copy", source, slices.Clone(source))})
 	for name, copy := range map[string][]byte{
-		"a byte of a color":   bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1),
+		"a byte of a color":   otherColor,
 		"a missing last byte": source[:len(source)-1],
 		"a byte at the end":   append(slices.Clone(source), '\n'),
 	} {
 		findsProblem(t, name, []string{copyProblem("copy", source, copy)}, differsAt)
 	}
-	findsProblem(t, "a byte of a color", []string{copyProblem("copy", source, bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1))}, "at byte 23 ")
+	findsProblem(t, "a byte of a color", []string{copyProblem("copy", source, otherColor)}, "at byte 23 ")
 }
 
 // driftRed is the red of a drift. A drift is white on this red in both schemes, so its rule holds the
@@ -1240,9 +1239,7 @@ const redBadge = ".badge.r{background:"
 func driftProblems(css string) []string {
 	var out []string
 	for _, selector := range []string{".badge.r", ".cnt.r"} {
-		if p := ruleProblem(css, selector, "background:"+driftRed+";color:#fff;"); p != "" {
-			out = append(out, p)
-		}
+		out = append(out, ruleProblem(css, selector, "background:"+driftRed+";color:#fff;"))
 	}
 	return out
 }
@@ -1322,9 +1319,7 @@ func themeProblems(css string) []string {
 		}
 	}
 	for selector, want := range choices {
-		if p := ruleProblem(css, selector, want); p != "" {
-			out = append(out, p)
-		}
+		out = append(out, ruleProblem(css, selector, want))
 	}
 	for name, n := range tokens {
 		if n > 1 {
@@ -1527,7 +1522,13 @@ func countSpan(class, count string) string {
 // navItem gives the pattern of the item of the nav to the screen hash, with its label. The count is a group of the
 // pattern, and class follows the class cnt of the count.
 func navItem(hash, label, class string) *regexp.Regexp {
-	return regexp.MustCompile(navLink(hash) + `"[^"]*">` + navCount(label, class, `([^<]*)`) + `</a>`)
+	return regexp.MustCompile(navItemText(hash, `[^"]*`, label, class, `([^<]*)`))
+}
+
+// navItemText gives the text of the item of the nav to the screen hash. link is the class of the link, and label, class,
+// and count are as navCount takes them.
+func navItemText(hash, link, label, class, count string) string {
+	return navLink(hash) + `"` + link + `">` + navCount(label, class, count) + `</a>`
 }
 
 // The badge of an image, and the badge of one digest, as the page draws them.
@@ -1567,8 +1568,12 @@ var imageSets = []devdata.State{devdata.StateOK, devdata.StateImages, devdata.St
 // sortHead starts the head of a column of the list of the images that sorts by text and is not sorted now. class is
 // the class of the head, col names the column, and label is its word.
 func sortHead(class, col, label string) string {
-	return `<th class="` + class + `" ` + sortAria("none") + `>` + sortButton("it", col, "", label) + `<`
+	return sortTh(class, "none") + sortButton("it", col, "", label) + `<`
 }
+
+// sortTh gives the start tag of the head of a column that sorts its table. class is the class of the head, and state is
+// as sortAria takes it.
+func sortTh(class, state string) string { return `<th class="` + class + `" ` + sortAria(state) + `>` }
 
 // sortAria gives the attribute that says how a head sorts its table now: none, ascending, or descending.
 func sortAria(state string) string { return `aria-sort="` + state + `"` }
@@ -1879,7 +1884,7 @@ func TestWithNoReadOfThePodsTheTileIsGoneAndTheNavItemSaysOff(t *testing.T) {
 			if n := navOfImages.FindStringSubmatch(overview); n == nil || n[1] != "Off" {
 				t.Errorf("the nav item is %q, want the count Off", n)
 			}
-			mustHold(t, "the images", pageOf(t, screens, "#images", ""), podsOffTitle, imagesOn+navCount("Images", "", "Off")+`</a>`)
+			mustHold(t, "the images", pageOf(t, screens, "#images", ""), podsOffTitle, navItemText("#images", "on", "Images", "", "Off"))
 		})
 	}
 }
@@ -2008,6 +2013,11 @@ func editJSON[T any](t *testing.T, change func(*T)) func([]byte) []byte {
 // replaceText gives an edit of a file of a set for writeSet. It puts to in place of each from in the text.
 func replaceText(from, to string) func([]byte) []byte {
 	return func(raw []byte) []byte { return []byte(strings.ReplaceAll(string(raw), from, to)) }
+}
+
+// wholeFile gives an edit of a file of a set for writeSet. It puts text in place of the whole file.
+func wholeFile(text string) func([]byte) []byte {
+	return func([]byte) []byte { return []byte(text) }
 }
 
 // chain gives a writeSet edit that makes each edit, in order.

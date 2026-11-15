@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,7 +15,7 @@ import (
 // the rules for drift and for the loss of contact.
 func rulesFile(t *testing.T, w *testkit.Receiver) string {
 	t.Helper()
-	return rulesFileAt(t, w.URL+"/"+testkit.AddressMarker+"\n", testkit.DriftNow, testkit.LostNow)
+	return rulesFileAt(t, w.MarkedAddress(), testkit.DriftNow, testkit.LostNow)
 }
 
 // rulesFileAt writes the file alerts.json of rules with one channel, oncall, whose file of the address holds address,
@@ -32,10 +31,9 @@ const drifting = `{"schema":"` + docs.DiffSchema + `","same":false,"sameContent"
 
 func TestOnceSendsNothingAlsoWithTheFlagAlerts(t *testing.T) {
 	w := testkit.NewReceiver(t)
-	var out, errs bytes.Buffer
 	args := append(onceArgs(t, fakeStrata(t, drifting, 0, false)), "--alerts", rulesFile(t, w), "--alerts-allow-http")
-	if code := run(args, &out, &errs); code != 1 {
-		t.Fatalf(testkit.ExitStderr, code, errs.String())
+	if code, _, _, errs := runOnce(t, args); code != 1 {
+		t.Fatalf(testkit.ExitStderr, code, errs)
 	}
 	if w.Count() != 0 {
 		t.Errorf("once sent %d messages", w.Count())
@@ -47,8 +45,7 @@ func TestOnceAndServeStopAtTheStartWithAFileOfRulesThatCannotBeUsed(t *testing.T
 		bad := rulesFileAt(t, "https://"+testkit.HooksExample, c.Rule)
 		for _, command := range []string{"once", "serve"} {
 			t.Run(c.Name+", "+command, func(t *testing.T) {
-				args := append(onceArgs(t, "strata"), "--alerts", bad)
-				args[0] = command
+				args := append(commandArgs(t, command, "strata"), "--alerts", bad)
 				exitsTwoSaying(t, args, "--alerts", "alerts.json", "line 4", "rule 1", c.Want)
 			})
 		}

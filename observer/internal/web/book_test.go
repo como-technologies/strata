@@ -44,6 +44,10 @@ func sectionOf(t *testing.T, page, heading string) string {
 	return rest
 }
 
+// unwrapped gives the text with each run of white space as one space, so that a sentence of the book that wraps reads as
+// one line.
+func unwrapped(text string) string { return strings.Join(strings.Fields(text), " ") }
+
 // tableRows gives the cells of each row of the first table in the text, with no header row and no rule row.
 func tableRows(t *testing.T, text string) [][]string {
 	t.Helper()
@@ -141,7 +145,7 @@ func TestALostPageNamesTheKeyOnlyForARefusal(t *testing.T) {
 			dir := writeSet(t, devdata.StateLostUnchecked, map[string]func([]byte) []byte{
 				"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Content.LastError = &lastError }),
 			})
-			page := pageWith(t, dir, scratch, "#overview", "")
+			page := pagesOf(t, dir, "#overview")[0]
 			mustHold(t, c.name, page, c.want)
 			mustNotHold(t, c.name, page, c.not)
 		})
@@ -162,7 +166,7 @@ func TestTheThirdFactOfAllQuietIsASingleShortLabel(t *testing.T) {
 		dir := writeSet(t, devdata.StateQuiet, map[string]func([]byte) []byte{
 			"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Counts.Newer = c.newer }),
 		})
-		mustHold(t, "the facts of "+calmQuiet, pageWith(t, dir, scratch, "#findings", ""), c.want)
+		mustHold(t, "the facts of "+calmQuiet, pagesOf(t, dir, "#findings")[0], c.want)
 	}
 }
 
@@ -174,7 +178,7 @@ func TestTheBookQuotesTheQuestionsOfTheCardCheckThisYourself(t *testing.T) {
 	if len(table) != 8 {
 		t.Fatalf("the table of the card has %d rows", len(table))
 	}
-	useCase := strings.Join(strings.Fields(string(testkit.ReadFile(t, useCasePage))), " ")
+	useCase := unwrapped(string(testkit.ReadFile(t, useCasePage)))
 	for _, row := range table {
 		question := strings.TrimSuffix(row[0], ".")
 		mustHold(t, "the scripts", script, `["`+question+`"`)

@@ -118,7 +118,7 @@ func TestTheStateHoldsTheFirstSightAndNoValue(t *testing.T) {
 	r, w := edited(t)
 	o := r.observer(w)
 	once(t, o)
-	stateHoldsNone(t, r, sentinel, "charts.a.b", "Betty", "John", "csi-aws-ebs")
+	testkit.StateHoldsNone(t, r.state, sentinel, "charts.a.b", "Betty", "John", "csi-aws-ebs")
 	keepsFirstSight(t, r, model.FindingID(model.PublishedChanged, testkit.AWSStackProfile))
 	if state := readState(t, r); state.StartedAt != t0 {
 		t.Errorf("state %+v", state)
@@ -130,11 +130,11 @@ func TestTheStateHoldsTheFirstSightAndNoValue(t *testing.T) {
 
 func TestASecondRunAfterARestartReadsFirstSeenFromTheState(t *testing.T) {
 	r, w := edited(t)
-	first, _ := r.observer(w).Once(context.Background())
+	first := once(t, r.observer(w))
 	again := r.restart(w)
 	later := t0.Add(2 * time.Hour)
 	again.now = func() time.Time { return later }
-	second, _ := again.Once(context.Background())
+	second := once(t, again)
 	if len(first.Findings) != 1 || len(second.Findings) != 1 {
 		t.Fatalf("findings %v %v", first.Findings, second.Findings)
 	}
@@ -159,7 +159,7 @@ func TestAFindingThatGoesLeavesTheState(t *testing.T) {
 }
 
 func TestTwoRunsWithOneStateDirectoryReachLost(t *testing.T) {
-	r, w := oneRecord(t, docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindTransport}})
+	r, w := oneRecord(t, testkit.ErrorRow(docs.KindTransport, 0))
 	w.verifyExit = 2
 	w.behindErr = &runner.RunError{Kind: docs.KindTransport}
 	first, err := r.observer(w).Once(context.Background())

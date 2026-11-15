@@ -73,7 +73,7 @@ func TestAFileThatIsNoProfileRecordDoesNotStopTheOthers(t *testing.T) {
 	testkit.WriteGzip(t, dir, "a-good.json.gz", aws)
 	testkit.WriteIn(t, dir, "b-plain.json.gz", aws)
 	testkit.WriteGzip(t, dir, otherSchema, `{"schema":"`+docs.DiffSchema+`"}`)
-	testkit.WriteGzip(t, dir, "d-cluster.json.gz", testkit.ClusterHead+testkit.PaymentsUID+`"}}}`)
+	testkit.WriteGzip(t, dir, "d-cluster.json.gz", testkit.ClusterPayments)
 	testkit.WriteGzip(t, dir, "e-not-json.json.gz", `not json`)
 	testkit.WriteGzip(t, dir, "f-good.json.gz", aws)
 	set, err := Load(dir)
@@ -145,8 +145,7 @@ func TestADirectoryThatDoesNotExistIsAnError(t *testing.T) {
 
 func TestARecordDecodesOnlyIntoTheAllowList(t *testing.T) {
 	dir := t.TempDir()
-	body := testkit.RigRecord(t, "aws-stack", "1.1.0", []map[string]any{}, marker)
-	testkit.WriteGzip(t, dir, testkit.RecordFile, body)
+	testkit.WriteRecord(t, dir, "aws-stack", "1.1.0", []map[string]any{}, marker)
 	set, err := Load(dir)
 	if err != nil || len(set.Entries) != 1 {
 		t.Fatalf("set %+v, error %v", set, err)

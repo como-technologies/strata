@@ -29,8 +29,15 @@ const (
 // markers. The pod runs ImageRef, with the image id ImageRan.
 func MarkerPods(t *testing.T) *KubeAPI {
 	t.Helper()
+	return PodsAPI(t, PodJSON("NS-MARKER", "POD-MARKER", ImageRef, ImageRan))
+}
+
+// PodsAPI starts a stand-in for the API server of Kubernetes that answers each request with one page of the pods,
+// each from PodJSON.
+func PodsAPI(t *testing.T, pods ...string) *KubeAPI {
+	t.Helper()
 	return NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(PodList("", PodJSON("NS-MARKER", "POD-MARKER", ImageRef, ImageRan))))
+		_, _ = w.Write([]byte(PodList("", pods...)))
 	})
 }
 
