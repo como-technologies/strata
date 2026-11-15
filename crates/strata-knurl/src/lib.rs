@@ -166,8 +166,8 @@ fn profile_ref(unit: &UnitRef) -> Ref {
 fn pack_ref(unit: &UnitRef, registry: Option<String>) -> Ref {
     Ref::pack(
         registry.as_deref(),
-        &unit.name.to_string(),
-        &unit.version.to_string(),
+        unit.name.as_ref(),
+        unit.version.as_ref(),
     )
 }
 
