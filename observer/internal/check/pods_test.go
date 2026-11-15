@@ -48,6 +48,9 @@ func podRig(t *testing.T, containers ...kube.Container) (*rig, *world, *Observer
 	return r, w, r.observer(w).WithPods(pods), pods
 }
 
+// findingsLeft is the failure of a check of the kinds of the findings that an event of a cycle leaves.
+const findingsLeft = "%s leaves the findings %v"
+
 // cycle runs a content cycle of o, and fails the test when it fails.
 func cycle(t *testing.T, o *Observer) {
 	t.Helper()
@@ -185,7 +188,7 @@ func TestANewRevisionOfTheRecordsResetsTheFirstDigest(t *testing.T) {
 	r.meta(testkit.ApprovedMeta(testkit.NewRevision))
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); len(got) != 0 {
-		t.Errorf("a new revision leaves the findings %v", got)
+		t.Errorf(findingsLeft, "a new revision", got)
 	}
 	st := readState(t, r)
 	if st.Images.Revision != testkit.NewRevision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest2 {

@@ -413,7 +413,7 @@ func TestAFailedReadOfMetaJSONKeepsEachFirstDigestAndARealNewRevisionResetsThem(
 	}
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
-		t.Errorf("a failed read of "+testkit.MetaFile+" leaves the findings %v", got)
+		t.Errorf(findingsLeft, "a failed read of "+testkit.MetaFile, got)
 	}
 	st := readState(t, r)
 	if st.Images.Revision != testkit.Revision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest1 {
