@@ -7,6 +7,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use strata::reference::{LATEST, version};
 
+use crate::common_palette::pack_listing_answer;
+
 use super::Tenant;
 use super::routes::{
     REGISTRY_LISTING, manifests_route, pack_entity_route, pack_listing, profile_route,
@@ -129,7 +131,7 @@ impl Tenant {
         self.write(
             project,
             &pack_listing(CHART),
-            &json!({"items": [], "listmeta": {"count": 0}}),
+            &pack_listing_answer(json!([])),
         );
     }
 
@@ -153,7 +155,7 @@ impl Tenant {
         self.write(
             project,
             &pack_listing(CHART),
-            &json!({"items": [made], "listmeta": {"count": 1}}),
+            &pack_listing_answer(json!([made])),
         );
         self.write(
             project,
@@ -182,11 +184,10 @@ impl Tenant {
                 item
             })
             .collect();
-        let count = items.len();
         self.write(
             project,
             &pack_listing(BITNAMI_CHART),
-            &json!({"items": items, "listmeta": {"count": count}}),
+            &pack_listing_answer(json!(items)),
         );
     }
 
@@ -279,8 +280,7 @@ impl Tenant {
         for dir in dirs {
             let name = dir.file_name().unwrap().to_string_lossy().into_owned();
             let summaries: Value = read_json(&dir.join("_summaries.json"));
-            let count = summaries.as_array().map(Vec::len).unwrap_or(0);
-            let mut listing = json!({"items": summaries, "listmeta": {"count": count}});
+            let mut listing = pack_listing_answer(summaries);
             let entity: Value = read_json(&dir.join("_entity.json"));
             self.write(project, &pack_entity_route(&name, PUBLIC_REPO), &entity);
             // The answer with the states query: the tags of the retired versions, which the

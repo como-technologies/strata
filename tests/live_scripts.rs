@@ -7919,7 +7919,7 @@ fn registry_kinds_sh_gets_the_error_of_several_registries_as_json_from_a_command
         (REGISTRY_LISTING.to_string(), listing),
         (
             pack_listing_route("strata-live-pack"),
-            pack_listing(serde_json::json!(packs)),
+            pack_listing_answer(serde_json::json!(packs)),
         ),
     ]));
     stage.env("FAKE_PALETTE", &palette);
@@ -9216,7 +9216,7 @@ fn route_packs(without_aws: bool) -> String {
     if without_aws {
         items.push(pack("gcp-dns", "2.0.0", "reg-pub", "addon", &["gcp"]));
     }
-    pack_listing(serde_json::json!(items)).to_string()
+    pack_listing_answer(serde_json::json!(items)).to_string()
 }
 
 /// A `strata` for route-bodies.sh. `preflight BODY` keeps a copy of BODY in strata/seen/, and logs
@@ -14509,7 +14509,7 @@ echo '{"metadata":{"name":"strata-live-observer-chart","uid":"reg-c"}}'
     );
     stage.route(
         "/v1/packs",
-        &pack_listing(serde_json::json!([
+        &pack_listing_answer(serde_json::json!([
             {"spec": {"name": "strata-observer", "version": "0.32.2", "registryUid": "reg-c"}}]))
         .to_string(),
     );
@@ -14609,7 +14609,7 @@ fn observer_chart_sh_records_a_registry_with_no_chart_and_deletes_it() {
     let stage = chart_stage();
     stage.route(
         "/v1/packs",
-        &pack_listing(serde_json::json!([])).to_string(),
+        &pack_listing_answer(serde_json::json!([])).to_string(),
     );
     let (o, steps) = stage.run("observer-chart.sh", &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
