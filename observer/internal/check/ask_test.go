@@ -16,7 +16,7 @@ import (
 )
 
 // askable runs a versions cycle on the world of withBehind, whose first pin is kubernetes 1.35.3, and
-// gives the pin the bump that `behind --pin` would read. Each prepare changes the world before the cycle.
+// gives the pin the bump that `behind --pin` reads. Each prepare changes the world before the cycle.
 func askable(t *testing.T, bump docs.Bump, prepare ...func(w *world)) (*rig, *world, *Observer) {
 	t.Helper()
 	r, w := withBehind(t)

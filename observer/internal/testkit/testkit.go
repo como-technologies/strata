@@ -612,8 +612,8 @@ func Snapshot(name, version string) string {
 	return ProfileRecord(name, version, `,"root":"r-`+name+`"`+NoPacks)
 }
 
-// RigPack gives a pack of the record of a rig of the tests of api and of check: the key layer/name, the version, the
-// registry reg1, and the images.
+// RigPack gives a pack of the record of a rig of the tests of api and of check. The pack has the key layer/name, the
+// version, the registry reg1, and the images.
 func RigPack(key, version string, images ...string) map[string]any {
 	layer, name, _ := strings.Cut(key, "/")
 	return map[string]any{"key": key, "layer": layer, "name": name, "version": version, "registryUid": "reg1", "images": images}
@@ -632,8 +632,8 @@ var (
 	secretData = regexp.MustCompile(`^  ([^ :]+): (\S+)$`)
 )
 
-// HunkHead reads the head of a hunk of a unified text: the first line and the count of lines of the old side, then of
-// the new side. A head with no count names one line.
+// HunkHead reads the head of a hunk of a unified text. It gives the first line and the count of lines of the old side,
+// then of the new side. A head with no count names one line.
 var HunkHead = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@$`)
 
 // RecordSecrets reads the Secrets in YAML that the records script prints. It gives the data of each Secret by its

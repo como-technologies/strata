@@ -363,8 +363,8 @@ func problemsInStyle(text string, add func(string)) {
 	}
 }
 
-// noProblems and findsProblem are the checks of the problems that a check of the page found, and mustHold and
-// mustNotHold are the checks of the words of a screen. Each one is a helper of testkit.
+// noProblems and findsProblem check the problems that a check of the page found. mustHold and mustNotHold check the
+// words of a screen. Each one is a helper of testkit.
 var (
 	noProblems   = testkit.NoProblems
 	findsProblem = testkit.FindsProblem
@@ -566,8 +566,7 @@ func render(t *testing.T, state devdata.State, poison bool) []screen {
 	return renderIn(t, "assets", "testdata/api", state, extra...)
 }
 
-// renderIn crawls each screen of the set state of the directory of sets apiDir with the scripts of assets, and fails for
-// a screen that threw.
+// renderIn crawls each screen of the set state of apiDir with the scripts of assets. It fails for a screen that threw.
 func renderIn(t *testing.T, assets, apiDir string, state devdata.State, extra ...string) []screen {
 	t.Helper()
 	screens := nodeJSON[[]screen](t, runNodeAssets(t, assets, apiDir, state, extra...))
@@ -668,7 +667,7 @@ const (
 	whenThisHappens = "<b>When this happens</b>"
 	// dexIDTokens is the path of a value of dex that its change sets.
 	dexIDTokens = testkit.DexExpiry + ".idTokens"
-	// mutedCell starts a muted cell of the table of the images, catchTab ends the tab of what the pods catch, and
+	// mutedCell starts a muted cell of the table of the images. catchTab ends the tab of what the pods catch, and
 	// machineImage ends the sentence of a finding of an image id.
 	mutedCell    = `<td class="m nw"><span class="mut">`
 	catchTab     = "What pods do catch</button>"

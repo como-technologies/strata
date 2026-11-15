@@ -26,8 +26,8 @@ func TestOutFileGivesTheArgumentAfterTheFlagAndAnErrorWhenThereIsNone(t *testing
 	}
 }
 
-// With the variable CI set, a missing tool, such as node for the render tests of internal/web, fails the test. Else
-// it skips. This test needs no tool.
+// With the variable CI set, a tool that is not on the PATH, such as node for the render tests of internal/web, fails
+// the test. Else it skips. This test needs no tool.
 func TestWithCISetAMissingToolFailsTheTest(t *testing.T) {
 	for _, c := range []struct {
 		name, ci      string

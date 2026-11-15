@@ -58,8 +58,7 @@ func problemsOf(got []string) []string {
 }
 
 // WhenMissing ends a test that needs tool, which is not on the PATH. With ci set, as the variable CI of a runner sets
-// it, the test fails: a runner with no tool would skip the test, and the check would pass with nothing checked. Else the
-// test skips.
+// it, the test fails, because a skip on a runner checks nothing. Else the test skips.
 func WhenMissing(ci, tool string, fail, skip func(args ...any)) {
 	if ci != "" {
 		fail(tool + " is not on the PATH, and CI is set: a runner must have it, or the test checks nothing")
