@@ -1172,12 +1172,11 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the command line or of a document
 
-- **`strata list` refuses `--packs` and `--applied`.** Release 0.34.0 kept them as the old names
-  of `--detail`, with a note. Now the command line refuses each one as an unexpected argument,
-  with the exit code `2` and no request. With `--json` too, the refusal is text and not an error
-  document. Use `--detail`, and name a kind to read that kind alone, such as
-  `strata list clusters --detail`. The tip of the refusal of `--packs` names `--pack`, which
-  keeps the versions with a pack whose name holds its text. See
+- **`strata list` refuses the old names `--packs` and `--applied`.** Each one is an unexpected
+  argument now, with the exit code `2` and no request. With `--json` too, the refusal is text
+  and not an error document. Use `--detail` in place of each one. Name a kind to read that kind
+  alone, such as `strata list clusters --detail`. The tip of the refusal of `--packs` names
+  `--pack`, which keeps the versions with a pack whose name holds its text. See
   [Read each row deeper](../commands/list.md#read-each-row-deeper).
 
 ## Release 0.34.0: changes that need action
@@ -1669,9 +1668,8 @@ field, a value, an input, or an option is in the sections above.
   version for its packs and each cluster for the profiles that it applies. `--packs` still
   reads the versions alone, and `--applied` the clusters alone. Each one also writes a note on
   standard error that names `--detail`, and the help no longer shows them.
-  [Release 0.35.0](#release-0350-changes-that-need-action) removes them. Use `--detail`, and
-  name a kind to read that kind alone, such as
-  `strata list profiles --detail`. See
+  [Release 0.35.0](#release-0350-changes-that-need-action) removes them. Name a kind with
+  `--detail` to read that kind alone, such as `strata list profiles --detail`. See
   [Read each row deeper](../commands/list.md#read-each-row-deeper).
 - **`strata list packs` gives the error `usage` with a message of its own.** Before, the
   command line refused the value with `invalid value 'packs'`. The exit code stays `2`, and

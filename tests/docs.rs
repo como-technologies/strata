@@ -389,14 +389,28 @@ fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means
     );
 }
 
+/// The heading of the section of `release` in the compatibility page, such as "0.25.0".
+fn release_heading(release: &str) -> String {
+    format!("## Release {release}: changes that need action")
+}
+
 /// The section of `release` in the compatibility page, such as "0.25.0", with each run of white
 /// space as one space.
 fn release_section(page: &str, release: &str) -> String {
-    one_line(section(
-        page,
-        &format!("## Release {release}: changes that need action"),
-        Some("\n## "),
-    ))
+    one_line(section(page, &release_heading(release), Some("\n## ")))
+}
+
+/// The compatibility page `page` has the sections of release `newer` and of release `older`, and
+/// `newer` comes first.
+fn assert_release_above(page: &str, newer: &str, older: &str) {
+    let at = |release: &str| {
+        page.find(&format!("\n{}\n", release_heading(release)))
+            .unwrap_or_else(|| panic!("the page has no section for release {release}"))
+    };
+    assert!(
+        at(newer) < at(older),
+        "release {newer} comes above release {older}"
+    );
 }
 
 /// The changes of Wave 11 were in a few paragraphs. The page had no section that tells a
@@ -405,13 +419,7 @@ fn release_section(page: &str, release: &str) -> String {
 #[test]
 fn compatibility_has_a_section_for_release_0_25_0_above_release_0_24_0_and_links_to_both() {
     let page = read(&docs().join("reference/compatibility.md"));
-    let newer = page
-        .find("\n## Release 0.25.0: changes that need action\n")
-        .expect("the page has no section for release 0.25.0");
-    let older = page
-        .find("\n## Release 0.24.0: changes that need action\n")
-        .expect("the page has no section for release 0.24.0");
-    assert!(newer < older, "release 0.25.0 comes above release 0.24.0");
+    assert_release_above(&page, "0.25.0", "0.24.0");
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
     for anchor in [
@@ -2188,13 +2196,7 @@ fn the_block_of_a_numbered_step_does_not_hold_the_next_step() {
 #[test]
 fn compatibility_has_a_section_for_release_0_26_0_above_release_0_25_0_and_links_to_all_three() {
     let page = read(&docs().join("reference/compatibility.md"));
-    let newer = page
-        .find("\n## Release 0.26.0: changes that need action\n")
-        .expect("the page has no section for release 0.26.0");
-    let older = page
-        .find("\n## Release 0.25.0: changes that need action\n")
-        .expect("the page has no section for release 0.25.0");
-    assert!(newer < older, "release 0.26.0 comes above release 0.25.0");
+    assert_release_above(&page, "0.26.0", "0.25.0");
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
     for anchor in [
@@ -3436,13 +3438,7 @@ fn step_6_of_the_deploy_states_the_three_results_of_cloud_run() {
 #[test]
 fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_of_the_report() {
     let page = read(&docs().join("reference/compatibility.md"));
-    let newer = page
-        .find("\n## Release 0.27.0: changes that need action\n")
-        .expect("the page has no section for release 0.27.0");
-    let older = page
-        .find("\n## Release 0.26.0: changes that need action\n")
-        .expect("the page has no section for release 0.26.0");
-    assert!(newer < older, "release 0.27.0 comes above release 0.26.0");
+    assert_release_above(&page, "0.27.0", "0.26.0");
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
     assert!(
@@ -3484,34 +3480,50 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
 }
 
 /// Release 0.35.0 removes the old names `--packs` and `--applied` of `strata list` (#862). So no
-/// code, script, or page names them, and each live script calls `--detail`. Only the compatibility
-/// page names them, in the text on the removal. Its section of release 0.35.0 sits above the one of
-/// release 0.34.0, and the line of release 0.34.0 on the old names links to it.
+/// file that `git grep` of the criterion reads names them, except the compatibility page. On that
+/// page, only two lines name them. One is the line of release 0.35.0 on the removal. The other is
+/// the line of release 0.34.0, which links to the section of release 0.35.0 above it.
 #[test]
 fn only_the_compatibility_page_names_the_old_names_packs_and_applied_of_list() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let named: Vec<String> = ["src", "examples", "scripts", "docs/src"]
+    let names_old = |text: &str| text.contains("--packs") || text.contains("--applied");
+    let named: Vec<String> = tracked_files(root, &["src", "examples", "scripts", "docs/src"])
         .iter()
-        .flat_map(|tree| walk(&root.join(tree)))
-        .filter(|f| {
-            // a file that is not text, such as an image, names no flag
-            std::fs::read_to_string(f)
-                .is_ok_and(|text| text.contains("--packs") || text.contains("--applied"))
-        })
-        .map(|f| f.strip_prefix(root).unwrap().to_path_buf())
-        .filter(|f| !f.components().any(|c| c.as_os_str() == "target"))
-        .map(|f| f.display().to_string())
+        // a file that is not text, such as an image, names no flag
+        .filter(|f| std::fs::read_to_string(f).is_ok_and(|text| names_old(&text)))
+        .map(|f| f.strip_prefix(root).unwrap().display().to_string())
         .collect();
     assert_eq!(named, ["docs/src/reference/compatibility.md"]);
 
     let page = read(&docs().join("reference/compatibility.md"));
-    let newer = page
-        .find("\n## Release 0.35.0: changes that need action\n")
-        .expect("the page has no section for release 0.35.0");
-    let older = page
-        .find("\n## Release 0.34.0: changes that need action\n")
-        .expect("the page has no section for release 0.34.0");
-    assert!(newer < older, "release 0.35.0 comes above release 0.34.0");
+    let mut rest = one_line(&page);
+    for (release, anchor) in [
+        (
+            "0.35.0",
+            "**`strata list` refuses the old names `--packs` and `--applied`.**",
+        ),
+        (
+            "0.34.0",
+            "**`list --detail` replaces `--packs` and `--applied`.**",
+        ),
+    ] {
+        let line = block(&page, anchor);
+        assert!(
+            release_section(&page, release).contains(&line),
+            "the line {anchor} is not in the section of release {release}"
+        );
+        rest = rest.replacen(&line, "", 1);
+    }
+    let left: Vec<String> = sentences(&rest)
+        .into_iter()
+        .filter(|sentence| names_old(sentence))
+        .collect();
+    assert!(
+        left.is_empty(),
+        "the page names an old name outside the two lines on the removal: {left:?}"
+    );
+
+    assert_release_above(&page, "0.35.0", "0.34.0");
     let release = release_section(&page, "0.35.0");
     for needed in [
         "`--packs`",
@@ -4235,13 +4247,7 @@ fn release_0_28_0_part(heading: &str) -> String {
 #[test]
 fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup() {
     let page = read(&docs().join("reference/compatibility.md"));
-    let newer = page
-        .find("\n## Release 0.28.0: changes that need action\n")
-        .expect("the page has no section for release 0.28.0");
-    let older = page
-        .find("\n## Release 0.27.0: changes that need action\n")
-        .expect("the page has no section for release 0.27.0");
-    assert!(newer < older, "release 0.28.0 comes above release 0.27.0");
+    assert_release_above(&page, "0.28.0", "0.27.0");
 
     let release = section(
         &page,
@@ -4756,12 +4762,7 @@ fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_n
             "the section of 0.33.0 lacks {needle:?}"
         );
     }
-    let release_at = page.find("\n## Release 0.33.0: changes that need action\n");
-    let older_at = page.find("\n## Release 0.28.0: changes that need action\n");
-    assert!(
-        release_at.is_some() && release_at < older_at,
-        "release 0.33.0 comes above release 0.28.0"
-    );
+    assert_release_above(&page, "0.33.0", "0.28.0");
 
     let refs = one_line(&read(&docs().join("reference/refs.md")));
     for needle in [

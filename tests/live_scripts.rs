@@ -3557,11 +3557,17 @@ esac
 /// `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments prints FILE, or writes it to the file
 /// of `-o`, and exits EXIT. A fourth field `err` prints FILE to standard error and writes no file.
 /// With no match it exits 0.
+///
+/// It refuses `--packs` and `--applied` as strata does since release 0.35.0: the exit code `2`,
+/// and `unexpected argument` on standard error.
 const FAKE_STRATA_STAGE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_STRATA/calls"
 echo "${XDG_STATE_HOME-}" >> "$FAKE_STRATA/state"
 out=""; prev=""
-for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
+for a in "$@"; do
+  case $a in --packs | --applied) echo "error: unexpected argument '$a' found" >&2; exit 2 ;; esac
+  [ "$prev" = -o ] && out=$a; prev=$a
+done
 while IFS=$'\t' read -r glob code file stream; do
   [[ "$*" == $glob ]] || continue
   if [ "$stream" = err ]; then cat "$FAKE_STRATA/$file" >&2
@@ -3962,6 +3968,45 @@ fn baseline_stage() -> Stage {
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     );
     stage
+}
+
+/// Release 0.35.0 removes `--packs` and `--applied` of `strata list` (#862), and the stand-in
+/// refuses each one as strata does. Each step of a live script that reads the rows deeper calls
+/// `--detail`, so it passes against the stand-in. The steps are `list-packs` of packs.sh,
+/// `addon-list` and `addon-list-says` of stage 2 of pending.sh, and `list-applied` and
+/// `list-applied-json` of verify.sh.
+#[test]
+fn each_live_step_that_reads_the_rows_deeper_calls_detail_and_passes_against_the_stand_in() {
+    let mut stage = Stage::new(serde_json::json!({
+        "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.0",
+        "csi_version": "1.64.0", "profile_name": "strata-live-profile",
+    }));
+    stage.strata(
+        "list profiles --detail --json",
+        0,
+        r#"{"profiles":[{"name":"strata-live-profile","packs":[{"name":"csi-aws-ebs"}]}]}"#,
+    );
+    let (_, steps) = stage.run("packs.sh", &[]);
+    passed(&steps, &["list-packs"]);
+
+    let mut stage = baseline_stage();
+    stage.strata(
+        "list clusters --detail",
+        0,
+        "fred  c-a  Running\n    strata-live-addon@1.0.0  ad-1  add-on  behind: an update waits\n",
+    );
+    let (_, steps) = stage.run("pending.sh", &["2"]);
+    passed(&steps, &["addon-list", "addon-list-says"]);
+
+    let mut outputs = baseline_outputs();
+    outputs["next_profile_uid"] = "r-2".into();
+    outputs["registries_profile_uid"] = "rg-1".into();
+    let mut stage = Stage::new(outputs);
+    // cluster A is at the baseline
+    let live = stage.copy_live();
+    executable(&live.join("baseline.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    let (_, steps) = stage.run("verify.sh", &[]);
+    passed(&steps, &["list-applied", "list-applied-json"]);
 }
 
 /// A stage of `packs.sh` whose release profile has an OS pack ref with `annotations`, and whose

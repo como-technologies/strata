@@ -1232,7 +1232,8 @@ fn list_refuses_packs_before_any_request_and_names_detail_and_the_packs_command(
 
 /// `--detail` reads each row deeper: each profile version for its packs, and each cluster for
 /// the profiles it applies. A kind reads that kind alone. Release 0.35.0 removes the old names
-/// `--packs` and `--applied`, so each one is an unknown flag, and strata sends no request.
+/// `--packs` and `--applied`, so each one is an unknown flag, and strata sends no request. The
+/// refusal is text and not an error document, also with `--json`.
 #[test]
 fn detail_reads_each_row_deeper_and_the_old_names_packs_and_applied_are_unknown_flags() {
     let profile = common::profile_document(
@@ -1307,6 +1308,15 @@ fn detail_reads_each_row_deeper_and_the_old_names_packs_and_applied_are_unknown_
             assert!(
                 r.err
                     .contains(&format!("unexpected argument '{old}' found")),
+                "{args:?}: {}",
+                r.err
+            );
+            // the refusal is text, also with `--json`: no document, and no JSON line of an error
+            assert_eq!(r.out, "", "{args:?}");
+            assert!(
+                !r.err
+                    .lines()
+                    .any(|line| serde_json::from_str::<serde_json::Value>(line).is_ok()),
                 "{args:?}: {}",
                 r.err
             );
