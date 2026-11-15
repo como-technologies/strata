@@ -14878,12 +14878,19 @@ fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_syn
         "isSyncSupported": true, "lastRunTime": "2026-09-30T00:00:11.000Z",
         "lastSyncedTime": "2026-09-30T00:00:11.000Z", "status": "Completed",
     });
-    let api = serve_behind().with(PACK_REGISTRY_SUMMARY, public_repo_summary(completed));
-    let (r, text) = behind_current_on(&api);
-    assert!(r.pins[0].registry_sync.is_none() && r.pins[0].registry_sync_error.is_none());
-    assert!(text.contains("csi-aws-ebs@1.65.0'  current\n"), "{text}");
-    let json = serde_json::to_value(&r).unwrap();
-    assert!(json["pins"][0].get("registrySync").is_none(), "{json}");
+    // Palette does not sync the registry: it gives a lastSyncedTime and no status (#928)
+    let unsynced = serde_json::json!({
+        "isSyncSupported": false, "lastSyncedTime": "2026-08-29T00:00:11.032Z",
+        "lastRunTime": "0001-01-01T00:00:00.000Z",
+    });
+    for sync in [completed, unsynced] {
+        let api = serve_behind().with(PACK_REGISTRY_SUMMARY, public_repo_summary(sync));
+        let (r, text) = behind_current_on(&api);
+        assert!(r.pins[0].registry_sync.is_none() && r.pins[0].registry_sync_error.is_none());
+        assert!(text.contains("csi-aws-ebs@1.65.0'  current\n"), "{text}");
+        let json = serde_json::to_value(&r).unwrap();
+        assert!(json["pins"][0].get("registrySync").is_none(), "{json}");
+    }
 
     // Palette does not serve the summary listing: no note, and no error
     let (r, text) = behind_current_on(&serve_behind());
