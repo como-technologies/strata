@@ -31,8 +31,8 @@ mod code_span;
 // of a cluster with the masks of Palette from them, as the cluster fixtures of the tests do. Its
 // tests serve the variables of a profile with the masks too. The tests of the contract also build
 // the body of an error with it. They and the tests of the facts use its route of the saved tag
-// filters. The stand-in and a chapter build the answer of the pack listing with it. xtask uses no
-// other item of it.
+// filters. The stand-in, the test of its download route, and a chapter build the answer of the
+// pack listing with it. xtask uses no other item of it.
 #[path = "../../tests/common/palette.rs"]
 #[allow(dead_code)]
 mod common_palette;

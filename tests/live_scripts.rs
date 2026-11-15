@@ -175,7 +175,7 @@ fn tenant_sh_listing_prints_the_cluster_listing_palette_answers() {
     let (o, urls) = tenant_sh(&["listing"], "200", body);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert!(
-        urls.contains("/v1/dashboard/spectroclusters/meta"),
+        urls.contains(CLUSTER_LISTING),
         "the listing strata lists clusters from: {urls}"
     );
     let printed: serde_json::Value = serde_json::from_str(&text(&o.stdout)).unwrap();
@@ -5205,7 +5205,7 @@ fn registry_sh_step_4b_pins_a_profile_with_values_of_its_own_under_the_floating_
     );
     stage.route(
         "/v1/packs",
-        &serde_json::json!({"items": [pack.summary(&[])]}).to_string(),
+        &pack_listing_answer(serde_json::json!([pack.summary(&[])])).to_string(),
     );
     stage.strata(
         "packs strata-live-pack --json",
@@ -5487,7 +5487,7 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
     let pack = PackFixture::new("cert-manager", "addon", "1.21.1", "pk-1", "reg-pub", "", "");
     stage.route(
         "/v1/packs",
-        &serde_json::json!({"items": [pack.summary(&[])]}).to_string(),
+        &pack_listing_answer(serde_json::json!([pack.summary(&[])])).to_string(),
     );
     stage.route(PROFILE_LISTING, r#"{"items":[]}"#);
     stage.route("/v1/clusterprofiles", r#"{"uid":"lp-1"}"#);
@@ -7737,8 +7737,10 @@ fn packs_arch_stage(line: &str, json: &str) -> String {
     }));
     stage.route(
         "/v1/packs",
-        r#"{"items":[{"spec":{"version":"2.10.2","annotations":{"architecture":"amd64,arm64"}}},
-            {"spec":{"version":"3.6.7","annotations":{"architecture":"amd64"}}}]}"#,
+        &pack_listing_answer(serde_json::json!([
+            {"spec": {"version": "2.10.2", "annotations": {"architecture": "amd64,arm64"}}},
+            {"spec": {"version": "3.6.7", "annotations": {"architecture": "amd64"}}}]))
+        .to_string(),
     );
     stage.strata(
         "snapshot pack:Public Repo/loki@2.10.2 -o loki.json",
@@ -9308,7 +9310,7 @@ fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
     stage.route(LAB_VPCS_ROUTE, LAB_VPCS);
     answer_aws_validate(&stage, "500", &cidr_overlap_answer());
     stage.route(
-        "/v1/registries/metadata",
+        REGISTRY_LISTING,
         r#"{"items":[{"name":"Public Repo","uid":"reg-pub"},{"name":"Other","uid":"reg-other"}]}"#,
     );
     stage.route(PROFILE_LISTING, r#"{"items":[]}"#);
@@ -14715,10 +14717,10 @@ const OBSERVER_ROLE_ROUTES: [(&str, &str); 16] = [
     ),
     ("profile-variables", "/v1/clusterprofiles/ad-1/variables"),
     ("audits", "/v1/audits"),
-    ("registries", "/v1/registries/metadata"),
+    ("registries", REGISTRY_LISTING),
     ("registry-pack-summary", "/v1/registries/pack/summary"),
     ("registry-helm-summary", "/v1/registries/helm/summary"),
-    ("registry-oci-summary", "/v1/registries/oci/summary"),
+    ("registry-oci-summary", OCI_REGISTRY_SUMMARY),
     ("packs", "/v1/packs"),
     ("pack-tags", "/v1/packs/cert-manager/registries/reg-1"),
 ];
@@ -14767,7 +14769,7 @@ fn observer_role_stage() -> Stage {
     stage.route(OBSERVER_ROLE_VALIDATE, r#"{"packs":{"results":[]}}"#);
     stage.strata("snapshot ad-1 -o *", 0, &observer_role_record().to_string());
     stage.route(
-        "/v1/registries/metadata",
+        REGISTRY_LISTING,
         r#"{"items":[{"name":"Public Repo","uid":"reg-1"}]}"#,
     );
     stage.env("OBSERVER_ROLE", "Project Viewer");
