@@ -3486,7 +3486,7 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
 /// Release 0.35.0 removes the old names `--packs` and `--applied` of `strata list` (#862). So no
 /// code, script, or page names them, and each live script calls `--detail`. Only the compatibility
 /// page names them, in the text on the removal. Its section of release 0.35.0 sits above the one of
-/// release 0.34.0.
+/// release 0.34.0, and the line of release 0.34.0 on the old names links to it.
 #[test]
 fn only_the_compatibility_page_names_the_old_names_packs_and_applied_of_list() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -3522,6 +3522,11 @@ fn only_the_compatibility_page_names_the_old_names_packs_and_applied_of_list() {
     ] {
         assert!(release.contains(needed), "the section lacks {needed:?}");
     }
+    assert!(
+        release_section(&page, "0.34.0")
+            .contains("[Release 0.35.0](#release-0350-changes-that-need-action) removes them"),
+        "the line of release 0.34.0 on the old names does not link to release 0.35.0"
+    );
 }
 
 /// Release 0.27.0 removed the old paths of the modules that moved to `model/`, and the deprecated

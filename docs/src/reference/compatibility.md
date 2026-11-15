@@ -1668,8 +1668,9 @@ field, a value, an input, or an option is in the sections above.
 - **`list --detail` replaces `--packs` and `--applied`.** `--detail` reads each profile
   version for its packs and each cluster for the profiles that it applies. `--packs` still
   reads the versions alone, and `--applied` the clusters alone. Each one also writes a note on
-  standard error that names `--detail`, and the help no longer shows them. Release 0.35.0
-  removes them. Use `--detail`, and name a kind to read that kind alone, such as
+  standard error that names `--detail`, and the help no longer shows them.
+  [Release 0.35.0](#release-0350-changes-that-need-action) removes them. Use `--detail`, and
+  name a kind to read that kind alone, such as
   `strata list profiles --detail`. See
   [Read each row deeper](../commands/list.md#read-each-row-deeper).
 - **`strata list packs` gives the error `usage` with a message of its own.** Before, the
