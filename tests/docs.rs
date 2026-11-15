@@ -326,8 +326,8 @@ fn the_code_table_of_each_validate_route_in_the_book_holds_the_codes_of_the_rout
     }
 }
 
-/// `behind` and `compare --validate` name two refusals of the update before it: the codes of
-/// `codes.rs`. The table of `errors.md` lists the same codes.
+/// `behind` and `compare --validate` check two rules of a move before the update. The table of
+/// `errors.md` lists the code of each rule, as `codes.rs` holds it.
 #[test]
 fn the_book_lists_each_refusal_of_the_update_that_strata_names_first() {
     let errors = read(&docs().join("reference/errors.md"));
@@ -3107,13 +3107,14 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
                 "In that run, the message names only the scope `project`.",
                 "A live run shows that the route refuses the body with `K8SCidrOverlap`.",
                 "A live run shows the mark in each report.",
-                "A live run shows the refusal, and its message names the variable.",
+                "A live run shows the refusal, and its message names the variable: see",
             ],
             &[
                 "No live run of the example shows it yet",
                 "and not its value. No live run shows it yet.",
                 "No live run shows the mark yet.",
                 "The code of Palette shows each rule; no live run shows it yet.",
+                "The code of Palette shows the refusal and each rule of a default; no live run shows them yet.",
             ],
         ),
         (
@@ -3127,9 +3128,12 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
             "reference/errors.md",
             &[
                 "A live run shows `ClusterProfilesNotSupported`, `RequiredParam`, and `K8SCidrOverlap`.",
-                "A live run shows `InvalidVariable`, and its message names the variable.",
+                "| `InvalidVariable` | A live run saw it with HTTP `500`, and the message named the variable.",
             ],
-            &["The code of Palette shows the two refusals, and no live run shows them yet."],
+            &[
+                "The code of Palette shows the two refusals, and no live run shows them yet.",
+                "| `InvalidVariable` | No live run saw it yet.",
+            ],
         ),
         (
             "development/live-runs.md",

@@ -289,7 +289,7 @@ pub(super) fn read_bump<A: PaletteApi>(
             let asked = questions.ask(holding, pin, &target);
             bump.palette_validation = asked.validation;
             bump.palette_validation_error = asked.error;
-            // the validate route does not check the minor step of Kubernetes, and the update does
+            // the validate route and the update do not check the minor step of Kubernetes
             bump.update_checks.skipped_minor =
                 MinorSkip::of(&pin.layer, &pin.name, &pin.version, &to)
                     .map(|skip| skip.with_next_step(pin.newer.iter().map(|n| n.version.as_str())));

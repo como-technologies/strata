@@ -38,10 +38,9 @@ pub struct Bump {
     /// strata did not ask, such as `1 record of project p2 was not asked`. The pin stays behind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation_error: Option<String>,
-    /// What strata checks about the move beside the answer of Palette: the rules that Palette
-    /// checks only at the update. For a pin, the skip of a minor version of the Kubernetes pack.
-    /// For a profile version, also the required variables that the newest version adds. Absent
-    /// when strata finds nothing.
+    /// What strata checks about the move beside the answer of Palette. For a pin, the skip of a
+    /// minor version of the Kubernetes pack. For a profile version, also the required variables
+    /// that the newest version adds. Absent when strata finds nothing.
     #[serde(default, skip_serializing_if = "UpdateChecks::is_empty")]
     pub update_checks: UpdateChecks,
 }

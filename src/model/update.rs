@@ -1,29 +1,29 @@
-//! The rules of Palette for the update of a cluster that no validate route checks, and the checks
-//! that strata makes for them.
+//! The checks that strata makes about a move beside the answer of a validate route.
 //!
 //! `behind` and `compare --validate` ask a validate route about a move, and the route checks the
-//! packs. Palette checks two more rules only at the update. One update moves the Kubernetes pack
-//! one minor version at most. Each required variable has a value or a default value. No route
-//! answers them before the update, so strata checks them, and names Palette as the owner of each
-//! rule. "The gaps that strata fills" in the book lists them.
+//! packs. Strata makes two more checks. Each required variable has a value or a default value:
+//! Palette checks this rule only at the update, and no route answers it before the update. One
+//! upgrade moves the Kubernetes pack one minor version at most: that is a rule of Kubernetes. A
+//! live run shows that Palette takes an update that skips a minor version, so this check is a
+//! check of strata. "The gaps that strata fills" in the book lists both checks.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE};
+use crate::api::codes::INVALID_VARIABLE_CODE;
 use crate::model::layer::Layer;
 use crate::reference::version;
 use crate::snapshot::{Pack, Snapshot, Variable};
 use crate::text::{and_list, plural};
 
-/// The most minor versions that one update moves the Kubernetes pack of a cluster.
+/// The most minor versions that one upgrade moves the Kubernetes pack of a cluster.
 ///
-/// Palette refuses a move of more, or to a higher major version, with
-/// [`K8S_UPGRADE_NOT_SUPPORTED_CODE`].
+/// Kubernetes moves one minor version at each upgrade. A live run shows that Palette takes an
+/// update that moves more, so strata names such a move: see [`MinorSkip`].
 const KUBERNETES_MINOR_STEP: u64 = 1;
 
-/// What strata checks about a move beside the answer of a validate route: the rules that Palette
-/// checks only at the update.
+/// What strata checks about a move beside the answer of a validate route: a rule that Palette
+/// checks only at the update, and the minor step of Kubernetes.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateChecks {
@@ -101,21 +101,18 @@ fn takes_a_default(v: &Variable) -> bool {
 
 /// A move of the Kubernetes pack of more than one minor version, or to a higher major version.
 ///
-/// Palette refuses the update with [`K8S_UPGRADE_NOT_SUPPORTED_CODE`]. It compares the version
-/// that each cluster runs with the version of the move.
+/// Kubernetes moves one minor version at each upgrade, so strata names such a move. This is a
+/// check of strata: a live run shows that Palette takes the update with no error.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MinorSkip {
-    /// The code of the refusal of Palette at the update: [`K8S_UPGRADE_NOT_SUPPORTED_CODE`].
-    pub code: String,
     /// The name of the pack of the `k8s` layer.
     pub pack: String,
     /// The version that the cluster runs, or that the record pins.
     pub from: String,
     /// The version of the move.
     pub to: String,
-    /// The minor version that Palette allows next, as `<major>.<minor>`: `1.35` for a move from
-    /// `1.34.9`.
+    /// The minor version to move to first, as `<major>.<minor>`: `1.35` for a move from `1.34.9`.
     pub next_minor: String,
     /// The newest version of `nextMinor` that the registry offers. Only `behind` reads the
     /// registry, for a pin. Absent when the registry offers none, and for each other move.
@@ -133,7 +130,6 @@ impl MinorSkip {
             return None;
         }
         Some(MinorSkip {
-            code: K8S_UPGRADE_NOT_SUPPORTED_CODE.to_string(),
             pack: pack.to_string(),
             from: from.to_string(),
             to: to.to_string(),
@@ -142,8 +138,8 @@ impl MinorSkip {
         })
     }
 
-    /// The skip with `next_step`: the newest of `newer` on the minor version that Palette allows
-    /// next. `newer` holds the newer versions of the pin, newest first.
+    /// The skip with `next_step`: the newest of `newer` on the minor version to move to first.
+    /// `newer` holds the newer versions of the pin, newest first.
     pub(crate) fn with_next_step<'v>(mut self, newer: impl IntoIterator<Item = &'v str>) -> Self {
         self.next_step = newer
             .into_iter()
@@ -152,18 +148,18 @@ impl MinorSkip {
         self
     }
 
-    /// `kubernetes 1.34.9 -> 1.36.2 skips a minor version: Palette refuses the update with
-    /// K8sUpgradeNotSupported; move to 1.35.6 first`. With no version of the next minor version,
-    /// the line ends with `move to a version of 1.35 first`.
+    /// `kubernetes 1.34.9 -> 1.36.2 skips a minor version: Kubernetes moves one minor version at
+    /// each upgrade; move to 1.35.6 first`. With no version of the next minor version, the line
+    /// ends with `move to a version of 1.35 first`.
     pub fn line(&self) -> String {
         let next = match &self.next_step {
             Some(version) => version.clone(),
             None => format!("a version of {}", self.next_minor),
         };
         format!(
-            "{} {} -> {} skips a minor version: Palette refuses the update with {}; move to {next} \
-             first",
-            self.pack, self.from, self.to, self.code
+            "{} {} -> {} skips a minor version: Kubernetes moves one minor version at each \
+             upgrade; move to {next} first",
+            self.pack, self.from, self.to
         )
     }
 
@@ -234,15 +230,17 @@ mod tests {
     #[test]
     fn a_kubernetes_move_of_two_minor_versions_skips_one_and_names_the_next_minor_version() {
         let skip = MinorSkip::of("k8s", "kubernetes-eks", "1.31.14", "1.37.0").unwrap();
-        assert_eq!(skip.code, K8S_UPGRADE_NOT_SUPPORTED_CODE);
         assert_eq!(skip.next_minor, "1.32");
         assert_eq!(skip.next_step, None);
+        // a check of strata: the line names the rule of Kubernetes, and no code of Palette
         assert_eq!(
             skip.line(),
-            format!(
-                "kubernetes-eks 1.31.14 -> 1.37.0 skips a minor version: Palette refuses the \
-                 update with {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to a version of 1.32 first"
-            )
+            "kubernetes-eks 1.31.14 -> 1.37.0 skips a minor version: Kubernetes moves one minor \
+             version at each upgrade; move to a version of 1.32 first"
+        );
+        assert_eq!(
+            serde_json::to_value(&skip).unwrap(),
+            json!({"pack": "kubernetes-eks", "from": "1.31.14", "to": "1.37.0", "nextMinor": "1.32"})
         );
         // the newest version of the next minor version, from the newer versions newest first
         let skip = skip.with_next_step(["1.37.0", "1.33.1", "1.32.13", "1.32.10", "1.31.15"]);
@@ -253,7 +251,7 @@ mod tests {
             skip.line()
         );
 
-        // one minor version, a pack of another layer, and a version that Palette does not read
+        // one minor version, a pack of another layer, and a version that strata does not read
         assert_eq!(MinorSkip::of("k8s", "kubernetes", "1.35.3", "1.36.2"), None);
         assert_eq!(
             MinorSkip::of("csi", "csi-aws-ebs", "1.63.1", "1.65.0"),

@@ -1203,8 +1203,10 @@ facts:
       - src/candidate/gaps.rs
       - src/api/codes.rs
 
-  # The update of a cluster refuses a move of Kubernetes of more than one minor version, and no
-  # validate route checks it. behind and compare --validate check the move (#623).
+  # No route of Palette checks a move of Kubernetes of more than one minor version. A live run shows
+  # that the validate route accepts it, and that the update takes it with HTTP 204 and no
+  # K8sUpgradeNotSupported. Kubernetes moves one minor version at each upgrade, so behind and
+  # compare --validate check the move (#623, #919).
   - id: gap-kubernetes-minor-step
     kind: gap
     reads:
@@ -1213,6 +1215,7 @@ facts:
     stand_in: []
     live:
       - validate-packs.sh:bump-text-skip
+      - validate-packs.sh:skip-validate
       - validate-packs.sh:skip-says
       - validate-packs.sh:skip-refused
     pages:

@@ -687,18 +687,19 @@ that answer.
 
 ### The checks of an update
 
-Palette checks two rules only at the update of a cluster, and no validate route
-checks them: see [What the update checks](./validate-routes.md#what-the-update-checks).
-A team learns of a fault only at the update. So `behind` and `compare --validate`
-check each rule for a move, and print a line under the answer of Palette:
+No validate route checks two rules of a move: see
+[What the update checks](./validate-routes.md#what-the-update-checks). A team
+learns of a fault only at the update, or after it. So `behind` and
+`compare --validate` check each rule for a move, and print a line before the
+answer of Palette:
 
-| Rule | Code |
-| --- | --- |
-| One update moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the pin, or the version that the cluster runs, with the version of the move. | `K8sUpgradeNotSupported` |
-| Each required variable has a value or a default value. The default value of a dropdown variable counts only when it is the label of an option. Palette also accepts a dropdown variable with a default option. Strata names each required variable with no such default that the move adds. | `InvalidVariable` |
+| Rule | Owner | Code |
+| --- | --- | --- |
+| One upgrade moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the pin, or the version that the cluster runs, with the version of the move. | Kubernetes. A live run shows that Palette takes an update that skips a minor version. | None: the line names the rule. |
+| Each required variable has a value or a default value. The default value of a dropdown variable counts only when it is the label of an option. Palette also accepts a dropdown variable with a default option. Strata names each required variable with no such default that the move adds. | Palette, at the update | `InvalidVariable` |
 
-Palette is the owner of each rule. When a validate route checks a rule, strata
-removes its check and reads the answer of the route. See
+When a route of Palette checks a rule before the update, strata removes its
+check and reads the answer of the route. See
 [A move that skips a minor version](../../commands/behind.md#a-move-that-skips-a-minor-version)
 and [What the route does not check](../../commands/compare/validate.md#what-the-route-does-not-check).
 

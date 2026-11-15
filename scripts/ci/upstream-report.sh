@@ -310,7 +310,7 @@ while IFS= read -r group <&3; do
           | if .accepts then "palette accepts" else (.errors // [])[] | "palette refuses: \(refusal_line)" end),
         (.paletteValidationError // empty | "palette gave no answer: \(.)"),
         (.updateChecks.skippedMinor // empty
-          | "\(.pack) \(.from) -> \(.to) skips a minor version: Palette refuses the update with \(.code); move to \(.nextStep // "a version of \(.nextMinor)") first");
+          | "\(.pack) \(.from) -> \(.to) skips a minor version: Kubernetes moves one minor version at each upgrade; move to \(.nextStep // "a version of \(.nextMinor)") first");
       def bump_cell:
         (["\(.to): \(.impact) \(.flags | join(" "))"] + [palette_lines]) | map(cell) | join("<br>");
       .pins[] | "| \(.version | code)\(if .floating then " (floating tag \(.tag | code))" else "" end) | \(

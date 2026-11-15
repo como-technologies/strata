@@ -36,9 +36,9 @@
 #      that adds a required variable with no default value, and moves Kubernetes one minor
 #      version at most. For each one that you give, `strata compare --validate` asks the route.
 #      Then the update PATCH /v1/spectroclusters/{uid}/profiles puts the version in the place of
-#      the version of its profile that the cluster runs. Palette refuses each update, so the cluster
-#      does not change. When Palette accepts one, the cluster moves: give a cluster of the lab
-#      only. It runs only when you give its number.
+#      the version of its profile that the cluster runs. A live run shows that Palette takes the
+#      update of SKIP (#919). When Palette takes an update, the cluster moves: give a cluster of
+#      the lab only. It runs only when you give its number.
 #
 # Results go under runs/<UTC time>/validate-packs/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
@@ -282,8 +282,8 @@ if [ "$stage" = 6 ]; then
       awk '!/^      / { pinned = 0 } /^      pinned by / { pinned = 1 }
         pinned && /^      palette refuses: DependencyPackUpgradeNotSupported on clusters? .+/ { found = 1 }
         END { exit !found }' bump-text.out
-    check bump-text-skip 0 '#623: behind says that the move skips a minor version, and that the update refuses it' -- \
-      grep -Eq '^      kubernetes .+ skips a minor version: Palette refuses the update with ' bump-text.out
+    check bump-text-skip 0 '#623, #919: behind says that the move skips a minor version, and names the rule of Kubernetes' -- \
+      grep -Eq '^      kubernetes .+ skips a minor version: Kubernetes moves one minor version at each upgrade; move to ' bump-text.out
     check bump-no-impact '?' '#166: --no-impact sends no request to a validate route' -- \
       "$strata" behind bump-profile.json --no-impact --json
     check bump-no-impact-says 0 '#166: the report holds no bump, so no answer of Palette' -- \
@@ -349,10 +349,11 @@ if [ "$stage" = 7 ]; then
       echo "== a move of Kubernetes that skips a minor version: $SKIP on $CLUSTER (#623)" | tee -a steps.log
       move_check skip "$SKIP"
       check skip-says 0 '#623: strata says that the move skips a minor version' -- \
-        jq -e '.updateChecks.skippedMinor.code != null' skip-validate.out
-      # the update refuses the move with the code that strata names
-      check skip-refused 0 '#623: Palette refuses the update with HTTP 400 and K8sUpgradeNotSupported' -- \
-        answer_is 400 skip-update.out '.code == $d[0].updateChecks.skippedMinor.code' --slurpfile d skip-validate.out
+        jq -e '.updateChecks.skippedMinor != null' skip-validate.out
+      # the book states the live result: Palette takes the update. A refusal fails the check, so
+      # a change of Palette shows, and the book changes with it
+      check skip-refused 0 '#919: Palette takes the update with HTTP 204, and does not refuse it with K8sUpgradeNotSupported' -- \
+        answered 204 skip-update.out
     fi
     if [ -n "${VARIABLES:-}" ]; then
       echo "== a move that adds a required variable with no default value: $VARIABLES on $CLUSTER (#623)" | tee -a steps.log

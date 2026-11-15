@@ -11,9 +11,9 @@ use std::path::Path;
 
 use serde_json::Value;
 use strata::api::codes::{
-    CreateRule, Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE,
-    OPERATION_FORBIDDEN_CODE, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
-    PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
+    CreateRule, Denial, INVALID_VARIABLE_CODE, OPERATION_FORBIDDEN_CODE, PACK_FORBIDDEN_CODE,
+    PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE, PROFILE_IMPORT_MATCH_CODES,
+    UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::closed_set::{ClosedSet, Open};
@@ -11577,8 +11577,8 @@ fn compare_validate_names_the_required_variables_that_the_move_adds_and_a_skip_o
             "note       the move adds the required variables db_password and owner \
              with no default value: give each one a value at the update, or Palette refuses the \
              update with {INVALID_VARIABLE_CODE}\nnote       kubernetes 1.29.4 -> 1.31.2 skips a minor \
-             version: Palette refuses the update with {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to \
-             a version of 1.30 first\n"
+             version: Kubernetes moves one minor version at each upgrade; move to a version of \
+             1.30 first\n"
         )) && text.ends_with(&format!("\n\n{}\n", render::palette_line("accepts"))),
         "{text}"
     );
@@ -11599,8 +11599,7 @@ fn compare_validate_names_the_required_variables_that_the_move_adds_and_a_skip_o
         json["updateChecks"],
         serde_json::json!({"requiredVariables": {"code": INVALID_VARIABLE_CODE,
             "names": ["db_password", "owner"]}, "skippedMinor": {
-            "code": K8S_UPGRADE_NOT_SUPPORTED_CODE, "pack": "kubernetes", "from": "1.29.4",
-            "to": "1.31.2", "nextMinor": "1.30"}})
+            "pack": "kubernetes", "from": "1.29.4", "to": "1.31.2", "nextMinor": "1.30"}})
     );
     // a comparison with nothing to check has no field
     let plain: Value = serde_json::to_value(ops::compare(&cluster, &cluster, "t1")).unwrap();
@@ -15921,14 +15920,13 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
         ("1.34.9", "1.35.2")
     );
 
-    // Palette accepts the packs of each move. The move from 1.34.9 to 1.36.2 skips 1.35, and the
-    // update refuses it. The next step is the newest version of 1.35 in the registry
+    // Palette accepts the packs of each move. The move from 1.34.9 to 1.36.2 skips 1.35, and
+    // strata names it. The next step is the newest version of 1.35 in the registry
     let bump = skip.bump.as_ref().unwrap();
     assert!(bump.palette_validation.as_ref().unwrap().accepts());
     assert_eq!(
         bump.update_checks.skipped_minor,
         Some(MinorSkip {
-            code: K8S_UPGRADE_NOT_SUPPORTED_CODE.to_string(),
             pack: "kubernetes".to_string(),
             from: "1.34.9".to_string(),
             to: "1.36.2".to_string(),
@@ -15941,10 +15939,9 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
     let next = step.bump.as_ref().unwrap();
     assert!(next.update_checks.is_empty(), "{:?}", next.update_checks);
 
-    let line = format!(
-        "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Palette refuses the update with \
-         {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to 1.35.6 first"
-    );
+    // a check of strata: the line names the rule of Kubernetes, and no code of Palette
+    let line = "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Kubernetes moves one minor \
+                version at each upgrade; move to 1.35.6 first";
     let text = common::terminal().render_behind(&r, false).unwrap();
     // the line of strata comes under the bump, and the answer of Palette is the last line
     let (line_at, answer_at) = (
@@ -15961,7 +15958,7 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
     assert!(
         md.contains(&format!(
             "<br>palette accepts<br>{} |",
-            strata::text::html_text(&line)
+            strata::text::html_text(line)
         )),
         "{md}"
     );
@@ -15970,9 +15967,8 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
     let json = serde_json::to_value(&r).unwrap();
     assert_eq!(
         json["pins"][0]["bump"]["updateChecks"],
-        serde_json::json!({"skippedMinor": {"code": K8S_UPGRADE_NOT_SUPPORTED_CODE,
-            "pack": "kubernetes", "from": "1.34.9", "to": "1.36.2", "nextMinor": "1.35",
-            "nextStep": "1.35.6"}})
+        serde_json::json!({"skippedMinor": {"pack": "kubernetes", "from": "1.34.9",
+            "to": "1.36.2", "nextMinor": "1.35", "nextStep": "1.35.6"}})
     );
     assert!(json["pins"][1]["bump"].get("updateChecks").is_none());
     let back: ops::BehindReport = serde_json::from_value(json).unwrap();

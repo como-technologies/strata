@@ -145,8 +145,9 @@ pub struct Diff {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<PaletteValidation>,
     /// With `compare --validate`: what strata checks about the move from the cluster side to the
-    /// profile side, beside the answer of Palette. These are the rules that Palette checks only at
-    /// the update. Absent when strata finds nothing, and without the option.
+    /// profile side, beside the answer of Palette: the required variables that the move adds, and
+    /// the skip of a minor version of Kubernetes. Absent when strata finds nothing, and without the
+    /// option.
     #[serde(default, skip_serializing_if = "UpdateChecks::is_empty")]
     pub update_checks: UpdateChecks,
 }
