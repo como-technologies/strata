@@ -203,7 +203,7 @@ registries the tenant can see, including one pack that two registries hold.
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `list-packs` | 0 | #55: the profiles list the pack versions they pin |
-| `list-registries` | 0 | #635: `list registries` names `Public Repo` one time, with its uid and its kind. No result yet: no live window ran the check |
+| `list-registries` | 0 | #635: `list registries` names `Public Repo` one time, with its uid and its kind. A live run passed. |
 | `compare-versions`, `compare-json` | 1 | #55: two versions of one pack differ, and the document names the pack on both sides |
 | `compare-images`, `compare-images-says` | 0 | #77: the diff flags `IMAGES` and `CHARTS` beside `AUTHORED`, and names each image that moved. The move is from `csi-aws-ebs` 1.63.1 to 1.65.0. Eight images are retagged, and the chart `aws-ebs-csi-driver` is at 2.65.0 |
 | `compare-same` | 0 | #55: a pack version against itself is identical |
@@ -978,13 +978,13 @@ mark `disabled`. These are the stages and the options:
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `validate-accepts`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` writes the record with `source.paletteValidation` `{"accepts": true}` |
-| `validate-accepts-says` | 0 | #633, #634: the last line, `palette    accepts the name, the version, and the packs of '<file>'`, says that Palette takes the candidate. No result yet: the line is new, and no live window ran it |
+| `validate-accepts-says` | 0 | #633, #634: the last line, `palette    accepts the name, the version, and the packs of '<file>'`, says that Palette takes the candidate. A live run passed. |
 | `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152, #242: strata sends values that are not YAML to Palette. Palette refuses the whole request, `PackValuesYamlInvalid`, with no pack. Strata exits `2` and writes no record |
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`. It refuses the whole request with `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`. The import validate route gives it with HTTP 500. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `validate-version` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
-| `validate-version-says` | 0 | #633, #634: the last line, `palette    accepts the packs of '<ref>' as an update of itself`, says that Palette takes the version. No result yet: the line is new, and no live window ran it |
+| `validate-version-says` | 0 | #633, #634: the last line, `palette    accepts the packs of '<ref>' as an update of itself`, says that Palette takes the version. A live run passed. |
 | `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, `Cluster Profile with name '<name>' and version '<version>' already exists`. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
 | `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |
@@ -1006,7 +1006,7 @@ mark `disabled`. These are the stages and the options:
 | `bump-asked` | 0 | #166: `behind` asks the route of the version, and the bump of `kubernetes` holds an answer of Palette in `bump.paletteValidation`. |
 | `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. |
 | `bump-text-says` | 0 | #166, #634: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on cluster <cluster>`, or `on clusters <clusters>`, under the `pinned by` line of the pin. No result yet: no live window ran this form of the check. |
-| `bump-text-skip` | 0 | #623, #919: `behind` prints `kubernetes <pin> -> <newest> skips a minor version: Kubernetes moves one minor version at each upgrade` under the bump. A live run passed: behind prints the line. |
+| `bump-text-skip` | 0 | #623, #919: `behind` prints `kubernetes <pin> -> <newest> skips a minor version: Kubernetes moves one minor version at each upgrade` under the bump. No result yet: no live window ran the new words of the line (#919). |
 | `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
 | `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
 | `bump-cluster-same` | 0 | #419: with `CLUSTER`, the record of the cluster and the record of the profile get one bump of `kubernetes`. The two bumps have the same version, impact level, and change flags: the bump to 1.37.0, with the level `repave`. |
@@ -1017,14 +1017,15 @@ mark `disabled`. These are the stages and the options:
 | `skip-record`, `skip-validate`, `skip-asked` | 0, ?, 0 | #623: `compare cluster:<CLUSTER> <SKIP> --validate` asks the route about the move, and the comparison holds an answer. A live run passed: the route accepts the move, with no error. |
 | `skip-says` | 0 | #623: `updateChecks.skippedMinor` of the comparison says that the move skips a minor version. A live run passed. |
 | `skip-update`, `skip-refused` | 0 | #623, #919: `api.sh replace-status` sends the update, as the Spectro Cloud provider sends it. `skip-refused` passes on HTTP 204, and fails on a refusal. A live run gave HTTP 204: Palette took the update, and did not refuse it with K8sUpgradeNotSupported. |
-| `variables-record`, `variables-validate`, `variables-asked` | 0, ?, 0 | #623: `compare cluster:<CLUSTER> <VARIABLES> --validate` asks the route about the move, and the comparison holds an answer. No result yet: no live window ran stage 7. |
-| `variables-accepts`, `variables-says` | 0 | #623: the route accepts the packs, and `updateChecks.requiredVariables.names` holds the required variables that the move adds. No result yet: no live window ran stage 7. |
-| `variables-update`, `variables-refused` | 0 | #623: Palette refuses the update with HTTP 500 and `InvalidVariable`, the code that `requiredVariables.code` names. The message names a variable of `requiredVariables.names`. No result yet: no live window ran stage 7. |
+| `variables-record`, `variables-validate`, `variables-asked` | 0, ?, 0 | #623: `compare cluster:<CLUSTER> <VARIABLES> --validate` asks the route about the move, and the comparison holds an answer. A live run passed. |
+| `variables-accepts`, `variables-says` | 0 | #623: the route accepts the packs, and `updateChecks.requiredVariables.names` holds the required variables that the move adds. A live run passed. |
+| `variables-update`, `variables-refused` | 0 | #623: Palette refuses the update with HTTP 500 and `InvalidVariable`, the code that `requiredVariables.code` names. The message names a variable of `requiredVariables.names`. A live run passed: Palette refused the update with HTTP 500 and `InvalidVariable`, and the message named the variable. |
 
-Each check of stage 6 but `bump-text-says` passes on cluster A, built on
+Each check of stage 6 but `bump-text-says` and `bump-text-skip` passes on cluster A, built on
 Kubernetes 1.35.8. That version is two minor versions under the newest version
 of the registry, 1.37.0. The stage exits `0`. `bump-text-says` has no result
 yet: no live window ran the form of the check that reads the place of the line.
+`bump-text-skip` has no result yet: no live window ran the new words of #919.
 
 Stage 7 can use cluster A on Kubernetes 1.35.8 too. `SKIP` is then a version of
 the release profile with Kubernetes 1.37.0. `VARIABLES` is a version of the
@@ -1093,7 +1094,7 @@ two checks expect the verdict `passed` and no message.
 | `pack-cloud-support`, `pack-cloud-support-says` | 0 | #415: the route takes a body with a pack version that does not list the cloud type. `palette-validate` passes and gives no message. So no route answers `pack-cloud-support`, and the rule stays in the catalog as a gap that preflight fills. |
 | `cidr-overlap`, `cidr-overlap-says` | 0 | #816: the route refuses a body whose pod CIDR overlaps the CIDR of its VPC, with `K8SCidrOverlap`. `palette-validate` gives the verdict `failed` with the message of Palette, also when the status is `500`. A live run of the first body, with no subnet for the pools, failed both checks. The route refused that body with `RequiredParam` (#824). A live run of the body with the subnets passes both checks. |
 | `cidr-variable`, `cidr-variable-says` | 0 | #829: the route refuses a body whose pod CIDR comes from the variable `pod_cidr` of a profile, with `K8SCidrOverlap`. The body gives the variable a CIDR in the VPC. A live run passed. |
-| `cidr-variable-reports`, `cidr-variable-marks` | ?, 0 | #614, #829: `palette-validate` writes `report.md`, `report.json`, and `report.html` with `--out`. Each report holds `[value of pod_cidr]`, the mark of the variable, and not the value of the variable. `report.md` writes a `\` before each bracket of the mark, so there the check also takes `\[value of pod_cidr\]` (#916). No result yet: no live window ran this form of the check. |
+| `cidr-variable-reports`, `cidr-variable-marks` | ?, 0 | #614, #829: `palette-validate` writes `report.md`, `report.json`, and `report.html` with `--out`. Each report holds `[value of pod_cidr]`, the mark of the variable, and not the value of the variable. `report.md` writes a `\` before each bracket of the mark, so there the check also takes `\[value of pod_cidr\]` (#916). A live run passed. |
 | `vsphere-static-ip-pool-empty`, `vsphere-static-ip-pool-dhcp`, each with `-says` | 0 | #243: the route refuses a static network with no `parentPoolUid`, and a static network on a DHCP cluster (`vsphere-static-ip-pool`). No result yet: the lab has no cloud account of vSphere (#409). |
 | `vsphere-controlplane-endpoint-no-host`, `edge-vip-multi-node-no-host`, each with `-says` | 0 | #243: the route refuses the type `VIP` with an empty host (`vsphere-controlplane-endpoint`, `edge-vip-multi-node`). No result yet: the lab has no cloud account of vSphere or Edge (#409). |
 | `azure-subnets-in-vnet-no-cidr`, `azure-subnets-in-vnet-no-cidr-says` | 0 | #243: the route refuses a `vnetName` with an empty `vnetCidrBlock` (`azure-subnets-in-vnet`). No result yet: the lab has no cloud account of Azure (#409). |
@@ -1242,7 +1243,7 @@ state what it shows.
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
 | `slash-registry`, `slash-listing`, `slash-listed` | 0 | #853: Palette takes a second registry over the Spectro pack registry, with the name `strata-live/packs`, and the registry listing names it. A live run passed. |
 | `slash-sync` | 0 | Palette reads the registry `strata-live/packs`. A live run passed. |
-| `slash-several`, `slash-several-uid` | 2, 0 | #853: a ref of the pack with no registry is `pack-in-several-registries`. The check runs `compare --json --quiet`, which writes the error as JSON on standard error. `snapshot` takes `--json` only with `--dir` (#916). The field `registries` gives `strata-live/packs` by its uid, and never by its name. No result yet: no live window ran this form of the checks. |
+| `slash-several`, `slash-several-uid` | 2, 0 | #853: a ref of the pack with no registry is `pack-in-several-registries`. The check runs `compare --json --quiet`, which writes the error as JSON on standard error. `snapshot` takes `--json` only with `--dir` (#916). The field `registries` gives `strata-live/packs` by its uid, and never by its name. A live run passed. |
 | `slash-record`, `slash-named` | 0 | #853: the ref `pack:<uid>/strata-live-pack@1.0.0` records the pack, and the record names the registry `strata-live/packs` and its uid. A live run passed. |
 | `slash-delete` | 0 | #853: the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack. A live run passed. |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
@@ -1396,7 +1397,7 @@ registry of the example, and no cluster. It empties the registry at its end.
 | `behind-own` | 0 | #79: the pack at 1.0.0 is behind 1.1.0, with the impact of the bump |
 | `behind-csi` | 0 | #79: `csi-aws-ebs` 1.63.1 is behind the newer versions of the Public Repo, and the bump names `IDENTITY` |
 | `behind-release` | 0 | #79: each pin of the release version is checked |
-| `behind-says` | 0 | #79, #634: the report line is `~ [addon] pack:<registry>/<pack>@1.0.0  behind: 1.1.0`, with the ref of the pin. No result yet: no live window ran this form of the check |
+| `behind-says` | 0 | #79, #634: the report line is `~ [addon] pack:<registry>/<pack>@1.0.0  behind: 1.1.0`, with the ref of the pin. A live run passed. |
 | `report-1`, `report-1-issues`, `report-1-first` | 1, 0, 0 | #79: `upstream-report.sh` opens one issue for each pack behind, and each says that this run is the first to find it behind |
 | `push-1.2.0`, `sync-3` | 0 | a third version arrives |
 | `behind-since`, `behind-arrived` | 1, 0 | #79: `--since` the first run names 1.2.0 as arrived, and nothing of `csi-aws-ebs` |
@@ -2499,7 +2500,7 @@ create itself breaks it. The two new rules find the risk before the create. See
   `cluster.sh`, and `tag-only.sh` have run under OpenTofu, with the same
   provider that Terraform used, and give the same answers. `drift-report.sh` has
   run under Terraform only. Stages 1 to 3 of `order.sh` read the OpenTofu
-  outputs and apply nothing. No live window ran stage 4.
+  outputs and apply nothing.
 - On GCP, the scripts in [A second cloud: GCP](#a-second-cloud-gcp) have run.
   `drift-report.sh`, `merge-gate.sh`, `pack-states.sh`, `registry.sh`,
   `template.sh`, `cluster.sh`, `order.sh`, `who.sh`, `macros.sh`, and

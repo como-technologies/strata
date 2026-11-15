@@ -148,7 +148,9 @@ manifests. The content of a manifest comes from
   of the app profile, as for a cluster profile. An app profile of a project
   names its project in `metadata.annotations.projectUid`. Only the app
   deployments of its project can use it. Each project of the tenant can use an
-  app profile of the tenant. The code of Palette gives these rules.
+  app profile of the tenant. The code of Palette gives these rules. The check
+  `consumers-scope` of [app-profile.sh](../../development/live-runs.md#app-profilesh)
+  shows the scope `project` and the project of an app profile of a project.
 - `status.inUseApps` of `GET /v1/appProfiles/<uid>` names the app deployments
   that use the app profile version, each with `uid`, `name`, `projectUid`, and
   `kind`. Palette computes the list when it is asked: each app deployment that
@@ -185,9 +187,10 @@ project that refuses the listing is not checked. The tenant listing holds each
 project only for a key whose role gives `project.list` in the tenant. So strata
 also sends one page of the cluster search at tenant scope, and Palette refuses
 it to another key: see
-[The reach of a search](clusters.md#the-reach-of-a-search). The checks `consumers-project`
-and `consumers-scope` of [app-profile.sh](../../development/live-runs.md#app-profilesh)
-list the app deployments of the project of the run.
+[The reach of a search](clusters.md#the-reach-of-a-search). For an app profile
+of a project, the checks `consumers-project` and `consumers-scope` of
+[app-profile.sh](../../development/live-runs.md#app-profilesh) show that Palette
+answers the listing of its project.
 
 A live run shows each rule on this page, except a rule that comes from the
 code of Palette. See

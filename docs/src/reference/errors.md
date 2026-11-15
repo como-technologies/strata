@@ -339,8 +339,9 @@ Each other `403` of the route, such as `AccessDenied` for the role of the key,
 is an error of the check. A refusal of the body with HTTP `400`, `404`, or `409`
 is an answer of the route.
 
-A live run shows `ClusterProfilesNotSupported` and `RequiredParam`. The code of
-Palette shows the other codes, and no live run shows them yet.
+A live run shows `ClusterProfilesNotSupported`, `RequiredParam`, and
+`K8SCidrOverlap`. The code of Palette shows the other codes, and no live run
+shows them yet.
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.
@@ -363,4 +364,4 @@ line is no error of strata, and the exit does not change. See
 | Code | What Palette does |
 | --- | --- |
 | `K8sUpgradeNotSupported` | No live run saw it yet. In the code of Palette, it is HTTP `400` for a move of the pack of the `k8s` layer of more than one minor version. A live run of such an update got HTTP 204: Palette took the update. So the line of strata names the rule of Kubernetes, and no code. See [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version). |
-| `InvalidVariable` | No live run saw it yet. In the code of Palette, it is HTTP `500` for a required variable with no value and no default value. See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check). |
+| `InvalidVariable` | A live run saw it with HTTP `500`, and the message named the variable. In the code of Palette, it is HTTP `500` for a required variable with no value and no default value. See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check). |
