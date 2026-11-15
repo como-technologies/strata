@@ -366,4 +366,5 @@ not change. See
 | `K8sUpgradeNotSupported` | HTTP `400`: a move of the pack of the `k8s` layer of more than one minor version, or to a higher major version. See [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version). |
 | `InvalidVariable` | HTTP `500`: a required variable with no value and no default value. See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check). |
 
-The code of Palette shows the two refusals, and no live run shows them yet.
+A live run shows `InvalidVariable`, and its message names the variable. The
+code of Palette shows `K8sUpgradeNotSupported`, and no live run shows it yet.

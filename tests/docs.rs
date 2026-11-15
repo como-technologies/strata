@@ -3019,11 +3019,33 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
     assert!(!clusters.contains("No run has used a key with a smaller"));
 }
 
-/// The live window of Wave 17 ran the checks of #619, #620, #621, #665, #829, #844, #853, #864, and
-/// #892. Each page that states one of their facts gives the result in place of "no live run shows
-/// it yet". A fact whose check has no result keeps its words (#920).
+/// The live windows of Wave 17 ran the checks of #619, #620, #621, #623, #634, #635, #665, #829,
+/// #844, #853, #864, and #892. The row of each check of the second window gives its result. Each
+/// page that states one of their facts gives the result in place of "no live run shows it yet". A
+/// fact whose check has no result keeps its words (#920).
 #[test]
 fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
+    let runs = read(&docs().join("development/live-runs.md"));
+    for start in [
+        "| `list-registries` |",
+        "| `validate-accepts-says` |",
+        "| `validate-version-says` |",
+        "| `variables-record`, ",
+        "| `variables-accepts`, ",
+        "| `variables-update`, ",
+        "| `cidr-variable-reports`, ",
+        "| `slash-several`, ",
+        "| `behind-says` | 0 | #79, #634:",
+    ] {
+        let row = runs
+            .lines()
+            .find(|l| l.starts_with(start))
+            .unwrap_or_else(|| panic!("live-runs.md has no row {start:?}"));
+        assert!(
+            !row.to_lowercase().contains("no result yet"),
+            "the row {start:?} says that it has no result: {row}"
+        );
+    }
     // each page, the words of a result or of a fact with no result, and the words that are gone
     let pages: [(&str, &[&str], &[&str]); 8] = [
         (
@@ -3084,11 +3106,14 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
                 "A live run shows `K8SCidrOverlap`, and no live run shows the other three yet.",
                 "In that run, the message names only the scope `project`.",
                 "A live run shows that the route refuses the body with `K8SCidrOverlap`.",
-                "No live run shows the mark yet.",
+                "A live run shows the mark in each report.",
+                "A live run shows the refusal, and its message names the variable.",
             ],
             &[
                 "No live run of the example shows it yet",
                 "and not its value. No live run shows it yet.",
+                "No live run shows the mark yet.",
+                "The code of Palette shows each rule; no live run shows it yet.",
             ],
         ),
         (
@@ -3102,8 +3127,9 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
             "reference/errors.md",
             &[
                 "A live run shows `ClusterProfilesNotSupported`, `RequiredParam`, and `K8SCidrOverlap`.",
+                "A live run shows `InvalidVariable`, and its message names the variable.",
             ],
-            &[],
+            &["The code of Palette shows the two refusals, and no live run shows them yet."],
         ),
         (
             "development/live-runs.md",

@@ -197,7 +197,7 @@ The case `cidr-variable` of
 body whose pod CIDR comes from the variable `pod_cidr` of a profile. A live run
 shows that the route refuses the body with `K8SCidrOverlap`. The checks of the
 case also make sure that the three reports hold the mark of the variable, and
-not its value. No live run shows the mark yet.
+not its value. A live run shows the mark in each report.
 
 ## POST /v1/spectroclusters/{uid}/validate/packs
 
@@ -513,9 +513,11 @@ that pins an older Kubernetes than the example does.
 
 The update of the profiles of a cluster checks two rules that no validate route
 checks. The update is a `PUT` or a `PATCH` of
-`/v1/spectroclusters/{uid}/profiles`. The code of Palette shows each rule; no
-live run shows it yet. Stage 7 of `validate-packs.sh` is the live check: see
-[validate-packs.sh](../../development/live-runs.md#validate-packssh).
+`/v1/spectroclusters/{uid}/profiles`. The code of Palette shows each rule.
+Stage 7 of `validate-packs.sh` is the live check: see
+[validate-packs.sh](../../development/live-runs.md#validate-packssh). A live
+run shows the rule of a required variable, and no live run shows the other rule
+yet.
 
 ### The minor version of Kubernetes
 
@@ -549,7 +551,8 @@ version at a time.
   of the body, or a default of the variable.
 - Palette refuses a required variable with no value, and changes nothing. The
   answer is HTTP 500 and `InvalidVariable`. The message ends with
-  `can't be empty for required variable '<name>'`.
+  `can't be empty for required variable '<name>'`. A live run shows the
+  refusal, and its message names the variable.
 - Palette accepts a required variable with no value when it has a default
   value. A dropdown variable is different: Palette accepts its default value
   only when the value is the label of one of its options. When it is not,
