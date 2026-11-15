@@ -382,9 +382,9 @@ A comparison of two sides, `a` and `b`.
   each. Strata does not read a document that says `accepts` is `false` and
   gives no error, or that says `true` and gives an error.
 - `updateChecks`, only with `compare --validate`: what strata checks about the
-  move beside the answer of Palette. Palette checks these rules only at the
-  update, and no validate route checks them. Absent when strata finds nothing.
-  See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
+  move beside the answer of Palette. No validate route checks these rules.
+  Absent when strata finds nothing. See
+  [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
   - `requiredVariables`: the required variables with no default value that the
     profile side adds. A dropdown variable counts only when no option has the
     mark `default`, and its default value is not the label of an option. It
@@ -392,9 +392,9 @@ A comparison of two sides, `a` and `b`.
     `InvalidVariable`, and `names[]`, the name of each variable. Palette refuses
     an update that gives such a variable no value.
   - `skippedMinor`: the move of the pack of the `k8s` layer, when it skips a
-    minor version. It has `code`, the code of the refusal of Palette,
-    `K8sUpgradeNotSupported`. It also has `pack`, `from`, `to`, and `nextMinor`,
-    the minor version that Palette allows next, such as `1.35`.
+    minor version. It has `pack`, `from`, `to`, and `nextMinor`, the minor
+    version to move to first, such as `1.35`. It has no `code`: the skip is a
+    check of strata, and a live run shows that Palette takes such an update.
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.

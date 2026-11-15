@@ -465,9 +465,10 @@ a report of 0.33.0 and before. See
 [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
 
 After 0.33.0, a bump of `strata-behind/1` can have the new field `updateChecks`, and so can a
-comparison of `strata-diff/1` with `compare --validate`. The field holds the rules that Palette
-checks only at the update: `requiredVariables` and `skippedMinor`. The ids stay, and
-`--since` reads a report of 0.33.0 and before. See
+comparison of `strata-diff/1` with `compare --validate`. The field holds two checks of a move
+that no validate route makes: `requiredVariables` and `skippedMinor`. `skippedMinor` has no
+`code`, because the skip is a check of strata. The ids stay, and `--since` reads a report of
+0.33.0 and before. See
 [The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
 
 After 0.33.0, an option of a variable of `strata-snapshot/1` can have the new field `default`,
@@ -1463,13 +1464,15 @@ field, a value, an input, or an option is in the sections above.
   `recording pack` ends with `; it skips 1.22.0-rc.1, a pre-release by SemVer`. A script that
   matches the whole note must match the new text. Standard output and the exit code of both
   changes stay. See [Which version is the newest](../commands/packs.md#which-version-is-the-newest).
-- **`behind` and `compare --validate` name two rules of the update that no validate route
-  checks.** A line can follow the answer of Palette. A script that reads these lines must skip
+- **`behind` and `compare --validate` name two rules of a move that no validate route
+  checks.** A line can come before the answer of Palette. A script that reads these lines must skip
   it, or read `updateChecks` of the JSON. The exit does not change. See
   [The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
   - A pin of the `k8s` layer can have a line under its bump, such as
-    `kubernetes 1.34.9 -> 1.36.2 skips a minor version`. The line names
-    `K8sUpgradeNotSupported` and the next step.
+    `kubernetes 1.34.9 -> 1.36.2 skips a minor version`. The line names the rule of
+    Kubernetes and the next step: `Kubernetes moves one minor version at each upgrade; move to
+    1.35.6 first`. It names no code of Palette, because a live run shows that Palette takes
+    such an update. `skippedMinor` of the JSON has no `code`.
   - A profile version can have that line under its bump. It can also have a line that
     starts with `the move adds the required variable`. That line names `InvalidVariable`.
   - `compare --validate` prints each line as a `note` line of the head. The `palette` lines
@@ -1776,9 +1779,9 @@ field, a value, an input, or an option is in the sections above.
 - `ops::Bump` and `diff::Diff` have the new field `update_checks: model::update::UpdateChecks`. A
   struct literal must set it. `ops::update_checks` is new: the checks of `compare --validate`.
   The module `model::update` is new, with `UpdateChecks`, `RequiredVariables`, and
-  `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
-  `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
-  `INVALID_VARIABLE_CODE`.
+  `MinorSkip`, which holds no code of Palette. Its public functions are
+  `UpdateChecks::is_empty`, `MinorSkip::of`, and `MinorSkip::line`. `api::codes` has the new
+  consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and `INVALID_VARIABLE_CODE`.
 - `error::Error::Api` has the new field `key_proved: bool`. A struct literal must set it, and a
   pattern with no `..` must name it. The message reads it: a `403` that is a denial names the
   key only when it is false. Before, the message read a flag of the thread. So a client with a

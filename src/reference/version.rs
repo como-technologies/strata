@@ -100,11 +100,11 @@ pub fn line(v: &str, count: usize) -> Option<String> {
 
 /// True when `to` is more than `limit` minor versions above `from`, or has a higher major number.
 ///
-/// Palette reads each of the two as a version that parses, or as the first three numbers of a
-/// text: see [`compare`]. It reads no version in one or two numbers with a tail, such as
-/// `1.2.develop`. When it reads no version in one of the two, it makes no check, so the answer is
-/// false. A move down is never above. So `1.36.2` is more than one minor version above `1.34.9`,
-/// and `1.35.6` is not.
+/// Strata reads each of the two as Palette reads a version: a version that parses, or the first
+/// three numbers of a text: see [`compare`]. It reads no version in one or two numbers with a
+/// tail, such as `1.2.develop`. When it reads no version in one of the two, the answer is false. A
+/// move down is never above. So `1.36.2` is more than one minor version above `1.34.9`, and
+/// `1.35.6` is not.
 pub(crate) fn minor_above(from: &str, to: &str, limit: u64) -> bool {
     match (Version::palette(from), Version::palette(to)) {
         (Some(from), Some(to)) => {
@@ -117,7 +117,7 @@ pub(crate) fn minor_above(from: &str, to: &str, limit: u64) -> bool {
 }
 
 /// The release line `steps` minor versions above `from`, as `<major>.<minor>`: `1.35` for
-/// `1.34.9` and one step. Palette reads `from` as [`minor_above`] says. None when it reads no
+/// `1.34.9` and one step. Strata reads `from` as [`minor_above`] says. None when it reads no
 /// version in `from`.
 pub(crate) fn minor_line_above(from: &str, steps: u64) -> Option<String> {
     let [major, minor, _] = Version::palette(from)?.numbers;

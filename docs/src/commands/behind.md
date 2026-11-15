@@ -244,7 +244,7 @@ on each side, its flags, and `valuesChanged` when its values change:
   profile version has no `palette accepts` line. To ask Palette about the move of
   a cluster, run `strata compare cluster:<cluster> <name>@<newest> --repave`. See
   [Ask Palette if the change repaves](./compare/repave.md).
-- **Strata names what the update checks.** A line names each required variable
+- **Strata names two checks of the move.** A line names each required variable
   with no default value that the newest version adds. A dropdown variable does
   not count when it has a default option, or a default value that is the label
   of an option. Palette refuses an update
@@ -393,7 +393,7 @@ of the pin, after the lines `pinned by`. A terminal shows it in bold:
 ```
 
 - `palette accepts`: Palette gives no error for the packs of the move. The route
-  does not check the version of Kubernetes, so a line of strata can follow: see
+  does not check the version of Kubernetes, so a line of strata can come first: see
   [A move that skips a minor version](#a-move-that-skips-a-minor-version).
 - `palette refuses: <code> on cluster <cluster>`: Palette gives the error
   `<code>`, and names the cluster in its message. Two clusters or more read
@@ -474,10 +474,10 @@ reads that document one time in each project: see
 
 ## A move that skips a minor version
 
-`palette accepts` covers the packs of the move. Palette checks the version of
-Kubernetes only at the update, and no validate route checks it. One update moves
-the Kubernetes pack one minor version at most. So strata makes the check, and
-Palette is the owner of the rule: see
+`palette accepts` covers the packs of the move. Kubernetes moves one minor
+version at each upgrade. No validate route checks the move, and a live run shows
+that Palette takes an update that skips a minor version. So strata makes the
+check, and Kubernetes is the owner of the rule: see
 [The gaps that strata fills](../internals/palette/profiles.md#the-checks-of-an-update).
 Here the record pins `kubernetes` 1.34.9, and the newest version is 1.36.2:
 
@@ -486,21 +486,20 @@ Here the record pins `kubernetes` 1.34.9, and the newest version is 1.36.2:
 ```
 
 The line under the `bump to` line says that the move skips a minor version. The
-answer of Palette stays the last line of the pin.
-Palette refuses the update with `K8sUpgradeNotSupported`, HTTP 400. The line
-names the next step: the newest version of the next minor version in the
-registry, here 1.35.6. When the registry has no such version, the line ends with
-`move to a version of 1.35 first`.
+answer of Palette stays the last line of the pin. The skip line is a check of
+strata, and not an answer of Palette. It names the next step: the newest version
+of the next minor version in the registry, here 1.35.6. When the registry has no
+such version, the line ends with `move to a version of 1.35 first`.
 
-- **The rule holds for each pack of the `k8s` layer**, on each cloud, such as
+- **The check holds for each pack of the `k8s` layer**, on each cloud, such as
   `kubernetes-eks`. A move of more than one minor version skips. A move to a
   higher major version skips too.
-- **Palette compares the version that each cluster runs** with the version of
-  the move. Strata compares the pinned version.
-- **A version in which Palette reads no version**, such as `1.29.x`, gets no
-  check, as in Palette.
+- **Strata compares the pinned version** with the version of the move.
+- **A version in which strata reads no version**, such as `1.29.x`, gets no
+  check.
 
-`--json` gives the skip in `bump.updateChecks.skippedMinor`:
+`--json` gives the skip in `bump.updateChecks.skippedMinor`. The field gives no
+code of Palette:
 
 ```text
 {{#include ../output/behind-skip-json.txt}}
@@ -508,7 +507,7 @@ registry, here 1.35.6. When the registry has no such version, the line ends with
 
 The check sends no request. `--no-impact` skips it with the bump. See
 [What the update checks](../internals/palette/validate-routes.md#what-the-update-checks)
-for the rule, and [validate-packs.sh](../development/live-runs.md#validate-packssh)
+for the live result, and [validate-packs.sh](../development/live-runs.md#validate-packssh)
 for the live check.
 
 ## A pin that is current against an older copy

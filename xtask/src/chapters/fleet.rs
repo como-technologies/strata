@@ -186,7 +186,7 @@ fn behind_refused(r: &mut Runner) {
 fn behind_skip(r: &mut Runner) {
     // aws-stack@1.1.20 pins kubernetes 1.34.9, two minor versions below 1.36.2, and the cluster
     // search runs it. The route of the version and the route of the cluster accept the packs of
-    // the move. The update of the cluster refuses it with K8sUpgradeNotSupported
+    // the move. A live run shows that the update of a cluster takes such a move too (#919)
     r.profile(
         DEV,
         A1120,
