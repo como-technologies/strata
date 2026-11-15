@@ -2454,15 +2454,14 @@ fn snapshot_of_one_ref_that_succeeds_with_json_writes_the_same_record_and_no_jso
     // the record on standard output, or in the file of -o. The read removes the file, so each run
     // must write it again. The time of the fetch is the one field that two runs can write differently.
     let record = |r: &Run, to_file: bool| {
-        let text = if to_file {
+        let mut v: serde_json::Value = if to_file {
             assert_eq!(r.out, "", "-o: no record on standard output");
-            let text = std::fs::read_to_string(&file).unwrap();
+            let v = read_json(&file);
             std::fs::remove_file(&file).unwrap();
-            text
+            v
         } else {
-            r.out.clone()
+            serde_json::from_str(&r.out).unwrap()
         };
-        let mut v: serde_json::Value = serde_json::from_str(&text).unwrap();
         v["source"].as_object_mut().unwrap().remove("fetchedAt");
         v
     };
