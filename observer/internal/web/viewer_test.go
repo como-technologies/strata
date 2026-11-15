@@ -261,6 +261,7 @@ const (
 	k8sMove       = "move-" + testkit.BaseProfile + "-" + testkit.KubernetesKey
 	traefikHash   = "#k-" + testkit.GatewayProfile + "/" + testkit.TraefikKey
 	traefikMove   = "move-" + testkit.GatewayProfile + "-" + testkit.TraefikKey
+	vendorHash    = "#k-" + testkit.GatewayProfile + "/" + testkit.VendorPack
 	layoutUnified = "unified"
 	layoutSplit   = "split"
 )

@@ -57,8 +57,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 // A pack that the move does not change shows "Undisturbed". A compare that failed gives no choice, and the card "Move to" says so.
 func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *testing.T) {
 	const notCompared = "a move that strata could not compare"
-	vendor := packPage(testkit.GatewayProfile, "addon", "vendor-product")
-	page := pageOf(t, crawl(t, devdata.StateOK), vendor, "")
+	page := pageOf(t, crawl(t, devdata.StateOK), vendorHash, "")
 	where := "the pack page of vendor-product"
 	mustHold(t, where, page, newestSelected+newestLabel+`</option>`, badge("b", "Newer"), "product.replicas")
 	// a newer version is no drift: the side keeps the neutral badge of a newer version (#709)
@@ -72,7 +71,7 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 			}
 		}
 	})})
-	same := pageWith(t, dir, scratch, vendor, `S.side["side-`+testkit.GatewayProfile+`-`+testkit.VendorPack+`"] = "newest"`)
+	same := pageWith(t, dir, scratch, vendorHash, `S.side["side-`+testkit.GatewayProfile+`-`+testkit.VendorPack+`"] = "newest"`)
 	mustHold(t, "a pack that the move does not change", same, badge("g", "Identical"),
 		"The newest version of the profile holds what the record holds for this pack.")
 
@@ -84,7 +83,7 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 			}
 		}
 	})})
-	pages := pagesOf(t, dir, wilmaHash, vendor)
+	pages := pagesOf(t, dir, wilmaHash, vendorHash)
 	mustHold(t, "the card of "+notCompared, cardOf(t, pages[0], "<h2>Move to "),
 		badge("y", "Not read"), "Strata could not compare the record with this version now.")
 	mustNotHold(t, "the pack page of "+notCompared, pages[1], newestOption)

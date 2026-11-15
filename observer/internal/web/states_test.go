@@ -706,7 +706,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 		t.Error("no diff of the set changes the build alone")
 	}
 	// The card of the move says the same, and it gives no count of 0 of 0.
-	ubuntu := pageOf(t, screens, packPage(testkit.BaseProfile, "os", "ubuntu-aws"), "")
+	ubuntu := pageOf(t, screens, ubuntuHash, "")
 	where := "the move of ubuntu-aws"
 	mustHold(t, where, ubuntu, labelRow("Content", "<b>The same</b>"), labelRow("Changes", buildWords), "Repave "+repaveHint+"&#39;s table: node repave (OS image change).")
 	mustNotHold(t, where, ubuntu, "of 0 values")

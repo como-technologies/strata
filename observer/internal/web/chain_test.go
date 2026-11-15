@@ -68,12 +68,11 @@ func TestTheWordsOfTheCarrierFollowTheAnswerOfBehind(t *testing.T) {
 // red badge "Changed".
 func TestTheCompareBadgeOfANewerVersionIsTheNeutralBadgeNewer(t *testing.T) {
 	screens := crawl(t, devdata.StateOK)
-	vendor := packPage(testkit.GatewayProfile, "addon", "vendor-product")
 	for _, c := range []struct {
 		where, hash, variant, option, badge string
 	}{
 		{"the newer version of traefik", traefikHash, "", `<option value="newer" selected>`, badge("b", "Newer")},
-		{"the newest profile version of vendor-product", vendor, "", newestSelected, badge("b", "Newer")},
+		{"the newest profile version of vendor-product", vendorHash, "", newestSelected, badge("b", "Newer")},
 		{"the published side of dex", dexHash, "", `<option value="published" selected>`, badge("r", "Changed")},
 	} {
 		head := compareHead(t, pageOf(t, screens, c.hash, c.variant))

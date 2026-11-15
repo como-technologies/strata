@@ -57,10 +57,12 @@ const (
 	pathPublished  = awsPacks + "/" + testkit.CSIKey + "/diff?side=published"
 	pathCluster    = kubernetesDiff + "?side=cluster"
 	pathNewer      = kubernetesDiff + "?side=newer"
-	pathAsk        = awsPacks + "/" + testkit.KubernetesKey + "/ask"
 	// pathProfileByName names the profile with no version.
 	pathProfileByName = "/v1/profiles/aws-stack"
 )
+
+// pathAsk is the route of the question to Palette for the move of the pack kubernetes of aws-stack@1.1.0.
+var pathAsk = testkit.AskPath(testkit.AWSStackProfile, testkit.KubernetesKey)
 
 // fixtures copies testdata/ to a directory of the test. The times of the documents are relative to
 // the clock, so the events of the last 7 days are in the window.

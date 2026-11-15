@@ -115,10 +115,9 @@ const (
 	// AuditUnread is the message of an event when the observer could not read the audit log.
 	AuditUnread = "The audit log could not be read, so this does not say who made the change."
 	// DexProfile is the profile of the pack dex in the dev data and in the tests of more than one package, and DexKey is
-	// the key of the pack. DexAsk is the route of the question to Palette for the move of dex in the dev data.
+	// the key of the pack.
 	DexProfile = "fred-identity@2.3.0"
 	DexKey     = "addon/dex"
-	DexAsk     = "/v1/packs/" + DexProfile + "/" + DexKey + "/ask"
 	// AsksRoute is the route of the list of answers of Palette. NoAnswers is the list of an observer that holds none, in
 	// the JSON of the route. The list is empty, and not null.
 	AsksRoute = "/v1/asks"
@@ -288,6 +287,14 @@ func Get(h http.Handler, path string) *httptest.ResponseRecorder {
 	return Serve(h, http.MethodGet, path, LoopbackHost, "")
 }
 
+// AskPath gives the route of the question to Palette for the move of the pack key of the profile.
+func AskPath(profile, key string) string {
+	return "/v1/packs/" + profile + "/" + key + "/ask"
+}
+
+// DexAsk is the route of the question to Palette for the move of dex in the dev data.
+var DexAsk = AskPath(DexProfile, DexKey)
+
 // AskFlow checks the click "Ask Palette" on the move of dex of the dev data ok. get sends a GET to a path of the
 // server of the set. post sends a POST, with the header of the page when page is true. Each gives the status and the
 // body. The list of answers is empty before the click. The server refuses a POST that the page did not send. The
@@ -311,7 +318,7 @@ func AskFlow(t *testing.T, get func(path string) (int, string), post func(path s
 	if code, list := get(AsksRoute); code != http.StatusOK || strings.Count(list, `"verdict"`) != 1 || !strings.Contains(list, strings.TrimSpace(body)) {
 		t.Errorf("the list after the click: %d %s", code, list)
 	}
-	for _, path := range []string{"/v1/packs/" + LonghornProfile + "/" + LonghornKey + "/ask", "/v1/packs/" + NobodyProfile + "/" + DexKey + "/ask"} {
+	for _, path := range []string{AskPath(LonghornProfile, LonghornKey), AskPath(NobodyProfile, DexKey)} {
 		if code, _ := post(path, true); code != http.StatusNotFound {
 			t.Errorf("%s gave %d", path, code)
 		}

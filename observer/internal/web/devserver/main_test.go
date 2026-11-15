@@ -110,7 +110,7 @@ func TestTheSetAsksListsOneAnswerOfEachVerdictAtTheStart(t *testing.T) {
 		t.Fatalf("the list gave %d", code)
 	}
 	testkit.HoldsAll(t, "the list of answers", list, []string{testkit.NoErrorVerdict, testkit.RefusesVerdict, testkit.NoAnswerVerdict, `"code":"` + testkit.CodeDependency + `"`, `"status":403`}...)
-	code, body := send(t, http.MethodPost, base+"/v1/packs/"+testkit.GatewayProfile+"/"+testkit.TraefikKey+"/ask", true)
+	code, body := send(t, http.MethodPost, base+testkit.AskPath(testkit.GatewayProfile, testkit.TraefikKey), true)
 	if code != 200 || !strings.Contains(body, testkit.RefusesVerdict) {
 		t.Errorf("a click on the refused move gave %d %s", code, body)
 	}

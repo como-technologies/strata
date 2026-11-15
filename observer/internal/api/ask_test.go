@@ -223,12 +223,12 @@ func TestTheClickAnswers404ForAProfileAPackOrAMoveThatIsNotKnownAndSendsNothing(
 	_, o, fake := asked(t, askNoError)
 	h := handlerOf(o)
 	for _, path := range []string{
-		"/v1/packs/nope@1/" + testkit.KubernetesKey + "/ask",
-		awsPacks + "/" + testkit.NopeKey + "/ask",
+		testkit.AskPath("nope@1", testkit.KubernetesKey),
+		testkit.AskPath(testkit.AWSStackProfile, testkit.NopeKey),
 		// cert-manager is current: no move exists for it
-		awsPacks + "/" + testkit.CertManagerKey + "/ask",
+		testkit.AskPath(testkit.AWSStackProfile, testkit.CertManagerKey),
 		// the layer is part of the key
-		awsPacks + "/" + testkit.AddonKubernetesKey + "/ask",
+		testkit.AskPath(testkit.AWSStackProfile, testkit.AddonKubernetesKey),
 	} {
 		rec := click(h, path)
 		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "nope") {
