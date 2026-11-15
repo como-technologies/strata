@@ -250,9 +250,7 @@ pub(crate) fn tag_note(pk: &crate::ops::ListedPack) -> Option<String> {
 /// The ref of a listed pack, as a row of the terminal names it: see [`listed_registry`]. `None`
 /// for a pack with no registry, such as a pack of manifests: no `pack:` ref can read it.
 pub(crate) fn listed_pack_ref(pk: &crate::ops::ListedPack) -> Option<Ref> {
-    listed_registry(pk)
-        .is_some()
-        .then(|| Ref::pack_in(&pk.registry, &pk.registry_uid, &pk.name, &pk.version))
+    listed_registry(pk).map(|registry| Ref::pack(Some(registry), &pk.name, &pk.version))
 }
 
 /// What a row of the terminal says of a pack with no registry: `pack namespace-labels 1.0.0 (no
@@ -267,7 +265,7 @@ pub(crate) fn unregistered_pack(pk: &crate::ops::ListedPack) -> String {
 /// The row gives the uid when the key cannot see the registry, and when its name holds a `/`. The
 /// error `pack-in-several-registries` sends the person to this row for the registry of a ref.
 pub(crate) fn listed_registry(pk: &crate::ops::ListedPack) -> Option<&str> {
-    Some(registry_in_ref(&pk.registry, &pk.registry_uid)).filter(|r| !r.is_empty())
+    registry_in_ref(&pk.registry, &pk.registry_uid)
 }
 
 /// `2 of 3 clusters recorded, 1 removed; found by the search of Palette`: the counts of a set.

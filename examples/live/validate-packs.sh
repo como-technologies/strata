@@ -277,8 +277,11 @@ if [ "$stage" = 6 ]; then
     check bump-clusters 0 '#166: the message of the error names a cluster that runs the version' -- \
       jq -e "$kubernetes_pin | .bump.paletteValidation.errors | map(.clusters | length) | max > 0" bump-behind.out
     check bump-text '?' '#166: behind prints the answer under the bump' -- "$strata" behind bump-profile.json
-    check bump-text-says 0 '#166: palette refuses, with the code and the clusters' -- \
-      grep -Eq '^      palette refuses: DependencyPackUpgradeNotSupported on .+' bump-text.out
+    # a line with no indent starts a pin, so `pinned` holds only for the lines of one pin
+    check bump-text-says 0 '#166, #634: palette refuses, with the code and the clusters, under the records of the pin' -- \
+      awk '!/^      / { pinned = 0 } /^      pinned by / { pinned = 1 }
+        pinned && /^      palette refuses: DependencyPackUpgradeNotSupported on clusters? .+/ { found = 1 }
+        END { exit !found }' bump-text.out
     check bump-text-skip 0 '#623: behind says that the move skips a minor version, and that the update refuses it' -- \
       grep -Eq '^      kubernetes .+ skips a minor version: Palette refuses the update with ' bump-text.out
     check bump-no-impact '?' '#166: --no-impact sends no request to a validate route' -- \

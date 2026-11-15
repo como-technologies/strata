@@ -203,8 +203,7 @@ impl Ref {
     /// `pack:<registry>/<name>@<version>`, with the registry as [`registry_in_ref`] names it.
     /// `pack:<name>@<version>` when the pack names no registry.
     pub(crate) fn pack_in(registry: &str, registry_uid: &str, name: &str, version: &str) -> Ref {
-        let registry = registry_in_ref(registry, registry_uid);
-        Ref::pack(Some(registry).filter(|r| !r.is_empty()), name, version)
+        Ref::pack(registry_in_ref(registry, registry_uid), name, version)
     }
 
     /// The ref as a person types it in a shell: in single quotes when it holds a space or another
@@ -240,16 +239,17 @@ fn pack_ref(text: &str) -> Option<Ref> {
 }
 
 /// The text that names a registry in a pack ref: its name, or its uid when the name is empty or
-/// holds a `/`.
+/// holds a `/`. `None` when that text is empty: the pack names no registry, and its ref names none.
 ///
 /// Palette takes a `/` in the name of a registry and in the name of a pack. [`pack_ref`] ends the
 /// registry at the first `/`, so that a pack name can hold one. A uid holds no `/`.
-pub(crate) fn registry_in_ref<'a>(name: &'a str, uid: &'a str) -> &'a str {
-    if name.contains('/') {
+pub(crate) fn registry_in_ref<'a>(name: &'a str, uid: &'a str) -> Option<&'a str> {
+    let text = if name.contains('/') {
         uid
     } else {
         crate::text::name_or_uid(name, uid)
-    }
+    };
+    Some(text).filter(|t| !t.is_empty())
 }
 
 /// The cluster ref `cluster:<uid>[/<profile>][@pending]`, when `text` is one.

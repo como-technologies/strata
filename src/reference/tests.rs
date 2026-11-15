@@ -146,9 +146,10 @@ fn pack_forms() {
 
 #[test]
 fn a_pack_ref_names_a_registry_by_its_uid_when_the_name_is_empty_or_holds_a_slash() {
-    assert_eq!(registry_in_ref("Public Repo", "r1"), "Public Repo");
-    assert_eq!(registry_in_ref("", "r1"), "r1");
-    assert_eq!(registry_in_ref("team/charts", "r1"), "r1");
+    assert_eq!(registry_in_ref("Public Repo", "r1"), Some("Public Repo"));
+    assert_eq!(registry_in_ref("", "r1"), Some("r1"));
+    assert_eq!(registry_in_ref("team/charts", "r1"), Some("r1"));
+    assert_eq!(registry_in_ref("", ""), None, "a pack with no registry");
     let written = Ref::pack_in("team/charts", "r1", "nginx", "1").to_string();
     assert_eq!(
         Ref::parse_with(&written, |_| false),

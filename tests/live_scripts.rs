@@ -14,6 +14,7 @@ use strata::api::codes::{
 use strata::api::{MASKED, PROJECT_UID_HEADER};
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
+use strata::model::validation::{PaletteRefusal, answer_lines};
 use strata::render::palette_line;
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -8196,6 +8197,30 @@ fn fred_document() -> serde_json::Value {
             {"name": "csi", "tag": "2.0.0", "type": "spectro", "values": "s: 1"}]}]}})
 }
 
+/// The text of `strata behind` on the record of the profile: the pin of `kubernetes` and its lines.
+/// The refusal of Palette is one of them, the words of [`upgrade_refused`]. With `refusal_last`,
+/// the refusal is the last line of the pin, as strata prints it. Else it is under the bump.
+fn bump_text(refusal_last: bool) -> String {
+    let errors: Vec<PaletteRefusal> =
+        serde_json::from_value(upgrade_refused()["errors"].clone()).unwrap();
+    let refusal = format!("palette {}", answer_lines(&errors)[0]);
+    let skip = MinorSkip::of("k8s", "kubernetes", "1.35.3", "1.37.0")
+        .unwrap()
+        .line();
+    let mut under = vec![
+        "bump to 1.37.0: repave IDENTITY".to_string(),
+        skip,
+        "pinned by bump-profile.json (strata-live-release@1.0.0)".to_string(),
+    ];
+    under.insert(if refusal_last { under.len() } else { 1 }, refusal);
+    let pin = "~ [k8s  ] 'pack:Public Repo/kubernetes@1.35.3'  behind: 1.37.0\n";
+    pin.to_string()
+        + &under
+            .iter()
+            .map(|l| format!("      {l}\n"))
+            .collect::<String>()
+}
+
 /// A stage 6 run of validate-packs.sh on the profile `strata-live-release@1.0.0` and the cluster
 /// `fred`. `strata behind --json` gives `report` for the record of the profile, and
 /// `cluster_report` for the record of the cluster. Gives steps.log.
@@ -8204,15 +8229,21 @@ fn bump_stage(report: &str, cluster_report: &str) -> (Stage, String) {
 }
 
 /// [`bump_stage`], where `arrange` changes the stage before the run, such as the answer of the
-/// route of the cluster.
+/// route of the cluster. An answer of strata that `arrange` gives comes first, so it wins.
 fn bump_stage_with(
     report: &str,
     cluster_report: &str,
-    arrange: impl FnOnce(&Stage),
+    arrange: impl FnOnce(&mut Stage),
 ) -> (Stage, String) {
     let mut stage = Stage::new(serde_json::json!({}));
     stage.env("PROFILE", "strata-live-release@1.0.0");
     stage.env("CLUSTER", "fred");
+    stage.route(&cluster_route(FRED_UID), &fred_document().to_string());
+    stage.route(
+        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
+        r#"{"profiles":[]}"#,
+    );
+    arrange(&mut stage);
     stage.strata(
         "snapshot strata-live-release@1.0.0 -o bump-profile.json",
         0,
@@ -8223,11 +8254,6 @@ fn bump_stage_with(
         0,
         &serde_json::json!({"source": {"cluster": {"uid": FRED_UID}}}).to_string(),
     );
-    stage.route(&cluster_route(FRED_UID), &fred_document().to_string());
-    stage.route(
-        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
-        r#"{"profiles":[]}"#,
-    );
     stage.strata("behind bump-profile.json --json", 1, report);
     stage.strata("behind bump-cluster.json --json", 1, cluster_report);
     stage.strata(
@@ -8235,15 +8261,7 @@ fn bump_stage_with(
         1,
         r#"{"pins":[{"name":"kubernetes","version":"1.35.3","behind":true}]}"#,
     );
-    stage.strata(
-        "behind bump-profile.json",
-        1,
-        &format!(
-            "~ [k8s  ] kubernetes  1.35.3  Public Repo  behind: 1.37.0\n      bump to 1.37.0: repave IDENTITY\n      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred\n      {}\n",
-            MinorSkip::of("k8s", "kubernetes", "1.35.3", "1.37.0").unwrap().line()
-        ),
-    );
-    arrange(&stage);
+    stage.strata("behind bump-profile.json", 1, &bump_text(true));
     let (o, steps) = stage.run("validate-packs.sh", &["6"]);
     assert!(
         steps.contains("== behind asks Palette"),
@@ -8280,6 +8298,18 @@ fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_pr
         !steps.contains("== a candidate whose") && !steps.contains("== the name route"),
         "stage 6 runs alone: {steps}"
     );
+}
+
+#[test]
+fn validate_packs_sh_stage_6_fails_when_the_refusal_of_palette_is_not_under_the_records_of_the_pin()
+{
+    let report = kubernetes_bump_report("1.37.0", &upgrade_refused());
+    // the order of the lines before #634: the refusal under the bump, and the record last
+    let (_, steps) = bump_stage_with(&report, &report, |stage| {
+        stage.strata("behind bump-profile.json", 1, &bump_text(false));
+    });
+    passed(&steps, &["bump-text-skip"]);
+    failed(&steps, &["bump-text-says"]);
 }
 
 #[test]
