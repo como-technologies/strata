@@ -14,6 +14,8 @@ use strata::api::codes::{
 use strata::api::{MASKED, PROJECT_UID_HEADER};
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
+use strata::model::validation::{PaletteRefusal, answer_lines};
+use strata::render::palette_line;
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
@@ -5314,8 +5316,8 @@ fn packs_paged(count: u32, headings: &str) -> String {
 fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() {
     let steps = packs_paged(
         266,
-        "kubernetes in Palette Registry (169 versions)\n  1.36.2  1.36.x\n\
-         kubernetes in Public Repo (97 versions)\n  1.36.2  1.36.x\n",
+        "registry Palette Registry, pack kubernetes: 169 versions\n  1.36.2  1.36.x\n\
+         registry Public Repo, pack kubernetes: 97 versions\n  1.36.2  1.36.x\n",
     );
     passed(
         &steps,
@@ -5324,7 +5326,7 @@ fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() 
 
     let steps = packs_paged(
         97,
-        "kubernetes in Public Repo (97 versions)\n  1.36.2  1.36.x\n",
+        "registry Public Repo, pack kubernetes: 97 versions\n  1.36.2  1.36.x\n",
     );
     failed(&steps, &["packs-paged-listing"]);
     failed(&steps, &["packs-paged-count"]);
@@ -7756,7 +7758,7 @@ fn packs_arch_stage(line: &str, json: &str) -> String {
 #[test]
 fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
     let steps = packs_arch_stage(
-        "1 pin from 1 record: 1 behind\n~ [addon] loki  2.10.2  Public Repo  behind: 3.6.7 (drops arm64)\n",
+        "1 pin from 1 record: 1 behind\n~ [addon] 'pack:Public Repo/loki@2.10.2'  behind: 3.6.7 (drops arm64)\n",
         r#"{"pins":[{"version":"2.10.2","newer":[{"version":"3.6.7","drops":["arm64"]}]}]}"#,
     );
     passed(
@@ -7772,7 +7774,7 @@ fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
 
     // a behind that says nothing of the architectures fails the two checks that read it
     let steps = packs_arch_stage(
-        "1 pin from 1 record: 1 behind\n~ [addon] loki  2.10.2  Public Repo  behind: 3.6.7\n",
+        "1 pin from 1 record: 1 behind\n~ [addon] 'pack:Public Repo/loki@2.10.2'  behind: 3.6.7\n",
         r#"{"pins":[{"version":"2.10.2","newer":[{"version":"3.6.7"}]}]}"#,
     );
     passed(&steps, &["arch-listing", "arch-record", "arch-behind"]);
@@ -7956,7 +7958,7 @@ fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_head
  {
     let row = "  1.0.0  pk-z  oci  all  1.0.0  no digest\n";
     let (stage, steps) = registry_kinds(&format!(
-        "strata-live-zarf in strata-live-oci (1 version, no digests)\n{row}"
+        "registry strata-live-oci, pack strata-live-zarf: 1 version, no digests\n{row}"
     ));
     passed(&steps, &["packs-zarf", "packs-zarf-says"]);
     let calls = lines_of(&stage.path("strata/calls"));
@@ -7969,11 +7971,11 @@ fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_head
 
     // a heading with no mark, or a row with no mark, fails the check
     let (_, steps) = registry_kinds(&format!(
-        "strata-live-zarf in strata-live-oci (1 version)\n{row}"
+        "registry strata-live-oci, pack strata-live-zarf: 1 version\n{row}"
     ));
     failed(&steps, &["packs-zarf-says"]);
     let (_, steps) = registry_kinds(
-        "strata-live-zarf in strata-live-oci (1 version, no digests)\n  1.0.0  pk-z  oci  all  1.0.0\n",
+        "registry strata-live-oci, pack strata-live-zarf: 1 version, no digests\n  1.0.0  pk-z  oci  all  1.0.0\n",
     );
     failed(&steps, &["packs-zarf-says"]);
 }
@@ -8027,7 +8029,7 @@ fn validate_packs_sh_stage_5_asks_the_two_routes_for_each_rule_that_they_answer(
         stage.strata_err(
             &format!("snapshot --from-candidate {file}.yaml --validate *"),
             2,
-            &format!("palette    refuses: {code}: {message}\n"),
+            &format!("{}\n", palette_line(&format!("refuses: {code}: {message}"))),
         );
     }
 
@@ -8092,8 +8094,8 @@ fn accepted_line(reference: &str, candidate: bool) -> String {
     }
     snap.source.palette_validation =
         Some(serde_json::from_value(serde_json::json!({"accepts": true})).unwrap());
-    let sentence = strata::render::acceptance_sentence(&snap).unwrap();
-    format!("{}: {sentence}\n", strata::TOOL_NAME)
+    let line = strata::render::acceptance_line(&snap).unwrap();
+    format!("{line}\n")
 }
 
 #[test]
@@ -8114,7 +8116,7 @@ fn validate_packs_sh_stage_1_says_that_palette_accepts_the_candidate_in_the_line
     stage.strata_err(
         "snapshot --from-candidate strata-validate-barney.yaml --validate *",
         0,
-        "palette    accepts\n",
+        &format!("{}\n", palette_line("accepts")),
     );
     let (_, steps) = stage.run("validate-packs.sh", &["1"]);
     failed(&steps, &["validate-accepts-says"]);
@@ -8133,8 +8135,11 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
         "snapshot --from-candidate exists.yaml --validate *",
         2,
         &format!(
-            "palette    refuses: {PROFILE_EXISTS_CODE}: Cluster Profile with name \
-             'strata-live-profile' and version '1.0.0' already exists\n"
+            "{}\n",
+            palette_line(&format!(
+                "refuses: {PROFILE_EXISTS_CODE}: Cluster Profile with name \
+                 'strata-live-profile' and version '1.0.0' already exists"
+            ))
         ),
     );
 
@@ -8192,6 +8197,30 @@ fn fred_document() -> serde_json::Value {
             {"name": "csi", "tag": "2.0.0", "type": "spectro", "values": "s: 1"}]}]}})
 }
 
+/// The text of `strata behind` on the record of the profile: the pin of `kubernetes` and its lines.
+/// The refusal of Palette is one of them, the words of [`upgrade_refused`]. With `refusal_last`,
+/// the refusal is the last line of the pin, as strata prints it. Else it is under the bump.
+fn bump_text(refusal_last: bool) -> String {
+    let errors: Vec<PaletteRefusal> =
+        serde_json::from_value(upgrade_refused()["errors"].clone()).unwrap();
+    let refusal = format!("palette {}", answer_lines(&errors)[0]);
+    let skip = MinorSkip::of("k8s", "kubernetes", "1.35.3", "1.37.0")
+        .unwrap()
+        .line();
+    let mut under = vec![
+        "bump to 1.37.0: repave IDENTITY".to_string(),
+        skip,
+        "pinned by bump-profile.json (strata-live-release@1.0.0)".to_string(),
+    ];
+    under.insert(if refusal_last { under.len() } else { 1 }, refusal);
+    let pin = "~ [k8s  ] 'pack:Public Repo/kubernetes@1.35.3'  behind: 1.37.0\n";
+    pin.to_string()
+        + &under
+            .iter()
+            .map(|l| format!("      {l}\n"))
+            .collect::<String>()
+}
+
 /// A stage 6 run of validate-packs.sh on the profile `strata-live-release@1.0.0` and the cluster
 /// `fred`. `strata behind --json` gives `report` for the record of the profile, and
 /// `cluster_report` for the record of the cluster. Gives steps.log.
@@ -8200,15 +8229,21 @@ fn bump_stage(report: &str, cluster_report: &str) -> (Stage, String) {
 }
 
 /// [`bump_stage`], where `arrange` changes the stage before the run, such as the answer of the
-/// route of the cluster.
+/// route of the cluster. An answer of strata that `arrange` gives comes first, so it wins.
 fn bump_stage_with(
     report: &str,
     cluster_report: &str,
-    arrange: impl FnOnce(&Stage),
+    arrange: impl FnOnce(&mut Stage),
 ) -> (Stage, String) {
     let mut stage = Stage::new(serde_json::json!({}));
     stage.env("PROFILE", "strata-live-release@1.0.0");
     stage.env("CLUSTER", "fred");
+    stage.route(&cluster_route(FRED_UID), &fred_document().to_string());
+    stage.route(
+        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
+        r#"{"profiles":[]}"#,
+    );
+    arrange(&mut stage);
     stage.strata(
         "snapshot strata-live-release@1.0.0 -o bump-profile.json",
         0,
@@ -8219,11 +8254,6 @@ fn bump_stage_with(
         0,
         &serde_json::json!({"source": {"cluster": {"uid": FRED_UID}}}).to_string(),
     );
-    stage.route(&cluster_route(FRED_UID), &fred_document().to_string());
-    stage.route(
-        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
-        r#"{"profiles":[]}"#,
-    );
     stage.strata("behind bump-profile.json --json", 1, report);
     stage.strata("behind bump-cluster.json --json", 1, cluster_report);
     stage.strata(
@@ -8231,15 +8261,7 @@ fn bump_stage_with(
         1,
         r#"{"pins":[{"name":"kubernetes","version":"1.35.3","behind":true}]}"#,
     );
-    stage.strata(
-        "behind bump-profile.json",
-        1,
-        &format!(
-            "~ [k8s  ] kubernetes  1.35.3  Public Repo  behind: 1.37.0\n      bump to 1.37.0: repave IDENTITY\n      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred\n      {}\n",
-            MinorSkip::of("k8s", "kubernetes", "1.35.3", "1.37.0").unwrap().line()
-        ),
-    );
-    arrange(&stage);
+    stage.strata("behind bump-profile.json", 1, &bump_text(true));
     let (o, steps) = stage.run("validate-packs.sh", &["6"]);
     assert!(
         steps.contains("== behind asks Palette"),
@@ -8276,6 +8298,18 @@ fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_pr
         !steps.contains("== a candidate whose") && !steps.contains("== the name route"),
         "stage 6 runs alone: {steps}"
     );
+}
+
+#[test]
+fn validate_packs_sh_stage_6_fails_when_the_refusal_of_palette_is_not_under_the_records_of_the_pin()
+{
+    let report = kubernetes_bump_report("1.37.0", &upgrade_refused());
+    // the order of the lines before #634: the refusal under the bump, and the record last
+    let (_, steps) = bump_stage_with(&report, &report, |stage| {
+        stage.strata("behind bump-profile.json", 1, &bump_text(false));
+    });
+    passed(&steps, &["bump-text-skip"]);
+    failed(&steps, &["bump-text-says"]);
 }
 
 #[test]
@@ -10081,7 +10115,7 @@ fn loop_sh_stage_5_asks_palette_about_the_bump_of_each_pin_that_the_nightly_job_
     let issue = std::fs::read_to_string(stage.path("out/upstream-asks.out")).unwrap();
     assert!(
         issue.contains(&format!(
-            "| 1.37.0 | 1.37.0: repave IDENTITY<br>palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred | - |"
+            "| 1.37.0 | 1.37.0: repave IDENTITY<br>palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on cluster fred | - |"
         )),
         "{issue}"
     );

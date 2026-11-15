@@ -46,19 +46,19 @@ echo "== packs shows the state of each version (#68)" | tee -a steps.log
 check states-disabled 0 '#68: packs lists a registry whose versions are all disabled' -- \
   "$strata" packs "$disabled" --registry "$disabled_reg"
 check states-disabled-says 0 '#120: the heading says disabled, and the states query gives the tags of 0.26.1' -- \
-  bash -c "head -1 states-disabled.out | grep -q 'disabled)\$' && grep -qE '^ *0\.26\.1 .* 0\.26\.1 0\.26\.x +disabled *\$' states-disabled.out"
+  bash -c "head -1 states-disabled.out | grep -q ', disabled\$' && grep -qE '^ *0\.26\.1 .* 0\.26\.1 0\.26\.x +disabled *\$' states-disabled.out"
 check states-deleted 0 '#68: packs lists a registry whose versions are all deleted' -- \
   "$strata" packs "$deleted" --registry "$disabled_reg"
 check states-deleted-says 0 '#120: the heading says deleted, and 1.0.6 has the tags 1.0.6 1.0.x 1.x' -- \
-  bash -c "head -1 states-deleted.out | grep -q 'deleted)\$' && grep -qE '^ *1\.0\.6 .* 1\.0\.6 1\.0\.x 1\.x +deleted *\$' states-deleted.out"
+  bash -c "head -1 states-deleted.out | grep -q ', deleted\$' && grep -qE '^ *1\.0\.6 .* 1\.0\.6 1\.0\.x 1\.x +deleted *\$' states-deleted.out"
 check states-deprecated 0 '#68: packs lists a registry whose versions are all deprecated' -- \
   "$strata" packs "$deprecated" --registry "$community"
 check states-deprecated-says 0 '#68: the heading says deprecated, and the version keeps its tags and says deprecated' -- \
-  bash -c "head -1 states-deprecated.out | grep -q 'deprecated)' && grep -qE '^ *$deprecated_version .* $deprecated_version .*deprecated *\$' states-deprecated.out"
+  bash -c "head -1 states-deprecated.out | grep -q ', deprecated\$' && grep -qE '^ *$deprecated_version .* $deprecated_version .*deprecated *\$' states-deprecated.out"
 check states-mark 0 '#125: packs lists a version with the mark disabled and no system_state' -- \
   "$strata" packs "$marked" --registry "$disabled_reg"
 check states-mark-says 0 '#125: the heading says disabled, and the row keeps its tags and says disabled' -- \
-  bash -c "head -1 states-mark.out | grep -q 'disabled)\$' && grep -qE '^ *$marked_version .* $marked_version .*disabled *\$' states-mark.out"
+  bash -c "head -1 states-mark.out | grep -q ', disabled\$' && grep -qE '^ *$marked_version .* $marked_version .*disabled *\$' states-mark.out"
 
 echo "== snapshot of a pack version in each state (#68)" | tee -a steps.log
 check snapshot-disabled 2 '#68: a disabled version is pack-unavailable' -- \

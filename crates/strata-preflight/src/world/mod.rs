@@ -290,12 +290,7 @@ impl World {
         let entity = entity_of(&cluster, &config, account_uid, &variables);
         Ok(World {
             cloud,
-            source: Ref::Cluster {
-                uid: uid.to_string(),
-                profile: None,
-                pending: false,
-            }
-            .to_string(),
+            source: Ref::cluster(uid).to_string(),
             entity,
             cluster_uid: Some(uid.to_string()),
             ..World::default()

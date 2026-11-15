@@ -1,11 +1,12 @@
 $ strata compare releases/1.1.0/dev.json cluster:search
 aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.1 on cluster search (uid 64f1000000000000000000e2)
 root       8a8a64d3f95d -> 088136c929bd   CHANGED
-consumers  aws-stack@1.1.0 has 2 consumers; search is not one of them
+consumers  aws-stack@1.1.0 has 2 consumers; cluster search is not one of them
 
   variables CHANGED
         + variable platform_owner (required)
 
+  5 packs: 1 changed, 0 added, 0 removed, 4 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged
   [cni  ] cni-cilium-oss             1.20.1             unchanged

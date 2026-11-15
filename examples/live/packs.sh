@@ -108,7 +108,7 @@ check packs-newest 0 '#54: the newest version is the first line, and it carries 
 check packs-latest 0 '#54: --latest gives one line for each registry that has the pack' -- \
   "$strata" packs "$pack" --latest
 check packs-two-registries 0 '#54: both registries of this tenant answer' -- \
-  bash -c "grep -c '^$pack in ' packs-latest.out | grep -qx 2"
+  bash -c "grep -c '^registry .*, pack $pack: ' packs-latest.out | grep -qx 2"
 # Palette serves /v1/packs 100 entries at a time. strata reads each entry of the name in all
 # registries, and then sorts the entries by registry. So the sum of all registries passes one
 # page, also when no single registry holds more than 100 versions of the pack.
@@ -117,13 +117,13 @@ check packs-paged-listing 0 '#180: the listing of kubernetes holds more entries 
 check packs-paged 0 '#54: a pack with more than 100 entries in the listing lists completely' -- \
   "$strata" packs kubernetes
 check packs-paged-count 0 '#180: the versions of all registries pass the 100 of one page' -- \
-  bash -c "grep -oE '^kubernetes in .* \([0-9]+ versions?' packs-paged.out | grep -oE '[0-9]+ versions?\$' | awk '{s += \$1} END {exit !(s > 100)}'"
+  bash -c "grep -oE '^registry .*, pack kubernetes: [0-9]+ versions?' packs-paged.out | grep -oE '[0-9]+ versions?\$' | awk '{s += \$1} END {exit !(s > 100)}'"
 check packs-cloud 0 '#54: --cloud keeps the versions of one cloud' -- \
   "$strata" packs kubernetes --registry "$reg" --cloud "$(out cloud)" --latest
 check packs-cloud-none 0 '#54: a cloud no version supports is an empty answer, not an error' -- \
   "$strata" packs kubernetes --registry "$reg" --cloud no-such-cloud
 check packs-cloud-none-says 0 '#54: and it says so' -- \
-  grep -q 'no version of kubernetes supports no-such-cloud' packs-cloud-none.out
+  grep -q 'no version of pack kubernetes supports no-such-cloud' packs-cloud-none.out
 check packs-json 0 '#54: --json writes strata-packs/1' -- \
   bash -c "\"$strata\" packs $pack --registry '$reg' --latest --json | jq -e '.schema == \"strata-packs/1\" and (.registries[0].versions[0].tags | length > 0)'"
 # strata orders versions by semantic version, as Palette does, so the highest version of a pack is
@@ -205,7 +205,7 @@ check arch-record 0 '#126: a record of loki 2.10.2 from the Public Repo' -- \
 check arch-behind 1 '#126: the record is behind 3.6.7' -- \
   "$strata" behind loki.json --no-impact
 check arch-behind-says 0 '#126: the line says that the move to 3.6.7 drops arm64' -- \
-  grep -Eq '^~ \[addon\] loki +2\.10\.2 +Public Repo +behind: .*3\.6\.7 \(drops arm64\)' arch-behind.out
+  grep -Eq "^~ \[addon\] .?pack:$reg/loki@2\.10\.2.? +behind: .*3\.6\.7 \(drops arm64\)" arch-behind.out
 check arch-behind-json 0 '#126: --json gives newer[].drops on 3.6.7' -- \
   bash -c "\"$strata\" behind loki.json --no-impact --json | jq -e '[.pins[0].newer[] | select(.version == \"3.6.7\") | .drops] == [[\"arm64\"]]'"
 

@@ -1,8 +1,9 @@
 # Errors
 
 An error exits `2`. Without `--json`, standard error gets one line that starts
-with `strata:`. With `--json --quiet`, standard error gets one JSON line. Use
-`--quiet`, or `STRATA_QUIET`, so that no progress note shares the stream:
+with `strata: error:`, in red on a terminal. With `--json --quiet`, standard
+error gets one JSON line. Use `--quiet`, or `STRATA_QUIET`, so that no progress
+note shares the stream:
 
 ```text
 {{#include ../output/auto-error.txt}}
@@ -112,7 +113,7 @@ Two `usage` errors can come after a request:
   [A name with no version](./refs.md#a-name-with-no-version).
 
 `snapshot` takes `--json` only with `--dir`. Without `--dir`, a `usage` error
-of `snapshot` prints as a `strata:` line.
+of `snapshot` prints as a `strata: error:` line.
 
 ## The refusals that a record or a cluster causes
 
@@ -345,8 +346,8 @@ A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.
 
 An error in the command line itself, such as a missing argument, comes from the
-argument parser. It exits `2` with its own message, with no `strata:` prefix and
-no JSON line, also with `--json`.
+argument parser. It exits `2` with its own message, with no `strata: error:`
+prefix and no JSON line, also with `--json`.
 
 `verify` with many files does not stop at a failed record. The record gets an
 `ERROR` line, and its entry in the summary has the `error` object.

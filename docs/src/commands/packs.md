@@ -8,6 +8,9 @@ pack, newest first, with the tags that point at each version.
 ...
 ```
 
+The heading of each registry names the kind of each name:
+`registry <registry>, pack <name>: <count>`. So each row below it gives one
+version, and a pack ref takes the two names: `pack:<registry>/<name>@<version>`.
 The columns are the version, the pack uid of that build, the pack type, the
 clouds it supports, and every tag that points at it. The exact tag comes first,
 then the floating tags above it: `1.65.0`, then `1.65.x`, then `1.x`.
@@ -106,9 +109,9 @@ no cloud type. `--cloud all` keeps each version. The JSON keeps `cloudTypes` as
 Palette gives it.
 
 A cloud that no version supports is an answer, and an empty one: exit `0` and
-one line, `no version of <name> supports <cloud>`. Without `--cloud`, a pack
-with no version that Palette serves is an empty answer too: `Palette serves no
-version of <name>`.
+one line, `no version of pack <name> supports <cloud>`. Without `--cloud`, a
+pack with no version that Palette serves is an empty answer too:
+`Palette serves no version of pack <name>`.
 One example is a pack with no FIPS compliant version.
 
 A registry the key cannot see is an error that lists the visible registries. A

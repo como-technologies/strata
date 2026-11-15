@@ -97,7 +97,7 @@ impact on running clusters.
 ```
 
 `--repave` sends the move of `payments` to `aws-stack@1.1.1` to Palette. The
-`palette` line gives the answer of Palette: no repave. The impact of step 5,
+last line, `palette`, gives the answer of Palette: no repave. The impact of step 5,
 `in-place`, agrees: it replaces no node. See
 [Ask Palette if the change repaves](./commands/compare/repave.md).
 

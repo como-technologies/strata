@@ -172,6 +172,47 @@ impl Ref {
             Ref::NameVersion { .. } | Ref::Uid(_) | Ref::Draft { .. }
         )
     }
+
+    /// `cluster:<uid>`: each profile that the cluster runs now.
+    pub fn cluster(uid: &str) -> Ref {
+        Ref::Cluster {
+            uid: uid.to_string(),
+            profile: None,
+            pending: false,
+        }
+    }
+
+    /// `edgehost:<uid>`: each profile that is bound to the edge host now.
+    pub fn edge_host(uid: &str) -> Ref {
+        Ref::EdgeHost {
+            uid: uid.to_string(),
+            profile: None,
+        }
+    }
+
+    /// `pack:<registry>/<name>@<version>`, or `pack:<name>@<version>` with no `registry`: the
+    /// version of the pack in any registry.
+    pub fn pack(registry: Option<&str>, name: &str, version: &str) -> Ref {
+        Ref::Pack {
+            registry: registry.map(str::to_string),
+            name: name.to_string(),
+            version: version.to_string(),
+        }
+    }
+
+    /// `pack:<registry>/<name>@<version>`, with the registry as [`registry_in_ref`] names it.
+    /// `pack:<name>@<version>` when the pack names no registry.
+    pub(crate) fn pack_in(registry: &str, registry_uid: &str, name: &str, version: &str) -> Ref {
+        Ref::pack(registry_in_ref(registry, registry_uid), name, version)
+    }
+
+    /// The ref as a person types it in a shell: in single quotes when it holds a space or another
+    /// character that the shell reads, as in `'pack:Public Repo/kubernetes@1.36.2'`.
+    ///
+    /// A report prints each ref that a person can copy here, so a copy pastes back as written.
+    pub fn shell_word(&self) -> String {
+        crate::text::shell_words(&[self.to_string()])
+    }
 }
 
 /// `<uid>/<profile>` or `<uid>`: the uid, and the profile when the text names one after the
@@ -193,24 +234,22 @@ fn pack_ref(text: &str) -> Option<Ref> {
     let registry = registry.filter(|r| !r.is_empty());
     // A pack ref with no registry prints with no `/` before the version. So a name with a `/` and
     // no registry is no pack ref: its text parses as another ref.
-    (!name.is_empty() && (registry.is_some() || !name.contains('/'))).then(|| Ref::Pack {
-        registry: registry.map(str::to_string),
-        name: name.to_string(),
-        version: version.to_string(),
-    })
+    (!name.is_empty() && (registry.is_some() || !name.contains('/')))
+        .then(|| Ref::pack(registry, name, version))
 }
 
 /// The text that names a registry in a pack ref: its name, or its uid when the name is empty or
-/// holds a `/`.
+/// holds a `/`. `None` when that text is empty: the pack names no registry, and its ref names none.
 ///
 /// Palette takes a `/` in the name of a registry and in the name of a pack. [`pack_ref`] ends the
 /// registry at the first `/`, so that a pack name can hold one. A uid holds no `/`.
-pub(crate) fn registry_in_ref<'a>(name: &'a str, uid: &'a str) -> &'a str {
-    if name.contains('/') {
+pub(crate) fn registry_in_ref<'a>(name: &'a str, uid: &'a str) -> Option<&'a str> {
+    let text = if name.contains('/') {
         uid
     } else {
         crate::text::name_or_uid(name, uid)
-    }
+    };
+    Some(text).filter(|t| !t.is_empty())
 }
 
 /// The cluster ref `cluster:<uid>[/<profile>][@pending]`, when `text` is one.

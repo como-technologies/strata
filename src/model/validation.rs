@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::json::{arr, text};
-use crate::text::and_list;
+use crate::text::{and_list, plural};
 
 /// Palette's answer to `POST /v1/spectroclusters/{uid}/validate/packs`, for one cluster.
 ///
@@ -120,15 +120,22 @@ pub struct PaletteRefusal {
 }
 
 impl PaletteRefusal {
-    /// `<code> on <clusters>` for an error about clusters. Else `<code> <pack>: <message>`, with
-    /// no pack for a refusal of the whole request.
+    /// `<code> on cluster <cluster>` for an error about clusters. Else `<code> for pack <pack>:
+    /// <message>`, with no pack for a refusal of the whole request. The words `cluster` and
+    /// `pack` name the kind of each name, also with no color.
     pub fn line(&self) -> String {
         if !self.clusters.is_empty() {
-            format!("{} on {}", self.code, and_list(&self.clusters))
+            let n = self.clusters.len();
+            format!(
+                "{} on {} {}",
+                self.code,
+                plural(n, "cluster", "clusters"),
+                and_list(&self.clusters)
+            )
         } else if self.pack.is_empty() {
             format!("{}: {}", self.code, self.message)
         } else {
-            format!("{} {}: {}", self.code, self.pack, self.message)
+            format!("{} for pack {}: {}", self.code, self.pack, self.message)
         }
     }
 
@@ -201,7 +208,7 @@ impl PaletteRefusal {
 }
 
 /// The lines of an answer of Palette to `--validate`: `accepts` when there is no error, or else
-/// one line for each error, such as `refuses: PackDependencyNotFound strata-live-pack:
+/// one line for each error, such as `refuses: PackDependencyNotFound for pack strata-live-pack:
 /// <message>`.
 pub fn answer_lines(errors: &[PaletteRefusal]) -> Vec<String> {
     if errors.is_empty() {
@@ -314,7 +321,7 @@ mod tests {
         assert_eq!(named.clusters, ["edge", "prod-10", "stage_1"]);
         assert_eq!(
             named.line(),
-            "PackDependencyNotFound on edge, prod-10, and stage_1"
+            "PackDependencyNotFound on clusters edge, prod-10, and stage_1"
         );
 
         // a message that names no candidate leaves the error as Palette gave it
@@ -322,7 +329,10 @@ mod tests {
         assert!(none.clusters.is_empty());
         assert_eq!(
             none.line(),
-            format!("PackDependencyNotFound kubernetes: {}", error.message)
+            format!(
+                "PackDependencyNotFound for pack kubernetes: {}",
+                error.message
+            )
         );
         assert_eq!(error.naming(&[]).clusters, Vec::<String>::new());
     }
@@ -335,7 +345,7 @@ mod tests {
             clusters: vec!["payments".to_string()],
             ..refusal()
         };
-        assert_eq!(on.line(), "PackDependencyNotFound on payments");
+        assert_eq!(on.line(), "PackDependencyNotFound on cluster payments");
         let json = serde_json::to_value(&on).unwrap();
         assert_eq!(json["clusters"], json!(["payments"]));
         assert_eq!(serde_json::from_value::<PaletteRefusal>(json).unwrap(), on);

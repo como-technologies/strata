@@ -77,7 +77,7 @@ script that omits it gets the notes and the JSON line together:
 {{#include ../output/auto-error.txt}}
 ```
 
-Without `--json`, the line is the message after `strata:`:
+Without `--json`, the line is the message after `strata: error:`:
 
 ```text
 {{#include ../output/auto-error-text.txt}}
@@ -88,7 +88,10 @@ fields.
 
 ## Progress messages
 
-Strata writes progress messages to standard error. `--quiet` stops them.
+Strata writes progress messages to standard error. Each one starts with
+`strata:`, a warning with `strata: warning:`, and an error with `strata: error:`:
+see [The look of each line](../reference/formats.md#the-look-of-each-line).
+`--quiet` stops the messages and the warnings.
 [Settings](../reference/settings.md) names the variable that does the same.
 
 ## Send the report of a new value

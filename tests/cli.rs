@@ -6,15 +6,14 @@ use std::path::{Path, PathBuf};
 
 use strata::diff::DIFF_SCHEMA;
 use strata::ops::{CHAIN_SCHEMA, VERIFY_SUMMARY_SCHEMA};
+use strata::render::palette_line;
 use strata::snapshot::{SNAPSHOT_SCHEMA, Tier};
 
 use common::{
-    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, Run, Stand, UID_A, UID_B,
-    against_closed_port, isolate_palette, listed, project_listing, read_json, schema,
-    schema_values, snapshot_from_raw, strata_command, write_record,
+    CLUSTER_LISTING, ESC, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, Run, Stand, UID_A,
+    UID_B, against_closed_port, error_text, isolate_palette, listed, project_listing, read_json,
+    schema, schema_values, snapshot_from_raw, strata_command, strip_ansi, write_record,
 };
-
-const ESC: char = '\x1b';
 
 fn run_in(args: &[&str], envs: &[(&str, &str)], clear: &[&str]) -> Run {
     let mut c = strata_command();
@@ -710,21 +709,57 @@ fn color_policy() {
     assert!(strip_ansi(&full).contains("--- a: addon/prometheus-operator manifest extra-rules"));
 }
 
-fn strip_ansi(s: &str) -> String {
-    let mut out = String::new();
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == ESC {
-            for n in chars.by_ref() {
-                if n == 'm' {
-                    break;
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
+/// Issue #634: each line of standard error has the look of its class, and its text keeps the class
+/// with no color. A note is dim, and an error is red with the word `error:`.
+#[test]
+fn a_note_is_dim_an_error_is_red_and_with_no_color_each_keeps_its_prefix() {
+    let fx = fixtures();
+    let dir = tempfile::tempdir().unwrap();
+    let record = dir.path().join("b.json");
+    let raw = fx.raw.join("b");
+    let note = [
+        "snapshot",
+        "--from-raw",
+        raw.to_str().unwrap(),
+        "-o",
+        record.to_str().unwrap(),
+    ];
+    // snapshot has no --color: the environment and the stream decide
+    let dim = run_in(
+        &note,
+        &[("CLICOLOR_FORCE", "1")],
+        &["NO_COLOR", "STRATA_QUIET"],
+    );
+    assert!(
+        dim.err.starts_with(&format!("{ESC}[2mstrata: wrote ")),
+        "{:?}",
+        dim.err
+    );
+    let plain = run_in(&note, &[], &["NO_COLOR", "CLICOLOR_FORCE", "STRATA_QUIET"]);
+    assert!(plain.err.starts_with("strata: wrote "), "{}", plain.err);
+    assert_eq!(strip_ansi(&dim.err), plain.err);
+
+    let missing = dir.path().join("missing.json");
+    let error = ["compare", missing.to_str().unwrap(), &fx.b];
+    let red = run(&[&error[..], &["--color=always"]].concat());
+    assert_eq!(red.code, 2);
+    assert!(
+        red.err.starts_with(&format!("{ESC}[31m{}", error_text(""))),
+        "{:?}",
+        red.err
+    );
+    let plain = run(&error);
+    assert!(plain.err.starts_with(&error_text("")), "{}", plain.err);
+    assert_eq!(strip_ansi(&red.err), plain.err);
+    // NO_COLOR wins over CLICOLOR_FORCE on standard error too, and --no-color wins over both
+    let none = run_in(&error, &[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "1")], &[]);
+    assert_eq!(none.err, plain.err);
+    let flag = run_in(
+        &[&error[..], &["--no-color"]].concat(),
+        &[("CLICOLOR_FORCE", "1")],
+        &["NO_COLOR"],
+    );
+    assert_eq!(flag.err, plain.err);
 }
 
 #[test]
@@ -1083,7 +1118,10 @@ fn a_cluster_snapshot_from_raw_compares_against_profile_records() {
         (r, out.to_str().unwrap().to_string())
     };
     let uid = common::CLUSTER_UID;
-    let (r, on_b) = cluster("cluster-b", &format!("cluster:{uid}"));
+    let (r, on_b) = cluster(
+        "cluster-b",
+        &strata::reference::Ref::cluster(uid).to_string(),
+    );
     assert_eq!(r.code, 0, "{}", r.err);
 
     let r = run(&["compare", &fx.b, &on_b]);
@@ -2280,7 +2318,7 @@ fn snapshot_validate_of_a_draft_is_a_usage_error_that_names_the_draft_and_the_ca
         &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
     );
     assert_eq!(r.code, 2, "{}", r.err);
-    assert!(r.err.starts_with("strata: --validate "), "{}", r.err);
+    assert!(r.err.starts_with(&error_text("--validate ")), "{}", r.err);
     assert!(r.err.contains("(aws-stack@1.1.1@draft)"), "{}", r.err);
     assert!(
         r.err.contains("`strata candidate aws-stack@1.1.1@draft`"),
@@ -2370,8 +2408,10 @@ fn snapshot_macros_names_the_refs_it_takes_and_refuses_another_before_any_reques
         assert_eq!(r.code, 2, "{reference}: {}", r.err);
         assert_eq!(
             r.err.trim_end(),
-            "strata: --macros takes <name>@<version>, a profile uid, cluster:<cluster>, or \
-             clustergroup:<group>",
+            error_text(
+                "--macros takes <name>@<version>, a profile uid, cluster:<cluster>, or \
+                 clustergroup:<group>"
+            ),
             "{reference}"
         );
     }
@@ -2459,11 +2499,11 @@ fn snapshot_of_a_set_with_no_dir_says_what_records_each_cluster_before_any_reque
         assert_eq!(r.code, 2, "{reference}: {}", r.err);
         assert_eq!(
             r.err.trim_end(),
-            format!(
-                "strata: {reference} names a set of clusters, and this command reads one: \
+            error_text(&format!(
+                "{reference} names a set of clusters, and this command reads one: \
                  `strata snapshot {reference} --dir DIR` records each cluster, and \
                  `strata list clusters` lists them"
-            ),
+            )),
             "{reference}"
         );
     }
@@ -2487,7 +2527,7 @@ fn snapshot_validate_with_no_profile_to_ask_about_is_a_usage_error_before_any_re
         );
         assert_eq!(r.code, 2, "{args:?}: {}", r.err);
         assert!(
-            r.err.starts_with("strata: --validate "),
+            r.err.starts_with(&error_text("--validate ")),
             "{args:?}: {}",
             r.err
         );
@@ -2651,15 +2691,20 @@ fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
 }
 
 /// Issue #633. On a terminal, the record on standard output came after the answer of Palette, and
-/// hid it. So the sentence of an accept is the last line, after the record, also with `-o` and
-/// with `-q`. A refusal keeps its lines of errors, and its error is the last line.
+/// hid it. So the line of an accept is the last line, after the record, also with `-o` and with
+/// `-q`. Issue #634: the line has no prefix `strata:`, so it does not read as a note. A refusal keeps
+/// its lines of errors, and its error is the last line.
 #[test]
 fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
     let validate_route = format!("{}/validate/packs", common::profile_route(UID_A));
     let mut routes = barney_tenant();
     routes.insert(validate_route.clone(), serde_json::json!({}));
     let stand = Stand::new(routes.clone(), "p-dev");
-    let sentence = "strata: Palette accepts the packs of 'barney@1.0.0' as an update of itself\n";
+    let accepts = palette_line("accepts");
+    let sentence = format!(
+        "{}\n",
+        palette_line("accepts the packs of 'barney@1.0.0' as an update of itself")
+    );
 
     let (code, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "--validate"]);
     assert_eq!(code, 0, "{text}");
@@ -2667,23 +2712,16 @@ fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
         .rsplit_once("}\n")
         .unwrap_or_else(|| panic!("no record: {text}"));
     assert_eq!(last, sentence, "{text}");
-    assert!(!record.contains("palette    accepts"), "{text}");
+    assert!(!record.contains(&accepts), "{text}");
     for args in [&["-o", "barney.json"][..], &["-q"][..]] {
         let args = [&["snapshot", "barney@1.0.0", "--validate"][..], args].concat();
         let (code, text) = stand.run_joined(&args);
         assert_eq!(code, 0, "{args:?}: {text}");
-        assert!(text.ends_with(sentence), "{args:?}: {text}");
-        assert_eq!(
-            text.matches("Palette accepts").count(),
-            1,
-            "{args:?}: {text}"
-        );
+        assert!(text.ends_with(&sentence), "{args:?}: {text}");
+        assert_eq!(text.matches(&accepts).count(), 1, "{args:?}: {text}");
     }
     let (_, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "-o", "barney.json"]);
-    assert!(
-        !text.contains("Palette accepts"),
-        "no question, no answer: {text}"
-    );
+    assert!(!text.contains(&accepts), "no question, no answer: {text}");
 
     routes.insert(
         validate_route,
@@ -2694,13 +2732,16 @@ fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
     let (code, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "--validate"]);
     assert_eq!(code, 2, "{text}");
     assert!(
-        text.ends_with(
-            "palette    refuses: PackDependencyNotFound cert-manager: a pack is missing\n\
-             strata: Palette refuses 'barney@1.0.0' with 1 error; strata wrote no record\n"
-        ),
+        text.ends_with(&format!(
+            "{}\n{}\n",
+            palette_line(
+                "refuses: PackDependencyNotFound for pack cert-manager: a pack is missing"
+            ),
+            error_text("Palette refuses 'barney@1.0.0' with 1 error; strata wrote no record")
+        )),
         "{text}"
     );
-    assert!(!text.contains("Palette accepts"), "{text}");
+    assert!(!text.contains(&accepts), "{text}");
 }
 
 /// Issue #625. `appprofile:<name>@latest` writes the note of the profile form, and names the

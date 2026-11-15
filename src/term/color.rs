@@ -116,9 +116,13 @@ impl Paint {
     }
 
     /// Wrap `s` in the SGR `code` when on.
+    ///
+    /// A part of `s` that has a color of its own keeps it, and `code` starts again after that
+    /// part. So a match in bold yellow stays in a cyan ref, and the rest of the ref stays cyan.
     pub fn c(&self, code: &str, s: &str) -> String {
         if self.on {
-            format!("\x1b[{code}m{s}\x1b[0m")
+            let again = format!("\x1b[0m\x1b[{code}m");
+            format!("\x1b[{code}m{}\x1b[0m", s.replace("\x1b[0m", &again))
         } else {
             s.to_string()
         }
@@ -172,6 +176,40 @@ impl Paint {
     pub fn dyellow(&self, s: &str) -> String {
         self.c("2;33", s)
     }
+
+    /// `line` in the look of its class: see [`LineClass`].
+    ///
+    /// A part of `line` that has a color of its own keeps it, as [`Paint::c`] keeps it. So the
+    /// verdict word `OK` stays green in a bold line.
+    pub fn line(&self, class: LineClass, line: &str) -> String {
+        match class {
+            LineClass::Output => line.to_string(),
+            LineClass::Progress => self.dim(line),
+            LineClass::Answer => self.bold(line),
+            LineClass::Warning => self.yellow(line),
+            LineClass::Error => self.red(line),
+        }
+    }
+}
+
+/// The class of a line that strata writes. Each class has one look, so that a person can find
+/// the answer of a check and a fault, also in a log with no color.
+///
+/// With no color, the text of the line keeps the class: a note starts with `strata:`, a warning
+/// with `strata: warning:`, and an error with `strata: error:`. The answer of a check has no
+/// prefix, and it is the last line of its check.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LineClass {
+    /// A note of what strata does, on standard error: dim.
+    Progress,
+    /// The report, on standard output: plain.
+    Output,
+    /// The answer of a check, such as `palette    accepts` or `OK:`: bold.
+    Answer,
+    /// A warning, on standard error: yellow.
+    Warning,
+    /// An error, on standard error: red.
+    Error,
 }
 
 #[cfg(test)]
@@ -217,6 +255,26 @@ mod tests {
         assert!(
             !colors(true, true, false, true),
             "NO_COLOR wins over CLICOLOR_FORCE"
+        );
+    }
+
+    #[test]
+    fn each_class_of_line_has_one_look_and_no_color_keeps_its_text() {
+        let on = Paint::resolve(ColorMode::Always, Stream::Stderr);
+        for (class, look) in [
+            (LineClass::Progress, "\x1b[2mx\x1b[0m"),
+            (LineClass::Output, "x"),
+            (LineClass::Answer, "\x1b[1mx\x1b[0m"),
+            (LineClass::Warning, "\x1b[33mx\x1b[0m"),
+            (LineClass::Error, "\x1b[31mx\x1b[0m"),
+        ] {
+            assert_eq!(on.line(class, "x"), look, "{class:?}");
+            assert_eq!(Paint::off().line(class, "x"), "x", "{class:?}");
+        }
+        // a word with a color of its own keeps it, and the bold starts again after it
+        assert_eq!(
+            on.line(LineClass::Answer, &format!("{}: done", on.green("OK"))),
+            "\x1b[1m\x1b[32mOK\x1b[0m\x1b[1m: done\x1b[0m"
         );
     }
 

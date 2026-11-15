@@ -1,7 +1,8 @@
 $ strata compare 'pack:Public Repo/csi-aws-ebs@1.65.0' 'pack:Palette Registry/csi-aws-ebs@1.65.0'
-pack csi-aws-ebs@1.65.0 (uid 6aa410ec144aaec79d547a9e)  ->  pack csi-aws-ebs@1.65.0 (uid 64ec000000000000000000b1)
+'pack:Public Repo/csi-aws-ebs@1.65.0' (uid 6aa410ec144aaec79d547a9e)  ->  'pack:Palette Registry/csi-aws-ebs@1.65.0' (uid 64ec000000000000000000b1)
 root       2aa9e638cf78 -> 65744f14f03f   CHANGED
 
+  1 pack: 1 changed, 0 added, 0 removed, 0 unchanged
 ~ [csi  ] csi-aws-ebs                1.65.0             IDENTITY UPSTREAM
       upstream digest: sha256:bd09e8b4187b -> sha256:a746e1468908 (packRef.digest)
       impact: cluster-wide infra addon update

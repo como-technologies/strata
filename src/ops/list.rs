@@ -695,12 +695,7 @@ pub(super) fn list_clusters<'a>(rows: impl IntoIterator<Item = &'a Value>) -> Ve
             let cloud_type =
                 listing_or_search(it, "/spec/cloudType", "/specSummary/cloudConfig/cloudType");
             ListedCluster {
-                reference: Ref::Cluster {
-                    uid: uid.clone(),
-                    profile: None,
-                    pending: false,
-                }
-                .to_string(),
+                reference: Ref::cluster(&uid).to_string(),
                 name: text(it, "/metadata/name"),
                 state: text(it, "/status/state"),
                 virtual_cluster: VirtualCluster::of_item(it, &cloud_type),

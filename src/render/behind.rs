@@ -4,7 +4,7 @@ use super::{count_of, entry_error, registry_sync_suffix};
 use crate::closed_set::impl_texts;
 use crate::model::validation::answer_lines;
 use crate::ops::{BehindReport, Pin, PinnedBy, ProfilePin};
-use crate::reference::{Ref, name_version, registry_in_ref};
+use crate::reference::{Ref, name_version};
 use crate::text::{and_list, shell_words};
 
 /// The state of a pin or of a profile version in the report of `behind`, as its status names it.
@@ -185,22 +185,20 @@ pub(crate) fn listed_since(pin: &Pin) -> Option<String> {
 /// command that gives what a move to it does.
 ///
 /// An example is `next patch 1.36.4: strata compare <pin> <patch>`, with the pack ref of each
-/// side, such as `'pack:Public Repo/kubernetes@1.36.2'`. The ref names the registry as
-/// [`registry_in_ref`] gives it, so that it parses. Strata sends no request for the line. None when
-/// the pin has no such patch: see [`Pin::next_patch`].
+/// side, such as `'pack:Public Repo/kubernetes@1.36.2'`: see [`pin_ref`]. Strata sends no request
+/// for the line. None when the pin has no such patch: see [`Pin::next_patch`].
 pub(crate) fn next_patch_line(pin: &Pin) -> Option<String> {
     let patch = pin.next_patch.as_deref()?;
-    let registry = registry_in_ref(&pin.registry, &pin.registry_uid);
-    let pack = |version: &str| {
-        Ref::Pack {
-            registry: Some(registry.to_string()),
-            name: pin.name.clone(),
-            version: version.to_string(),
-        }
-        .to_string()
-    };
+    let pack = |version: &str| pin_ref(pin, version).to_string();
     let command = shell_words(&["strata", "compare", &pack(&pin.version), &pack(patch)]);
     Some(format!("next patch {patch}: {command}"))
+}
+
+/// The pack ref of `pin` at `version`, in the registry of the pin, as
+/// `pack:<registry>/<name>@<version>`. The ref names the registry as
+/// [`registry_in_ref`](crate::reference::registry_in_ref) gives it, so that it parses.
+pub(crate) fn pin_ref(pin: &Pin, version: &str) -> Ref {
+    Ref::pack_in(&pin.registry, &pin.registry_uid, &pin.name, version)
 }
 
 /// `arrived: 1.65.0, 1.66.0`: the newer versions of a pin that arrived since the time of
@@ -211,10 +209,14 @@ pub(crate) fn arrived_line(pin: &Pin) -> Option<String> {
 }
 
 /// One line for each profile version that holds a pin that is behind, and has a newer version.
-/// Examples are `barney-addons@1.4.0 carries fred-compositions@0.2.0` and
-/// `no newer version of barney-addons@1.3.1 carries a newer fred-compositions`. When strata could
-/// not read a version, the line gives the error.
+/// Examples are `barney-addons@1.4.0 carries pack:fred-compositions@0.2.0` and `no newer version
+/// of barney-addons@1.3.1 carries a newer version of the pack fred-compositions`. When strata
+/// could not read a version, the line gives the error.
+///
+/// The ref of the carried pack names no registry. The newer version can take the pack from
+/// another registry, and strata does not read which one.
 pub(crate) fn carrier_lines(pin: &Pin) -> Vec<String> {
+    let newer = format!("a newer version of the pack {}", pin.name);
     pin.carriers
         .iter()
         .map(|c| {
@@ -223,13 +225,12 @@ pub(crate) fn carrier_lines(pin: &Pin) -> Vec<String> {
                 (Some(by), _) => format!(
                     "{} carries {}",
                     name_version(&c.profile, &by.version),
-                    name_version(&pin.name, &by.pack_version)
+                    Ref::pack(None, &pin.name, &by.pack_version).shell_word()
                 ),
                 (None, Some(msg)) => format!(
-                    "strata could not read which newer version of {held} carries a newer {} ({msg})",
-                    pin.name
+                    "strata could not read which newer version of {held} carries {newer} ({msg})"
                 ),
-                (None, None) => format!("no newer version of {held} carries a newer {}", pin.name),
+                (None, None) => format!("no newer version of {held} carries {newer}"),
             }
         })
         .collect()
@@ -253,10 +254,10 @@ fn newer_version(n: &crate::ops::Newer) -> String {
 }
 
 /// The answer of Palette about the bump of a pin, one line each: `palette accepts`, or `palette
-/// refuses: DependencyPackUpgradeNotSupported on payments` for each error. An error that names no
-/// cluster gives its pack and its message. When a request failed, or strata did not ask a record of
-/// another project, a line gives the message: `palette gave no answer: <message>`. Empty when
-/// Palette was not asked.
+/// refuses: DependencyPackUpgradeNotSupported on cluster payments` for each error. An error that
+/// names no cluster gives its pack and its message. When a request failed, or strata did not ask a
+/// record of another project, a line gives the message: `palette gave no answer: <message>`. Empty
+/// when Palette was not asked.
 pub(crate) fn palette_lines(pin: &Pin) -> Vec<String> {
     let Some(bump) = pin.bump.as_ref() else {
         return Vec::new();

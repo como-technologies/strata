@@ -1,2 +1,2 @@
 $ strata compare aws-stack@1.1.1 aws-stack@1.1.7 --validate
-strata: --validate needs one side that is a cluster and one that is a profile version
+strata: error: --validate needs one side that is a cluster and one that is a profile version

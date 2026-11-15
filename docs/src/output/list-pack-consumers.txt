@@ -7,7 +7,7 @@ aws-stack@1.0.0 (uid 64e0000000000000000000a1): no consumers
     edge hosts       none found
   scope: project profile, so only project dev can use it
 aws-stack@1.1.0 (uid 64e0000000000000000000b2): 1 consumer
-  payments  64f1000000000000000000e1  project dev  Running
+  cluster:64f1000000000000000000e1  payments  project dev  Running
   searched:
     consumer list    1 cluster, no cluster templates
     cluster search   1 other cluster with the profile: 0 on this version, 1 on other versions
@@ -15,7 +15,7 @@ aws-stack@1.1.0 (uid 64e0000000000000000000b2): 1 consumer
     edge hosts       none found
   scope: project profile, so only project dev can use it
 aws-stack@1.1.1 (uid 64e0000000000000000000c3): 1 consumer
-  search  64f1000000000000000000e2  project dev  Running
+  cluster:64f1000000000000000000e2  search  project dev  Running
   searched:
     consumer list    1 cluster, no cluster templates
     cluster search   1 other cluster with the profile: 0 on this version, 1 on other versions
@@ -24,7 +24,7 @@ aws-stack@1.1.1 (uid 64e0000000000000000000c3): 1 consumer
   scope: project profile, so only project dev can use it
 $ PALETTE_PROJECT_UID= PALETTE_PROJECT=prod strata consumers aws-stack@1.1.1
 aws-stack@1.1.1 (uid 64e1000000000000000000c3): 1 consumer
-  payments  64f1000000000000000000f1  project prod  Running
+  cluster:64f1000000000000000000f1  payments  project prod  Running
   searched:
     consumer list    1 cluster, no cluster templates
     cluster search   no other cluster with the profile

@@ -16,9 +16,10 @@ The first examples use the project `dev`, which holds `aws-stack@1.0.0` and
 {{#include ../output/retire-in-use.txt}}
 ```
 
-Exit `1`. Each line gives the name, uid, project, and state of a cluster. The
-project reads as its name, and as its uid when strata could not read the project
-listing. Strata reads the names from the project listing of the tenant, so a
+Exit `1`. Each line gives the ref, the name, the project, and the state of a
+cluster. The ref, `cluster:<uid>`, names the kind, and a copy of it pastes back
+into `strata snapshot` or `strata compare`. The project reads as its name, and
+as its uid when strata could not read the project listing. Strata reads the names from the project listing of the tenant, so a
 consumer in another project shows the name of its project too. `--json` gives
 the uid in `projectUid` and the name in `projectName`.
 
@@ -128,9 +129,10 @@ profile names clusters only, so strata reads each edge host the key can list:
 {{#include ../output/edge-consumers.txt}}
 ```
 
-An edge host line ends with `edge host`. The row `edge hosts` gives how many of
-the edge hosts of the search are bound to the version. `none found` says that
-the search names no edge host. See [A profile runs on edge hosts](../use-cases/edge-hosts.md).
+An edge host line starts with its ref, `edgehost:<uid>`. The row `edge hosts`
+gives how many of the edge hosts of the search are bound to the version.
+`none found` says that the search names no edge host. See
+[A profile runs on edge hosts](../use-cases/edge-hosts.md).
 
 ## Cluster templates
 
@@ -142,8 +144,9 @@ cluster runs the version. In `dev`, the template `aws-standard` links
 {{#include ../output/retire-template.txt}}
 ```
 
-Exit `1`. A template line ends with `cluster template`, and the row
-`consumer list` counts it. A template has no state, and it keeps no copy of the
+Exit `1`. No ref of strata reads a cluster template, so a template line starts
+with its uid and ends with `cluster template`. The row `consumer list` counts
+it. A template has no state, and it keeps no copy of the
 version. The profile document names each template, so a template costs no
 request.
 
@@ -165,9 +168,9 @@ Exit `0`. When an app deployment uses it:
 ```
 
 Exit `1`. Palette refuses the delete of an app profile while an app deployment
-uses it. An app deployment line ends with `app deployment`, and the state is
-the state of the deployment, for example `Deployed`. In `--json`, the kind of
-the consumer is `app`:
+uses it. An app deployment line starts with its uid and ends with
+`app deployment`. The state is the state of the deployment, for example
+`Deployed`. In `--json`, the kind of the consumer is `app`:
 
 ```text
 {{#include ../output/app-consumers-json.txt}}

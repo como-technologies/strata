@@ -133,7 +133,7 @@ fn behind_names_the_newer_published_version_of_a_profile_and_a_pre_release_only_
         "{text}"
     );
     assert!(
-        text.contains("~ [profile] barney-addons  1.3.1  project  behind: 1.4.0\n"),
+        text.contains("~ [profile] barney-addons@1.3.1  project  behind: 1.4.0\n"),
         "{text}"
     );
     assert!(
@@ -319,7 +319,7 @@ fn a_version_that_palette_no_longer_holds_is_gone_and_a_failed_read_is_not_check
     assert_eq!(r.exit_code(), 0);
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
-        text.contains("  [profile] barney-addons  1.3.1  -  gone\n"),
+        text.contains("  [profile] barney-addons@1.3.1  -  gone\n"),
         "{text}"
     );
 
@@ -337,7 +337,7 @@ fn a_version_that_palette_no_longer_holds_is_gone_and_a_failed_read_is_not_check
         "{text}"
     );
     assert!(
-        text.contains("  [profile] barney-addons  1.3.1  -  not checked\n"),
+        text.contains("  [profile] barney-addons@1.3.1  -  not checked\n"),
         "{text}"
     );
 }
@@ -760,7 +760,7 @@ fn a_move_that_strata_cannot_compare_makes_the_profile_version_not_checked() {
     assert_eq!(r.exit_code(), 2);
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
-        text.contains("~ [profile] barney-addons  1.3.1  project  not checked\n"),
+        text.contains("~ [profile] barney-addons@1.3.1  project  not checked\n"),
         "{text}"
     );
 }
@@ -874,13 +874,13 @@ fn behind_names_the_newer_profile_version_that_carries_the_newer_pack() {
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(
-            "      barney-addons@1.4.0 carries fred-compositions@0.2.0\n      pinned by "
+            "      barney-addons@1.4.0 carries pack:fred-compositions@0.2.0\n      pinned by "
         ),
         "the line comes before the records that pin the pack: {text}"
     );
     let markdown = common::markdown().render_behind(&r, false).unwrap();
     assert!(
-        markdown.contains("; barney-addons@1.4.0 carries fred-compositions@0.2.0 |"),
+        markdown.contains("; barney-addons@1.4.0 carries pack:fred-compositions@0.2.0 |"),
         "{markdown}"
     );
     let doc = serde_json::to_value(&r).unwrap();
@@ -917,11 +917,11 @@ fn behind_says_that_no_newer_profile_version_carries_a_newer_pack() {
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(
-            "      no newer version of barney-addons@1.3.1 carries a newer fred-compositions\n"
+            "      no newer version of barney-addons@1.3.1 carries a newer version of the pack fred-compositions\n"
         ),
         "{text}"
     );
-    assert!(!text.contains(" carries fred-compositions@"), "{text}");
+    assert!(!text.contains(" carries pack:fred-compositions@"), "{text}");
     let doc = serde_json::to_value(&r).unwrap();
     assert!(
         doc["pins"][0]["carriers"][0].get("carrier").is_none(),
@@ -944,7 +944,7 @@ fn a_newer_profile_version_that_pins_a_version_between_the_pin_and_the_newest_is
     );
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
-        text.contains("      barney-addons@1.4.0 carries fred-compositions@0.1.5\n"),
+        text.contains("      barney-addons@1.4.0 carries pack:fred-compositions@0.1.5\n"),
         "{text}"
     );
 
@@ -1022,7 +1022,7 @@ fn a_newer_profile_version_that_strata_cannot_read_gives_its_error_and_keeps_the
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(
-            "      strata could not read which newer version of barney-addons@1.3.1 carries a newer fred-compositions ("
+            "      strata could not read which newer version of barney-addons@1.3.1 carries a newer version of the pack fred-compositions ("
         ),
         "{text}"
     );
@@ -1256,7 +1256,7 @@ fn the_counts_of_the_heading_of_behind_add_up_to_the_pins_and_to_the_profile_ver
         assert_eq!(RowState::from_text(state.as_str()), Some(*state));
     }
     assert!(
-        text.contains("  [addon] loki          2.10.2  Public Repo  not checked\n"),
+        text.contains("  [addon] 'pack:Public Repo/loki@2.10.2'          not checked\n"),
         "{text}"
     );
 }
@@ -1275,13 +1275,13 @@ fn behind_only_omits_the_rows_that_are_current_and_keeps_the_heading_and_the_jso
     assert_eq!(
         rows,
         [
-            "~ [addon] kubernetes   1.36.2  Public Repo  behind: 1.37.0, 1.36.4, 1.36.3",
-            "~ [addon] ubuntu-aws   20.04   Public Repo  behind: 24.04, 22.04 (floating tag LTS__20.4.x)",
-            "~ [addon] csi-aws-ebs  1.63.1  Public Repo  not checked",
-            "  [addon] loki         2.10.2  Public Repo  not checked",
-            "~ [profile] aws-stack  1.0.0  -  behind: 1.1.0",
-            "  [profile] aws-stack  0.9.0  -  gone",
-            "  [profile] aws-stack  0.8.0  -  not checked",
+            "~ [addon] 'pack:Public Repo/kubernetes@1.36.2'   behind: 1.37.0, 1.36.4, 1.36.3",
+            "~ [addon] 'pack:Public Repo/ubuntu-aws@20.04'    behind: 24.04, 22.04 (floating tag LTS__20.4.x)",
+            "~ [addon] 'pack:Public Repo/csi-aws-ebs@1.63.1'  not checked",
+            "  [addon] 'pack:Public Repo/loki@2.10.2'         not checked",
+            "~ [profile] aws-stack@1.0.0  -  behind: 1.1.0",
+            "  [profile] aws-stack@0.9.0  -  gone",
+            "  [profile] aws-stack@0.8.0  -  not checked",
         ],
         "{text}"
     );
@@ -1409,11 +1409,7 @@ fn the_next_patch_of_a_registry_with_a_slash_in_its_name_gives_refs_that_parse_t
             .split(' ')
             .map(|word| Ref::parse_with(word, no_files))
             .collect();
-        let pack = |version: &str| Ref::Pack {
-            registry: Some(registry.to_string()),
-            name: name.to_string(),
-            version: version.to_string(),
-        };
+        let pack = |version: &str| Ref::pack(Some(registry), name, version);
         assert_eq!(refs, [pack("1.27.0"), pack("1.27.4")], "{line}");
     }
 }

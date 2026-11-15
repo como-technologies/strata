@@ -14,7 +14,7 @@ use strata::ops;
 use strata::reference::Ref;
 use strata::render::count_of;
 use strata::term::color::{ColorMode, Paint, Stream};
-use strata::term::progress::Progress;
+use strata::term::progress::{Progress, error_line};
 use strata::text::{dash, plural};
 use strata::timestamp::now_utc;
 use strata_preflight::confidence::{self, Ledger};
@@ -145,13 +145,14 @@ enum SchemaKind {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let json = format_of(&cli) == Format::Json;
+    let stderr_paint = paint_of(&cli, Stream::Stderr);
     match run_cli(cli) {
         Ok(code) => code,
         Err(e) => {
             if json {
                 eprintln!("{}", serde_json::json!({ "error": e.to_json() }));
             } else {
-                eprintln!("{TOOL_NAME}: {e}");
+                eprintln!("{}", error_line(TOOL_NAME, &e.to_string(), &stderr_paint));
             }
             ExitCode::from(2)
         }
@@ -198,7 +199,8 @@ fn ledger_of(cli: &Cli) -> Result<Ledger> {
 
 fn run_cli(cli: Cli) -> Result<ExitCode> {
     // --verbose asks for the lines, so it wins over STRATA_QUIET; --quiet wins over both
-    let progress = Progress::new(cli.quiet || (config::quiet_from_env() && !cli.verbose));
+    let progress = Progress::new(cli.quiet || (config::quiet_from_env() && !cli.verbose))
+        .painted(paint_of(&cli, Stream::Stderr));
     if let Some(kind) = cli.schema {
         return print_schema(kind);
     }

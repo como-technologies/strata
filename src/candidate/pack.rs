@@ -236,7 +236,11 @@ fn holding_registry<A: PaletteApi>(
             // lists the registries in the order it likes, and a live run saw both orders
             let mut registries: Vec<String> = several
                 .iter()
-                .map(|(registry, uid, _)| registry_in_ref(registry, uid).to_string())
+                .map(|(registry, uid, _)| {
+                    registry_in_ref(registry, uid)
+                        .unwrap_or_default()
+                        .to_string()
+                })
                 .collect();
             registries.sort();
             Err(Error::PackInSeveralRegistries {

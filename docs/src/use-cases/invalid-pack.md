@@ -57,7 +57,7 @@ Keep the record from step 1.
 
 `verify` exits `0`: the content is the recorded content. The line of the pack
 says `INVALID on side B`, with the reason. Side B is the version in Palette now.
-The line under the verdict names the pack again.
+The line above the verdict names the pack again.
 
 A new record of the version warns on standard error:
 

@@ -145,7 +145,7 @@ if stage 7 "Palette's check of the packs"; then
     bash -c "\"$strata\" compare cluster:$C/$release $R --validate --json | jq -e '.paletteValidation | .accepts == true and .clusterUid == \"$C\" and (has(\"errors\") | not)'"
   check validate-usage 2 "#134: two profile versions and no cluster: a usage error" -- \
     "$strata" compare "$R" "$AD" --validate
-  check validate-usage-says 0 "and it says what it needs" -- grep -q '^strata: --validate needs one side that is a cluster' validate-usage.err
+  check validate-usage-says 0 "and it says what it needs" -- grep -q '^strata: error: --validate needs one side that is a cluster' validate-usage.err
 fi
 
 if stage 8 "a profile variable in a repave key of a version that cluster A does not run"; then

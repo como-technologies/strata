@@ -11,9 +11,10 @@ that Palette holds, in either order:
 ```
 
 The `palette` line gives Palette's reason: the code, the pack, and the config
-keys that differ. Strata does not compare the values: Palette does. The key
-`kubeadmconfig.postKubeadmCommands` is on its list, and a change of a key that
-is not on it repaves nothing. A change of the CSI values does not:
+keys that differ. It is the answer of the check, so it is the last line of the
+report, in bold on a terminal. Strata does not compare the values: Palette does.
+The key `kubeadmconfig.postKubeadmCommands` is on its list, and a change of a
+key that is not on it repaves nothing. A change of the CSI values does not:
 
 ```text
 {{#include ../../output/repave-csi-lines.txt}}

@@ -5,7 +5,7 @@ strata: searching the clusters that run the version
 strata: reading the virtual clusters of the cluster groups that pin the version
 strata: reading each edge host for the profiles bound to it
 aws-stack@1.1.0 (uid 64e1000000000000000000b2): 1 consumer
-  payments  64f1000000000000000000f1  project prod  Running
+  cluster:64f1000000000000000000f1  payments  project prod  Running
   searched:
     consumer list    1 cluster, no cluster templates
     cluster search   no other cluster with the profile

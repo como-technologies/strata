@@ -302,9 +302,9 @@ while IFS= read -r group <&3; do
     # MinorSkip::line
     jq -r "$markdown_jq"' def and_list: if length < 3 then join(" and ") else (.[:-1] | join(", ")) + ", and " + .[-1] end;
       def refusal_line:
-        if (.clusters // [] | length) > 0 then "\(.code) on \(.clusters | and_list)"
+        if (.clusters // [] | length) > 0 then "\(.code) on \(if (.clusters | length) == 1 then "cluster" else "clusters" end) \(.clusters | and_list)"
         elif (.pack // "") == "" then "\(.code): \(.message)"
-        else "\(.code) \(.pack): \(.message)" end;
+        else "\(.code) for pack \(.pack): \(.message)" end;
       def palette_lines:
         (.paletteValidation // empty
           | if .accepts then "palette accepts" else (.errors // [])[] | "palette refuses: \(refusal_line)" end),
