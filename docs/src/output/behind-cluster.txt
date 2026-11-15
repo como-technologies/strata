@@ -1,17 +1,17 @@
 $ strata behind refused/payments.json
 5 pins (1 with a floating tag) from 1 record: 1 behind, 4 current; 1 profile version: 0 behind, 1 current
-  [addon] cert-manager    1.21.1  Public Repo  current
+  [addon] 'pack:Public Repo/cert-manager@1.21.1'    current
       pinned by refused/payments.json (aws-stack@1.1.11 on cluster payments)
-  [cni  ] cni-cilium-oss  1.20.1  Public Repo  current
+  [cni  ] 'pack:Public Repo/cni-cilium-oss@1.20.1'  current
       pinned by refused/payments.json (aws-stack@1.1.11 on cluster payments)
-~ [csi  ] csi-aws-ebs     1.63.1  Public Repo  behind: 1.65.0, 1.64.0
+~ [csi  ] 'pack:Public Repo/csi-aws-ebs@1.63.1'     behind: 1.65.0, 1.64.0
       1.65.0 listed since 2026-09-11T14:32:12.028Z
       bump to 1.65.0: cluster-wide IDENTITY UPSTREAM AUTHORED IMAGES CHARTS
-      palette refuses: DependencyPackUpgradeNotSupported on payments
       pinned by refused/payments.json (aws-stack@1.1.11 on cluster payments)
-  [k8s  ] kubernetes      1.36.2  Public Repo  current
+      palette refuses: DependencyPackUpgradeNotSupported on cluster payments
+  [k8s  ] 'pack:Public Repo/kubernetes@1.36.2'      current
       pinned by refused/payments.json (aws-stack@1.1.11 on cluster payments)
-  [os   ] ubuntu-aws      24.04   Public Repo  current (floating tag LTS__24.x, now 24.04)
+  [os   ] 'pack:Public Repo/ubuntu-aws@24.04'       current (floating tag LTS__24.x, now 24.04)
       pinned by refused/payments.json (aws-stack@1.1.11 on cluster payments)
-  [profile] aws-stack  1.1.11  project  current
+  [profile] aws-stack@1.1.11  project  current
       pinned by refused/payments.json (aws-stack@1.1.11 on cluster payments)

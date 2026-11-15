@@ -6,6 +6,7 @@ consumers  0 -> 0 clusters
 
   variables unchanged
 
+  5 packs: 4 changed, 0 added, 0 removed, 1 unchanged
 ~ [os   ] ubuntu-aws                 20.04 -> 24.04     IDENTITY UPSTREAM
       upstream digest: sha256:d7aee32a7be4 -> sha256:2df05daa4eb4 (packRef.digest)
       impact: node repave (OS image change)

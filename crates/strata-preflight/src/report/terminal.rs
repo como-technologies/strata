@@ -1,6 +1,6 @@
 //! The terminal form of a report.
 
-use strata::term::color::Paint;
+use strata::term::color::{LineClass, Paint};
 use strata::text::{cut, plural};
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
@@ -143,7 +143,8 @@ fn summary_lines(r: &Report, paint: &Paint) -> String {
     } else {
         paint.green(&s.verdict)
     };
-    out.push_str(&format!("{verdict}\n"));
+    // the verdict is the answer of the check: the last line, in the look of an answer
+    out.push_str(&format!("{}\n", paint.line(LineClass::Answer, &verdict)));
     out
 }
 

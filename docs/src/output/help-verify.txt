@@ -15,7 +15,7 @@ Options:
       --full                         Also give the unified diffs of the values and of each manifest of a drifted record
       --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]
       --json                         The same as --format json
-      --color [<COLOR>]              Color the report: auto, always, or never [default: auto]
+      --color [<COLOR>]              Color the report and the messages: auto, always, or never [default: auto]
       --no-color                     The same as --color=never
       --compact                      Write the JSON on one line
   -q, --quiet                        No progress messages, no note of an unknown value, and no warning of the send

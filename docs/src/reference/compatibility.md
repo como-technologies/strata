@@ -309,10 +309,23 @@ After 0.33.0, `snapshot::SecretLikeVariable`, `snapshot::Snapshot::secret_like_v
 clear and whose name reads as a secret. `ops::SetRecord` has a new field for them: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
-After 0.33.0, `render::refusal_lines` and `render::acceptance_sentence` are new. They give the
-answer of Palette in a record of `snapshot --validate`: one line for each error, or the sentence
-of an accept. The command line prints the sentence last, after the record: see
+After 0.33.0, `render::refusal_lines` and `render::acceptance_line` are new. They give the
+answer of Palette in a record of `snapshot --validate`: one line for each error, or the line
+of an accept. The command line prints the line of an accept last, after the record: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `term::color::LineClass` and `term::color::Paint::line` are new. They give the
+look of each class of line: a note, the report, the answer of a check, a warning, and an
+error. `term::progress::Progress::painted` gives the notes and the warnings that look, and
+`term::progress::error_line` gives the line of an error. See
+[The look of each line](./formats.md#the-look-of-each-line) and
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `reference::Ref::shell_word` gives a ref as a person types it in a shell.
+`reference::Ref::cluster` gives `cluster:<uid>`, `reference::Ref::edge_host` gives
+`edgehost:<uid>`, and `reference::Ref::pack` gives a pack ref, with a registry or with none.
+`ops::ConsumerKind::noun` is public: the noun of the kind of a consumer in a report, such as
+`cluster template`. See [The kind of each thing](./formats.md#the-kind-of-each-thing).
 
 After 0.33.0, `ops::ProjectsRead`, `ops::UnreadProject`, and `render::Reading` are new.
 `ops::ProjectsRead` names the projects that `consumers` searched one by one, and
@@ -1179,6 +1192,59 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the command line or of a document
 
+- **An error starts with `strata: error:`.** The line of an error on standard error reads
+  `strata: error: <message>`. Before, it read `strata: <message>`. A script that matches the
+  line, or cuts `strata: ` from it, must match the new prefix. `strata-preflight` writes
+  `strata-preflight: error: <message>`. With `--json`, the error is the same JSON object. See
+  [The look of each line](./formats.md#the-look-of-each-line).
+- **The answer of a check is the last line.** See
+  [The look of each line](./formats.md#the-look-of-each-line).
+  - `verify` prints the lines `who:` and `INVALID:` before the verdict. Before, they came
+    after it. A script that reads the verdict as the first line after the report must read
+    the last line.
+  - `compare --repave` and `compare --validate` print the `palette` lines at the end of the
+    report, after an empty line and after the diffs of `--full`. Before, they came after the
+    line `root`.
+  - `behind` prints the `palette` lines of a pin after its lines `pinned by`. Before, they came
+    after the line `bump to`. The line of an update check, such as a move that skips a minor
+    version, stays after the line `bump to`.
+  - `snapshot --validate` ends with the line `palette    accepts ...`, in the form of the line
+    `palette    refuses:`. Before, it ended with the note `strata: Palette accepts ...`.
+- **Each row names its thing by its ref.** A ref goes in single quotes when a shell reads a
+  character of it. So a copy pastes back into a shell. A script that reads the columns of a
+  row must read the new form, or read `--json`. See
+  [The kind of each thing](./formats.md#the-kind-of-each-thing).
+  - `packs` heads each registry with `registry <registry>, pack <name>: <count>`. Before, the
+    heading was `<name> in <registry> (<count>)`. A cut list and the notes of the registry
+    follow the count, such as `1 of 36 versions, deprecated`. The markdown heading changes in
+    the same way. The line of no version reads `no version of pack <name> supports <cloud>`,
+    or `Palette serves no version of pack <name>`.
+  - `behind` gives each pin as `[<layer>] <pack ref>  <status>`, and each profile version as
+    `[profile] <name>@<version>  <scope>  <status>`. Before, the name, the version, and the
+    registry or the scope were columns of their own. A carrier line reads
+    `<profile>@<version> carries pack:<name>@<version>`, with no registry. The line with no
+    carrier ends with `carries a newer version of the pack <name>`. The markdown cell of the
+    carriers changes in the same way.
+  - `consumers` starts each row with the ref of the consumer, `cluster:<uid>` or
+    `edgehost:<uid>`, and then its name. A cluster template and an app deployment have no
+    ref, so their row starts with the uid. Before, a row started with the name and then the
+    uid, and the row of an edge host ended with `edge host`.
+  - `compare` and `verify` give the line `<n> packs: <counts>` above the rows of the packs. A
+    pack side of the heading is its ref. Before, it read `pack <name>@<version>`. The line
+    `consumers` names a cluster as `cluster <name>`, also in the markdown.
+  - `snapshot` of a set prints `wrote <file>  cluster:<uid>  <name>  root <root>`, and
+    `could not record cluster:<uid> (<name>): <message>`. Before, it named
+    `cluster <name> (uid <uid>)`.
+  - A refusal of Palette reads `<code> on cluster <cluster>`, or
+    `<code> on clusters <a> and <b>`. A refusal of one pack reads
+    `<code> for pack <pack>: <message>`. Before, the clusters and the pack had no word of
+    their kind. This is so in `behind`, `compare --validate`, `snapshot --validate`, and the
+    markdown.
+- **Each class of line has a color on a terminal.** A note is dim, a warning is yellow, and
+  an error is red. The answer of a check is bold. A pack ref is cyan, the ref of a cluster or
+  an edge host is blue, and the name of a registry is magenta. A pipe, `NO_COLOR`,
+  and `--no-color` remove the color, and the text does not change. `CLICOLOR_FORCE` now colors
+  standard error too.
 - **The line `masked:` of `compare` and `verify` changes.**
   It reads `masked: <path>: the record holds ******** in place of the secret`. Before, it
   said `Palette serves ********`. Strata writes the mask over the console address of a pack
@@ -1188,12 +1254,14 @@ field, a value, an input, or an option is in the sections above.
   mark, as in a check of Palette. Before, the cut came first, and a part of a value could stay in the message.
   See [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
 
-- **A pack row of `list --packs` and `list --pack` ends with its registry.** The name of the
-  registry follows the version. When the key cannot see the registry, or when its name holds a
-  `/`, the row gives its uid. A `pack:` ref takes that text. A script that reads the text of a
-  row must read one more column, or read `--json`. With
-  `--format markdown`, the pack ends with `in` and the registry. See
+- **A pack row of `list --detail` and `list --pack` gives the ref of the pack.** It follows
+  the layer. A tag that the profile pins follows the ref as `(tag <tag>)`. Before,
+  the row gave the name and the version in columns, and no registry. A script that reads the
+  text of a row must read the new form, or read `--json`. See
   [The registry of each pack](../commands/list.md#the-registry-of-each-pack).
+  - When the key cannot see the registry, or when its name holds a `/`, the ref gives its uid.
+    A pack with no registry reads `pack <name> <version> (no registry)`.
+  - With `--format markdown`, the pack ends with `in` and the registry.
 - **A record, `compare`, `same-release`, and `list --packs` read the registry listing.** This
   is one more request, `GET /v1/registries/metadata`, when a pack names a registry. `compare`
   and `same-release` send it for each side that Palette answers, and `snapshot` of a set for
@@ -1404,14 +1472,15 @@ field, a value, an input, or an option is in the sections above.
     `K8sUpgradeNotSupported` and the next step.
   - A profile version can have that line under its bump. It can also have a line that
     starts with `the move adds the required variable`. That line names `InvalidVariable`.
-  - `compare --validate` prints each line as a `note` line under the `palette` lines. The
-    markdown gives each one as a `**Note:**`.
+  - `compare --validate` prints each line as a `note` line of the head. The `palette` lines
+    come last. The markdown gives each one as a `**Note:**`.
   - The markdown of `behind` adds each line to the cell of the bump.
 - **`snapshot --validate` gives the answer of Palette last, in a sentence.** Before, an accept
   was the line `palette    accepts`, before the record. On a terminal, the record on standard
   output hid it. Now the last line comes after the record, such as
-  `strata: Palette accepts the packs of 'aws-stack@1.1.1' as an update of itself`. A refusal
-  does not change. A script that reads `palette    accepts` must read the new line, or
+  `palette    accepts the packs of 'aws-stack@1.1.1' as an update of itself`. The error of a
+  refusal starts with `strata: error:`, as each error does. A script that reads
+  `palette    accepts` alone must read the new line, or
   `source.paletteValidation.accepts` of the record. See
   [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 - **`compare --help` says that the two sides can be of different kinds.** The help of `<B>`
@@ -1642,6 +1711,11 @@ field, a value, an input, or an option is in the sections above.
   names and the versions of many profiles. The next run gives the new title to
   the open issue of a record that still drifts. See
   [Drift issues](../automation/drift-issues.md).
+- **The issue of `upstream-report.sh` names the kind of each name of a refusal.** It writes the
+  line as `behind` does. A refusal in the bump cell reads `on cluster <cluster>`, or
+  `for pack <pack>:`. A script that reads the cell must read the new words.
+- **`pr-comment.sh --repave` passes on the error of strata as strata writes it.** The line on
+  standard error starts with `strata: error:`. The table still decides the label.
 - **`pr-comment.sh --repave` prints the new error of strata for two records.** It records each
   ref that is not a file. So for two profile versions, the line of strata on standard error says
   that both sides are records, and names the commands to use. The table still decides the
@@ -1649,6 +1723,16 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the library of strata
 
+- `term::color::Paint::c`, and each color method of `Paint`, keep the color of the text around
+  a part that has a color of its own. Before, the color stopped after that part. A program that
+  compares the codes of a colored text must compare the new codes.
+- The terminal renderer gives the new text of each command: see
+  [For a user of the command line or of a document](#for-a-user-of-the-command-line-or-of-a-document).
+  `render::Renderer::verdict` of the terminal gives the lines `who:` and `INVALID:` first, and
+  the verdict last. `model::validation::PaletteRefusal::line` names the kind of each name:
+  `<code> on cluster <cluster>`, or `<code> for pack <pack>: <message>`.
+- `term::progress::Progress::new` gives notes with no color, as before. Give the notes a color
+  with `Progress::painted`.
 - `snapshot::Pack` has the new field `registry_name`. `ops::ListedPack` has the new fields
   `registry_uid` and `registry`. A struct literal must set them, and a pattern with no `..`
   must name them.

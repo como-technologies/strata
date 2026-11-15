@@ -68,3 +68,43 @@ pub(super) fn table_line(
         .collect();
     format!("{indent}{}\n", cells.join("  "))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::term::color::{ColorMode, Stream};
+
+    #[test]
+    fn the_part_of_a_pack_name_that_matched_is_marked() {
+        let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
+        assert_eq!(
+            matched(&on, "cni-cilium-oss", Some("cilium")),
+            format!("cni-{}-oss", on.byellow("cilium")),
+            "the match is marked, and the rest of the name is not"
+        );
+        // the search ignores case, and the name keeps its own
+        assert_eq!(
+            matched(&on, "cni-Cilium-oss", Some("cilium")),
+            format!("cni-{}-oss", on.byellow("Cilium"))
+        );
+        // the padding of the column stays in the cell
+        assert_eq!(
+            matched(&on, "csi-aws-ebs   ", Some("aws")),
+            format!("csi-{}-ebs   ", on.byellow("aws"))
+        );
+
+        // nothing to mark, nothing to do
+        assert_eq!(matched(&on, "kubernetes", Some("cilium")), "kubernetes");
+        assert_eq!(matched(&on, "kubernetes", None), "kubernetes");
+        assert_eq!(matched(&on, "kubernetes", Some("")), "kubernetes");
+        // no color: the plain name, so a pipe and a file read the same
+        let off = Paint::off();
+        assert_eq!(
+            matched(&off, "cni-cilium-oss", Some("cilium")),
+            "cni-cilium-oss"
+        );
+        // text that is not ASCII is left alone, because lowercasing can change its length
+        assert_eq!(matched(&on, "pack-ß", Some("ß")), "pack-ß");
+        assert_eq!(matched(&on, "cilium", Some("CILIUM")), on.byellow("cilium"));
+    }
+}

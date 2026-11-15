@@ -6,6 +6,7 @@ note       pack app/web has no upstream digest: Palette gives none, so a change 
 
   variables unchanged
 
+  2 packs: 1 changed, 0 added, 0 removed, 1 unchanged
   [app  ] config                     1.0.0              unchanged
 ~ [app  ] web                        2.1.0              AUTHORED
       upstream unknown: no digest, so a change of the archive does not show

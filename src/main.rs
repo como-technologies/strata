@@ -5,6 +5,7 @@ use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches};
 use strata::error::Result;
+use strata::term::progress::error_line;
 use strata::{BOOK_URL, TOOL_NAME};
 
 mod cli;
@@ -91,6 +92,7 @@ fn main() -> ExitCode {
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
     let json = cli.json_selected();
     let progress = cli.cmd.progress();
+    let stderr_paint = cli.cmd.stderr_paint();
     let watching = cli::watch_unknown(progress);
     let code = match run(cli) {
         Ok(code) => code,
@@ -98,7 +100,7 @@ fn main() -> ExitCode {
             if json {
                 eprintln!("{}", serde_json::json!({ "error": e.to_json() }));
             } else {
-                eprintln!("{TOOL_NAME}: {e}");
+                eprintln!("{}", error_line(TOOL_NAME, &e.to_string(), &stderr_paint));
             }
             ExitCode::from(e.exit_code())
         }

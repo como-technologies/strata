@@ -97,7 +97,7 @@ Treat `2` as a failed job. It never means "no change".
 | `--format markdown` | Tables for a pull request comment or an issue. |
 | `--format json`, `--json` | A JSON document for a script. |
 | `--compact` | The JSON on one line. |
-| `--color auto\|always\|never`, `--no-color` | Color of the terminal text. |
+| `--color auto\|always\|never`, `--no-color` | Color of the terminal text, and of the messages on standard error. See [The look of each line](../reference/formats.md#the-look-of-each-line). |
 | `-q`, `--quiet` | No progress messages on standard error, no note of an unknown value, and no warning of the send. |
 
 [Report formats](../reference/formats.md) and

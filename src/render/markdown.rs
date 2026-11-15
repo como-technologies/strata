@@ -4,9 +4,9 @@ mod behind;
 mod consumers;
 
 use super::changes::{
-    OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, moved, plain_flags,
-    status_mark, status_word, tier_op_lines, traits_suffix, upstream_line, values_changed,
-    values_summary, values_unparsed_sentence, variable_lines, version_display,
+    OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, moved, pack_counts,
+    plain_flags, status_mark, status_word, tier_op_lines, traits_suffix, upstream_line,
+    values_changed, values_summary, values_unparsed_sentence, variable_lines, version_display,
 };
 use super::consumers::{consumer_count, consumer_counts, consumers_sentence};
 use super::list::{
@@ -116,13 +116,10 @@ fn result_section(d: &Diff) -> String {
         String::new()
     };
     o.push_str(&format!(
-        "**Result:** {} · max impact: `{}` · packs: {} changed, {} added, {} removed, {} unchanged{}\n\n",
+        "**Result:** {} · max impact: `{}` · packs: {}{}\n\n",
         diff_word(d),
         s.max_impact.as_str(),
-        s.packs_changed,
-        s.packs_added,
-        s.packs_removed,
-        s.packs_unchanged,
+        pack_counts(s),
         variables
     ));
     if let Some(sentence) = consumers_sentence(d) {
@@ -404,7 +401,7 @@ impl Renderer for MarkdownRenderer {
         for r in &l.registries {
             out.push_str(&format!(
                 "### {}\n\n",
-                markdown_cell(&registry_heading(l, r, str::to_string))
+                markdown_cell(&registry_heading(l, r, |_, name| name.to_string()))
             ));
             out.push_str("| version | tags | type | clouds | pack uid |\n");
             out.push_str("| --- | --- | --- | --- | --- |\n");

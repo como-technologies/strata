@@ -5,6 +5,7 @@ consumers  0 -> 0 clusters
 
   variables unchanged
 
+  5 packs: 2 changed, 0 added, 0 removed, 3 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
 ~ [k8s  ] kubernetes                 1.36.2-rc.1 -> 1.36.2 IDENTITY UPSTREAM
       upstream digest: sha256:4d277c9ef2dc -> sha256:c4f7f20f40c7 (packRef.digest)

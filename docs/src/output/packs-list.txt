@@ -1,5 +1,5 @@
 $ strata packs csi-aws-ebs --registry 'Public Repo'
-csi-aws-ebs in Public Repo (36 versions)
+registry Public Repo, pack csi-aws-ebs: 36 versions
   1.65.0  6aa410ec144aaec79d547a9e  spectro  eks,aws  1.65.0 1.65.x 1.x
   1.64.0  6a9d8e38f39026aa0c23cfe1  spectro  eks,aws  1.64.0 1.64.x
   1.63.1  6a75f441d410c3b5762fed2d  spectro  eks,aws  1.63.1 1.63.x

@@ -181,9 +181,9 @@ refusal of the whole request, for example values that are not YAML, names no
 pack. The API schema refuses two equal layers with HTTP 422, and the code is
 the number `610`. Fix the candidate, and ask again.
 
-When Palette takes the packs, strata writes the record. Then a sentence says
-what Palette accepts, as the last line. The record holds the answer in
-`source.paletteValidation`:
+When Palette takes the packs, strata writes the record. Then the line
+`palette    accepts` says what Palette accepts, as the last line. The record
+holds the answer in `source.paletteValidation`:
 
 ```text
 {{#include ../output/candidate-validate-accepts.txt}}

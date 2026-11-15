@@ -5,11 +5,11 @@ use std::path::Path;
 use super::changes::variable_path;
 use super::notes::marks_invalid;
 use super::verify::record_label;
-use super::{count_of, count_of_noun, entry_error, joined_note};
+use super::{Kind, count_of, count_of_noun, entry_error, joined_note};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::invalid_packs;
 use crate::ops::{ListKind, Listing, PackListing, Resolved, SetRecord, SetReport};
-use crate::reference::registry_in_ref;
+use crate::reference::{Ref, registry_in_ref};
 use crate::snapshot::{SecretLikeVariable, Snapshot};
 use crate::text::{and_list, dash, name_or_uid};
 
@@ -151,16 +151,16 @@ fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
     ])
 }
 
-/// `csi-aws-ebs in Public Repo (2 of 12 versions, deprecated)`: the heading of the versions that
-/// one registry offers.
+/// `registry Public Repo, pack csi-aws-ebs: 2 of 12 versions, deprecated`: the heading of the
+/// versions that one registry offers.
 ///
-/// The heading states what the registry holds. A flag that cuts the list says so, so that a
-/// reader never takes the count for the inventory of the registry. `strong` puts the name of the
-/// pack and of the registry in the form of the report.
+/// The heading names the kind of each name, so the rows below it give a version alone. It states
+/// what the registry holds. A flag that cuts the list says so, so that a reader never takes the
+/// count for the inventory of the registry. `named` puts each name in the form of the report.
 pub(crate) fn registry_heading(
     l: &PackListing,
     r: &crate::ops::PackRegistry,
-    strong: impl Fn(&str) -> String,
+    named: impl Fn(Kind, &str) -> String,
 ) -> String {
     let offered = count_of(r.versions_offered, "version");
     let count = if r.versions.len() == r.versions_offered {
@@ -172,9 +172,9 @@ pub(crate) fn registry_heading(
         .map(|n| format!(", {n}"))
         .unwrap_or_default();
     format!(
-        "{} in {} ({count}{note})",
-        strong(&l.name),
-        strong(&r.registry)
+        "registry {}, pack {}: {count}{note}",
+        named(Kind::Registry, &r.registry),
+        named(Kind::Pack, &l.name)
     )
 }
 
@@ -191,16 +191,16 @@ pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
 
 /// The one line of a listing that keeps no registry, or None when a registry has the pack.
 ///
-/// `no version of csi-aws-ebs supports edge-native` when `--cloud` left the listing empty.
-/// `Palette serves no version of csi-aws-ebs` with no `--cloud`: the registry gives no version a
-/// tag, so strata shows none.
+/// `no version of pack csi-aws-ebs supports edge-native` when `--cloud` left the listing empty.
+/// `Palette serves no version of pack csi-aws-ebs` with no `--cloud`: the registry gives no
+/// version a tag, so strata shows none.
 pub(crate) fn no_version_sentence(l: &PackListing) -> Option<String> {
     if !l.registries.is_empty() {
         return None;
     }
     Some(match &l.cloud {
-        Some(cloud) => format!("no version of {} supports {cloud}", l.name),
-        None => format!("Palette serves no version of {}", l.name),
+        Some(cloud) => format!("no version of pack {} supports {cloud}", l.name),
+        None => format!("Palette serves no version of pack {}", l.name),
     })
 }
 
@@ -236,11 +236,27 @@ pub(crate) fn cluster_count(n: usize, text: Option<&str>) -> String {
 /// A listed pack's version, with the tag when the profile pins another name for it:
 /// `24.04 (tag LTS__24.x)`.
 pub(crate) fn pack_version(pk: &crate::ops::ListedPack) -> String {
-    if pk.tag.is_empty() || pk.tag == pk.version {
-        pk.version.clone()
-    } else {
-        format!("{} (tag {})", pk.version, pk.tag)
+    match tag_note(pk) {
+        Some(tag) => format!("{} {tag}", pk.version),
+        None => pk.version.clone(),
     }
+}
+
+/// `(tag LTS__24.x)`, when the profile pins a listed pack under another name than its version.
+pub(crate) fn tag_note(pk: &crate::ops::ListedPack) -> Option<String> {
+    (!pk.tag.is_empty() && pk.tag != pk.version).then(|| format!("(tag {})", pk.tag))
+}
+
+/// The ref of a listed pack, as a row of the terminal names it: see [`listed_registry`]. `None`
+/// for a pack with no registry, such as a pack of manifests: no `pack:` ref can read it.
+pub(crate) fn listed_pack_ref(pk: &crate::ops::ListedPack) -> Option<Ref> {
+    listed_registry(pk).map(|registry| Ref::pack(Some(registry), &pk.name, &pk.version))
+}
+
+/// What a row of the terminal says of a pack with no registry: `pack namespace-labels 1.0.0 (no
+/// registry)`. The kind is in the text, and no ref claims to read the pack.
+pub(crate) fn unregistered_pack(pk: &crate::ops::ListedPack) -> String {
+    format!("pack {} {} (no registry)", pk.name, pk.version)
 }
 
 /// The registry that a profile takes a listed pack from, as a pack ref names it: see
@@ -249,7 +265,7 @@ pub(crate) fn pack_version(pk: &crate::ops::ListedPack) -> String {
 /// The row gives the uid when the key cannot see the registry, and when its name holds a `/`. The
 /// error `pack-in-several-registries` sends the person to this row for the registry of a ref.
 pub(crate) fn listed_registry(pk: &crate::ops::ListedPack) -> Option<&str> {
-    Some(registry_in_ref(&pk.registry, &pk.registry_uid)).filter(|r| !r.is_empty())
+    registry_in_ref(&pk.registry, &pk.registry_uid)
 }
 
 /// `2 of 3 clusters recorded, 1 removed; found by the search of Palette`: the counts of a set.

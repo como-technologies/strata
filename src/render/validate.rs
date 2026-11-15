@@ -18,13 +18,14 @@ pub fn refusal_lines(snap: &Snapshot) -> Vec<String> {
     }
 }
 
-/// The sentence that says that Palette accepts the record, such as `Palette accepts the packs of
-/// 'aws-stack@1.1.1' as an update of itself`. `None` when Palette refuses it, or strata did not ask.
+/// The line that says that Palette accepts the record, such as
+/// `palette    accepts the packs of 'aws-stack@1.1.1' as an update of itself`. `None` when
+/// Palette refuses it, or strata did not ask.
 ///
-/// It is the last line, after the record. So a record on standard output does not hide it on a
-/// terminal. It names what Palette checks: the name, the version, and the packs of a candidate, or
-/// the packs of a version as an update of itself.
-pub fn acceptance_sentence(snap: &Snapshot) -> Option<String> {
+/// It is the answer of the check, so it is the last line, after the record. So a record on
+/// standard output does not hide it on a terminal. It names what Palette checks: the name, the
+/// version, and the packs of a candidate, or the packs of a version as an update of itself.
+pub fn acceptance_line(snap: &Snapshot) -> Option<String> {
     let source = &snap.source;
     if !source
         .palette_validation
@@ -34,9 +35,9 @@ pub fn acceptance_sentence(snap: &Snapshot) -> Option<String> {
         return None;
     }
     let reference = &source.reference;
-    Some(if source.template == Template::Candidate {
-        format!("Palette accepts the name, the version, and the packs of '{reference}'")
+    Some(palette_line(&if source.template == Template::Candidate {
+        format!("accepts the name, the version, and the packs of '{reference}'")
     } else {
-        format!("Palette accepts the packs of '{reference}' as an update of itself")
-    })
+        format!("accepts the packs of '{reference}' as an update of itself")
+    }))
 }

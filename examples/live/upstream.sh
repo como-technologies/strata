@@ -119,7 +119,7 @@ check behind-csi 0 '#79: csi-aws-ebs 1.63.1 is behind the newer versions of the 
 check behind-release 0 '#79: each pin of the release version is checked: no error' -- \
   jq -e '[.pins[] | select(.pinnedBy | any(.path == "release.json"))] | length > 0 and all(.error == null)' run-1.json
 check behind-says 0 '#79: the report names each pin that is behind with its newer versions' -- \
-  bash -c "\"$strata\" behind records/own.json records/csi.json --no-impact | grep -Eq '^~ \\[addon\\] $PACK +1.0.0 +$REG_NAME +behind: 1.1.0$'"
+  bash -c "\"$strata\" behind records/own.json records/csi.json --no-impact | grep -Eq '^~ \\[addon\\] .?pack:$REG_NAME/$PACK@1\\.0\\.0.? +behind: 1.1.0$'"
 
 echo "== 2. the upstream report opens an issue for each pack behind" | tee -a steps.log
 check report-1 1 '#79: upstream-report.sh opens one issue for each pack behind: exit 1' -- \

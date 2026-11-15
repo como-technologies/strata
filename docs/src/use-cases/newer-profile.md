@@ -95,11 +95,11 @@ and no cost.
 The line under each pin names the newest profile version that carries a newer
 version of the pack:
 
-- `aws-stack@1.1.0 carries csi-aws-ebs@1.65.0`: the change of 1.65.0 reached the
+- `aws-stack@1.1.0 carries pack:csi-aws-ebs@1.65.0`: the change of 1.65.0 reached the
   profile, and 1.66.0 did not yet. The definition of the cluster still pins 1.0.0,
   so the move of the cluster is the step that waits.
-- `no newer version of aws-stack@1.0.0 carries a newer cert-manager`: the change
-  stopped at the registry. The pipeline of the profile is the step that waits.
+- `no newer version of aws-stack@1.0.0 carries a newer version of the pack cert-manager`:
+  the change stopped at the registry. The pipeline of the profile is the step that waits.
 
 See
 [The newer profile version that carries a newer pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).

@@ -10,6 +10,7 @@ root       b18fc230c0b9 -> b18fc230c0b9   IDENTICAL
   variables unchanged
   cluster tiers unchanged
 
+  8 packs: 0 changed, 0 added, 0 removed, 8 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged
   [cni  ] cni-cilium-oss             1.20.1             unchanged
@@ -25,6 +26,7 @@ root       b18fc230c0b9 -> b18fc230c0b9   IDENTICAL
   variables unchanged
   cluster tiers unchanged
 
+  8 packs: 0 changed, 0 added, 0 removed, 8 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged
   [cni  ] cni-cilium-oss             1.20.1             unchanged

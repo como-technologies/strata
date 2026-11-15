@@ -24,6 +24,7 @@ selects, and leaves every other file:
 {{#include ../../output/fleet-snapshot-again.txt}}
 ```
 
+Each line names the cluster by its ref, `cluster:<uid>`, and then by its name.
 Exit `0`, or `2` when strata could not record a cluster: the line of that
 cluster says why, and the other records are written. See
 [Find the fleet from Palette](../../use-cases/fleet.md).

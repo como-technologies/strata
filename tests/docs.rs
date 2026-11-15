@@ -18,6 +18,11 @@ use common::{
 use strata::TOOL_NAME;
 use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute};
 use strata::content::canonical_json;
+use strata::ops::ConsumerKind;
+use strata::reference::{
+    APP_PROFILE_PREFIX, CLUSTER_GROUP_PREFIX, CLUSTER_PREFIX, EDGE_HOST_PREFIX, PACK_PREFIX,
+};
+use strata::render::palette_line;
 
 fn docs() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src")
@@ -6395,7 +6400,9 @@ fn no_output_of_the_book_names_the_folder_of_the_runner() {
     }
     assert!(found.is_empty(), "the folder of the runner is in {found:?}");
     let report = read(&outputs.join("unknown-value-report-invalid.txt"));
-    assert!(report.contains("strata: ~/.local/state/strata/strata-unknown.jsonl: line 1 is not"));
+    assert!(report.contains(&common::error_text(
+        "~/.local/state/strata/strata-unknown.jsonl: line 1 is not"
+    )));
 }
 
 /// S9: a page includes the output of each step that the wave added to what a user sees. A row has
@@ -7311,4 +7318,313 @@ fn the_help_of_each_report_script_names_the_change_to_each_issue_for_a_dry_run()
         );
         assert_no_faults(&wording_faults(file, &help));
     }
+}
+
+// ---- the kind of each thing, and the answer of each check (#634) ---------------------------------
+
+/// One run of `strata` in an output of the book, with no pipe and no other command. It holds the
+/// file, the arguments after `strata`, and each line that the run printed.
+struct StrataRun {
+    file: String,
+    args: Vec<String>,
+    lines: Vec<String>,
+}
+
+impl StrataRun {
+    fn has(&self, flag: &str) -> bool {
+        self.args.iter().any(|a| a == flag)
+    }
+
+    /// True for a run of `verify` that prints one row for each record: `--summary`, a pattern, or
+    /// two records or more.
+    fn many_records(&self) -> bool {
+        let pattern = self.args.iter().any(|a| a.contains('*'));
+        let records = self.args.iter().filter(|a| a.ends_with(".json")).count();
+        self.has("--summary") || pattern || records > 1
+    }
+
+    /// True for a run that prints the terminal report: no `--json`, no `--format`, and no help.
+    fn terminal(&self) -> bool {
+        let flags = ["--json", "--help", "-h"];
+        !flags.iter().any(|f| self.has(f)) && !self.args.iter().any(|a| a.starts_with("--format"))
+    }
+
+    /// The last line that is not empty, or `None` when the output is an excerpt that cuts its end.
+    fn last(&self) -> Option<&str> {
+        let last = self.lines.iter().rev().find(|l| !l.is_empty())?;
+        (last != "...").then_some(last.as_str())
+    }
+}
+
+/// Each run of `strata` in the outputs of the book. A command line of a pipe, a loop, or a redirect
+/// is not one: another program printed some of its lines.
+fn strata_runs() -> Vec<StrataRun> {
+    let mut runs = Vec::new();
+    for file in walk(&docs().join("output")) {
+        let mut run: Option<StrataRun> = None;
+        for line in read(&file).lines() {
+            if let Some(command) = line.strip_prefix("$ ") {
+                runs.extend(run.take());
+                let plain = !["|", ";", ">", "&&", "$("]
+                    .iter()
+                    .any(|mark| command.contains(mark));
+                let mut words = command.split_whitespace().skip_while(|w| w.contains('='));
+                run = (plain && words.next() == Some("strata")).then(|| StrataRun {
+                    file: file.display().to_string(),
+                    args: words.map(str::to_string).collect(),
+                    lines: Vec::new(),
+                });
+            } else if let Some(r) = run.as_mut() {
+                r.lines.push(line.to_string());
+            }
+        }
+        runs.extend(run);
+    }
+    runs
+}
+
+/// The prefix of each ref of an object: a pack, a cluster, an edge host, a cluster group, and an
+/// app profile.
+const REF_PREFIXES: [&str; 5] = [
+    PACK_PREFIX,
+    CLUSTER_PREFIX,
+    EDGE_HOST_PREFIX,
+    CLUSTER_GROUP_PREFIX,
+    APP_PROFILE_PREFIX,
+];
+
+/// Each ref that `line` prints as a word, as it prints it: in single quotes when it holds a space.
+/// A ref inside another word, such as a value of JSON, and a ref with a placeholder, such as
+/// `cluster:<uid>`, are no such word.
+fn printed_refs(line: &str) -> Vec<String> {
+    let starts_word = |at: usize| at == 0 || line[..at].ends_with([' ', '(']);
+    let mut refs = Vec::new();
+    for prefix in REF_PREFIXES {
+        for (at, _) in line.match_indices(prefix) {
+            let word = if at > 0 && line[..at].ends_with('\'') && starts_word(at - 1) {
+                match line[at..].find('\'') {
+                    Some(end) => &line[at - 1..=at + end],
+                    None => continue,
+                }
+            } else if starts_word(at) {
+                let end = line[at..].find(' ').map_or(line.len(), |e| at + e);
+                line[at..end].trim_end_matches([',', ';', '.', ')', ':'])
+            } else {
+                continue;
+            };
+            // a word that ends at the prefix, such as the count `1 pack:`, names no object
+            let named = word.trim_matches('\'').len() > prefix.len();
+            if named && !word.contains('<') {
+                refs.push(word.to_string());
+            }
+        }
+    }
+    refs
+}
+
+/// The text that a shell gives strata for `word`: without its single quotes, with each `'\''`
+/// as a quote.
+fn shell_unquoted(word: &str) -> String {
+    match word.strip_prefix('\'').and_then(|w| w.strip_suffix('\'')) {
+        Some(inner) => inner.replace("'\\''", "'"),
+        None => word.to_string(),
+    }
+}
+
+#[test]
+fn each_ref_that_strata_prints_in_an_output_of_the_book_pastes_back_as_written() {
+    use strata::reference::Ref;
+    let mut kinds = BTreeSet::new();
+    for run in strata_runs() {
+        // a line of a JSON document, such as a record on standard output, prints no ref as a word
+        let report = |l: &&String| !l.trim_start().starts_with(['"', '{', '}', '[', ']']);
+        for line in run.lines.iter().filter(report) {
+            for word in printed_refs(line) {
+                let parsed = Ref::parse_with(&shell_unquoted(&word), |_| false);
+                let kind = match &parsed {
+                    Ref::Pack { .. } => "pack",
+                    Ref::Cluster { .. } => "cluster",
+                    Ref::EdgeHost { .. } => "edge host",
+                    Ref::ClusterGroup { .. } => "cluster group",
+                    Ref::AppProfile { .. } => "app profile",
+                    other => panic!("{}: {word} reads as {other:?}: {line}", run.file),
+                };
+                // the shell gives the word to strata, and strata reads the ref that it printed
+                assert_eq!(parsed.shell_word(), word, "{}: {line}", run.file);
+                kinds.insert(kind);
+            }
+        }
+    }
+    for kind in ["pack", "cluster", "edge host"] {
+        assert!(kinds.contains(kind), "no output prints the ref of a {kind}");
+    }
+}
+
+/// True for a row of `behind`: `~ [csi  ] <pack ref>  behind: ...` or `  [profile] ...`.
+fn behind_row(line: &str) -> bool {
+    line.starts_with("~ [") || line.starts_with("  [")
+}
+
+/// True for a row of a pack in `compare` and `verify`: its mark, and its layer in brackets.
+fn pack_row(line: &str) -> bool {
+    ["~ [", "  [", "+ [", "- ["]
+        .iter()
+        .any(|start| line.starts_with(start))
+}
+
+/// The faults of the rows of `run`: each row whose text does not name the kind of its thing.
+fn kind_faults(run: &StrataRun) -> Vec<String> {
+    let mut faults = Vec::new();
+    let mut fault = |line: &str| faults.push(format!("{}: {line}", run.file));
+    // a ref with a space starts with a quote, and the whitespace cuts the cell in two
+    let is_pack_ref = |cell: &str| cell.trim_start_matches('\'').starts_with(PACK_PREFIX);
+    match run.args.first().map(String::as_str) {
+        Some("list") => {
+            let mut profiles = false;
+            for line in &run.lines {
+                if !line.starts_with(' ') {
+                    profiles = line.contains(" profile");
+                } else if profiles && line.starts_with("    ") {
+                    // the layer, and then the ref of the pack or the words of a pack with none
+                    let cell = line.split_whitespace().nth(1).unwrap_or_default();
+                    if !is_pack_ref(cell) && cell != "pack" {
+                        fault(line);
+                    }
+                }
+            }
+        }
+        Some("behind") => {
+            for line in run.lines.iter().filter(|l| behind_row(l)) {
+                let cell = line.split("] ").nth(1).unwrap_or_default();
+                let profile = line.contains("[profile] ") && cell.contains('@');
+                if !profile && !is_pack_ref(cell) {
+                    fault(line);
+                }
+            }
+        }
+        Some("consumers") => {
+            let rows = run.lines.iter().skip(1).take_while(|l| *l != "  searched:");
+            for line in rows.filter(|l| l.starts_with("  ") && !l.starts_with("   ")) {
+                let named = [CLUSTER_PREFIX, EDGE_HOST_PREFIX]
+                    .iter()
+                    .any(|r| line.trim_start().starts_with(r))
+                    || [ConsumerKind::Template, ConsumerKind::App]
+                        .iter()
+                        .any(|kind| line.contains(&format!("  {}", kind.noun())));
+                if !named {
+                    fault(line);
+                }
+            }
+        }
+        Some("packs") => {
+            // a line of standard error starts with the name of the tool
+            let report = |l: &&String| {
+                !l.is_empty() && !l.starts_with(' ') && !l.starts_with(&format!("{TOOL_NAME}: "))
+            };
+            for line in run.lines.iter().filter(report) {
+                let heading = line.starts_with("registry ") && line.contains(", pack ");
+                if !heading && !line.contains("no version of pack ") {
+                    fault(line);
+                }
+            }
+        }
+        Some("compare" | "verify") if !run.has("--summary") => {
+            if let Some(heading) = run.lines.iter().find(|l| l.contains("  ->  "))
+                && (heading.starts_with("pack ") || heading.contains("  ->  pack "))
+            {
+                fault(heading);
+            }
+            // the rows of the packs come under a heading that names their kind
+            let first_row = run.lines.iter().position(|l| pack_row(l));
+            let heading = run.lines.iter().position(|l| {
+                let l = l.trim_start();
+                l.split_once(": ")
+                    .is_some_and(|(count, _)| count.ends_with(" pack") || count.ends_with(" packs"))
+            });
+            if let Some(row) = first_row
+                && !run.lines.contains(&"...".to_string())
+                && heading.is_none_or(|h| h > row)
+            {
+                fault(&run.lines[row]);
+            }
+        }
+        _ => {}
+    }
+    faults
+}
+
+/// The book is made with no color, as a pipe and a CI log show it. So each row of a report names
+/// the kind of its thing in its text. A row gives the ref of its thing, or the words of a kind with
+/// no ref. Or a heading above the rows names the kind.
+#[test]
+fn each_row_that_strata_prints_in_an_output_of_the_book_names_the_kind_of_its_thing() {
+    let runs: Vec<StrataRun> = strata_runs()
+        .into_iter()
+        .filter(StrataRun::terminal)
+        .collect();
+    for command in ["list", "behind", "consumers", "packs", "compare", "verify"] {
+        assert!(
+            runs.iter()
+                .any(|r| r.args.first().is_some_and(|a| a == command)),
+            "no output runs strata {command}"
+        );
+    }
+    let faults: Vec<String> = runs.iter().flat_map(kind_faults).collect();
+    assert!(faults.is_empty(), "{}", faults.join("\n"));
+}
+
+/// The faults of the answer of the check of `run`: a check whose answer is not its last line.
+fn answer_faults(run: &StrataRun) -> Option<String> {
+    let last = run.last()?;
+    // an error stops the check, and it is the last line
+    if last.starts_with(&common::error_text("")) {
+        return None;
+    }
+    let args: Vec<&str> = run.args.iter().map(String::as_str).collect();
+    let (palette, accepts) = (palette_line(""), palette_line("accepts "));
+    let answers: Vec<&str> = match args.as_slice() {
+        ["verify", ..] if run.many_records() => vec![" record: ", " records: "],
+        ["verify", ..] => vec!["OK: ", "DRIFT: ", "UNVERIFIED: "],
+        ["same-release", ..] => vec!["SAME RELEASE: ", "NOT THE SAME RELEASE: "],
+        ["compare", ..] if run.has("--validate") || run.has("--repave") => vec![&palette],
+        ["snapshot", ..] if run.has("--validate") => vec![&accepts],
+        _ => return None,
+    };
+    let answered = answers
+        .iter()
+        .any(|a| last.starts_with(a) || last.contains(a));
+    (!answered).then(|| format!("{}: strata {}: {last}", run.file, args.join(" ")))
+}
+
+/// The answer of a check is the last line that strata prints, so a terminal and a CI log show it
+/// at the end. In `behind`, the answer of Palette about the bump of a pin is the last line of the
+/// lines of the pin.
+#[test]
+fn the_answer_of_each_check_is_the_last_line_that_strata_prints_in_an_output_of_the_book() {
+    let runs: Vec<StrataRun> = strata_runs()
+        .into_iter()
+        .filter(StrataRun::terminal)
+        .collect();
+    let mut faults: Vec<String> = runs.iter().filter_map(answer_faults).collect();
+    let mut answers = 0;
+    for run in runs
+        .iter()
+        .filter(|r| r.args.first().is_some_and(|a| a == "behind"))
+    {
+        for (at, line) in run.lines.iter().enumerate() {
+            if !line.starts_with("      palette ") {
+                continue;
+            }
+            answers += 1;
+            let next = run.lines.get(at + 1).map(String::as_str);
+            let last_of_pin = next.is_none_or(|n| {
+                n.is_empty() || n == "..." || behind_row(n) || n.starts_with("      palette ")
+            });
+            if !last_of_pin {
+                faults.push(format!("{}: {line}", run.file));
+            }
+        }
+    }
+    assert!(answers > 0, "no output of behind asks Palette");
+    assert!(faults.is_empty(), "{}", faults.join("\n"));
 }

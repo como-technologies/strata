@@ -37,7 +37,7 @@ pub use json::JsonRenderer;
 pub use list::{invalid_pack_warnings, secret_like_notes, set_counts_line};
 pub use markdown::MarkdownRenderer;
 pub use terminal::TerminalRenderer;
-pub use validate::{acceptance_sentence, refusal_lines};
+pub use validate::{acceptance_line, refusal_lines};
 
 /// The output formats. On the command line, each is its name in lower case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -67,9 +67,11 @@ pub trait Renderer {
     /// document. The terminal renderer and the markdown renderer give no error.
     fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String>;
 
-    /// One line that states the outcome of `verify`.
+    /// The line that states the outcome of `verify`, after the lines of `--who` and of each pack
+    /// that Palette marks invalid.
     ///
-    /// `None` for a diff with no verify, and for the formats whose document carries the outcome.
+    /// The terminal puts the verdict last, because it is the answer of the check. `None` for a
+    /// diff with no verify, and for the formats whose document carries the outcome.
     fn verdict(&self, _d: &Diff) -> Option<String> {
         None
     }
@@ -184,6 +186,35 @@ pub(crate) fn key_line(key: &str, text: impl std::fmt::Display) -> String {
 /// One line of the answer of Palette, as a report prints it: `palette    accepts`.
 pub fn palette_line(line: &str) -> String {
     key_line("palette", line)
+}
+
+/// The kind of a thing that the terminal report names, which gives its color.
+///
+/// The color is a second channel. The text names the kind also with no color: a ref, such as
+/// `pack:Public Repo/kubernetes@1.36.2` or `cluster:<uid>`, or a heading or a word of the kind,
+/// such as `2 registries` or `registry Public Repo`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Kind {
+    /// A profile version, as `<name>@<version>`: bold.
+    Profile,
+    /// A pack version, as `pack:<registry>/<name>@<version>`: cyan.
+    Pack,
+    /// A cluster, an edge host, or a cluster group, as `cluster:<uid>` or `edgehost:<uid>`: blue.
+    Cluster,
+    /// A registry: magenta.
+    Registry,
+}
+
+impl Kind {
+    /// `text` in the color of the kind.
+    pub(crate) fn paint(self, p: &Paint, text: &str) -> String {
+        match self {
+            Kind::Profile => p.bold(text),
+            Kind::Pack => p.cyan(text),
+            Kind::Cluster => p.blue(text),
+            Kind::Registry => p.magenta(text),
+        }
+    }
 }
 
 /// `state` in the color of a cluster state.
@@ -320,6 +351,21 @@ mod tests {
         ] {
             assert_eq!(paint_state(&on, state), painted, "{state}");
             assert_eq!(paint_state(&Paint::off(), state), state, "{state}");
+        }
+    }
+
+    #[test]
+    fn each_kind_has_one_color_and_no_color_keeps_its_text() {
+        use crate::term::color::{ColorMode, Stream};
+        let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
+        for (kind, painted) in [
+            (Kind::Profile, on.bold("x")),
+            (Kind::Pack, on.cyan("x")),
+            (Kind::Cluster, on.blue("x")),
+            (Kind::Registry, on.magenta("x")),
+        ] {
+            assert_eq!(kind.paint(&on, "x"), painted, "{kind:?}");
+            assert_eq!(kind.paint(&Paint::off(), "x"), "x", "{kind:?}");
         }
     }
 

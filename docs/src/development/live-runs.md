@@ -977,13 +977,13 @@ mark `disabled`. These are the stages and the options:
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `validate-accepts`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` writes the record with `source.paletteValidation` `{"accepts": true}` |
-| `validate-accepts-says` | 0 | #633: the line `strata: Palette accepts the name, the version, and the packs of '<file>'` says that Palette takes the candidate. No result yet: the line is new, and no live window ran it |
+| `validate-accepts-says` | 0 | #633, #634: the last line, `palette    accepts the name, the version, and the packs of '<file>'`, says that Palette takes the candidate. No result yet: the line is new, and no live window ran it |
 | `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152, #242: strata sends values that are not YAML to Palette. Palette refuses the whole request, `PackValuesYamlInvalid`, with no pack. Strata exits `2` and writes no record |
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`. It refuses the whole request with `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`. The import validate route gives it with HTTP 500. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `validate-version` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
-| `validate-version-says` | 0 | #633: the line `strata: Palette accepts the packs of '<ref>' as an update of itself` says that Palette takes the version. No result yet: the line is new, and no live window ran it |
+| `validate-version-says` | 0 | #633, #634: the last line, `palette    accepts the packs of '<ref>' as an update of itself`, says that Palette takes the version. No result yet: the line is new, and no live window ran it |
 | `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, `Cluster Profile with name '<name>' and version '<version>' already exists`. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
 | `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |
@@ -1004,7 +1004,7 @@ mark `disabled`. These are the stages and the options:
 | `bump-pair` | 0 | #166, #623: the newest version of `kubernetes` is two minor versions or more above the pin. `bump.updateChecks.skippedMinor` of `behind` says so. |
 | `bump-asked` | 0 | #166: `behind` asks the route of the version, and the bump of `kubernetes` holds an answer of Palette in `bump.paletteValidation`. |
 | `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. |
-| `bump-text-says` | 0 | #166: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on <clusters>` under the bump. |
+| `bump-text-says` | 0 | #166, #634: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on cluster <cluster>`, or `on clusters <clusters>`, under the `pinned by` line of the pin. No result yet: no live window ran this form of the check. |
 | `bump-text-skip` | 0 | #623: `behind` prints `kubernetes <pin> -> <newest> skips a minor version: Palette refuses the update with K8sUpgradeNotSupported` under the bump. No result yet: no live window ran the check. |
 | `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
 | `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
@@ -1020,10 +1020,11 @@ mark `disabled`. These are the stages and the options:
 | `variables-accepts`, `variables-says` | 0 | #623: the route accepts the packs, and `updateChecks.requiredVariables.names` holds the required variables that the move adds. No result yet: no live window ran stage 7. |
 | `variables-update`, `variables-refused` | 0 | #623: Palette refuses the update with HTTP 500 and `InvalidVariable`, the code that `requiredVariables.code` names. The message names a variable of `requiredVariables.names`. No result yet: no live window ran stage 7. |
 
-Each check of stage 6 but `bump-text-skip` passes on cluster A, built on
-Kubernetes 1.35.8. That version is two minor versions under the newest version
-of the registry, 1.37.0. The stage exits `0`. `bump-text-skip` has no result
-yet: no live window ran the check.
+Each check of stage 6 but `bump-text-says` and `bump-text-skip` passes on
+cluster A, built on Kubernetes 1.35.8. That version is two minor versions under
+the newest version of the registry, 1.37.0. The stage exits `0`. The two checks
+have no result yet: no live window ran `bump-text-skip`, or the form of
+`bump-text-says` that reads the place of the line.
 
 Stage 7 can use cluster A on Kubernetes 1.35.8 too. `SKIP` is then a version of
 the release profile with Kubernetes 1.37.0. `VARIABLES` is a version of the
@@ -1394,7 +1395,7 @@ registry of the example, and no cluster. It empties the registry at its end.
 | `behind-own` | 0 | #79: the pack at 1.0.0 is behind 1.1.0, with the impact of the bump |
 | `behind-csi` | 0 | #79: `csi-aws-ebs` 1.63.1 is behind the newer versions of the Public Repo, and the bump names `IDENTITY` |
 | `behind-release` | 0 | #79: each pin of the release version is checked |
-| `behind-says` | 0 | #79: the report line is `~ [addon] <pack> 1.0.0 <registry> behind: 1.1.0` |
+| `behind-says` | 0 | #79, #634: the report line is `~ [addon] pack:<registry>/<pack>@1.0.0  behind: 1.1.0`, with the ref of the pin. No result yet: no live window ran this form of the check |
 | `report-1`, `report-1-issues`, `report-1-first` | 1, 0, 0 | #79: `upstream-report.sh` opens one issue for each pack behind, and each says that this run is the first to find it behind |
 | `push-1.2.0`, `sync-3` | 0 | a third version arrives |
 | `behind-since`, `behind-arrived` | 1, 0 | #79: `--since` the first run names 1.2.0 as arrived, and nothing of `csi-aws-ebs` |

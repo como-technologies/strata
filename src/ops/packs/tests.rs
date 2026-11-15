@@ -404,7 +404,7 @@ fn latest_keeps_the_version_of_palette_when_it_is_not_the_newest_and_names_it() 
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(
         lines[0],
-        "strata-live-dep in strata-live-registry (2 of 3 versions)"
+        "registry strata-live-registry, pack strata-live-dep: 2 of 3 versions"
     );
     assert!(
         lines[1].starts_with("  1.30.0.1 ") && !lines[1].contains("Palette"),
@@ -475,7 +475,7 @@ fn a_version_with_no_digest_says_so_on_its_row_and_the_heading_does_not() {
     let lines: Vec<&str> = terminal.lines().collect();
     assert_eq!(
         lines[0],
-        "strata-live-dep in strata-live-registry (2 versions)"
+        "registry strata-live-registry, pack strata-live-dep: 2 versions"
     );
     assert!(
         lines[1].starts_with("  1.0.2 ") && !lines[1].contains("digest"),
@@ -509,7 +509,7 @@ fn a_registry_with_no_digest_for_each_version_says_no_digests_in_the_heading_als
     let lines: Vec<&str> = terminal.lines().collect();
     assert_eq!(
         lines[0],
-        "strata-live-dep in strata-live-registry (1 of 2 versions, no digests)"
+        "registry strata-live-registry, pack strata-live-dep: 1 of 2 versions, no digests"
     );
     assert!(
         lines[1].starts_with("  1.0.2 ") && lines[1].ends_with("no digest"),

@@ -6,6 +6,7 @@ root       088136c929bd -> 487f5e18aa69   CHANGED
         - variable platform_owner (required)
   cluster tiers unchanged
 
+  5 packs: 0 changed, 0 added, 5 removed, 0 unchanged
 - [os   ] ubuntu-aws                 24.04              REMOVED
       impact: node repave (os pack removed)
 - [k8s  ] kubernetes                 1.36.2             REMOVED

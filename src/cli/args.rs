@@ -107,6 +107,13 @@ impl Cmd {
         }
     }
 
+    /// The color of standard error for the command: by its `--color` and `--no-color`, or by
+    /// the environment and the stream for a command with no such flag.
+    pub(crate) fn stderr_paint(&self) -> Paint {
+        self.out()
+            .map_or_else(stderr_paint_auto, OutputArgs::stderr_paint)
+    }
+
     /// The progress notes of the command, as `--quiet` and `STRATA_QUIET` decide. A command that
     /// reads nothing from Palette writes none.
     pub(crate) fn progress(&self) -> Progress {
@@ -134,7 +141,7 @@ pub(crate) struct OutputArgs {
     /// The same as --format json
     #[arg(long, conflicts_with = "format")]
     pub(crate) json: bool,
-    /// Color the report: auto, always, or never
+    /// Color the report and the messages: auto, always, or never
     #[arg(long, value_enum, default_value = "auto", num_args = 0..=1,
           default_missing_value = "always", hide_possible_values = true)]
     pub(crate) color: ColorMode,
@@ -172,9 +179,17 @@ pub(crate) struct QuietArgs {
 }
 
 impl QuietArgs {
+    /// The notes of a command with no `--color`: the environment and the stream decide their
+    /// color.
     pub(crate) fn progress(&self) -> Progress {
-        progress(self.quiet)
+        progress(self.quiet).painted(stderr_paint_auto())
     }
+}
+
+/// The color of standard error for a command with no `--color`. `NO_COLOR`, `CLICOLOR_FORCE`,
+/// `TERM`, and a terminal decide it.
+pub(crate) fn stderr_paint_auto() -> Paint {
+    Paint::resolve(ColorMode::Auto, Stream::Stderr)
 }
 
 /// `--project` and `--project-name`, for each command that reads Palette.
@@ -247,11 +262,16 @@ impl OutputArgs {
     pub(crate) fn paint(&self) -> Paint {
         Paint::resolve(self.color.unless(self.no_color), Stream::Stdout)
     }
+    /// The color of standard error, by the flags of the report: the notes, the warnings, and the
+    /// error.
+    pub(crate) fn stderr_paint(&self) -> Paint {
+        Paint::resolve(self.color.unless(self.no_color), Stream::Stderr)
+    }
     pub(crate) fn renderer(&self) -> Box<dyn render::Renderer> {
         render::renderer(self.format(), self.paint(), self.compact.compact)
     }
     pub(crate) fn progress(&self) -> Progress {
-        self.quiet.progress()
+        progress(self.quiet.quiet).painted(self.stderr_paint())
     }
 }
 

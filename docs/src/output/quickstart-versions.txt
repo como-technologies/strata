@@ -6,6 +6,7 @@ consumers  1 -> 0 clusters
   variables CHANGED
         + variable platform_owner (required)
 
+  5 packs: 1 changed, 0 added, 0 removed, 4 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged
   [cni  ] cni-cilium-oss             1.20.1             unchanged

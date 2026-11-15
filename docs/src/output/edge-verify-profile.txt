@@ -6,6 +6,7 @@ consumers  platform-addons@1.0.0 has no consumers
 
   variables unchanged
 
+  1 pack: 1 changed, 0 added, 0 removed, 0 unchanged
 ~ [addon] namespace-policy           1.0.0              AUTHORED
       ~ manifest namespace-policy
       impact: in-place addon upgrade

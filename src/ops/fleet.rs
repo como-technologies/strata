@@ -547,11 +547,7 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let reference = Ref::Cluster {
-        uid: cluster.uid.clone(),
-        profile: None,
-        pending: false,
-    };
+    let reference = Ref::cluster(&cluster.uid);
     let scope = scope_of(&cluster.project_uid);
     let snap = super::snapshot_in(
         &reference,

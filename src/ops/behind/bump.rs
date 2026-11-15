@@ -315,12 +315,7 @@ fn bump_of<A: PaletteApi>(
             Some(&pin.registry_uid),
             &pin.name,
             version,
-            &Ref::Pack {
-                registry: None,
-                name: pin.name.clone(),
-                version: version.to_string(),
-            }
-            .to_string(),
+            &Ref::pack(None, &pin.name, version).to_string(),
             at,
             progress,
         )

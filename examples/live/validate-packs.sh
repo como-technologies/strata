@@ -81,8 +81,8 @@ if [ "$stage" = all ] || [ "$stage" = 1 ]; then
   candidate strata-validate-barney ""
   check validate-accepts 0 '#152: snapshot --from-candidate --validate writes the record when Palette takes the packs' -- \
     "$strata" snapshot --from-candidate strata-validate-barney.yaml --validate -o barney.json
-  check validate-accepts-says 0 '#152, #633: it says in a sentence that Palette accepts the candidate' -- \
-    grep -qx "strata: Palette accepts the name, the version, and the packs of 'strata-validate-barney.yaml'" validate-accepts.err
+  check validate-accepts-says 0 '#152, #633, #634: the last line says that Palette accepts the candidate' -- \
+    bash -c "tail -n 1 validate-accepts.err | grep -qx \"palette    accepts the name, the version, and the packs of 'strata-validate-barney.yaml'\""
   check validate-accepts-record 0 '#152: the record holds source.paletteValidation.accepts true' -- \
     jq -e '.source.paletteValidation == {"accepts": true}' barney.json
 fi
@@ -137,8 +137,8 @@ if [ "$stage" = all ] || [ "$stage" = 3 ]; then
     echo "== a version that Palette holds, as an update of itself (#152)" | tee -a steps.log
     check validate-version 0 "#152: snapshot $PROFILE --validate asks the route of an update, and Palette takes the version as it is" -- \
       "$strata" snapshot "$PROFILE" --validate -o version.json
-    check validate-version-says 0 '#152, #633: it says in a sentence that Palette accepts the packs of the version' -- \
-      grep -qx "strata: Palette accepts the packs of '$PROFILE' as an update of itself" validate-version.err
+    check validate-version-says 0 '#152, #633, #634: the last line says that Palette accepts the packs of the version' -- \
+      bash -c "tail -n 1 validate-version.err | grep -qx \"palette    accepts the packs of '$PROFILE' as an update of itself\""
     echo "== a candidate with the name and the version of $PROFILE (#273)" | tee -a steps.log
     {
       echo "name: ${PROFILE%@*}"
@@ -277,8 +277,11 @@ if [ "$stage" = 6 ]; then
     check bump-clusters 0 '#166: the message of the error names a cluster that runs the version' -- \
       jq -e "$kubernetes_pin | .bump.paletteValidation.errors | map(.clusters | length) | max > 0" bump-behind.out
     check bump-text '?' '#166: behind prints the answer under the bump' -- "$strata" behind bump-profile.json
-    check bump-text-says 0 '#166: palette refuses, with the code and the clusters' -- \
-      grep -Eq '^      palette refuses: DependencyPackUpgradeNotSupported on .+' bump-text.out
+    # a line with no indent starts a pin, so `pinned` holds only for the lines of one pin
+    check bump-text-says 0 '#166, #634: palette refuses, with the code and the clusters, under the records of the pin' -- \
+      awk '!/^      / { pinned = 0 } /^      pinned by / { pinned = 1 }
+        pinned && /^      palette refuses: DependencyPackUpgradeNotSupported on clusters? .+/ { found = 1 }
+        END { exit !found }' bump-text.out
     check bump-text-skip 0 '#623: behind says that the move skips a minor version, and that the update refuses it' -- \
       grep -Eq '^      kubernetes .+ skips a minor version: Palette refuses the update with ' bump-text.out
     check bump-no-impact '?' '#166: --no-impact sends no request to a validate route' -- \

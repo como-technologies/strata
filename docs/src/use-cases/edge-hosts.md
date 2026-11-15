@@ -31,7 +31,8 @@ page has two seeds. Each section names the one it needs.
 ```
 
 Exit `1`: one cluster and two edge hosts use the version. An edge host line
-ends with `edge host`.
+starts with its ref, `edgehost:<uid>`, and a copy of it pastes back into
+`strata snapshot`.
 
 ## 2. Record an edge host
 

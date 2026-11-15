@@ -1733,3 +1733,36 @@ pub fn serve_pack_files(
         api.with_file(download_route(&s.source.uid), bytes)
     })
 }
+
+// ---- the color of a terminal ---------------------------------------------------------------------
+
+/// The escape character that starts each code of color.
+pub const ESC: char = '\x1b';
+
+/// `s` with no code of color: the text that a pipe, a file, or a CI log with no color shows.
+pub fn strip_ansi(s: &str) -> String {
+    let mut out = String::new();
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == ESC {
+            for n in chars.by_ref() {
+                if n == 'm' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The line of an error of strata with no color, `strata: error: <message>`, as
+/// [`strata::term::progress::error_line`] writes it.
+pub fn error_text(message: &str) -> String {
+    strata::term::progress::error_line(
+        strata::TOOL_NAME,
+        message,
+        &strata::term::color::Paint::off(),
+    )
+}

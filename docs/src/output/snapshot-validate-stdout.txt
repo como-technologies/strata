@@ -3605,4 +3605,4 @@ strata: fetching profile 64e0000000000000000000c3
   "root": "088136c929bd2837cf59ab12920367187654c128964cea737c28b98e13f79dc4",
   "contentDigest": "6e91f0d29a8aaa6799a9978b501bebc0065a9a2f0385f09d84677d642d0309a2"
 }
-strata: Palette accepts the packs of 'aws-stack@1.1.1' as an update of itself
+palette    accepts the packs of 'aws-stack@1.1.1' as an update of itself

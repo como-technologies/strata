@@ -185,7 +185,7 @@ check oci-zarf-digest 0 "#75: OCI zarf: Palette gives no digest" -- \
 # no_digest_says FILE: the output of strata packs of the Zarf pack says no digest on the row of
 # 1.0.0, and no digests in the heading
 no_digest_says() {
-  grep -qE "^$ZARF in .*, no digests\)$" "$1" && grep -qE '^  1\.0\.0 .*no digest$' "$1"
+  grep -qE "^registry .*, pack $ZARF: .*, no digests$" "$1" && grep -qE '^  1\.0\.0 .*no digest$' "$1"
 }
 check packs-zarf 0 "#128: strata packs of the Zarf pack" -- \
   "$strata" packs "$ZARF" --registry "$(name_of oci-zarf)"

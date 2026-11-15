@@ -11,6 +11,7 @@ use strata::api::{MemoryApi, RawCluster, ReadErrors};
 use strata::closed_set::ClosedSet;
 use strata::model::cluster_state::ClusterState;
 use strata::ops::ConsumersReport;
+use strata::reference::Ref;
 use strata::snapshot::Snapshot;
 use tempfile::TempDir;
 
@@ -97,11 +98,11 @@ impl VerifyFleet {
                     namespaces: None,
                     errors: ReadErrors::default(),
                 };
-                Snapshot::from_cluster(&raw, None, &format!("cluster:{uid}"), FETCHED_AT)
+                Snapshot::from_cluster(&raw, None, &Ref::cluster(&uid).to_string(), FETCHED_AT)
                     .expect("the generated responses build a record")
             });
             let mut record = record.clone();
-            record.source.reference = format!("cluster:{uid}");
+            record.source.reference = Ref::cluster(&uid).to_string();
             if let Some(cluster) = record.source.cluster.as_mut() {
                 cluster.uid = uid.clone();
                 cluster.name = name;
