@@ -102,8 +102,11 @@ body. For example, these refusals quote such a value:
 So strata writes a mark in place of each value of a variable of the entity, in
 each message of the report. The mark names the variable, such as
 `[value of pod_cidr]`. Each form of the report has the mark: the terminal, the
-markdown, the JSON, and the HTML. The values of the entity before a change get
-a mark too. To see a value, give `--world` and read `entity.json`.
+markdown, the JSON, and the HTML. In a row of the markdown table, strata writes
+a `\` before each bracket of the mark, as `\[value of pod_cidr\]`: see
+[The markdown comment](../../reference/formats.md#the-markdown-comment). The
+values of the entity before a change get a mark too. To see a value, give
+`--world` and read `entity.json`.
 
 The message of an error holds the start of the body of the answer. This is
 so for a check of Palette, and for an exec check that reads Palette before its

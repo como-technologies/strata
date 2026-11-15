@@ -2003,6 +2003,13 @@ fn run_live(script: &str, args: &[&str], root: &Path, extra: &[(&str, &str)]) ->
 
 /// [`run_live`] for the script at `path`, such as a script of [`Stage::copy_live`].
 fn run_live_at(path: &Path, args: &[&str], root: &Path, extra: &[(&str, &str)]) -> Output {
+    live_command(path, args, root, extra)
+        .output_locked()
+        .unwrap()
+}
+
+/// The command of [`run_live_at`], before its run.
+fn live_command(path: &Path, args: &[&str], root: &Path, extra: &[(&str, &str)]) -> Command {
     let bin = fake_bin(root, &[("curl", FAKE_API_CURL), ("kubectl", FAKE_KUBECTL)]);
     let tmp = root.join("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
@@ -2021,7 +2028,7 @@ fn run_live_at(path: &Path, args: &[&str], root: &Path, extra: &[(&str, &str)]) 
     for (k, v) in extra {
         c.env(k, v);
     }
-    c.output_locked().unwrap()
+    c
 }
 
 /// Every file under `dir`, as (path relative to dir, contents).
@@ -3782,7 +3789,12 @@ fi
             Some(live) => live.join(script),
             None => live_script(script),
         };
-        let o = run_live_at(&path, args, root, &env);
+        // a stand-in of strata can give a call to the binary of the tests, as
+        // [`FAKE_STRATA_NO_REGISTRY`] does
+        let mut command = live_command(&path, args, root, &env);
+        let o = give_strata(&mut command, "REAL_STRATA")
+            .output_locked()
+            .unwrap();
         let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap();
         // the harness shows the standard output of a test that fails, so its log holds the output
         // of each step that failed
@@ -7815,27 +7827,35 @@ else
 fi
 "#;
 
-/// A run of `registry-kinds.sh` in which the second registry of stage 1, `strata-live/packs`, gets
-/// the uid `reg-slash`. The listing names it. For the ref of the pack with no registry, strata
-/// gives `several` on standard error. For the ref with the uid, it gives a record of the pack.
-fn registry_kinds_slash(several: &str) -> (Stage, String) {
+/// The registry listing after the create of `strata-live/packs` in stage 1: the two registries
+/// over the Spectro pack registry.
+const SLASH_LISTING: &str = r#"{"items":[{"name":"strata-live-packs","uid":"reg-packs"},
+    {"name":"strata-live/packs","uid":"reg-slash"}]}"#;
+
+/// The stage of `registry-kinds.sh` in which the second registry of stage 1, `strata-live/packs`,
+/// gets the uid `reg-slash`. The listing names it. For the ref with the uid, strata gives a record
+/// of the pack. The test gives the answer to the ref of the pack with no registry.
+fn registry_kinds_slash_stage() -> Stage {
     let mut stage = registry_kinds_stage("");
     executable(
         &stage.path("routes/v1_registries_pack.sh"),
         SLASH_REGISTRY_CREATE,
     );
-    stage.route(
-        "/v1/registries/metadata",
-        r#"{"items":[{"name":"strata-live-packs","uid":"reg-packs"},
-            {"name":"strata-live/packs","uid":"reg-slash"}]}"#,
-    );
+    stage.route(REGISTRY_LISTING, SLASH_LISTING);
     stage.route("/v1/registries/pack/reg-slash", "{}");
-    stage.strata_err("snapshot pack:strata-live-pack@1.0.0 *", 2, several);
     stage.strata(
         "snapshot pack:reg-slash/strata-live-pack@1.0.0 *",
         0,
         r#"{"packs":[{"registryName":"strata-live/packs","registryUid":"reg-slash"}]}"#,
     );
+    stage
+}
+
+/// A run of [`registry_kinds_slash_stage`]. For the ref of the pack with no registry, strata gives
+/// `several` on standard error.
+fn registry_kinds_slash(several: &str) -> (Stage, String) {
+    let mut stage = registry_kinds_slash_stage();
+    stage.strata_err("compare pack:strata-live-pack@1.0.0 *", 2, several);
     let (_, steps) = stage.run("registry-kinds.sh", &[]);
     (stage, steps)
 }
@@ -7876,6 +7896,46 @@ fn registry_kinds_sh_names_a_registry_with_a_slash_in_its_name_by_its_uid_and_re
             "registries":["strata-live-oci","strata-live-packs","strata-live/packs"]}}"#,
     );
     failed(&steps, &["slash-several-uid"]);
+}
+
+/// A `strata` that gives each call with the ref `pack:strata-live-pack@1.0.0`, which names no
+/// registry, to the binary of the tests in `REAL_STRATA`. That binary asks the stand-in Palette at
+/// `FAKE_PALETTE`. A call that it does not give goes to the answers of the stage.
+const FAKE_STRATA_NO_REGISTRY: &str = r#"#!/usr/bin/env bash
+case " $* " in
+  *" pack:strata-live-pack@1.0.0 "*) PALETTE_API=$FAKE_PALETTE STRATA_RETRIES=0 exec "$REAL_STRATA" "$@" ;;
+esac
+exec "$(dirname "$0")/fake-strata-rules" "$@"
+"#;
+
+#[test]
+fn registry_kinds_sh_gets_the_error_of_several_registries_as_json_from_a_command_line_that_strata_takes()
+ {
+    let mut stage = registry_kinds_slash_stage();
+    // the stand-in Palette lists the two registries, and the pack at 1.0.0 in each
+    let listing: serde_json::Value = serde_json::from_str(SLASH_LISTING).unwrap();
+    let packs = ["reg-packs", "reg-slash"].map(|uid| listed_pack("strata-live-pack", "1.0.0", uid));
+    let palette = serve_routes(std::collections::BTreeMap::from([
+        (REGISTRY_LISTING.to_string(), listing),
+        (
+            pack_listing_route("strata-live-pack"),
+            pack_listing(serde_json::json!(packs)),
+        ),
+    ]));
+    stage.env("FAKE_PALETTE", &palette);
+    stage.wrap_strata(FAKE_STRATA_NO_REGISTRY);
+    let (_, steps) = stage.run("registry-kinds.sh", &[]);
+    // strata refuses -o with --json with a usage error, which also exits 2. That error is no JSON,
+    // so slash-several-uid fails on it
+    passed(&steps, &["slash-several", "slash-several-uid"]);
+    let err = std::fs::read_to_string(stage.path("out/slash-several.err")).unwrap();
+    let err: serde_json::Value = serde_json::from_str(&err).unwrap();
+    assert_eq!(err["error"]["kind"], "pack-in-several-registries", "{err}");
+    assert_eq!(
+        err["error"]["registries"],
+        serde_json::json!(["reg-slash", "strata-live-packs"]),
+        "the registry with a / by its uid: {err}"
+    );
 }
 
 #[test]
@@ -8669,7 +8729,8 @@ fn aws_case_taken() -> &'static AwsCase {
 /// Answer the validate route for the clean AWS body, for each case of `AWS_CASES`, for
 /// `CIDR_CASE`, and for `CIDR_VARIABLE_CASE`. The route refuses a case with its refusal. It takes a
 /// case with no refusal, and a case in `takes`. The three reports of `CIDR_VARIABLE_CASE` hold the
-/// message with the mark.
+/// message with the mark. report.md holds it as markdown, as strata-preflight writes it: with a `\`
+/// before each bracket of the mark (#872).
 fn answer_aws_cases(stage: &mut Stage, takes: &[&str]) {
     stage.strata(
         "preflight */aws-clean.json --cloud aws *",
@@ -8678,8 +8739,13 @@ fn answer_aws_cases(stage: &mut Stage, takes: &[&str]) {
     );
     let reports = stage.path(&format!("strata/out/{CIDR_VARIABLE_CASE}"));
     std::fs::create_dir_all(&reports).unwrap();
-    for file in ["report.md", "report.json", "report.html"] {
-        std::fs::write(reports.join(file), CIDR_VARIABLE_SAID).unwrap();
+    let markdown = strata::text::markdown_cell(CIDR_VARIABLE_SAID);
+    for (file, text) in [
+        ("report.md", markdown.as_str()),
+        ("report.json", CIDR_VARIABLE_SAID),
+        ("report.html", CIDR_VARIABLE_SAID),
+    ] {
+        std::fs::write(reports.join(file), text).unwrap();
     }
     let cidr = format!("K8SCidrOverlap: {CIDR_OVERLAP_MESSAGE}");
     let cases = AWS_CASES.iter().map(|case| (case.id, case.refusal)).chain([
@@ -8984,7 +9050,11 @@ fn validate_route_sh_checks_that_the_three_reports_of_cidr_variable_hold_the_mar
         (steps, marks, out)
     };
 
-    // the three reports hold the mark of pod_cidr
+    // the three reports hold the mark of pod_cidr, and report.md escapes its brackets (#872)
+    assert!(
+        strata::text::markdown_cell(CIDR_VARIABLE_SAID).contains(r"'\[value of pod_cidr\]'"),
+        "the report of markdown escapes the mark"
+    );
     let (steps, marks, _) = run(&[]);
     passed(&steps, &[CIDR_VARIABLE_CASE, "cidr-variable-says", &marks]);
     assert!(
@@ -9146,7 +9216,7 @@ fn route_packs(without_aws: bool) -> String {
     if without_aws {
         items.push(pack("gcp-dns", "2.0.0", "reg-pub", "addon", &["gcp"]));
     }
-    serde_json::json!({"items": items, "listmeta": {"count": items.len()}}).to_string()
+    pack_listing(serde_json::json!(items)).to_string()
 }
 
 /// A `strata` for route-bodies.sh. `preflight BODY` keeps a copy of BODY in strata/seen/, and logs
@@ -14439,7 +14509,9 @@ echo '{"metadata":{"name":"strata-live-observer-chart","uid":"reg-c"}}'
     );
     stage.route(
         "/v1/packs",
-        r#"{"items":[{"spec":{"name":"strata-observer","version":"0.32.2","registryUid":"reg-c"}}],"listmeta":{"count":1}}"#,
+        &pack_listing(serde_json::json!([
+            {"spec": {"name": "strata-observer", "version": "0.32.2", "registryUid": "reg-c"}}]))
+        .to_string(),
     );
     stage
 }
@@ -14535,7 +14607,10 @@ fn observer_chart_sh_records_a_refusal_of_the_create_with_its_code_and_deletes_n
 #[test]
 fn observer_chart_sh_records_a_registry_with_no_chart_and_deletes_it() {
     let stage = chart_stage();
-    stage.route("/v1/packs", r#"{"items":[],"listmeta":{"count":0}}"#);
+    stage.route(
+        "/v1/packs",
+        &pack_listing(serde_json::json!([])).to_string(),
+    );
     let (o, steps) = stage.run("observer-chart.sh", &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(
