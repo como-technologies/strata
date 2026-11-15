@@ -7,6 +7,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use strata::reference::{LATEST, version};
 
+use crate::common_palette::pack_listing_answer;
+
 use super::Tenant;
 use super::routes::{
     REGISTRY_LISTING, manifests_route, pack_entity_route, pack_listing, profile_route,
@@ -129,7 +131,7 @@ impl Tenant {
         self.write(
             project,
             &pack_listing(CHART),
-            &json!({"items": [], "listmeta": {"count": 0}}),
+            &pack_listing_answer(json!([])),
         );
     }
 
@@ -153,7 +155,7 @@ impl Tenant {
         self.write(
             project,
             &pack_listing(CHART),
-            &json!({"items": [made], "listmeta": {"count": 1}}),
+            &pack_listing_answer(json!([made])),
         );
         self.write(
             project,
@@ -182,11 +184,10 @@ impl Tenant {
                 item
             })
             .collect();
-        let count = items.len();
         self.write(
             project,
             &pack_listing(BITNAMI_CHART),
-            &json!({"items": items, "listmeta": {"count": count}}),
+            &pack_listing_answer(json!(items)),
         );
     }
 
@@ -279,8 +280,7 @@ impl Tenant {
         for dir in dirs {
             let name = dir.file_name().unwrap().to_string_lossy().into_owned();
             let summaries: Value = read_json(&dir.join("_summaries.json"));
-            let count = summaries.as_array().map(Vec::len).unwrap_or(0);
-            let mut listing = json!({"items": summaries, "listmeta": {"count": count}});
+            let mut listing = pack_listing_answer(summaries);
             let entity: Value = read_json(&dir.join("_entity.json"));
             self.write(project, &pack_entity_route(&name, PUBLIC_REPO), &entity);
             // The answer with the states query: the tags of the retired versions, which the
@@ -331,8 +331,7 @@ impl Tenant {
         let mut listing = self.read(project, &path);
         if let Some(items) = listing["items"].as_array_mut() {
             items.retain(|i| !is_listed(i, PUBLIC_REPO, version));
-            let count = items.len();
-            listing["listmeta"]["count"] = json!(count);
+            listing = pack_listing_answer(listing["items"].take());
         }
         self.write(project, &path, &listing);
     }
@@ -390,8 +389,7 @@ impl Tenant {
             }
         }
         items.push(copy);
-        let count = items.len();
-        listing["listmeta"]["count"] = json!(count);
+        listing = pack_listing_answer(listing["items"].take());
         self.write(project, &path, &listing);
 
         let path = pack_entity_route(name, PUBLIC_REPO);
@@ -480,9 +478,10 @@ fn read_json(path: &Path) -> Value {
 /// The newest csi-aws-ebs version, copied into the OCI registry with its own uid and digest.
 ///
 /// The newest is the one that `name@latest` picks. 1.9.0 is older than 1.10.0. A pre-release is
-/// newest only when no item has a version that is not a pre-release.
+/// newest only when no item has a version that is not a pre-release. The count of `listing` then
+/// counts the copy too.
 fn add_csi_to_oci(listing: &mut Value) {
-    let items = listing["items"].as_array().cloned().unwrap_or_default();
+    let mut items = listing["items"].as_array().cloned().unwrap_or_default();
     let with_values = items.iter().filter(|i| !i["spec"]["values"].is_null());
     let newest = version::pick(
         with_values,
@@ -493,10 +492,8 @@ fn add_csi_to_oci(listing: &mut Value) {
     let mut copy = newest.clone();
     with_oci_csi_build(&mut copy);
     copy["spec"]["type"] = json!("oci");
-    listing["items"]
-        .as_array_mut()
-        .expect("an array")
-        .push(copy);
+    items.push(copy);
+    *listing = pack_listing_answer(Value::Array(items));
 }
 
 /// Give the uid, the registry, and the digest of the OCI copy of `csi-aws-ebs` to `item`.
@@ -546,6 +543,11 @@ mod tests {
             json!({"items": versions.iter().map(|v| item(v, true)).collect::<Vec<_>>()});
         add_csi_to_oci(&mut listing);
         let items = listing["items"].as_array().expect("an array");
+        assert_eq!(
+            listing["listmeta"]["count"],
+            items.len(),
+            "the count holds the copy"
+        );
         let copy = items.get(versions.len())?;
         assert_eq!(copy["metadata"]["uid"], OCI_CSI_PACK);
         Some(copy["spec"]["version"].as_str()?.to_string())
