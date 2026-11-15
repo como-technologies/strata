@@ -59,9 +59,9 @@ type Result struct {
 
 // RunError is a run with no answer: exit 2 with an error line, a killed process, or no process. It
 // holds a kind and a status only, so a log line or an answer of the API cannot carry the message of
-// Palette. A command with no JSON mode, such as snapshot, writes a plain line, and its kind is
-// unknown. The kind of a failed cycle then comes from records[].error of verify, and pins[].error
-// of behind.
+// Palette. A snapshot that the observer runs has no --json, so it writes a plain line, and its
+// kind is unknown. The kind of a failed cycle then comes from records[].error of verify, and
+// pins[].error of behind.
 type RunError struct {
 	Kind   string
 	Status int
