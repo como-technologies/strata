@@ -14,7 +14,8 @@
 #   5  the annotations of the OS pack: the pack ref, the registry, and a record (#189, #253)
 #   6  the time of a pack in the listing, and no such time in verify (#191)
 #   7  the architectures of a version, and what a move to a newer version drops (#126)
-#   8  a pin that is current against the copy of a registry whose last sync did not complete (#122)
+#   8  a pin that is current against the copy of a registry whose last sync did not complete (#122),
+#      or of a registry with no sync status (#928)
 #
 # The CSI versions are the one the live profiles pin and an older one, from the file of the cloud
 # in terraform/. On AWS they are the two that the offline examples also use. Results go under runs/<UTC time>/packs/, or OUT. Exit 0 only when no
@@ -211,20 +212,28 @@ check arch-behind-json 0 '#126: --json gives newer[].drops on 3.6.7' -- \
 
 # A pin that is current is current against the copy of its registry in Palette. When the last sync
 # of the registry did not complete, the copy is the copy of an earlier sync, and the pin names that
-# sync (#122). The Bitnami registry of the tenant is the case: its sync stays InProgress. The check
-# reads the state of the sync first, so it holds when the sync completes one day.
+# sync (#122). The check reads the state of the sync of the Bitnami registry first, so it holds
+# for each state. With no state, the listing gives isSyncSupported false: the code of Palette shows
+# it, and bitnami-no-status checks it. strata reads no sync then, and the pin has no note (#928).
 echo "== a pin that is current against the copy of an older sync (#122)" | tee -a steps.log
 check bitnami-sync 0 '#122: the Helm summary listing gives the sync of the Bitnami registry' -- \
   "$live/api.sh" get /v1/registries/helm/summary
-bitnami_sync=$(jq -r '.items[] | select(.metadata.name == "Bitnami") | .status.sync.status' bitnami-sync.out)
+bitnami_sync=$(jq -r '.items[] | select(.metadata.name == "Bitnami") | .status.sync.status // empty' bitnami-sync.out)
 nginx=$("$strata" packs nginx --registry Bitnami --latest --json | jq -r '.registries[0].versions[0].version')
-check stale-record 0 "#122: a record of nginx@$nginx from Bitnami, whose last sync is $bitnami_sync" -- \
+check stale-record 0 "#122: a record of nginx@$nginx from Bitnami, whose last sync is ${bitnami_sync:-not given}" -- \
   "$strata" snapshot "pack:Bitnami/nginx@$nginx" -o nginx.json
 check stale-current 0 '#122: the newest version of the copy is current' -- \
   "$strata" behind nginx.json --no-impact
 if [ "$bitnami_sync" = Completed ]; then
   check stale-no-note 0 '#122: the last sync completed, so the pin has no sync note' -- \
     bash -c "! grep -q 'sync of the registry' stale-current.out"
+elif [ -z "$bitnami_sync" ]; then
+  check bitnami-no-status 0 '#928: the listing gives the Bitnami registry no sync status, and isSyncSupported false' -- \
+    jq -e '[.items[] | select(.metadata.name == "Bitnami") | .status.sync] | length == 1 and (.[0] | (.status // "") == "" and .isSyncSupported == false)' bitnami-sync.out
+  check stale-no-status 0 '#928: Palette gives no sync status, so the line of the pin names no sync' -- \
+    bash -c "grep -F 'pack:Bitnami/nginx@$nginx' stale-current.out | grep -qvF 'sync of the registry'"
+  check stale-no-status-json 0 '#928: --json gives no pins[0].registrySync and no pins[0].registrySyncError' -- \
+    bash -c "\"$strata\" behind nginx.json --no-impact --json | jq -e '.pins[0] | (has(\"registrySync\") or has(\"registrySyncError\")) | not'"
 else
   check stale-note 0 '#122: the pin is current against the copy of an older sync, and its line names that sync' -- \
     grep -qE 'current.*(a sync of the registry is in progress since .*, and the last complete sync of the registry started|the last complete sync of the registry started .*; the last sync of the registry failed)' stale-current.out
