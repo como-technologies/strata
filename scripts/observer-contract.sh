@@ -126,6 +126,9 @@ registry=5eecc89d0b150045ae661cef
 run compare "pack:$registry/kubernetes@1.35.3" "pack:$registry/kubernetes@1.36.2" --full >"$docs/move-kubernetes.json"
 run compare "pack:$registry/cert-manager@1.20.3" "pack:$registry/cert-manager@1.21.1" --full >"$docs/move-cert-manager.json"
 run compare "pack:$registry/cni-cilium-oss@1.19.6" "pack:$registry/cni-cilium-oss@1.20.1" --full >"$docs/move-cni-cilium-oss.json"
+# The versions cycle compares the record with the newest version of its profile, by its uid. The move to aws-stack@1.1.1
+# adds the required variable platform_owner, so the document holds the check of strata.
+run compare behind-record.json "$(jq -r '.profiles[0].newer[0].uid' "$docs/behind.json")" --full >"$docs/profile-move.json"
 # The click "Ask Palette" runs behind with --pin for one pack. This is the one run of the observer that asks Palette.
 "$strata" behind behind-record.json --pin k8s/kubernetes --json --compact -q >"$docs/ask-behind.json" || [ "$?" -eq 1 ]
 # The rows of the card "Check this yourself" for a move give these two commands, with the registry of this stand-in.
@@ -225,5 +228,6 @@ expect stopped '.page == "lost" and .content.failedRuns == 2 and .content.lastEr
 STRATA_BIN=$strata STRATA_DOCS=$docs go -C "$observer" test ./internal/docs/ -count=1 -run 'Schema|DocumentsOfTheBinary|ClearValue|KindOfAFailedCheck'
 if [ "${1:-}" = --write ]; then
   mkdir -p "$observer/internal/docs/testdata"
-  cp "$docs/verify-summary-drift.json" "$docs/behind.json" "$docs/ask-behind.json" "$docs/ask-skip.json" "$docs"/move-*.json "$observer/internal/docs/testdata/"
+  cp "$docs/verify-summary-drift.json" "$docs/behind.json" "$docs/ask-behind.json" "$docs/ask-skip.json" "$docs/profile-move.json" \
+    "$docs"/move-*.json "$observer/internal/docs/testdata/"
 fi

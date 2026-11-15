@@ -381,16 +381,17 @@ A comparison of two sides, `a` and `b`.
   the whole request has no `pack`. Strata sorts the errors and keeps one copy of
   each. Strata does not read a document that says `accepts` is `false` and
   gives no error, or that says `true` and gives an error.
-- `updateChecks`, only with `compare --validate`: what strata checks about the
-  move beside the answer of Palette. No validate route checks these rules.
-  Absent when strata finds nothing. See
-  [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
+- `updateChecks`, with `compare --validate`, and for two versions of one profile:
+  what strata checks about the move. No validate route checks these rules.
+  Absent when strata finds nothing, and for each other pair. See
+  [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check)
+  and [The checks of a move](../commands/compare/versions.md#the-checks-of-a-move).
   - `requiredVariables`: the required variables with no default value that the
-    profile side adds. A dropdown variable counts only when no option has the
-    mark `default`, and its default value is not the label of an option. It
-    has `code`, the code of the refusal of Palette,
-    `InvalidVariable`, and `names[]`, the name of each variable. Palette refuses
-    an update that gives such a variable no value.
+    move adds: the profile side of `--validate`, or side B. A dropdown variable
+    counts only when no option has the mark `default`, and its default value is
+    not the label of an option. It has `code`, the code of the refusal of
+    Palette, `InvalidVariable`, and `names[]`, the name of each variable.
+    Palette refuses an update that gives such a variable no value.
   - `skippedMinor`: the move of the pack of the `k8s` layer, when it skips a
     minor version. It has `pack`, `from`, `to`, and `nextMinor`, the minor
     version to move to first, such as `1.35`. It has no `code`: the skip is a

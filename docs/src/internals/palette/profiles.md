@@ -691,11 +691,12 @@ No validate route checks two rules of a move: see
 [What the update checks](./validate-routes.md#what-the-update-checks). A team
 learns of a fault only at the update, or after it. So `behind` and
 `compare --validate` check each rule for a move, and print a line before the
-answer of Palette:
+answer of Palette. `compare` of two versions of one profile checks them too, with
+no request:
 
 | Rule | Owner | Code |
 | --- | --- | --- |
-| One upgrade moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the pin, or the version that the cluster runs, with the version of the move. | Kubernetes. A live run shows that Palette takes an update that skips a minor version. | None: the line names the rule. |
+| One upgrade moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the move with the version of the pin, of the cluster, or of side A of `compare`. | Kubernetes. A live run shows that Palette takes an update that skips a minor version. | None: the line names the rule. |
 | Each required variable has a value or a default value. The default value of a dropdown variable counts only when it is the label of an option. Palette also accepts a dropdown variable with a default option. Strata names each required variable with no such default that the move adds. | Palette, at the update | `InvalidVariable` |
 
 When a route of Palette checks a rule before the update, strata removes its

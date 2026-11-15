@@ -717,6 +717,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateAlertsUnset, []string{needsAttention, notSet}},
 		{devdata.StateMovedDrift, []string{needsAttention, publishedChanged, "3 of 3 packs in full", "1 profile · 1 this week"}},
 		{devdata.StateUpdateChecks, okOverview},
+		{devdata.StateProfileChecks, append([]string{"2 newer profile versions"}, okOverview...)},
 	}
 	if len(cases) != len(devdata.States) {
 		t.Fatalf("the table has %d sets, and devdata lists %d", len(cases), len(devdata.States))

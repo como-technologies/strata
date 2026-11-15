@@ -198,15 +198,17 @@ const MOVE_WORDS = {changed: "Changed", added: "Added", removed: "Removed"};
 
 // profileMoveCard draws the move of a profile to its newest published version. It shows the impact, the flags of its packs, and each
 // pack that the move changes, adds, or removes. For each pack, it shows the versions and whether the values change. A pack of the
-// record links to its page, where the Compare menu shows the full diff of the move. It is "" for a profile with no newer version.
+// record links to its page, where the Compare menu shows the full diff of the move. Each check of the move that strata gives comes
+// first, in an amber note. It is "" for a profile with no newer version.
 function profileMoveCard(subject, x) {
   const n = x.newerVersion;
   if (!n) return "";
   const head = h`<h2>Move to ${ref(x.name, n.version)} <span class="sub">Created ${day(n.created)}</span></h2>${newestImpact(n)}`;
   const card = (flags, body) => h`<section class="card"><div class="chead">${head}${flags}</div>${body}</section>`;
   if (!n.move) return card("", h`<div class="body">${inline(TONE.WARN, "Strata could not compare the record with this version now. The next read of the versions asks again.")}</div>`);
-  const m = n.move, flags = flagRow(m, "", "");
-  if (!m.packs.length) return card(flags, h`<div class="body">${inline(TONE.SAME, "The move changes no pack.")}</div>`);
+  const m = n.move, flags = flagRow(m, "", ""), note = checkNote(m, CHECKS_WHY.profile);
+  const checks = note ? h`<div class="body">${note}</div>` : "";
+  if (!m.packs.length) return card(flags, h`${checks}<div class="body">${inline(TONE.SAME, "The move changes no pack.")}</div>`);
   const rows = m.packs.map(q => {
     const p = x.packs.find(k => k.key === q.key), href = p ? packHash(subject, p) : "";
     const version = q.from && q.to ? (q.from === q.to ? h`${q.from} ${mut("same version")}` : h`${q.from}${ARROW}${q.to}`) : q.from || q.to;
@@ -214,7 +216,7 @@ function profileMoveCard(subject, x) {
     const values = q.from && q.to ? (q.valuesChanged ? "Change" : mut("Same")) : DASH;
     return h`<tr${href ? h` class="link" data-go="${href}"` : ""}><td class="m">${href ? h`<a href="${href}">${q.key}</a>` : q.key}</td><td>${MOVE_WORDS[q.status] || q.status}</td><td class="m nw">${version}</td><td>${values}</td></tr>`;
   });
-  return card(flags, h`<div class="tw"><table><thead><tr><th>Pack</th><th>Change</th><th>Version</th><th>Values</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+  return card(flags, h`${checks}<div class="tw"><table><thead><tr><th>Pack</th><th>Change</th><th>Version</th><th>Values</th></tr></thead><tbody>${rows}</tbody></table></div>`);
 }
 
 // eventFrom names where an event comes from.

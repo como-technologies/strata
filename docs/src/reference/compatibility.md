@@ -15,7 +15,8 @@ The package is `strata-palette`, and Rust code names the crate `strata`. A
 dependency names the tag and the package: see
 [The library](../automation/library.md#add-the-dependency).
 
-Seven sections list the changes that need action:
+Eight sections list the changes that need action:
+[Release 0.35.0](#release-0350-changes-that-need-action),
 [Release 0.34.0](#release-0340-changes-that-need-action),
 [Release 0.33.0](#release-0330-changes-that-need-action),
 [Release 0.28.0](#release-0280-changes-that-need-action),
@@ -470,6 +471,10 @@ that no validate route makes: `requiredVariables` and `skippedMinor`. `skippedMi
 `code`, because the skip is a check of strata. The ids stay, and `--since` reads a report of
 0.33.0 and before. See
 [The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
+
+After 0.34.0, a comparison of `strata-diff/1` of two versions of one profile has
+`updateChecks` with no option, as the bump of `behind` does. The id stays. See
+[The checks of a move](../commands/compare/versions.md#the-checks-of-a-move).
 
 After 0.33.0, an option of a variable of `strata-snapshot/1` can have the new field `default`,
 only when it is `true`. The mark is outside the root, so no root changes, and the id stays. A
@@ -1161,6 +1166,34 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.35.0: changes that need action
+
+Release 0.35.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **`compare` of two versions of one profile names the checks of the move.** The report gives a
+  `note` line for each check. One names the required variables with no default value that side B
+  adds. Another names a move of Kubernetes that skips a minor version. Before, only
+  `compare --validate` gave them, in the report and in `updateChecks` of the JSON. A script
+  that reads the `note` lines must read the new lines. See
+  [The checks of a move](../commands/compare/versions.md#the-checks-of-a-move).
+- **The card "Move to" of a profile shows the checks of the move.**
+  `newerVersion.move` of `/v1/profiles` can hold the new field `updateChecks`. The card names each
+  check in an amber note. A check that reads the words of the page must read the new lines. See
+  [The move to a newer profile version](../automation/observer.md#the-move-to-a-newer-profile-version).
+
+### For a user of the library of strata
+
+- `ops::compare` of two versions of one profile gives the checks of the move in
+  `diff::Diff::update_checks`. Before, the field stayed empty, and only `ops::update_checks` gave
+  the checks. Two versions of one profile have one name and two versions, and each side names its
+  uid. A program that compares a `Diff` must read the field. `ops::Bump::of_profile` copies the
+  checks of its `Diff`, so the bump of a profile version of `behind` keeps the same checks.
 
 ## Release 0.34.0: changes that need action
 

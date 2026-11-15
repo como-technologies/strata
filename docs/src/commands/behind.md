@@ -253,7 +253,9 @@ on each side, its flags, and `valuesChanged` when its values change:
   this line for `platform_owner`. Another line names a move of Kubernetes that
   skips a minor version: see
   [A move that skips a minor version](#a-move-that-skips-a-minor-version).
-  `bump.updateChecks` gives both.
+- **`bump.updateChecks` gives both checks.** `compare` of the two versions gives
+  them in `updateChecks`: see
+  [The checks of a move](./compare/versions.md#the-checks-of-a-move).
 - **A comparison that fails** makes the profile version `not checked`. The line
   under it gives the error, and the exit is `2`.
 - `--no-impact` skips the comparison, as it skips the comparison of a pin.

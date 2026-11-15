@@ -121,7 +121,7 @@ func TestTheChecksOfStrataReachTheDetailTierBesideTheAnswerAndNoOtherRoute(t *te
 	if skip.From != "1.35.3" || skip.To != "1.37.0" || skip.NextMinor != "1.36" || skip.NextStep != "1.36.2" {
 		t.Fatalf("the skip %+v", skip)
 	}
-	if variables.Code != testkit.CodeVariable || !slices.Equal(variables.Names, []string{"platform_owner"}) {
+	if variables.Code != testkit.CodeVariable || !slices.Equal(variables.Names, []string{testkit.PlatformOwner}) {
 		t.Fatalf("the variables %+v", variables)
 	}
 	list := answersOf(t, h)

@@ -81,7 +81,7 @@ newer versions. `observer-1` is the tenant before the edit, with no finding.
 Its sets `asks` and `text-too-large` show the answers of Palette and the cap of the text.
 Its sets `alerts` and `alerts-unset` show the Alerts screen with rules and with no alert.
 Its set `moved-drift` shows a finding on a version that the cluster no longer runs, and
-`update-checks` shows the checks of strata.
+`update-checks` and `profile-checks` show the checks of strata.
 [Try each state](./observer-api.md#try-each-state) lists every set.
 
 `scripts/observer-lib.sh` holds the functions that start and stop the stand-in.

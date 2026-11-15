@@ -3446,10 +3446,11 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
     assert!(
-        one_line(opening).contains("Seven sections list the changes that need action"),
-        "the opening does not name seven sections"
+        one_line(opening).contains("Eight sections list the changes that need action"),
+        "the opening does not name eight sections"
     );
     for anchor in [
+        "(#release-0350-changes-that-need-action)",
         "(#release-0340-changes-that-need-action)",
         "(#release-0330-changes-that-need-action)",
         "(#release-0280-changes-that-need-action)",

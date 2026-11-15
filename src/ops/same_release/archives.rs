@@ -116,10 +116,7 @@ where
 /// candidate, a draft, a cluster, a pack, and an app profile have none.
 fn version_of(s: &Snapshot) -> Option<VersionAt> {
     let source = &s.source;
-    (source.is_profile_version()
-        && source.template == Template::Published
-        && !source.uid.is_empty())
-    .then(|| {
+    (source.is_held_version() && source.template == Template::Published).then(|| {
         (
             scope_of(&source.project_uid).map(str::to_string),
             source.uid.clone(),

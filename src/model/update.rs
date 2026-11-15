@@ -1,7 +1,8 @@
 //! The checks that strata makes about a move beside the answer of a validate route.
 //!
 //! `behind` and `compare --validate` ask a validate route about a move, and the route checks the
-//! packs. Strata makes two more checks. Each required variable has a value or a default value:
+//! packs. Strata makes two more checks. `compare` of two versions of one profile makes them too,
+//! with no request. Each required variable has a value or a default value:
 //! Palette checks this rule only at the update, and no route answers it before the update. One
 //! upgrade moves the Kubernetes pack one minor version at most: that is a rule of Kubernetes. A
 //! live run shows that Palette takes an update that skips a minor version, so this check is a
@@ -188,6 +189,23 @@ impl UpdateChecks {
         UpdateChecks {
             required_variables: RequiredVariables::added(&from.variables, &to.variables),
             skipped_minor: MinorSkip::between(&from.packs, &to.packs),
+        }
+    }
+
+    /// The checks of the comparison of `from` with `to`, when the two are versions of one
+    /// profile.
+    ///
+    /// Each other pair gives no check. Two versions of one profile have one name and two
+    /// versions, and Palette holds each one, with its uid. The comparison of the two is a move of
+    /// the profile, as `behind` names it, and [`UpdateChecks::between`] gives its checks. A
+    /// cluster, a pack, a candidate, and an app profile are not such a version.
+    pub(crate) fn of_versions(from: &Snapshot, to: &Snapshot) -> UpdateChecks {
+        let (a, b) = (&from.source, &to.source);
+        if a.is_held_version() && b.is_held_version() && a.name == b.name && a.version != b.version
+        {
+            UpdateChecks::between(from, to)
+        } else {
+            UpdateChecks::default()
         }
     }
 

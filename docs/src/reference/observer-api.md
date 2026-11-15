@@ -86,6 +86,12 @@ plain text. The route `/` serves the page of the dashboard.
   `valuesChanged`. `from` is absent for a pack that the move adds, and `to` for a
   pack that it removes. When the compare failed, `move` is absent and `unread` is
   true. An observer of 0.32.2 and before gives neither.
+- `newerVersion.move.updateChecks` holds the checks of the move that strata gives,
+  with the fields of `updateChecks` of [strata-diff/1](./documents.md#strata-diff1):
+  `requiredVariables`, `skippedMinor`, or both. `skippedMinor` has no `nextStep`,
+  because the compare reads no registry. The field is absent when strata finds
+  nothing. An observer of 0.34.0 and before does not give it. See [The move to a newer
+  profile version](../automation/observer.md#the-move-to-a-newer-profile-version).
 - `counts` of `/v1/cluster` holds `newerProfileVersions`, the profiles with a newer
   published version. An observer of 0.32.2 and before does not give it.
 - A pack that is behind holds `carried` when its profile has a newer published

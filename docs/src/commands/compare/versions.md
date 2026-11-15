@@ -120,3 +120,34 @@ A move to other numbers keeps the level of its layer, also with the same values.
 `compare` does not read the archives of the two builds.
 `same-release --allow renumber` reads them. See
 [A renumber](../../reference/impact.md#a-renumber).
+
+## The checks of a move
+
+When the two sides are two versions of one profile, `compare` reads side B as the next
+version of side A. It makes two checks of the move from A to B, as `behind` does for the
+move to the newest version: see [The move to the newest profile
+version](../behind.md#the-move-to-the-newest-profile-version). Here `aws-stack@1.1.1`
+adds the required variable `platform_owner`, which has no default value:
+
+```text
+{{#include ../../output/compare-profile-checks-lines.txt}}
+```
+
+- **A required variable with no default value** that side B adds. Palette refuses an
+  update that gives such a variable no value, with `InvalidVariable`.
+- **A move of Kubernetes that skips a minor version.** The line names the rule of
+  Kubernetes and the next minor version. `compare` reads no registry, so it names no
+  version of that minor version: see [What the route does not
+  check](./validate.md#what-the-route-does-not-check).
+
+`--json` gives the checks in `updateChecks`:
+
+```text
+{{#include ../../output/compare-profile-checks-json.txt}}
+```
+
+The checks send no request, and they do not change the exit. Two versions of one
+profile have one name and two versions, and each side names its uid. So a published
+version and its record count, and a candidate does not, because it has no uid yet. For
+a cluster side, use `--validate`: it checks the move from the cluster to the profile
+version, and asks Palette about the packs.

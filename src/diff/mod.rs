@@ -144,10 +144,11 @@ pub struct Diff {
     /// packs of the change on the cluster side.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<PaletteValidation>,
-    /// With `compare --validate`: what strata checks about the move from the cluster side to the
-    /// profile side, beside the answer of Palette: the required variables that the move adds, and
-    /// the skip of a minor version of Kubernetes. Absent when strata finds nothing, and without the
-    /// option.
+    /// What strata checks about a move: the required variables that the move adds, and the skip of
+    /// a minor version of Kubernetes. With `compare --validate`, the move from the cluster side to
+    /// the profile side, beside the answer of Palette. For two versions of one profile, the move
+    /// from side A to side B: see [`ops::compare`](crate::ops::compare). Absent when strata finds
+    /// nothing, and for each other pair.
     #[serde(default, skip_serializing_if = "UpdateChecks::is_empty")]
     pub update_checks: UpdateChecks,
 }

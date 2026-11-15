@@ -623,6 +623,13 @@ Newest version". The card "Check this yourself" gives the command of the same co
 When the compare fails, the card says that strata could not compare the two, and the
 dropdown has no such choice.
 
+The compare of two versions of one profile also gives `updateChecks`, the checks of the
+move. They are the required variables with no default value that the move adds, and a
+skip of a minor version of Kubernetes. The row keeps them in
+`newerVersion.move.updateChecks`, as strata gives them. The compare reads no registry,
+so a skip has no `nextStep`. The checks send no request. The card "Move to" names each
+one: see [The move to a newer profile version](../automation/observer.md#the-move-to-a-newer-profile-version).
+
 A published version can change in place, so the move of a profile has no cache.
 Each cycle compares it again. The memory holds the diff for the side `newest` of
 the detail tier, and the state never holds it. A compare that fails gives
