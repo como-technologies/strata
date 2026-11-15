@@ -115,18 +115,18 @@ the refusal.
 
 A field test ran `behind` on a pin of `kubernetes-eks` 1.31. It printed
 `bump to 1.37` and `palette accepts`, and a reader took that to mean that the move
-works. The route checks the packs. The update checks the minor version of
-Kubernetes, and refuses a move of more than one. `aws-stack@1.1.20` pins
+works. The route checks the packs. Kubernetes moves one minor version at each
+upgrade, and Palette takes an update that skips one. `aws-stack@1.1.20` pins
 `kubernetes` 1.34.9, and the newest version is 1.36.2:
 
 ```text
 {{#include ../output/behind-skip.txt}}
 ```
 
-The line under the bump says that the move skips a minor version, and names the
-next step, 1.35.6. The line `palette accepts` comes last, as the answer of the
-check of Palette. Move the clusters to a version that pins 1.35.6
-first. Then move them to 1.36.2. See
+The line under the bump is a check of strata. It says that the move skips a
+minor version, and names the next step, 1.35.6. The line `palette accepts` comes
+last, as the answer of the check of Palette. Move the clusters to a version that
+pins 1.35.6 first. Then move them to 1.36.2. See
 [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version).
 
 ## 5. A pre-release in the registry
@@ -202,7 +202,8 @@ registry between two runs. The second run names the version as arrived. Palette
 lists it with the time it first listed it, and the issue of the pack follows. See
 [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).
 
-The refusal of a move that skips a minor version comes from the code of Palette,
-and no live run shows it yet. Stage 7 of `validate-packs.sh` is the live check:
-see [validate-packs.sh](../development/live-runs.md#validate-packssh) and
+A live run of stage 7 of `validate-packs.sh` sent an update that skips a minor
+version of Kubernetes. Palette took the update with HTTP 204, and did not refuse
+it. So the line of the skip is a check of strata. See
+[validate-packs.sh](../development/live-runs.md#validate-packssh) and
 [What the update checks](../internals/palette/validate-routes.md#what-the-update-checks).

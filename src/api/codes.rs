@@ -174,11 +174,9 @@ pub const UPGRADE_NOT_SUPPORTED_CODE: &str = "DependencyPackUpgradeNotSupported"
 /// The code of the refusal of an update that moves the Kubernetes pack of a cluster more than one
 /// minor version.
 ///
-/// Palette refuses it with HTTP 400, on each cloud. It refuses it at the update of the profiles of
-/// a cluster or of a cluster template. It also refuses it at an update or a publish of a profile
-/// version that a cluster runs. No validate route checks the rule, so strata checks it: see
-/// [`MinorSkip`](crate::model::update::MinorSkip). The code of Palette shows it; no live run shows
-/// it yet.
+/// The code of Palette shows it with HTTP 400; no live run shows it yet. A live run of the update
+/// of the profiles of a cluster, with a move of two minor versions, got HTTP 204. So strata checks
+/// the move itself, and its line names no code: see [`MinorSkip`](crate::model::update::MinorSkip).
 pub const K8S_UPGRADE_NOT_SUPPORTED_CODE: &str = "K8sUpgradeNotSupported";
 
 /// The codes of the errors that the import validate route gives with HTTP 500 when it matches no

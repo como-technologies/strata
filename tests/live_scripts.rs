@@ -8569,7 +8569,8 @@ fn skip_compared() -> serde_json::Value {
         "updateChecks": {"skippedMinor": skip}})
 }
 
-/// The refusal of the update that moves Kubernetes from 1.35.8 to 1.37.0.
+/// A refusal of the update that moves Kubernetes from 1.35.8 to 1.37.0. No live run saw it: a live
+/// run got HTTP 204 (#919).
 fn skip_refused() -> String {
     error_body(
         K8S_UPGRADE_NOT_SUPPORTED_CODE,
@@ -8578,8 +8579,10 @@ fn skip_refused() -> String {
 }
 
 #[test]
-fn validate_packs_sh_stage_7_asks_the_route_about_a_skip_of_a_minor_version_and_sends_the_update() {
-    let (stage, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 400, &skip_refused());
+fn validate_packs_sh_stage_7_asks_the_route_about_a_skip_of_a_minor_version_and_palette_takes_the_update()
+ {
+    // a live run: Palette takes the update with HTTP 204 and no body (#919)
+    let (stage, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 204, "");
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(
         &steps,
@@ -8610,17 +8613,18 @@ fn replaced_with(stage: &Stage, m: &Move) {
 }
 
 #[test]
-fn validate_packs_sh_stage_7_fails_when_palette_accepts_the_update_or_strata_finds_no_skip() {
-    // Palette takes the update: the cluster moves, and the check fails
-    let (_, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 200, "{}");
+fn validate_packs_sh_stage_7_fails_when_palette_refuses_the_skip_or_strata_finds_no_skip() {
+    // Palette refuses the update: the book states another result, and the check fails
+    let (_, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 400, &skip_refused());
     passed(&steps, &["skip-says", "skip-update"]);
     failed(&steps, &["skip-refused"]);
 
-    // strata says nothing about the move, and Palette refuses it
+    // strata says nothing about the move, and Palette takes it
     let compared =
         serde_json::json!({"paletteValidation": {"clusterUid": FRED_UID, "accepts": true}});
-    let (_, steps) = move_stage(&SKIP_MOVE, &compared, 400, &skip_refused());
-    failed(&steps, &["skip-says", "skip-refused"]);
+    let (_, steps) = move_stage(&SKIP_MOVE, &compared, 204, "");
+    passed(&steps, &["skip-refused"]);
+    failed(&steps, &["skip-says"]);
 }
 
 #[test]

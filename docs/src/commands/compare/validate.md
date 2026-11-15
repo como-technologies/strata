@@ -86,10 +86,9 @@ answers.
 
 ## What the route does not check
 
-The route checks the packs. Palette checks two more rules only at the update,
-and no validate route checks them. So strata checks them for the move. It prints
-a `note` line under the answer of Palette for each one that it finds. Palette is
-the owner of each rule: see
+The route checks the packs. No validate route checks two more rules of the move,
+so strata checks them. It prints a `note` line before the answer of Palette for
+each one that it finds. Each rule names its owner in
 [The gaps that strata fills](../../internals/palette/profiles.md#the-checks-of-an-update).
 
 - **A required variable with no default value.** The body of the route holds no
@@ -100,9 +99,11 @@ the owner of each rule: see
   no such default that the profile version adds. The move of the cluster
   `payments` to `aws-stack@1.1.1` adds `platform_owner`: see
   [Compare a profile version with a cluster](./clusters.md#compare-a-profile-version-with-a-cluster).
-- **A move of Kubernetes that skips a minor version.** Palette refuses the
-  update with `K8sUpgradeNotSupported` and HTTP 400. Here the cluster `search`
-  runs Kubernetes 1.34.9, and `aws-stack@1.1.1` pins 1.36.2:
+- **A move of Kubernetes that skips a minor version.** Kubernetes moves one
+  minor version at each upgrade. Palette takes an update that skips one: see
+  [What the update checks](../../internals/palette/validate-routes.md#what-the-update-checks).
+  So the line is a check of strata. Here the cluster `search` runs Kubernetes
+  1.34.9, and `aws-stack@1.1.1` pins 1.36.2:
 
 ```text
 {{#include ../../output/validate-skip-lines.txt}}

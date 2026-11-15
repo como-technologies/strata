@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 use strata::api::MemoryApi;
-use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE};
+use strata::api::codes::INVALID_VARIABLE_CODE;
 use strata::closed_set::ClosedSet;
 use strata::diff::{ChangeFlag, Status};
 use strata::model::input_type::InputType;
@@ -662,10 +662,9 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
         "the move adds the required variable owner with no default value: give it a value at the \
          update, or Palette refuses the update with {INVALID_VARIABLE_CODE}"
     );
-    let skip_line = format!(
-        "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Palette refuses the update with \
-         {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to a version of 1.35 first"
-    );
+    // the skip is a check of strata, so its line names the rule of Kubernetes and no code
+    let skip_line = "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Kubernetes moves one minor \
+                     version at each upgrade; move to a version of 1.35 first";
     assert!(
         text.contains(&format!(
             "{} IDENTITY UPSTREAM\n      {variables_line}\n      {skip_line}\n",
@@ -678,7 +677,7 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
     assert!(
         markdown.contains(&format!(
             "<br>{variables_line}<br>{} |",
-            strata::text::html_text(&skip_line)
+            strata::text::html_text(skip_line)
         )),
         "{markdown}"
     );
@@ -690,6 +689,11 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
     assert_eq!(
         doc["profiles"][0]["bump"]["updateChecks"]["skippedMinor"]["nextMinor"],
         "1.35"
+    );
+    assert_eq!(
+        doc["profiles"][0]["bump"]["updateChecks"]["skippedMinor"].get("code"),
+        None,
+        "the skip gives no code of Palette"
     );
 }
 

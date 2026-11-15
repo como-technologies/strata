@@ -495,8 +495,8 @@ move of two minor versions. Palette refuses it on each cluster that runs 1.35.
 The pin and the registry decide whether a live example has such a pair.
 
 The limit is a dependency of the pack, and not a rule of the route. So the route
-accepts a move of two minor versions of a pack with no such dependency. The
-update refuses each such move: see
+accepts a move of two minor versions of a pack with no such dependency. A live
+run shows that the update takes a move of two minor versions of Kubernetes: see
 [What the update checks](#what-the-update-checks).
 
 Stage 6 of `validate-packs.sh` asks the route for a move of Kubernetes by two
@@ -505,37 +505,32 @@ that pins an older Kubernetes than the example does.
 
 ## What the update checks
 
-The update of the profiles of a cluster checks two rules that no validate route
-checks. The update is a `PUT` or a `PATCH` of
-`/v1/spectroclusters/{uid}/profiles`. The code of Palette shows each rule; no
-live run shows it yet. Stage 7 of `validate-packs.sh` is the live check: see
+The update of the profiles of a cluster is a `PUT` or a `PATCH` of
+`/v1/spectroclusters/{uid}/profiles`. No validate route checks the minor version
+of Kubernetes, or a value of a required variable. Stage 7 of `validate-packs.sh`
+sends the update: see
 [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 ### The minor version of Kubernetes
 
-- One update moves the pack of the `k8s` layer one minor version at most. A
-  move to a higher major version is refused too. The rule holds for each pack of
-  that layer, such as `kubernetes` and `kubernetes-eks`, on each cloud.
-- Palette refuses a move that skips with HTTP 400 and `K8sUpgradeNotSupported`:
-  `Kubernetes upgrade from <current> to <new> is not supported`.
-- Palette reads each version as a semantic version, or as the first three
-  numbers of the text. When it reads no version, as in `1.29.x`, it makes no
-  check.
-- The current version depends on the request:
-  - The update of the profiles of a cluster, and the apply of an update
-    notification: the version that the cluster runs.
-  - A `PUT` of a profile version that a cluster runs: the lowest version that a
-    cluster of the version runs.
-  - The publish of a draft of a version that a cluster runs: the published
-    version.
-  - The update of the profiles of a cluster template, and the attach of a
-    cluster to a template: the version that each cluster runs.
-- `validate/packs` of a cluster or of a profile version does not check the
-  rule, and neither does `validate/repave`. A pack can also declare a limit of
-  its own: see [The upgrade dependency](#the-upgrade-dependency).
+A live run sent the update to a cluster of the lab. The new profile version
+moves the pack of the `k8s` layer two minor versions above the version that the
+cluster runs:
 
-The public documentation states the same rule: update Kubernetes one minor
-version at a time.
+- `compare --validate` asked the validate route of the cluster about the move.
+  The route accepted the move with no error.
+- Palette took the update with HTTP 204, and did not refuse it with
+  `K8sUpgradeNotSupported`.
+- The cluster then ran the profile version of the move. The run did not watch
+  the nodes.
+
+A pack can also declare a limit of its own, and the route of a profile version
+checks it: see [The upgrade dependency](#the-upgrade-dependency).
+
+Kubernetes moves one minor version at each upgrade. The public documentation
+states the same rule: update Kubernetes one minor version at a time. So strata
+checks the move itself: see
+[The gaps that strata fills](./profiles.md#the-checks-of-an-update).
 
 ### A value of each required variable
 
@@ -551,11 +546,13 @@ version at a time.
   `default: true`. A default value that is the value of an option, and not its
   label, does not count. Palette refuses a required variable of another input
   type with no default value, also with a default option.
-- The code of Palette shows each rule of a default; no live run shows it yet.
+- The code of Palette shows the refusal and each rule of a default; no live run
+  shows them yet.
 - No validate route checks a variable. The body of the profile routes has no
   field for one.
 
-`behind` and `compare --validate` check the two rules before the update: see
+`behind` and `compare --validate` check the minor version and the required
+variables before the update: see
 [The gaps that strata fills](./profiles.md#the-checks-of-an-update).
 
 ## GET /v1/clusterprofiles/validate/name
@@ -800,8 +797,8 @@ a policy or to test a permission. `strata preflight` runs the tool of the cloud 
 these, and prints `NOT CHECKED` with the command for the rest: see
 [What strata preflight does not check](limits.md#what-strata-preflight-does-not-check).
 
-Two rules of the update of a cluster are in no route either: see
-[What the update checks](#what-the-update-checks).
+No validate route checks the minor version of Kubernetes or a value of a
+required variable either: see [What the update checks](#what-the-update-checks).
 
 ## Where these answers come from
 

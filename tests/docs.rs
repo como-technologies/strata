@@ -326,8 +326,8 @@ fn the_code_table_of_each_validate_route_in_the_book_holds_the_codes_of_the_rout
     }
 }
 
-/// `behind` and `compare --validate` name two refusals of the update before it: the codes of
-/// `codes.rs`. The table of `errors.md` lists the same codes.
+/// `behind` and `compare --validate` check two rules of a move before the update. The table of
+/// `errors.md` lists the code of each rule, as `codes.rs` holds it.
 #[test]
 fn the_book_lists_each_refusal_of_the_update_that_strata_names_first() {
     let errors = read(&docs().join("reference/errors.md"));
