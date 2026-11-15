@@ -3971,13 +3971,13 @@ fn baseline_stage() -> Stage {
 }
 
 /// Release 0.35.0 removes `--packs` and `--applied` of `strata list` (#862), and the stand-in
-/// refuses each one as strata does. Each step of a live script that reads the rows deeper calls
-/// `--detail`, so it passes against the stand-in. The steps are `list-packs` of packs.sh,
+/// refuses each one as strata does. The test runs five of the steps of the live scripts that call
+/// `--detail`, and each one passes against the stand-in. The steps are `list-packs` of packs.sh,
 /// `addon-list` and `addon-list-says` of stage 2 of pending.sh, and `list-applied` and
 /// `list-applied-json` of verify.sh. For verify.sh, the stand-in answers `list clusters` only with
 /// `--detail`, so a call with no `--detail` fails its step.
 #[test]
-fn each_live_step_that_reads_the_rows_deeper_calls_detail_and_passes_against_the_stand_in() {
+fn the_list_steps_of_packs_pending_and_verify_call_detail_and_pass_against_the_stand_in() {
     let mut stage = Stage::new(serde_json::json!({
         "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.0",
         "csi_version": "1.64.0", "profile_name": "strata-live-profile",
