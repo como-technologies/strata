@@ -3933,7 +3933,7 @@ fn failed(steps: &str, ids: &[&str]) {
 
 /// No check of `ids` ran.
 fn not_run(steps: &str, ids: &[&str]) {
-    let ran = check_ids(steps);
+    let ran: std::collections::BTreeSet<&str> = ids_with(steps, &VERDICTS).collect();
     for id in ids {
         assert!(!ran.contains(id), "{id} ran:\n{steps}");
     }
@@ -5506,15 +5506,30 @@ fn packs_sh_checks_that_the_newest_version_of_a_pack_is_the_version_that_palette
 /// `strata behind` on the record of the newest nginx of Bitnami prints `line` and `json`.
 /// Gives steps.log.
 fn packs_stale(sync: &str, line: &str, json: &str) -> String {
+    packs_listing(&[("Bitnami", sync)], line, json)
+}
+
+/// A run of packs.sh whose Helm summary listing gives a registry for each pair of `registries`:
+/// its name and its sync.
+///
+/// Its `strata behind` on the record of the newest nginx of Bitnami prints `line` and `json`.
+/// Gives steps.log.
+fn packs_listing(registries: &[(&str, &str)], line: &str, json: &str) -> String {
+    let items: Vec<String> = registries
+        .iter()
+        .map(|(name, sync)| {
+            format!(
+                r#"{{"metadata":{{"name":"{name}","uid":"reg-{name}"}},"status":{{"sync":{sync}}}}}"#
+            )
+        })
+        .collect();
     let mut stage = Stage::new(serde_json::json!({
         "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.1",
         "csi_version": "1.65.0", "cloud": "aws",
     }));
     stage.route(
         "/v1/registries/helm/summary",
-        &format!(
-            r#"{{"items":[{{"metadata":{{"name":"Bitnami","uid":"reg-bitnami"}},"status":{{"sync":{sync}}}}}]}}"#
-        ),
+        &format!(r#"{{"items":[{}]}}"#, items.join(",")),
     );
     stage.strata(
         "packs nginx --registry Bitnami --latest --json",
@@ -5594,7 +5609,8 @@ fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_re
     let no_status = r#"{"lastSyncedTime":"2026-08-29T00:00:11.032Z","lastRunTime":"0001-01-01T00:00:00.000Z","isSyncSupported":false}"#;
     let current = "1 pin from 1 record: 0 behind, 1 current\n  [addon] 'pack:Bitnami/nginx@25.1.5'  \
                    current\n      pinned by nginx.json (pack nginx@25.1.5)\n";
-    let steps = packs_stale(no_status, current, r#"{"pins":[{}]}"#);
+    let no_sync = r#"{"pins":[{}]}"#;
+    let steps = packs_stale(no_status, current, no_sync);
     passed(&steps, &["bitnami-sync", "stale-record", "stale-current"]);
     passed(&steps, &NO_STATUS_CHECKS);
     not_run(&steps, &["stale-note", "stale-json", "stale-no-note"]);
@@ -5615,14 +5631,23 @@ fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_re
     );
     failed(&steps, &[json]);
     // no line of the pin fails the check
-    let steps = packs_stale(no_status, "0 pins from 1 record\n", r#"{"pins":[{}]}"#);
+    let steps = packs_stale(no_status, "0 pins from 1 record\n", no_sync);
     failed(&steps, &[line]);
 
     // a listing that syncs the registry with no status fails the check of Palette
     let steps = packs_stale(
         r#"{"lastSyncedTime":"2026-08-29T00:00:11.032Z","isSyncSupported":true}"#,
         current,
-        r#"{"pins":[{}]}"#,
+        no_sync,
+    );
+    failed(&steps, &[listing]);
+    // so does a listing with no Bitnami registry, or with two: the check reads one sync
+    let steps = packs_listing(&[("Public Repo", no_status)], current, no_sync);
+    failed(&steps, &[listing]);
+    let steps = packs_listing(
+        &[("Bitnami", no_status), ("Bitnami", no_status)],
+        current,
+        no_sync,
     );
     failed(&steps, &[listing]);
 
@@ -5630,18 +5655,27 @@ fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_re
     let completed = r#"{"status":"Completed","lastSyncedTime":"2026-10-05T00:00:14.200Z","isSyncSupported":true}"#;
     let running = r#"{"status":"InProgress","lastSyncedTime":"2026-08-29T00:00:11.032Z","isSyncSupported":true}"#;
     for sync in [completed, running] {
-        let steps = packs_stale(sync, current, r#"{"pins":[{}]}"#);
+        let steps = packs_stale(sync, current, no_sync);
         not_run(&steps, &NO_STATUS_CHECKS);
     }
 
     // the page of live runs names each check, and says that no live window ran it
+    let in_script: std::collections::BTreeSet<String> =
+        script_check_ids("packs.sh").into_iter().collect();
     let section = page_section("docs/src/development/live-runs.md", "## packs.sh");
     let rows = table_rows(&section, "| Check |");
+    let row_of: std::collections::BTreeMap<&str, &[String]> = rows
+        .iter()
+        .flat_map(|row| {
+            code_spans(&row[0])
+                .into_iter()
+                .map(move |id| (id, row.as_slice()))
+        })
+        .collect();
     for id in NO_STATUS_CHECKS {
-        assert!(script_check_ids("packs.sh").iter().any(|i| i == id), "{id}");
-        let row = rows
-            .iter()
-            .find(|row| code_spans(&row[0]).contains(&id))
+        assert!(in_script.contains(id), "packs.sh has no check {id}");
+        let row = row_of
+            .get(id)
             .unwrap_or_else(|| panic!("live-runs.md has no row for {id}"));
         assert!(row[2].contains("No result yet: "), "{row:?}");
     }
