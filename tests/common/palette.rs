@@ -320,17 +320,21 @@ pub const REGISTRY_LISTING: &str = "/v1/registries/metadata";
 /// The summary of the OCI registries, `GET /v1/registries/oci/summary`.
 pub const OCI_REGISTRY_SUMMARY: &str = "/v1/registries/oci/summary";
 
-/// Serve the pack listing of the pack `name`: the pack summaries `items`, an array, and their count.
+/// The answer of the pack listing, `GET /v1/packs`, on a page that holds each pack: the pack
+/// summaries `items`, an array, and their count.
+pub fn pack_listing_answer(items: Value) -> Value {
+    let count = items.as_array().map_or(0, Vec::len);
+    json!({"items": items, "listmeta": {"count": count}})
+}
+
+/// Serve the pack listing of the pack `name`: the [`pack_listing_answer`] of the pack summaries
+/// `items`.
 pub fn serve_pack_listing(
     api: strata::api::MemoryApi,
     name: &str,
     items: Value,
 ) -> strata::api::MemoryApi {
-    let count = items.as_array().map_or(0, Vec::len);
-    api.with(
-        pack_listing_route(name),
-        json!({"items": items, "listmeta": {"count": count}}),
-    )
+    api.with(pack_listing_route(name), pack_listing_answer(items))
 }
 
 /// The registry endpoints strata reads for one pack, as the examples cached them from a live

@@ -69,13 +69,17 @@ names() {
 }
 
 # masked BODY DIR: each of the three reports in DIR holds the mark of each variable of BODY, and
-# no value of a variable of BODY
+# no value of a variable of BODY. report.md writes a `\` before each bracket of the mark (#872), so
+# the check also takes `\[value of NAME\]` there. A `_` between two letters, as in pod_cidr, stays
+# as it is.
 masked() {
-  local file name value
+  local file name value marks
   for file in report.md report.json report.html; do
     [ -f "$2/$file" ] || { echo "no $file in $2"; return 1; }
     while IFS=$'\t' read -r name value; do
-      grep -qF "[value of $name]" "$2/$file" || { echo "$file holds no mark of $name"; return 1; }
+      marks=(-e "[value of $name]")
+      [ "$file" != report.md ] || marks+=(-e "\\[value of $name\\]")
+      grep -qF "${marks[@]}" "$2/$file" || { echo "$file holds no mark of $name"; return 1; }
       ! grep -qF "$value" "$2/$file" || { echo "$file holds the value of $name"; return 1; }
     done < <(jq -r '.spec.profiles[].variables[]? | "\(.name)\t\(.value)"' "$1")
   done

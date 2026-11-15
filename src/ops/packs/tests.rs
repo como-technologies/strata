@@ -2,7 +2,7 @@
 //! tag requests.
 
 use super::*;
-use crate::api::{MemoryApi, REGISTRY_METADATA};
+use crate::api::{MemoryApi, REGISTRY_METADATA, routes};
 use crate::model::cloud::CLOUD_ALL;
 
 fn version(uid: &str, version: &str, clouds: &[&str]) -> Value {
@@ -37,21 +37,19 @@ fn read_with(
         .iter()
         .map(|v| serde_json::json!({"tag": v["spec"]["version"], "packUid": v["metadata"]["uid"]}))
         .collect();
-    let api = MemoryApi::new()
-        .with(
-            REGISTRY_METADATA,
-            serde_json::json!({"items": [
-                {"name": "strata-live-registry", "uid": "reg-own", "kind": "oci"},
-            ]}),
-        )
-        .with(
-            "/v1/packs?filters=spec.name=strata-live-dep&limit=100&offset=0",
-            serde_json::json!({"items": versions}),
-        )
-        .with(
-            "/v1/packs/strata-live-dep/registries/reg-own",
-            serde_json::json!({"layer": "addon", "tags": tags}),
-        );
+    let api = MemoryApi::new().with(
+        REGISTRY_METADATA,
+        serde_json::json!({"items": [
+            {"name": "strata-live-registry", "uid": "reg-own", "kind": "oci"},
+        ]}),
+    );
+    let api = routes::serve_registry_pack(
+        api,
+        "strata-live-dep",
+        Value::Array(versions),
+        serde_json::json!({"layer": "addon", "tags": tags}),
+        "reg-own",
+    );
     let palette = Palette::new(api);
     registry_packs_in(
         &mut Registries::new(&palette),
@@ -550,20 +548,16 @@ fn tag(uid: &str, version: &str, tag: &str) -> Value {
 /// Public Repo. These are `plain` with no query, and `retired` with the states query. An empty
 /// answer is a 404.
 fn nginx_api(versions: Vec<Value>, plain: &[Value], retired: &[Value]) -> MemoryApi {
-    let mut api = MemoryApi::new()
-        .with(
-            REGISTRY_METADATA,
-            serde_json::json!({"items": [
-                {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
-            ]}),
-        )
-        .with(
-            "/v1/packs?filters=spec.name=nginx&limit=100&offset=0",
-            serde_json::json!({"items": versions}),
-        );
+    let api = MemoryApi::new().with(
+        REGISTRY_METADATA,
+        serde_json::json!({"items": [
+            {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
+        ]}),
+    );
+    let mut api = routes::serve_pack_listing(api, "nginx", Value::Array(versions));
     if !plain.is_empty() {
         api = api.with(
-            "/v1/packs/nginx/registries/reg-public",
+            routes::pack_entity_route("nginx", "reg-public"),
             serde_json::json!({"layer": "addon", "tags": plain}),
         );
     }

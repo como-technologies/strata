@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::*;
 use crate::api::codes::CreateRule;
-use crate::api::{MemoryApi, Palette};
+use crate::api::{MemoryApi, Palette, routes};
 use crate::model::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use crate::term::progress::Progress;
 
@@ -387,16 +387,14 @@ fn served_with_values(layers: &[&str], clouds: &[Value], values: &str) -> Palett
                 "spec": {"name": l.name, "version": l.version, "registryUid": "r1",
                          "layer": layers[i], "type": "spectro", "values": "",
                          "cloudTypes": clouds[i]}});
-        api = api
-            .with(
-                format!("/v1/packs?filters=spec.name={}&limit=100&offset=0", l.name),
-                json!({"items": [summary], "listmeta": {"count": 1}}),
-            )
-            .with(
-                format!("/v1/packs/{}/registries/r1", l.name),
-                json!({"tags": [{"tag": l.version, "packUid": uid}],
-                           "packValues": [{"packUid": uid, "values": values}]}),
-            );
+        api = routes::serve_registry_pack(
+            api,
+            &l.name,
+            json!([summary]),
+            json!({"tags": [{"tag": l.version, "packUid": uid}],
+                   "packValues": [{"packUid": uid, "values": values}]}),
+            "r1",
+        );
     }
     Palette::new(api)
 }

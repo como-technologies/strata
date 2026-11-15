@@ -23,6 +23,7 @@ use super::ids::{
     FIELDS_OCI_CHARTS, FIELDS_OCI_PACKS, FIELDS_PACKS_STOPPED, FIELDS_PACKS_SYNCED, FIELDS_PROFILE,
 };
 use crate::book::Runner;
+use crate::common_palette::pack_listing_answer;
 use crate::tenant::{
     AUDITS, CLUSTER_LISTING, RegistrySync, app_profile_route, app_tier_manifest_route,
     app_tiers_route, group_route, pack_listing, profile_route, registry_summary_route,
@@ -163,10 +164,8 @@ fn registries_and_packs(r: &mut Runner) {
     r.answer(
         DEV,
         &pack_listing("gloo"),
-        &json!({"items": [{"metadata": {"uid": FIELDS_DISABLED_PACK},
-                "spec": {"name": "gloo", "version": "1.2.18",
-                    "annotations": {"disabled": "true"}}}],
-            "listmeta": {"count": 1}}),
+        &pack_listing_answer(json!([{"metadata": {"uid": FIELDS_DISABLED_PACK},
+            "spec": {"name": "gloo", "version": "1.2.18", "annotations": {"disabled": "true"}}}])),
     );
 }
 
