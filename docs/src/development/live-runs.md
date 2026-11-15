@@ -234,9 +234,10 @@ registries the tenant can see, including one pack that two registries hold.
 | `verify-no-time` | 0 | #191: `verify --json` gives no `verify.lastModified` for a pack record |
 | `arch-listing` | 0 | #126: the listing names the architectures of `loki` 2.10.2 as `amd64,arm64`, and of 3.6.7 as `amd64`: see [The architectures of a version](../internals/palette/packs.md#the-architectures-of-a-version) |
 | `arch-record`, `arch-behind`, `arch-behind-says`, `arch-behind-json` | 0, 1, 0, 0 | #126: a record of `loki` 2.10.2 is behind 3.6.7, and `behind` says that the move drops `arm64`, in the line and in `newer[].drops` |
-| `bitnami-sync` | 0 | #122: the Helm summary listing gives the sync of the Bitnami registry: `InProgress`, with `syncRecovery` `Recovering` and `sync interrupted` |
+| `bitnami-sync` | 0 | #122, #928: the Helm summary listing gives the sync of the Bitnami registry. The last live run got a `lastSyncedTime` and no `status`. Earlier live runs got `InProgress`, with `syncRecovery` `Recovering` and `sync interrupted` |
 | `stale-record`, `stale-current` | 0 | #122: a record of the newest `nginx` of Bitnami, and `behind` says that the pin is current |
-| `stale-note`, `stale-json` | 0 | #122: the last sync did not complete, so the line of the pin names the sync that runs, the last complete sync, and the recovery. `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. The sync of Bitnami stays `InProgress`, so no run shows `stale-no-note` |
+| `stale-note`, `stale-json` | 0 | #122: the last sync did not complete, so the line of the pin names the sync that runs, the last complete sync, and the recovery. `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. Earlier live runs passed `stale-note` and `stale-json` while the sync of Bitnami was `InProgress`. The last live run failed them: Palette gave Bitnami no sync status, and the line of the pin had no note. No run shows `stale-no-note` |
+| `bitnami-no-status`, `stale-no-status`, `stale-no-status-json` | 0 | #928: when the listing gives the Bitnami registry no sync status, these checks run in place of `stale-note` and `stale-json`. The listing gives `isSyncSupported` `false`, so strata reads no sync, and the line of the pin names none. `--json` gives no `pins[].registrySync` and no `pins[].registrySyncError`. No result yet: no live window ran this case |
 
 Palette lists the registries of a tenant in no fixed order, so strata sorts them
 and the ambiguous-ref message reads the same every time:
@@ -2404,9 +2405,10 @@ script holds the other reads.
 - The two routes give the same fields and the same values for each registry.
 - Two or three registries give the same `lastSyncedTime` or `lastRunTime` to
   the millisecond: the time is the start of the sync job, not its end.
-- The Bitnami registry is `InProgress`, with `syncRecovery` `Recovering` and
-  `sync interrupted`. Its `lastSyncedTime` is more than a month older than its
-  `lastRunTime`.
+- The Bitnami registry was `InProgress`, with `syncRecovery` `Recovering` and
+  `sync interrupted`. Its `lastSyncedTime` was more than a month older than its
+  `lastRunTime`. In the last live run, `bitnami-sync` got no `status` for
+  Bitnami: see [packs.sh](#packssh).
 - A registry whose sync failed gives `Failed` and the cause in `message`.
 
 See [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).

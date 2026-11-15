@@ -5570,6 +5570,80 @@ fn packs_sh_stage_8_checks_the_sync_note_of_a_pin_that_is_current_against_an_old
     failed(&steps, &["stale-note"]);
 }
 
+/// The ids of the checks of stage 8 of packs.sh for a registry with no sync status (#928).
+const NO_STATUS_CHECKS: [&str; 3] = [
+    "bitnami-no-status",
+    "stale-no-status",
+    "stale-no-status-json",
+];
+
+#[test]
+fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_registry_no_sync_status()
+ {
+    // the listing gives Bitnami a lastSyncedTime and no status: Palette does not sync the
+    // registry, so strata reads no sync, and the pin names none
+    let no_status = r#"{"lastSyncedTime":"2026-08-29T00:00:11.032Z","lastRunTime":"0001-01-01T00:00:00.000Z","isSyncSupported":false}"#;
+    let current = "1 pin from 1 record: 0 behind, 1 current\n  [addon] 'pack:Bitnami/nginx@25.1.5'  \
+                   current\n      pinned by nginx.json (pack nginx@25.1.5)\n";
+    let steps = packs_stale(no_status, current, r#"{"pins":[{}]}"#);
+    passed(&steps, &["bitnami-sync", "stale-record", "stale-current"]);
+    passed(&steps, &NO_STATUS_CHECKS);
+    let ids = check_ids(&steps);
+    for id in ["stale-note", "stale-json", "stale-no-note"] {
+        assert!(!ids.contains(&id), "{id} ran:\n{steps}");
+    }
+
+    // a line or a JSON that names a sync fails the checks
+    let noted = "1 pin from 1 record: 0 behind, 1 current\n  [addon] 'pack:Bitnami/nginx@25.1.5'  \
+                 current; the last complete sync of the registry started 2026-08-29T00:00:11.032Z\n";
+    let steps = packs_stale(
+        no_status,
+        noted,
+        r#"{"pins":[{"registrySync":{"status":""}}]}"#,
+    );
+    failed(&steps, &["stale-no-status", "stale-no-status-json"]);
+    let steps = packs_stale(
+        no_status,
+        current,
+        r#"{"pins":[{"registrySyncError":"HTTP 500: {}"}]}"#,
+    );
+    failed(&steps, &["stale-no-status-json"]);
+    // no line of the pin fails the check
+    let steps = packs_stale(no_status, "0 pins from 1 record\n", r#"{"pins":[{}]}"#);
+    failed(&steps, &["stale-no-status"]);
+
+    // a listing that syncs the registry with no status fails the check of Palette
+    let steps = packs_stale(
+        r#"{"lastSyncedTime":"2026-08-29T00:00:11.032Z","isSyncSupported":true}"#,
+        current,
+        r#"{"pins":[{}]}"#,
+    );
+    failed(&steps, &["bitnami-no-status"]);
+
+    // a sync that completed or that runs keeps its own checks
+    let completed = r#"{"status":"Completed","lastSyncedTime":"2026-10-05T00:00:14.200Z","isSyncSupported":true}"#;
+    let running = r#"{"status":"InProgress","lastSyncedTime":"2026-08-29T00:00:11.032Z","isSyncSupported":true}"#;
+    for sync in [completed, running] {
+        let steps = packs_stale(sync, current, r#"{"pins":[{}]}"#);
+        let ids = check_ids(&steps);
+        for id in NO_STATUS_CHECKS {
+            assert!(!ids.contains(&id), "{id} ran:\n{steps}");
+        }
+    }
+
+    // the page of live runs names each check, and says that no live window ran it
+    let section = page_section("docs/src/development/live-runs.md", "## packs.sh");
+    let rows = table_rows(&section, "| Check |");
+    for id in NO_STATUS_CHECKS {
+        assert!(script_check_ids("packs.sh").iter().any(|i| i == id), "{id}");
+        let row = rows
+            .iter()
+            .find(|row| code_spans(&row[0]).contains(&id))
+            .unwrap_or_else(|| panic!("live-runs.md has no row for {id}"));
+        assert!(row[2].contains("No result yet: "), "{row:?}");
+    }
+}
+
 #[test]
 fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_its_registry() {
     let mut stage = Stage::new(serde_json::json!({}));

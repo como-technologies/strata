@@ -54,7 +54,7 @@ and
 | Field | What it is |
 | --- | --- |
 | `isSyncSupported` | Whether Palette syncs the registry. |
-| `status` | The state of the last sync: `Completed`, `InProgress`, or `Failed`. |
+| `status` | The state of the last sync: `Completed`, `InProgress`, or `Failed`. Absent when `isSyncSupported` is `false`. |
 | `lastSyncedTime` | When the last sync that completed started. Not when it completed. |
 | `lastRunTime` | When the last sync started, also a sync that runs or that failed. |
 | `message` | The cause of a failed sync. |
@@ -69,10 +69,16 @@ and
   older. It is older when a later run did not refresh the copy, and
   `status` stays `Completed`.
 - A sync can stay `InProgress` for a long time. The Bitnami registry of the
-  tenant stays `InProgress` for more than a month, with `syncRecovery`
-  `Recovering` and the message `sync interrupted`. Its `lastSyncedTime` is
+  tenant stayed `InProgress` for more than a month, with `syncRecovery`
+  `Recovering` and the message `sync interrupted`. Its `lastSyncedTime` was
   more than a month older than its `lastRunTime`. The copy of Palette is then
   the copy of the last sync that completed.
+- Palette gives no `status` when `isSyncSupported` is `false`: it does not
+  sync the registry. The code of Palette shows it; no live run shows it yet.
+  The last live run got a `lastSyncedTime` and no `status` for the Bitnami
+  registry. The check `bitnami-no-status` of
+  [packs.sh](../../development/live-runs.md#packssh) reads its
+  `isSyncSupported`.
 - Palette writes `0001-01-01T00:00:00.000Z` for a registry that never
   completed a sync.
 - Palette refuses a sync while a sync of the registry runs. The sync route of

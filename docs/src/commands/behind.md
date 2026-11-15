@@ -534,8 +534,8 @@ and its line names the sync:
 
 A sync can stay in progress for a long time: see
 [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
-A live run shows the note with the Bitnami registry of the tenant, whose sync
-stays in progress: see [packs.sh](../development/live-runs.md#packssh).
+Live runs showed the note with the Bitnami registry of the tenant while its
+sync was in progress: see [packs.sh](../development/live-runs.md#packssh).
 
 A pin whose registry completed its last sync has no note. Palette shows the
 sync of each registry, and the copy is the copy of the last run. A pin that is
@@ -545,6 +545,12 @@ of `verify.registrySync`: see
 [The sync of the registry of a pack record](./verify.md#the-sync-of-the-registry-of-a-pack-record).
 When strata cannot read the sync, the pin stays current, and
 `pins[].registrySyncError` gives the reason.
+
+When Palette gives the registry of a pin no sync status, the line of the pin
+is `current` with no sync note. `--json` then gives no `pins[].registrySync`
+and no `pins[].registrySyncError`. Palette gives no sync status when it does
+not sync the registry: `isSyncSupported` is then `false`. See
+[The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
 
 ## What arrived since the last run
 
