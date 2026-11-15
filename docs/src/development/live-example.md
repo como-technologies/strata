@@ -827,7 +827,7 @@ These rules come from the teardowns of this kind of cluster:
 | `consumers-release-json` | 1 | #12: the same listing as JSON |
 | `consumer-is-the-cluster` | 0 | #12: listed with its name, project, and state |
 | `consumers-next` | 0 | #12: no cluster runs the newer version |
-| `list-applied`, `list-applied-json` | 0 | #63: `list --applied` names the profiles each cluster runs, as text and as JSON |
+| `list-applied`, `list-applied-json` | 0 | #63: `list --detail` names the profiles each cluster runs, as text and as JSON |
 | `applied-is-what-the-cluster-runs` | 0 | #63: the listed profiles are those the cluster record names |
 | `cluster-listing` | 0 | #63: read the cluster listing that strata lists clusters from |
 | `listing-profile-fields` | 0 | #63: the fields of the cluster listing whose name holds `profile` |

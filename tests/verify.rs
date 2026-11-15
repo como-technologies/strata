@@ -4164,7 +4164,7 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
     assert_eq!(
         api.calls(&profile_route("u2")),
         0,
-        "no profile document without --packs"
+        "no profile document without --detail"
     );
 
     let text = common::terminal().render_list(&l).unwrap();
@@ -4423,7 +4423,7 @@ fn list_with_packs_says_for_each_version_whether_it_is_published_and_marks_a_dra
             .unwrap()
             .iter()
             .all(|p| p.published.is_none()),
-        "with no --packs, strata reads no profile document and does not know"
+        "with no --detail, strata reads no profile document and does not know"
     );
 
     let l = list(&ListOptions {
@@ -4601,7 +4601,7 @@ fn list_gives_each_version_its_scope_from_the_profile_search_and_marks_a_version
     assert_eq!(
         api.calls(&profile_route("u-tenant")),
         0,
-        "no profile document without --packs"
+        "no profile document without --detail"
     );
 
     let json: Value = serde_json::from_str(
@@ -4661,7 +4661,7 @@ fn list_with_packs_reads_the_scope_in_each_document_and_joins_the_marks_of_a_ten
     );
     assert!(
         api.posted().is_empty(),
-        "with --packs, strata sends no search"
+        "with --detail, strata sends no search"
     );
     let text = common::terminal().render_list(&l).unwrap();
     assert!(
@@ -4917,7 +4917,7 @@ fn a_linked_and_a_shared_version() -> MemoryApi {
         )
 }
 
-/// `list --packs` counts each consumer that the profile document names, and not the clusters
+/// `list --detail` counts each consumer that the profile document names, and not the clusters
 /// alone. A version that a template links and no cluster runs has one consumer, because Palette
 /// refuses its delete. `--json` gives the number as before, and the count by kind in
 /// `consumersByKind`.
@@ -5003,7 +5003,7 @@ fn list_with_packs_counts_the_cluster_templates_of_a_version_with_its_clusters()
     );
 }
 
-/// `list --packs` and `consumers --list-only` read one profile document, so they give one number
+/// `list --detail` and `consumers --list-only` read one profile document, so they give one number
 /// for a version: the clusters of its consumer list and the cluster templates that link it.
 #[test]
 fn list_with_packs_gives_the_count_of_consumers_with_the_list_of_palette_alone() {
@@ -5030,7 +5030,7 @@ fn list_with_packs_gives_the_count_of_consumers_with_the_list_of_palette_alone()
         assert_eq!(
             (p.consumers, counts.count()),
             (Some(r.count), r.count),
-            "{}: list --packs and consumers --list-only differ",
+            "{}: list --detail and consumers --list-only differ",
             p.reference
         );
         let of_kind =

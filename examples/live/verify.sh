@@ -102,10 +102,10 @@ check consumers-next 0 "#12: nothing runs the newer version" -- \
   "$strata" consumers "$P2"
 
 # ---- #63: the profiles a cluster applies
-check list-applied 0 "#63: list --applied names the profiles each cluster runs" -- \
-  "$strata" list clusters --applied
+check list-applied 0 "#63: list --detail names the profiles each cluster runs" -- \
+  "$strata" list clusters --detail
 check list-applied-json 0 "the same listing as JSON" -- \
-  "$strata" list clusters --applied --json
+  "$strata" list clusters --detail --json
 check applied-is-what-the-cluster-runs 0 "#63: the listed profiles are those the cluster record names" -- \
   jq -e --slurpfile record cluster.json --arg c "$C" \
     '(.clusters | map(select(.uid == $c))) as $m

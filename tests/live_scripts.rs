@@ -3557,11 +3557,17 @@ esac
 /// `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments prints FILE, or writes it to the file
 /// of `-o`, and exits EXIT. A fourth field `err` prints FILE to standard error and writes no file.
 /// With no match it exits 0.
+///
+/// It refuses `--packs` and `--applied` as strata does since release 0.35.0: the exit code `2`,
+/// and `unexpected argument` on standard error.
 const FAKE_STRATA_STAGE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_STRATA/calls"
 echo "${XDG_STATE_HOME-}" >> "$FAKE_STRATA/state"
 out=""; prev=""
-for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
+for a in "$@"; do
+  case $a in --packs | --applied) echo "error: unexpected argument '$a' found" >&2; exit 2 ;; esac
+  [ "$prev" = -o ] && out=$a; prev=$a
+done
 while IFS=$'\t' read -r glob code file stream; do
   [[ "$*" == $glob ]] || continue
   if [ "$stream" = err ]; then cat "$FAKE_STRATA/$file" >&2
@@ -3962,6 +3968,91 @@ fn baseline_stage() -> Stage {
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     );
     stage
+}
+
+/// Release 0.35.0 removes `--packs` and `--applied` of `strata list` (#862), and the stand-in
+/// refuses each one as strata does. The test runs five of the steps of the live scripts that call
+/// `--detail`, and each one passes against the stand-in. The steps are `list-packs` of packs.sh,
+/// `addon-list` and `addon-list-says` of stage 2 of pending.sh, and `list-applied` and
+/// `list-applied-json` of verify.sh. For verify.sh, the stand-in answers `list clusters` only with
+/// `--detail`, so a call with no `--detail` fails its step.
+#[test]
+fn the_list_steps_of_packs_pending_and_verify_call_detail_and_pass_against_the_stand_in() {
+    let mut stage = Stage::new(serde_json::json!({
+        "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.0",
+        "csi_version": "1.64.0", "profile_name": "strata-live-profile",
+    }));
+    stage.strata(
+        "list profiles --detail --json",
+        0,
+        r#"{"profiles":[{"name":"strata-live-profile","packs":[{"name":"csi-aws-ebs"}]}]}"#,
+    );
+    let (_, steps) = stage.run("packs.sh", &[]);
+    passed(&steps, &["list-packs"]);
+
+    let mut stage = baseline_stage();
+    stage.strata(
+        "list clusters --detail",
+        0,
+        "fred  c-a  Running\n    strata-live-addon@1.0.0  ad-1  add-on  behind: an update waits\n",
+    );
+    let (_, steps) = stage.run("pending.sh", &["2"]);
+    passed(&steps, &["addon-list", "addon-list-says"]);
+
+    let mut outputs = baseline_outputs();
+    outputs["next_profile_uid"] = "r-2".into();
+    outputs["registries_profile_uid"] = "rg-1".into();
+    let mut stage = Stage::new(outputs);
+    // cluster A is at the baseline
+    let live = stage.copy_live();
+    executable(&live.join("baseline.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    stage.strata(
+        "list clusters --detail",
+        0,
+        "1 cluster\n  cluster:c-a  fred  Running  aws\n    strata-live-profile@1.0.0  r-1  cluster\n",
+    );
+    stage.strata(
+        "list clusters --detail --json",
+        0,
+        r#"{"clusters":[{"uid":"c-a","name":"fred","profiles":[{"uid":"r-1","name":"strata-live-profile","version":"1.0.0"}]}]}"#,
+    );
+    // the first rule that matches gives the answer, so this rule takes each other `list clusters`
+    stage.strata_err(
+        "list clusters*",
+        1,
+        "the stand-in answers list clusters only with --detail\n",
+    );
+    let (_, steps) = stage.run("verify.sh", &[]);
+    passed(&steps, &["list-applied", "list-applied-json"]);
+}
+
+/// The stand-in of strata refuses `--packs` and `--applied` before it reads its rules, as strata
+/// does since release 0.35.0 (#862). It takes the same call with `--detail`.
+#[test]
+fn the_stand_in_of_strata_refuses_the_old_names_of_list_with_the_exit_code_2_and_takes_detail() {
+    let mut stage = Stage::new(serde_json::json!({}));
+    // a rule that matches each call, so only the refusal gives the exit code 2
+    stage.strata("list*", 0, "the rows\n");
+    let call = |args: &[&str]| {
+        Command::new(stage.path("bin/fake-strata"))
+            .args(args)
+            .env("FAKE_STRATA", stage.path("strata"))
+            .output_locked()
+            .unwrap()
+    };
+    for args in [
+        &["list", "--packs"][..],
+        &["list", "clusters", "--applied", "--json"],
+    ] {
+        let o = call(args);
+        let stderr = String::from_utf8_lossy(&o.stderr);
+        assert_eq!(o.status.code(), Some(2), "{args:?}: {stderr}");
+        assert!(stderr.contains("unexpected argument"), "{args:?}: {stderr}");
+        assert!(o.stdout.is_empty(), "{args:?}: no answer of a rule");
+    }
+    let o = call(&["list", "clusters", "--detail", "--json"]);
+    assert_eq!(o.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&o.stdout), "the rows\n");
 }
 
 /// A stage of `packs.sh` whose release profile has an OS pack ref with `annotations`, and whose
@@ -7067,7 +7158,7 @@ fn each_live_script_that_lists_the_profiles_of_the_project_matches_them_by_name_
     let matched_later = [
         ("baseline.sh", "list profiles --json >"),
         ("loop.sh", "list --pack \"$pack\" --json"),
-        ("template.sh", "list profiles --packs --json"),
+        ("template.sh", "list profiles --detail --json"),
     ];
     let matches = [".name ==", ".uid ==", "index(", "grep -qE '^  $"];
     let listings = listings_of_profiles();
@@ -7232,7 +7323,7 @@ fn unpublished_stage(un_published: bool) -> Stage {
         r#"{"profiles":[{"name":"strata-live-addon","version":"1.0.0","uid":"ad-1"}]}"#,
     );
     stage.strata(
-        "list --packs --json",
+        "list profiles --detail --json",
         0,
         &serde_json::json!({"profiles": [
             {"uid": "ad-1", "published": true, "packs": [{"name": "config"}]},
@@ -7241,7 +7332,7 @@ fn unpublished_stage(un_published: bool) -> Stage {
         .to_string(),
     );
     stage.strata(
-        "list --packs --no-color",
+        "list profiles --detail --no-color",
         0,
         "  strata-live-addon@1.0.0        ad-1  all  add-on  no consumers\n  \
          strata-live-unpublished@1.0.0  un-1  all  add-on  no consumers  draft\n",
@@ -7406,7 +7497,7 @@ fn scope_stage(tenant_scope: &str) -> Stage {
         "  strata-live-profile@1.0.0  r-1  aws\n  strata-live-profile@1.0.0  t-1  aws  tenant\n",
     );
     stage.strata(
-        "list profiles --packs --no-color",
+        "list profiles --detail --no-color",
         0,
         "  strata-live-profile@1.0.0  r-1  aws  cluster  no consumers\n  \
          strata-live-profile@1.0.0  t-1  aws  cluster  no consumers  tenant\n",
@@ -10757,7 +10848,7 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
             "{run}"
         );
         assert!(words[4].ends_with("/out/state"), "{run}");
-        assert!(run.ends_with("list profiles --packs --json"), "{run}");
+        assert!(run.ends_with("list profiles --detail --json"), "{run}");
     }
     let gh = std::fs::read_to_string(dir.path().join("gh.log")).unwrap();
     assert!(

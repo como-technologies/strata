@@ -48,7 +48,7 @@ trap summary EXIT
 
 echo "== the packs the profiles use" | tee -a steps.log
 check list-packs 0 '#55: the profiles list the pack versions they pin' -- \
-  bash -c "\"$strata\" list --packs --json | jq -e --arg n '$(out profile_name)' \
+  bash -c "\"$strata\" list profiles --detail --json | jq -e --arg n '$(out profile_name)' \
     '[.profiles[] | select(.name == \$n)] | length > 0 and all(.packs | length > 0)'"
 check list-registries 0 "#635: list registries names $reg one time, with its uid and its kind" -- \
   bash -c "\"$strata\" list registries --json | jq -e --arg r '$reg' \

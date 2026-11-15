@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The pending update test (#70, #78): when Palette says that an update waits for cluster A, what
-# a cluster record, `list clusters --applied`, and `compare` say about it, and what a record of
+# a cluster record, `list clusters --detail`, and `compare` say about it, and what a record of
 # `cluster:<uid>@pending` holds.
 #
 #   examples/live/pending.sh [FROM_STAGE]
@@ -92,8 +92,8 @@ if stage 2 "an edit of a manifest of the add-on version"; then
     test "$(jq -r .root addon.json)" = "$(jq -r .root base.json)"
   check addon-release-only 0 '#70: a record of the release profile alone says that no update waits for it' -- \
     bash -c "\"$strata\" snapshot cluster:$C/$(out profile_name) | jq -e '.source.cluster.updatesPending == false'"
-  check addon-list 0 '#70: list clusters --applied marks the add-on as behind' -- \
-    "$strata" list clusters --applied
+  check addon-list 0 '#70: list clusters --detail marks the add-on as behind' -- \
+    "$strata" list clusters --detail
   check addon-list-says 0 '#70: the line of the add-on says behind' -- \
     grep -Eq "^    $addon@[^ ]+ +$AD +add-on +behind: an update waits$" addon-list.out
   check addon-compare 1 "#70: compare of the add-on version with its copy on cluster A" -- \

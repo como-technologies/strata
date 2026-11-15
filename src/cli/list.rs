@@ -12,25 +12,12 @@ use super::{connect, now_utc, project_arg};
 
 pub(crate) fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
-    // each old name reads one kind deeper, as before, so a script that uses it gets the same
-    // answer until its removal
-    for (old, given, part) in [
-        ("--packs", a.packs, "versions"),
-        ("--applied", a.applied, "clusters"),
-    ] {
-        if given {
-            progress.note(&format!(
-                "{old} is the old name of --detail for the {part} alone. Release 0.35.0 \
-                 removes {old}"
-            ));
-        }
-    }
     let options = ListOptions {
         kinds: a.kinds.clone(),
         project: project_arg(progress, &a.project)?,
-        packs: a.detail || a.packs,
+        packs: a.detail,
         pack: a.pack.clone(),
-        applied: a.detail || a.applied,
+        applied: a.detail,
         cluster: a.cluster.clone(),
         query: ops::ClusterQuery {
             tags: a.tag.clone(),

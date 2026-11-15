@@ -30,11 +30,6 @@ it is published. It also reads each cluster for the profiles that it applies:
 for the registry listing. Name a kind to read that kind alone:
 `strata list profiles --detail`. The sections below show each part.
 
-`--packs` and `--applied` are the old names of the two parts. `--packs` reads
-the versions alone, and `--applied` reads the clusters alone, as before. Each
-one writes a note that names `--detail`. Release 0.35.0 removes them: see
-[Release 0.34.0](../reference/compatibility.md#release-0340-changes-that-need-action).
-
 ## List the projects
 
 ```text

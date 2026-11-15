@@ -79,8 +79,8 @@ check list-scope 0 '#113: list --json gives scope tenant for the tenant version 
     '([.profiles[] | select(.uid == \$t)][0].scope == \"tenant\") and ([.profiles[] | select(.uid == \$r)][0].scope == \"project\")'"
 check list-mark 0 '#113: the row of the tenant version ends with tenant' -- \
   bash -c "\"$strata\" list profiles --no-color | grep -qE '^  $NAME@$VERSION +$T +[a-z]+ +tenant\$'"
-check list-packs-mark 0 '#113: with --packs, the row of the tenant version ends with tenant too' -- \
-  bash -c "\"$strata\" list profiles --packs --no-color | grep -qE '^  $NAME@$VERSION +$T .* tenant\$'"
+check list-packs-mark 0 '#113: with --detail, the row of the tenant version ends with tenant too' -- \
+  bash -c "\"$strata\" list profiles --detail --no-color | grep -qE '^  $NAME@$VERSION +$T .* tenant\$'"
 check ambiguous 2 "#113: snapshot $NAME@$VERSION exits 2: two scopes answer the ref" -- \
   "$strata" snapshot "$NAME@$VERSION" -o ambiguous.json
 check ambiguous-says 0 '#113: the error names each uid with its scope' -- \
