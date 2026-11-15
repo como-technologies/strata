@@ -65,21 +65,6 @@ These are open:
   alone, because strata prints one refusal when two routes give the same one.
   See
   [The validate routes](validate-routes.md#post-v1clusterprofilesimportvalidate).
-- The answer of `config/rbacs`, `config/namespaces`, and `repave/status` to a
-  key whose role in the project does not give `cluster.get`. The code of
-  Palette shows HTTP 500 with the code `OperationForbidden`, and the stand-in
-  gives that answer. Stage 8 of
-  [tiers.sh](../../development/live-runs.md#tierssh) reads the three routes with
-  such a key, and has no result yet.
-
-  A run shows the answer to a key of an active user with no role in the
-  project. Stage 6 of [tiers.sh](../../development/live-runs.md#tierssh) reads
-  `config/rbacs` with such a key. Palette answers HTTP 500, and not 403, with
-  the code `ResourceAccessDenied` and the message
-  `Project '<project uid>' access denied`. See
-  [Cluster tiers](clusters.md#cluster-tiers). `strata snapshot` of the cluster
-  writes no record and exits `2`: see
-  [The policy tier](../../commands/snapshot/cluster.md#the-policy-tier).
 - The answer of `config/rbacs` to the keys of two users, for a cluster with a
   role binding of the system. The code of Palette shows that each binding of
   that item holds only the subject that is the user of the key. The stand-in
@@ -87,13 +72,17 @@ These are open:
   [tiers.sh](../../development/live-runs.md#tierssh) reads such a cluster with
   two keys, and has no result yet. See
   [Cluster tiers](clusters.md#cluster-tiers).
-- The answer of the profile listing and the cluster listing to a key whose
-  roles in the project do not give `clusterProfile.list` or `cluster.list`.
-  The code of Palette shows HTTP 500 with the code `ResourceAccessDenied`, and
-  the stand-in gives that answer to the cluster listing. Stage 8 of
-  [tiers.sh](../../development/live-runs.md#tierssh) runs `strata list` with
-  such a key, and has no result yet. See
+- The answer of the profile listing to a key whose roles in the project do not
+  give `clusterProfile.list`. The code of Palette shows HTTP 500 with the code
+  `ResourceAccessDenied`. A run shows that answer only for the cluster listing:
+  stage 8 of [tiers.sh](../../development/live-runs.md#tierssh) runs
+  `strata list` with a role that does not give `cluster.list`. See
   [The role that a key needs](clusters.md#the-role-that-a-key-needs).
+- The refusal of a search to a key that cannot read a project. The code of
+  Palette shows HTTP 403 with `AccessDenied` at tenant scope, and HTTP 500 with
+  `ResourceAccessDenied` for the search of one project. A run shows only the
+  searches of a key that reads each project. See
+  [The reach of a search](clusters.md#the-reach-of-a-search).
 - An imported cluster: no run imports one. So no run shows the `clusterType`
   of an import in the listing, or a read-only import with no add-on profile.
   The stand-in of the book models them. See

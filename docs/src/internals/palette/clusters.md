@@ -55,10 +55,9 @@ itself. A cluster on AWS gives these fields:
 - Three routes need `cluster.get`: the bindings route, the namespaces route,
   and `GET /v1/spectroclusters/{uid}/repave/status`. For a key whose role in the
   project does not give it, each answers HTTP 500, and not 403. The body holds
-  the code `OperationForbidden`, and a message that names `cluster.get`. The
-  code of Palette shows it; no live run shows it yet. Stage 8 of
-  [tiers.sh](../../development/live-runs.md#tierssh) reads the three routes
-  with such a key.
+  the code `OperationForbidden`, and a message that names `cluster.get`. Stage
+  8 of [tiers.sh](../../development/live-runs.md#tierssh) reads the three
+  routes with such a key, and gets this answer from each one.
 - An item of the bindings route with `spec.isSystem` true is a role binding of
   the system. In such an item, each binding holds only the subject that is the
   user of the key. The answer drops a binding with no such subject, and keeps
@@ -342,11 +341,15 @@ error, before it prints or keeps the error. It also masks a copy that a letter
 or a digit touches, as after the escape `\n` or the URL code `%3D`. A key of
 fewer than 16 characters can be a part of a word, so strata masks only its
 whole copies. So the terminal, `--json`, a record, and the log of a job hold
-no copy of the key.
+no copy of the key. Stage 9 of [tiers.sh](../../development/live-runs.md#tierssh)
+sends a key that no tenant has. The output and the errors of
+`strata list projects` hold no copy of it.
 
 The tier `palette` of [`strata preflight`](../../commands/preflight/tiers.md#the-key-of-the-live-tier)
 sends more requests. The validate route of a create needs a permission that a viewer role
-does not give. The code of Palette shows this table; no live run shows it yet.
+does not give. The code of Palette shows this table. A live run shows its first
+row for Project Viewer: see
+[The permission of the route](./validate-routes.md#the-permission-of-the-route).
 
 | Requests | Permission | Built-in roles that hold it | The answer without it |
 | --- | --- | --- | --- |
@@ -367,13 +370,16 @@ The profile listing and the cluster listing check the role in the project of
 the request: `clusterProfile.list` and `cluster.list`. When no role there gives
 the permission, each listing answers HTTP 500 with `ResourceAccessDenied`, and
 not 403. The message names the project by its name, or by its uid when the key
-has no role in the project, as in `Project 'dev' access denied`.
+has no role in the project, as in `Project 'dev' access denied`. Stage 8 of
+[tiers.sh](../../development/live-runs.md#tierssh) runs `strata list` with a
+role in the project that gives `clusterProfile.list` and not `cluster.list`. The
+cluster listing answers HTTP 500 with `ResourceAccessDenied`, and the profile
+listing gives the profiles. The code of Palette shows the refusal of the profile
+listing and the message of each listing; no live run shows them yet.
 
 The saved tag filters need `filter.list` in the tenant. Without it, Palette
-answers HTTP 403 with `AccessDenied`, and the
-message names `filter.list`. The code of Palette shows these answers; no live
-run shows them yet. Stage 8 of [tiers.sh](../../development/live-runs.md#tierssh)
-runs `strata list` with a role in the project that does not give `cluster.list`.
+answers HTTP 403 with `AccessDenied`, and the message names `filter.list`. The
+code of Palette shows this answer; no live run shows it yet.
 
 Strata sends no denial again, and its message names what Palette denied: see
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
@@ -412,10 +418,12 @@ cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`, gives the profile
 at position 0 as `spec.clusterProfileTemplate`, so it then names that add-on
 profile. The rule `position-zero` of `strata preflight` warns about it.
 
-A cluster with no change keeps its stored order. The code of Palette shows it;
-no live run shows it yet. Stage 4 of
-[order.sh](../../development/live-runs.md#ordersh) is the live check, with a
-second cluster as the control.
+A cluster with no change keeps its stored order. Stage 4 of
+[order.sh](../../development/live-runs.md#ordersh) shows it, with a second
+cluster as the control. The stage also shows that an added profile goes to the
+end when the `PUT` gives it first. The `PATCH` of an upgrade puts the new
+version of the infrastructure profile at the end. Then the summary of the
+cluster names an add-on profile.
 
 The order that strata gives a cluster record does not depend on the stored
 order. So a change of the stored order changes no root of a record.
@@ -568,10 +576,13 @@ The code of Palette shows these facts; no live run shows the refusal yet:
 
 So [`strata consumers`](../../commands/consumers.md#a-profile-of-the-tenant)
 searches each project of the tenant listing for a profile of the tenant or of
-the system. It names each project whose search Palette refuses. The checks
+the system. It names each project whose search Palette refuses. A live run
+shows the searches with a key that reads each project. The checks
 `tenant-consumers` and `tenant-consumers-projects` of
-[scope.sh](../../development/live-runs.md#scopesh) search each project with a
-key that reads each one.
+[scope.sh](../../development/live-runs.md#scopesh) show that Palette answers the
+search of each project of the tenant listing. The check
+`release-consumers-edge-hosts` shows that the edge host search of one project
+answers, beside the search at tenant scope.
 
 ## A deleted cluster
 

@@ -835,6 +835,36 @@ facts:
       - src/api/palette/clusters.rs
       - src/error/mod.rs
 
+  - id: cluster-config-forbidden
+    kind: behavior
+    reads:
+      codes: [OperationForbidden]
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/spectroclusters/{uid}/config/rbacs
+      - v1/spectroclusters/{uid}/config/namespaces
+      - v1/spectroclusters/{uid}/repave/status
+    live:
+      - tiers.sh:narrow-rbacs
+      - tiers.sh:narrow-namespaces
+      - tiers.sh:narrow-repave
+      - tiers.sh:narrow-rbacs-says
+      - tiers.sh:narrow-namespaces-says
+      - tiers.sh:narrow-repave-says
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+      - commands/snapshot/cluster.md#the-policy-tier
+      - development/live-runs.md#tierssh
+    code:
+      - src/api/palette/mod.rs
+      - src/api/palette/clusters.rs
+      - src/snapshot/policy.rs
+      - src/snapshot/cluster.rs
+      - src/api/codes.rs
+      - src/error/class.rs
+
   - id: cluster-rbac-edit
     kind: behavior
     reads:
@@ -1211,7 +1241,11 @@ facts:
         - message
     stand_in:
       - v1/dashboard/spectroclusters/meta
-    unchecked: The code of Palette shows HTTP 500 with the code ResourceAccessDenied on the cluster listing and on the profile listing, for a key whose roles in the project do not give cluster.list or clusterProfile.list. The message names the project by its name. The checks narrow-list, narrow-list-profiles, narrow-list-says, and narrow-list-once of tiers.sh stage 8 have no result yet.
+    live:
+      - tiers.sh:narrow-list
+      - tiers.sh:narrow-list-profiles
+      - tiers.sh:narrow-list-says
+      - tiers.sh:narrow-list-once
     pages:
       - internals/palette/clusters.md#the-role-that-a-key-needs
       - commands/list.md#a-kind-that-the-key-cannot-read
@@ -1247,8 +1281,14 @@ facts:
       fields:
         - spec.clusterProfileTemplates[].uid
     stand_in: []
-    live: []
-    unchecked: The code of Palette shows it. The checks added-last, upgraded-last, summary-first, summary-addon, and control-kept of order.sh stage 4 have no result yet.
+    live:
+      - order.sh:append-add
+      - order.sh:added-last
+      - order.sh:append-upgrade
+      - order.sh:upgraded-last
+      - order.sh:summary-first
+      - order.sh:summary-addon
+      - order.sh:control-kept
     pages:
       - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
     rules:
@@ -1363,9 +1403,13 @@ facts:
         - message
     stand_in:
       - v1/dashboard/spectroclusters/search
-    unchecked: The code of Palette shows that the cluster search and the edge host search at tenant scope need project.list in the tenant. Without it, they answer HTTP 403 with the code AccessDenied. With it, they give only the projects where a role of the key gives the listing. In a project where no role gives it, the search of that project answers HTTP 500 with the code ResourceAccessDenied, and the message names the project by its name. The project listing at tenant scope holds each project of the tenant only for a key whose role gives project.list in the tenant. The checks tenant-consumers and tenant-consumers-projects of scope.sh search each project with a key that reads each one, and release-consumers-edge-hosts searches the edge hosts of the project of the release. They have no result yet.
+    live:
+      - scope.sh:tenant-consumers
+      - scope.sh:tenant-consumers-projects
+      - scope.sh:release-consumers-edge-hosts
     pages:
       - internals/palette/clusters.md#the-reach-of-a-search
+      - internals/palette/limits.md#what-no-run-covers
       - commands/consumers.md#a-profile-of-the-tenant
       - internals/palette/other-objects.md#app-profiles
     code:
