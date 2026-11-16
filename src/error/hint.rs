@@ -1,5 +1,5 @@
-//! The parts of the message of [`Error::Api`](super::Error::Api) that the answer gives: the words
-//! of Palette, and what the status and the body tell the reader to do.
+//! The parts of the message of [`Error::Api`](super::Error::Api) that the answer gives. They are
+//! the words of Palette, and what the status and the body tell the reader to do.
 
 use crate::api::codes::{Denial, PROJECT_SCOPE_CODE};
 use crate::api::{DOWNLOAD_INTERVAL_SECONDS, is_download_limit};

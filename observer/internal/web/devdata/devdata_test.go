@@ -793,8 +793,8 @@ func TestTheSetAsksHoldsOneAnswerOfEachVerdict(t *testing.T) {
 }
 
 // The set update-checks holds the answers of the set asks, each with the checks of the update that strata gives beside
-// it, and it changes nothing else of ok. The registry gained kubernetes 1.37.0 after the versions cycle: the answer of that
-// move is for 1.37.0, and the move from the pin of the row skips a minor version to the newest version of the row.
+// it. It changes nothing else of ok. The registry gained kubernetes 1.37.0 after the versions cycle. The answer of that
+// move is for 1.37.0. The move from the pin of the row skips a minor version to the newest version of the row.
 func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 	ok, asks, checks := load(t, StateOK), load(t, StateAsks), load(t, StateUpdateChecks)
 	moves := movesOf(checks)

@@ -243,8 +243,8 @@ const (
 	screensOnly = "only the scripts of the screens write markup"
 	oneWrite    = "el.innerHTML = part(markup);"
 	notAFont    = "is not a file of fonts/"
-	// inAString and styledCell name and make a problem of a string of the script, and secondWrite names a second write
-	// of markup, in the names of the cases.
+	// inAString and styledCell name and make a problem of a string of the script. secondWrite names a second write of
+	// markup. inAString and secondWrite are in the names of the cases.
 	inAString   = " in a string of the script"
 	styledCell  = "\nconst s = `<td style=\"width:90px\">`;"
 	secondWrite = "a second write of markup"

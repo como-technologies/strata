@@ -424,10 +424,10 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
     ))
 }
 
-/// `snap` with the values that a question to Palette sends for each pack of virtual machines: the
-/// console address that the cluster `doc` holds, in place of the mask of strata. See
-/// [`console_values`]. Only the values text of such a pack changes, because a body reads no other
-/// field of it. A record with no such mask gives `snap` as it is.
+/// `snap` with the values that a question to Palette sends for each pack of virtual machines. In
+/// those values, the console address that the cluster `doc` holds takes the place of the mask of
+/// strata. See [`console_values`]. Only the values text of such a pack changes, because a body
+/// reads no other field of it. A record with no such mask gives `snap` as it is.
 pub(super) fn with_console_of<'a>(snap: &'a Snapshot, doc: &Value) -> Result<Cow<'a, Snapshot>> {
     let mut out: Option<Snapshot> = None;
     for (i, p) in snap.packs.iter().enumerate() {

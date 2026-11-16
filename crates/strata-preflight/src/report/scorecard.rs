@@ -28,7 +28,7 @@ pub(super) struct Tally {
 
 impl Tally {
     /// The counts of `checks`. A note is outside the checks that ran and outside the readiness,
-    /// whether it ran or not: a failed note is a note, and another note adds nothing.
+    /// whether it ran or not. A failed note is a note, and another note adds nothing.
     pub(super) fn of<'a>(checks: impl IntoIterator<Item = &'a CheckResult>) -> Tally {
         let mut t = Tally::default();
         for c in checks {

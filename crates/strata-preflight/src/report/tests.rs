@@ -1290,8 +1290,8 @@ fn a_check_with_one_request_keeps_its_ran_and_answer_and_has_no_requests() {
     );
 }
 
-/// The criterion of #832: a message from an answer shows each tag of HTML as text in the markdown,
-/// in the row of a check that failed and in the line of the checks that did not run.
+/// The criterion of #832: a message from an answer shows each tag of HTML as text in the markdown.
+/// It does so in the row of a check that failed and in the line of the checks that did not run.
 #[test]
 fn the_markdown_shows_each_tag_of_a_message_from_an_answer_as_text() {
     let message = format!("HTTP 403: {ANSWER_TAGS}");

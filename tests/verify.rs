@@ -615,8 +615,9 @@ fn a_500_that_palette_gives_for_a_refusal_is_not_retried() {
 
 #[test]
 fn a_500_whose_code_says_that_access_is_denied_is_not_retried() {
-    // the answers of Palette to a key with no role in the project that gives the read, to a role
-    // without the permission on one object, and to a user with no role at all
+    // the answer of Palette to a key with no role in the project that gives the read. The next two
+    // are its answers to a role without the permission on one object, and to a user with no role
+    // at all
     for body in [
         clusters_denied(),
         error_body(
@@ -1990,8 +1991,9 @@ fn the_heading_of_a_record_of_two_profiles_gives_the_count_of_the_profiles() {
 }
 
 /// A row of `verify --summary` names a record of four profiles in the words of the heading of
-/// `compare`, on the terminal and in markdown, also when strata cannot check it (#851). The
-/// document gives the words in `subject`, and keeps the joined `name` and `version` for a script.
+/// `compare`. The row does this on the terminal and in markdown, also when strata cannot check the
+/// record (#851). The document gives the words in `subject`, and keeps the joined `name` and
+/// `version` for a script.
 #[test]
 fn a_row_of_the_summary_names_a_record_of_four_profiles_in_the_words_of_the_heading_of_compare() {
     let dir = tempfile::tempdir().unwrap();
@@ -2517,7 +2519,7 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
 }
 
 /// The cluster of [`serve_policy`], whose role bindings Palette answers to the key of the user
-/// `user`: the bindings of [`system_rbacs`], with a binding of the system.
+/// `user`. The bindings are those of [`system_rbacs`], with a binding of the system.
 fn serve_system_rbacs(dir: &Path, user: &str) -> MemoryApi {
     serve_policy(dir, barney()).with(rbacs_route(), rbacs_answer(system_rbacs(), user))
 }
@@ -5004,7 +5006,8 @@ fn list_with_packs_counts_the_cluster_templates_of_a_version_with_its_clusters()
 }
 
 /// `list --detail` and `consumers --list-only` read one profile document, so they give one number
-/// for a version: the clusters of its consumer list and the cluster templates that link it.
+/// for a version. The number counts the clusters of the consumer list of the version and the
+/// cluster templates that link it.
 #[test]
 fn list_with_packs_gives_the_count_of_consumers_with_the_list_of_palette_alone() {
     let api = a_linked_and_a_shared_version();
@@ -8925,7 +8928,7 @@ fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_
 }
 
 /// The criterion of #887: a record and a verdict keep the reason of a read that failed as
-/// `HTTP <status>: <body>`, with the body as Palette sent it. Only a text form gives the words.
+/// `HTTP <status>: <body>`. The body stays as Palette sent it. Only a text form gives the words.
 #[test]
 fn a_record_and_a_verdict_keep_the_reason_of_a_read_that_failed_with_the_body_of_the_answer() {
     let dir = tempfile::tempdir().unwrap();
@@ -10911,8 +10914,9 @@ fn the_check_of_the_questions_reads_each_record_file_and_refuses_the_pair_it_sho
                 .is_ok()
         );
     }
-    // two profile records show no cluster: the error says so, names the command with a cluster in
-    // place of one record, and names plain compare (#633). That command passes the check
+    // two profile records show no cluster: the error says so, and names the command with a cluster
+    // in place of one record. It also names plain compare (#633). The command with a cluster passes
+    // the check
     for (questions, option) in [(repave, "--repave"), (validate, "--validate")] {
         let said = refused(questions, &a_file, &b_file);
         assert!(
@@ -15701,8 +15705,8 @@ fn upgrade_refusal(message: &str) -> Value {
 }
 
 /// The record of the profile version `uid`, `name` at `version`, of the type `kind`, that pins
-/// the pack of `pack_ref` (`pack:<name>@<version>`): the record of the pack from `api`, with the
-/// source of a profile version.
+/// the pack of `pack_ref` (`pack:<name>@<version>`). It is the record of the pack from `api`, with
+/// the source of a profile version.
 fn version_pinning(
     api: &MemoryApi,
     pack_ref: &str,
@@ -18867,9 +18871,9 @@ fn a_behind_report_with_values_of_a_later_release_reads_with_no_error_and_writes
 
 // ---- a text of an answer in the markdown -----------------------------------------------------
 
-/// The markdown of `verify` that quotes the message of Palette `message`, in three places: a note
-/// of a diff, a verdict, and the sync of a registry in a verdict. Each one holds `start`, the start
-/// of the message as the markdown writes it, after the words of strata.
+/// The markdown of `verify` that quotes the message of Palette `message` in three places. They are
+/// a note of a diff, a verdict, and the sync of a registry in a verdict. Each one holds `start`,
+/// the start of the message as the markdown writes it, after the words of strata.
 fn markdown_that_quotes(message: &str, start: &str) -> [String; 3] {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -18923,8 +18927,8 @@ fn markdown_that_quotes(message: &str, start: &str) -> [String; 3] {
     [note, verdict, sync]
 }
 
-/// The criterion of #832: a message of Palette in a note of a diff, and in a verdict, shows each
-/// tag of HTML as text in the markdown of a pull request comment.
+/// The criterion of #832 for a message of Palette in a note of a diff and in a verdict. The
+/// markdown of a pull request comment shows each tag of HTML in it as text.
 #[test]
 fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() {
     for md in markdown_that_quotes(common::ANSWER_TAGS, "&lt;a href=") {
@@ -18932,9 +18936,9 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() 
     }
 }
 
-/// The criteria of #872: a message of Palette with a link, an emphasis, and two backticks shows
-/// each mark as text in a note and in a verdict. So the two backticks open no code span, and the
-/// tag between them shows as text.
+/// The criteria of #872: a note and a verdict show each mark of a message of Palette as text. The
+/// message holds a link, an emphasis, and two backticks. So the two backticks open no code span,
+/// and the tag between them shows as text.
 #[test]
 fn the_markdown_of_a_note_and_of_a_verdict_shows_the_marks_of_markdown_of_a_message_as_text() {
     for md in markdown_that_quotes(common::ANSWER_MARKS, "\\[x\\]") {
@@ -19098,7 +19102,7 @@ fn the_markdown_of_full_keeps_a_line_of_three_backticks_of_the_values_in_its_blo
 }
 
 /// The criterion of #832: the name of a profile, as the answer gives it, shows each tag of HTML as
-/// text in the line `Consumers:` of the markdown, as it does in the heading.
+/// text. It does this in the line `Consumers:` of the markdown, as in the heading.
 #[test]
 fn the_markdown_of_the_consumers_line_shows_the_name_of_the_profile_as_text() {
     let dir = tempfile::tempdir().unwrap();
@@ -19127,9 +19131,9 @@ fn the_markdown_of_the_consumers_line_shows_the_name_of_the_profile_as_text() {
     common::assert_only_strata_tags(&common::outside_code_blocks(&md));
 }
 
-/// The criterion of #832: the tag of a pack, as the answer gives it, shows each tag of HTML as text
-/// in the change cell of the pack table and in the fold of the pack. So do the layer of a pack and
-/// the project of a side.
+/// The criterion of #832: the tag of a pack, as the answer gives it, shows each tag of HTML as
+/// text. It does this in the change cell of the pack table and in the fold of the pack. So do the
+/// layer of a pack and the project of a side.
 #[test]
 fn the_markdown_of_a_tag_a_layer_and_a_project_shows_the_text_of_the_answer_as_text() {
     let dir = tempfile::tempdir().unwrap();
@@ -19174,8 +19178,8 @@ fn the_markdown_of_a_tag_a_layer_and_a_project_shows_the_text_of_the_answer_as_t
     common::assert_only_strata_tags(&common::outside_code_blocks(&md));
 }
 
-/// The criterion of #832: a state of a pack version that strata does not know, as the answer gives
-/// it, shows each tag of HTML as text in the markdown of `packs`.
+/// The criterion of #832 for a state of a pack version that strata does not know, as the answer
+/// gives it. The markdown of `packs` shows each tag of HTML in it as text.
 #[test]
 fn the_markdown_of_packs_shows_a_state_of_the_answer_as_text() {
     let api = serve_summaries(

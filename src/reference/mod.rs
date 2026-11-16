@@ -206,8 +206,8 @@ impl Ref {
         Ref::pack(registry_in_ref(registry, registry_uid), name, version)
     }
 
-    /// The ref as a person types it in a shell: in single quotes when it holds a space or another
-    /// character that the shell reads, as in `'pack:Public Repo/kubernetes@1.36.2'`.
+    /// The ref as a person types it in a shell. It is in single quotes when it holds a space or
+    /// another character that the shell reads, as in `'pack:Public Repo/kubernetes@1.36.2'`.
     ///
     /// A report prints each ref that a person can copy here, so a copy pastes back as written.
     pub fn shell_word(&self) -> String {

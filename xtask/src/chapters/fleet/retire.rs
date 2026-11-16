@@ -1,5 +1,5 @@
-//! The chapters of the retire of a version: the consumers of a profile of a project, and of a
-//! profile of the tenant that each project can use.
+//! The chapters of the retire of a version. They show the consumers of a profile of a project,
+//! and of a profile of the tenant that each project can use.
 
 use super::super::DEV_ENV;
 use super::super::ids::{

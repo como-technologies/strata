@@ -1,6 +1,7 @@
-//! The tables of `list` for the terminal: the profile versions with their packs, the clusters
-//! with their profiles, the projects, the saved tag filters, and the registries. Each cell is
-//! [`terminal_text`]: see [`table_line`].
+//! The tables of `list` for the terminal. They show the profile versions with their packs, the
+//! clusters with their profiles, the projects, the saved tag filters, and the registries.
+//!
+//! Each cell is [`terminal_text`]: see [`table_line`].
 
 use super::table::{column_widths, matched, painted_text, table_line};
 use crate::ops::{

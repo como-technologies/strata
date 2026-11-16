@@ -73,10 +73,10 @@ pub(crate) fn consumer_counts(d: &Diff) -> Option<(usize, usize)> {
     Some((d.a.consumers.as_ref()?.count, d.b.consumers.as_ref()?.count))
 }
 
-/// What the consumers of the profile side say, when the other side is a cluster or a pack:
-/// `aws-stack@1.1.0 has 1 consumer; cluster payments is one of them`. The count of the other side is 0
-/// because it has no consumers, so the reports state the profile side alone. None when both sides
-/// are profile versions, or when neither is.
+/// What the consumers of the profile side say, when the other side is a cluster or a pack. An
+/// example is `aws-stack@1.1.0 has 1 consumer; cluster payments is one of them`. The count of the
+/// other side is 0 because it has no consumers, so the reports state the profile side alone. None
+/// when both sides are profile versions, or when neither is.
 pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
     let (profile, other) = match (lists_consumers(&d.a), lists_consumers(&d.b)) {
         (true, false) => (&d.a, &d.b),
@@ -221,9 +221,9 @@ fn clusters_found(read: &ClustersRead, found: usize) -> (Reading, String) {
 /// What a row of a reading says when `--list-only` asked for none of it.
 const NOT_DONE_LIST_ONLY: &str = "not done (--list-only)";
 
-/// The row of the app deployments of an app profile: the app deployments of the listings of the
-/// projects that run the version and that the consumer list does not name. Or why strata listed
-/// none. The line `NOT CHECKED` names each project whose listing failed.
+/// The row of the app deployments of an app profile. It names the app deployments of the listings
+/// of the projects that run the version and that the consumer list does not name. Or why strata
+/// listed none. The line `NOT CHECKED` names each project whose listing failed.
 fn apps_found(r: &ConsumersReport) -> String {
     let Some(projects) = &r.projects_read else {
         return match r.clusters_read.reason.as_str() {

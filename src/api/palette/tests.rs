@@ -766,7 +766,8 @@ fn each_template_of_a_route_that_gives_a_closed_set_starts_from_its_collection()
 }
 
 /// Issue #625. `@latest` of a profile and of an app profile gives the uid of the version that it
-/// takes, and the highest pre-release above it, which it skips. An exact version skips nothing.
+/// takes. It also gives the highest pre-release above it, which it skips. An exact version skips
+/// nothing.
 #[test]
 fn latest_of_a_profile_and_of_an_app_profile_names_the_pre_release_that_it_skips() {
     let listed = |(name, uid, version): &(&str, &str, &str)| json!({"metadata": {"name": name, "uid": uid}, "spec": {"version": version}});

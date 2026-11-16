@@ -110,9 +110,9 @@ fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
     out
 }
 
-/// A side of the heading of a diff: the ref of a pack, such as
-/// `'pack:Public Repo/kubernetes@1.36.2'`, or the title of each other record, such as
-/// `aws-stack@1.1.1 on cluster payments`.
+/// A side of the heading of a diff. For a pack, it is the ref of the pack, such as
+/// `'pack:Public Repo/kubernetes@1.36.2'`. For each other record, it is the title of the record,
+/// such as `aws-stack@1.1.1 on cluster payments`.
 fn side_title(s: &Source, p: &Paint) -> String {
     match &s.pack {
         Some(pk) => {

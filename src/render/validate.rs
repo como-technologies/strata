@@ -23,8 +23,8 @@ pub fn refusal_lines(snap: &Snapshot) -> Vec<String> {
 /// Palette refuses it, or strata did not ask.
 ///
 /// It is the answer of the check, so it is the last line, after the record. So a record on
-/// standard output does not hide it on a terminal. It names what Palette checks: the name, the
-/// version, and the packs of a candidate, or the packs of a version as an update of itself.
+/// standard output does not hide it on a terminal. It names what Palette checks. That is the name,
+/// the version, and the packs of a candidate, or the packs of a version as an update of itself.
 pub fn acceptance_line(snap: &Snapshot) -> Option<String> {
     let source = &snap.source;
     if !source

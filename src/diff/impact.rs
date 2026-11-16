@@ -14,9 +14,10 @@ use crate::model::layer::Layer;
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum ImpactLevel {
-    /// No change, a renamed tag of the same build, a pack uid that Palette mints, an OS,
-    /// Kubernetes, or kernel pack that moved to another pack reference at the same version, or a
-    /// pack whose version alone changed and kept its numbers.
+    /// No change, a renamed tag of the same build, or a pack uid that Palette mints. The level is
+    /// also `none` for an OS, Kubernetes, or kernel pack that moved to another pack reference at
+    /// the same version. It is also `none` for a pack whose version alone changed and kept its
+    /// numbers.
     #[default]
     None,
     /// Only the upstream digest changed, or an OS, Kubernetes, or kernel pack moved to another pack

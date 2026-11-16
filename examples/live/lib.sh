@@ -1,8 +1,8 @@
-# Shared by the scripts in examples/live: the strata binary, the OpenTofu outputs, the usage and the
-# stages, the checks and their summary, the markdown of a text, the edits of the lab, the OpenTofu
-# applies, and the baseline.
+# The scripts in examples/live share this file. It gives them the strata binary, the OpenTofu
+# outputs, the usage and the stages, and the checks and their summary. It also gives them the
+# markdown of a text, the edits of the lab, the OpenTofu applies, and the baseline.
 # Set `script` to the script's name, `flag` to the immutable-clusterprofiles setting the script runs
-# with, and `from` to the first stage of the run, then source it.
+# with, and `from` to the first stage of the run. Then source this file.
 #
 # The baseline is the state `just live-up` builds: cluster A Running the release and add-on
 # profiles' current content, no cluster B, every profile name holding only the versions

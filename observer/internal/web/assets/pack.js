@@ -352,7 +352,7 @@ function sideFacts(x, p, changed) {
   return newer ? [published, cluster, newer] : [published, cluster];
 }
 
-// newerFact gives the fact of the newer version of the pack p of the profile x, or null for a pack that strata does not look for.
+// newerFact gives the fact of the newer version of the pack p of the profile x. It gives null for a pack that strata does not look for.
 function newerFact(x, p) {
   switch (newerStateOf(x, p)) {
     case NEWER_STATE.NEWER: return [p.newer, "Newer version"];

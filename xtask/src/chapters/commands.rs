@@ -113,7 +113,7 @@ fn list_denied(r: &mut Runner) {
     r.tenant(|t| t.deny(TENANT, TAG_FILTER_LISTING, Denial::Route, &filters));
     r.step("list-denied-filters", 2, true, "strata list filters");
     // the error document gives the words of Palette in its message, and the body as Palette sent
-    // it (#632); the page of the errors shows it
+    // it (#632). The page of the errors shows it
     r.step(
         "list-denied-filters-json",
         2,

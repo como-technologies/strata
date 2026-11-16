@@ -2,11 +2,13 @@
 //!
 //! `behind` and `compare --validate` ask a validate route about a move, and the route checks the
 //! packs. Strata makes two more checks. `compare` of two versions of one profile makes them too,
-//! with no request. Each required variable has a value or a default value:
-//! Palette checks this rule only at the update, and no route answers it before the update. One
-//! upgrade moves the Kubernetes pack one minor version at most: that is a rule of Kubernetes. A
-//! live run shows that Palette takes an update that skips a minor version, so this check is a
-//! check of strata. "The gaps that strata fills" in the book lists both checks.
+//! with no request.
+//!
+//! Each required variable has a value or a default value. Palette checks this rule only at the
+//! update, and no route answers it before the update. One upgrade moves the Kubernetes pack one
+//! minor version at most: that is a rule of Kubernetes. A live run shows that Palette takes an
+//! update that skips a minor version, so this check is a check of strata. "The gaps that strata
+//! fills" in the book lists both checks.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -23,8 +25,8 @@ use crate::text::{and_list, plural};
 /// update that moves more, so strata names such a move: see [`MinorSkip`].
 const KUBERNETES_MINOR_STEP: u64 = 1;
 
-/// What strata checks about a move beside the answer of a validate route: a rule that Palette
-/// checks only at the update, and the minor step of Kubernetes.
+/// What strata checks about a move beside the answer of a validate route. It checks a rule that
+/// Palette checks only at the update, and the minor step of Kubernetes.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateChecks {

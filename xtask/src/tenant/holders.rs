@@ -217,8 +217,8 @@ impl Tenant {
     }
 
     /// The app deployment `name`, `uid`, of the app profile `profile` at its version now, in the
-    /// state `Deployed`. Palette names it in `status.inUseApps` of the app profile, and in the app
-    /// deployment listing of the project, with the app profile version that it runs.
+    /// state `Deployed`. Palette names it in `status.inUseApps` of the app profile. The app
+    /// deployment listing of the project also names it, with the app profile version that it runs.
     pub fn app_deployment(&self, project: &str, uid: &str, name: &str, profile: &str) {
         let path = app_profile_route(profile);
         let mut doc = self.read(project, &path);
@@ -247,7 +247,8 @@ impl Tenant {
     }
 
     /// Make Palette omit each app deployment from the consumer list of the app profile
-    /// `profile` in `project`, as it does for a key with no role there that gives `cluster.get`.
+    /// `profile` in `project`. Palette does this for a key with no role there that gives
+    /// `cluster.get`.
     /// The list is then empty, with no error. The code of Palette shows it; no live run shows it
     /// yet.
     pub fn deny_cluster_get(&self, project: &str, profile: &str) {

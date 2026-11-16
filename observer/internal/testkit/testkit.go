@@ -114,7 +114,7 @@ const (
 	AuditSentinel = "AUDIT-REASON-SENTINEL"
 	// AuditUnread is the message of an event when the observer could not read the audit log.
 	AuditUnread = "The audit log could not be read, so this does not say who made the change."
-	// DexProfile is the profile of the pack dex in the dev data and in the tests of more than one package, and DexKey is
+	// DexProfile is the profile of the pack dex in the dev data and in the tests of more than one package. DexKey is
 	// the key of the pack.
 	DexProfile = "fred-identity@2.3.0"
 	DexKey     = "addon/dex"
@@ -167,8 +167,8 @@ const (
 	NoEOL         = `\ No newline at end of file`
 )
 
-// The profiles and the keys of the packs of the test data that the tests of more than one package hold, with the
-// versions of a pack in a move.
+// The profiles and the keys of the packs of the test data that the tests of more than one package hold. This block
+// also holds the versions of a pack in a move.
 const (
 	// BaseProfile and GatewayProfile are two profiles of the dev data. BaseProfile holds the pack kubernetes, and
 	// GatewayProfile holds the pack traefik, whose key is TraefikKey. GatewayMoved is the version of the profile that the

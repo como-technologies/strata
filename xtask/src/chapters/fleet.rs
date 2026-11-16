@@ -128,7 +128,7 @@ fn behind_rows(r: &mut Runner) {
 }
 
 /// The steps of the chapter `behind` where `compare` of two versions of one profile names the
-/// checks of the move, as the bump of `behind` does (#897).
+/// checks of the move (#897). The bump of `behind` also names them.
 fn compare_profile_checks(r: &mut Runner) {
     // aws-stack@1.1.1 adds the required variable platform_owner, which has no default value
     r.step(
@@ -687,9 +687,9 @@ fn packs(r: &mut Runner) {
     r.step("packs-json", 0, false, r#"strata packs csi-aws-ebs --registry 'Public Repo' --latest --json | jq '.registries[0].versions[0]'"#);
 }
 
-/// The steps of the chapter `packs` for a pack version in two registries: the refusal of a ref
-/// that names no registry, as text and as JSON, and the list and the record that name the registry
-/// of each pin.
+/// The steps of the chapter `packs` for a pack version in two registries. They give the refusal of
+/// a ref that names no registry, as text and as JSON. They also give the list and the record that
+/// name the registry of each pin.
 fn two_registries(r: &mut Runner) {
     r.step(
         "pack-ambiguous",

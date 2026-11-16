@@ -107,8 +107,8 @@ impl Cmd {
         }
     }
 
-    /// The color of standard error for the command: by its `--color` and `--no-color`, or by
-    /// the environment and the stream for a command with no such flag.
+    /// The color of standard error for the command, by its `--color` and `--no-color`. For a
+    /// command with no such flag, the environment and the stream give the color.
     pub(crate) fn stderr_paint(&self) -> Paint {
         self.out()
             .map_or_else(stderr_paint_auto, OutputArgs::stderr_paint)

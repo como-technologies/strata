@@ -4,7 +4,7 @@
 //! projects where a role of the key gives the listing. So strata also searches each project of
 //! the tenant listing. A project that Palette refuses is not checked, and an answer with no
 //! consumer then exits `2`. For a profile of a project, strata searches the edge hosts of the
-//! project, and for an app profile of a project, it lists the app deployments of the project.
+//! project. For an app profile of a project, strata lists the app deployments of the project.
 
 use std::cell::RefCell;
 
@@ -97,8 +97,8 @@ fn project(uid: &str) -> MemoryApi {
 }
 
 /// The project `uid`, named `name`, which refuses the search `route` as Palette refuses a key with
-/// no role there that gives the listing: HTTP 500 with `ResourceAccessDenied`, and the name of the
-/// project.
+/// no role there that gives the listing. The refusal gives HTTP 500 with `ResourceAccessDenied`,
+/// and the name of the project.
 fn denying(uid: &str, name: &str, route: &str) -> MemoryApi {
     project(uid).failing(
         route,

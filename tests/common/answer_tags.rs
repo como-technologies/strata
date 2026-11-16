@@ -1,7 +1,7 @@
-//! A text of an answer with tags of HTML, one with the marks of markdown, one with mentions of
-//! GitHub, one with bare addresses, and one with control characters. The checks that a markdown
-//! output shows each such tag, mark, and mention as text, and each such address as it is. The
-//! check that a terminal output shows each such control character as a visible escape.
+//! A text of an answer with tags of HTML, one with the marks of markdown, and one with mentions
+//! of GitHub. Also a text with bare addresses, and one with control characters. The checks that a
+//! markdown output shows each such tag, mark, and mention as text, and each such address as it
+//! is. The check that a terminal output shows each such control character as a visible escape.
 //!
 //! `tests/common/mod.rs` re-exports this file for the tests. The unit tests of `src/text.rs` and
 //! of the report of `strata-preflight` include it with `#[path]`. So one text of each kind and one
@@ -59,8 +59,8 @@ pub fn assert_answer_mentions_as_text(markdown: &str) {
     assert_eq!(mention, None, "a mention of GitHub in\n{markdown}");
 }
 
-/// The body of an answer with three bare addresses that GitHub links: one with a query of two
-/// values, one with `~`, `*`, and `_`, and one with `/@name`. A `,`, a `)`, and a `.` end them, as
+/// The body of an answer with three bare addresses that GitHub links. One has a query of two
+/// values, one has `~`, `*`, and `_`, and one has `/@name`. A `,`, a `)`, and a `.` end them, as
 /// in a sentence.
 pub const ANSWER_ADDRESSES: &str = "see https://example.com/?a=1&b=2, \
      https://example.com/~a/*b*/c_d and (https://example.com/@octocat).";
@@ -75,9 +75,9 @@ pub fn assert_answer_addresses_as_they_are(markdown: &str) {
 }
 
 /// The message of an answer with an escape sequence of the terminal, a carriage return, and a line
-/// break, as a decoded message of Palette can hold them. On a terminal, the escape sequence makes
-/// the next text red, the carriage return writes over the start of the line, and the line break
-/// starts a new line.
+/// break. A decoded message of Palette can hold them. On a terminal, the escape sequence makes the
+/// next text red, and the carriage return writes over the start of the line. The line break starts
+/// a new line.
 pub const ANSWER_CONTROLS: &str = "\u{1b}[31mred\u{1b}[0m over\rback\nnext";
 
 /// [`ANSWER_CONTROLS`] as a terminal must get it: each control character as a visible escape.

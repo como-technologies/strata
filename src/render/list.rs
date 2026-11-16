@@ -20,7 +20,7 @@ pub(crate) fn profile_type_cell(pr: &crate::ops::ListedProfile) -> &str {
 }
 
 /// `clusters: not read (<the message of the error>)`: one line for each kind of the listing that
-/// strata could not read, in the order of [`ListKind`].
+/// strata could not read. The lines are in the order of [`ListKind`].
 pub(crate) fn unread_lines(l: &Listing) -> Vec<String> {
     ListKind::ALL
         .iter()

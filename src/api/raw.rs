@@ -248,8 +248,8 @@ fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
     Ok(())
 }
 
-/// The file of a raw directory that holds the registries that the key can see, when the record
-/// read them for the name of the registry of each pack.
+/// The file of a raw directory that holds the registries that the key can see. It is there when
+/// the record read them for the name of the registry of each pack.
 const REGISTRIES_FILE: &str = "registries.json";
 
 /// Write `registries`, the items of `GET /v1/registries/metadata`, under `dir` as a listing, so
@@ -468,8 +468,8 @@ impl RawCluster {
     ///
     /// # Errors
     ///
-    /// [`Error::Io`] when strata cannot write a file, and [`Error::Serialize`] when it cannot
-    /// write a document, the masked values of a cluster group, or the masked values of a pack.
+    /// [`Error::Io`] when strata cannot write a file. [`Error::Serialize`] when it cannot write a
+    /// document, the masked values of a cluster group, or the masked values of a pack.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
         let mut cluster = masked_group(&self.cluster)?;

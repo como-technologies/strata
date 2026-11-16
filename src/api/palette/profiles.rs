@@ -83,7 +83,7 @@ impl<A: PaletteApi> Palette<A> {
         }
     }
 
-    /// The uid of a profile that a ref names: `id` is a uid when there is no `version`, and else
+    /// The uid of a profile that a ref names. `id` is a uid when there is no `version`. Else it is
     /// a name that [`Palette::resolve`] finds at `version`. For [`LATEST`], `progress` notes the
     /// version that the pick takes: see [`Picked::note`].
     pub(crate) fn profile_uid(

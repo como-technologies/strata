@@ -52,8 +52,8 @@ func newReceiver(t *testing.T, start func(http.Handler) *httptest.Server) *Recei
 	return r
 }
 
-// MarkedAddress gives the address of the receiver with AddressMarker in its path and a newline at its end, as the file
-// of a Secret of a channel holds it.
+// MarkedAddress gives the address of the receiver with AddressMarker in its path and a newline at its end. The file
+// of a Secret of a channel holds an address in this form.
 func (r *Receiver) MarkedAddress() string {
 	return r.URL + "/" + AddressMarker + "\n"
 }

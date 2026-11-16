@@ -598,8 +598,8 @@ impl ClusterVariable {
 /// The words that make a variable name read as a secret, with no case.
 const SECRET_WORDS: [&str; 4] = ["secret", "password", "passwd", "token"];
 
-/// The pairs of words that make a variable name read as a secret, with no case, with one
-/// character or none between them: `apikey`, `api_key`, `private-key`.
+/// The pairs of words that make a variable name read as a secret, with no case. One character or
+/// none is between the two words: `apikey`, `api_key`, `private-key`.
 const SECRET_PAIRS: [(&str, &str); 2] = [("api", "key"), ("private", "key")];
 
 /// True when `name` matches `secret|password|passwd|token|api.?key|private.?key` with no case.

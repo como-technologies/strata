@@ -171,7 +171,7 @@ pub struct PackDiff {
     /// The params differ.
     pub params_changed: bool,
     /// True when the only difference is a `packUid` that Palette mints. A manifest pack comes
-    /// from no registry, and Palette mints its uid for each profile it creates, so two profiles
+    /// from no registry, and Palette mints its uid for each profile it creates. So two profiles
     /// with the same manifests have different uids. A pack from a registry that Palette does not
     /// sync gets its uid at the create, so the record of a candidate has none. The content is the
     /// same, so the impact is `none` with no text.

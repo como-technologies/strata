@@ -4,8 +4,8 @@
 //! serves the published packs of a profile. It serves the draft packs with no mask. Strata writes
 //! the same mask over the draft, so that a record and a saved answer hold no clear secret. Strata
 //! also writes the mask over each password in the values of a cluster group that a record or a
-//! saved answer keeps, and over the console address of a pack of virtual machines: see
-//! [`console`]. The body of an error of an answer holds no copy of the API key: see
+//! saved answer keeps. It writes the mask over the console address of a pack of virtual machines
+//! too: see [`console`]. The body of an error of an answer holds no copy of the API key: see
 //! [`mask_secret`].
 
 use std::borrow::Cow;
@@ -417,7 +417,7 @@ fn holds_variable(text: &str) -> bool {
     })
 }
 
-/// `text` with the value of the key at `path` changed to `value` in single quotes on its line, or
+/// `text` with the value of the key at `path` changed to `value` in single quotes on its line.
 /// `None` when that key is not on a line of its own in block style.
 fn edit_line(text: &str, path: &[&str], value: &str) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();

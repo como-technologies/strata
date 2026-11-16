@@ -44,7 +44,7 @@ func sectionOf(t *testing.T, page, heading string) string {
 	return rest
 }
 
-// unwrapped gives the text with each run of white space as one space, so that a sentence of the book that wraps reads as
+// unwrapped gives the text with each run of white space as one space. Then a sentence of the book that wraps reads as
 // one line.
 func unwrapped(text string) string { return strings.Join(strings.Fields(text), " ") }
 

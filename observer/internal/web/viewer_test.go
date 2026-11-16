@@ -796,8 +796,8 @@ func TestTheAnswersOfPaletteReadExactlyAsTheIssueSays(t *testing.T) {
 // noMoveScreens are the screens that show no move. They show no answer of Palette and no check of strata.
 var noMoveScreens = []string{"#overview", "#findings", "#profiles", "#notchecked", "#images"}
 
-// sameScreensWithNoMove fails when a screen that shows no move has another nav or other tiles in got than in want,
-// or holds one of the words in got. The nav and the tiles hold every count.
+// sameScreensWithNoMove fails when a screen that shows no move has another nav or other tiles in got than in want.
+// It also fails when such a screen holds one of the words in got. The nav and the tiles hold every count.
 func sameScreensWithNoMove(t *testing.T, want, got []screen, words ...string) {
 	t.Helper()
 	for _, hash := range noMoveScreens {

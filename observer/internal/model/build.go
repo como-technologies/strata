@@ -56,11 +56,13 @@ func Build(in Input) Summary {
 }
 
 // forThisCluster gives the answers of the versions cycle for the profile versions that the cluster runs.
-// The cycle asks about each record, also about a version that the cluster no longer runs, such as a
-// first-seen record after a move to the next version. A newer version of that version is no news for
+// The cycle asks about each record, also about a version that the cluster no longer runs. An example is
+// a first-seen record after a move to the next version. A newer version of that version is no news for
 // this cluster. So the answers name no such record, and a pin or a profile version that only such
-// records hold leaves. Before the first good content cycle, the observer does not know what the
-// cluster runs, and it keeps each answer. The answers of the cycle stay as they are.
+// records hold leaves.
+//
+// Before the first good content cycle, the observer does not know what the cluster runs, and it keeps
+// each answer. The answers of the cycle stay as they are.
 func forThisCluster(vs *Versions, c *Content) *Versions {
 	if vs == nil || c == nil {
 		return vs
