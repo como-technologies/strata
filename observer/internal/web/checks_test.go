@@ -37,10 +37,20 @@ const (
 	paletteNoCheck = ", because the question to Palette does not check "
 	// variableWords are in each line of a required variable, on the column and on the card.
 	variableWords = "required variable"
+	// noStepLine is the next step of a skip when strata names no version of the next minor version.
+	noStepLine = skipRule + " Move to a version of 1.36 first."
+	// The words of the card "Move to" of a profile for the checks of the set profile-checks (#897). No click asks Palette about
+	// the move of a profile, so the last sentence of the note says that no question checks the rules.
+	baseVariables   = variablesNote + " aws_region, node_owner"
+	oneProfileRule  = "Strata checks this rule" + noQuestionCheck + "it."
+	twoProfileRules = "Strata checks these rules" + noQuestionCheck + "them."
+	noQuestionCheck = ", because no question to Palette checks "
+	// checkNoteStart starts the amber note of the checks on a card, with a required variable first.
+	checkNoteStart = `<div class="note a small"><div class="mt3"><b>`
 )
 
 // checkWords are the words that only a check of strata shows, on the column and on the card.
-var checkWords = []string{skipLine, skipNote, variableWords, oneRule, twoRules}
+var checkWords = []string{skipLine, skipNote, variableWords, oneRule, twoRules, oneProfileRule, twoProfileRules}
 
 // cellWith gives a cell of the column "Palette" with the line of each check under the word of the answer.
 func cellWith(cell string, lines ...string) string {
@@ -89,7 +99,7 @@ func TestTheCardAndTheColumnShowEachCheckOfStrataWithTheAnswerOfPalette(t *testi
 	words := textOf(cardOf(t, dex, gaveNoAnswer))
 	mustHoldInOrder(t, "the variables", words, gave403, twoVariables, twoValues, oneRule, askAgain)
 	// The checks are a note of their own, in the tone of a refusal. The answer that failed stays neutral.
-	mustHold(t, "the variables", dex, neutralNote+gave403+`</b> This is not a finding.</div><div class="note a small"><div class="mt3"><b>`+variablesNote+`</b>`)
+	mustHold(t, "the variables", dex, neutralNote+gave403+`</b> This is not a finding.</div>`+checkNoteStart+variablesNote+`</b>`)
 }
 
 // A move with no check shows no word of a check, on any screen of the sets ok and asks.
@@ -119,7 +129,7 @@ func TestTwoChecksComeInTheOrderOfStrataAndASkipWithNoStepNamesTheMinorVersion(t
 		{"both", docs.UpdateChecks{RequiredVariables: &variable, SkippedMinor: skip},
 			[]string{variableNote + " cluster_owner", oneValue, skipHead, skipStep, twoRules}, cellWith(noErrorCell, variableLine, skipLine)},
 		{"no step", docs.UpdateChecks{SkippedMinor: &noStep},
-			[]string{skipHead, skipRule + " Move to a version of 1.36 first.", oneRule}, cellWith(noErrorCell, skipLine)},
+			[]string{skipHead, noStepLine, oneRule}, cellWith(noErrorCell, skipLine)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := writeSet(t, devdata.StateUpdateChecks, map[string]func([]byte) []byte{"asks.json": editJSON(t, func(v *api.AsksView) {
@@ -191,4 +201,77 @@ func TestTheBookQuotesTheWordsOfEachCheck(t *testing.T) {
 		mustHold(t, "the scripts", script, words(row[0]), words(row[1]))
 		mustHold(t, "the use case", useCase, `"`+row[0]+`"`)
 	}
+}
+
+/* Issue #897. The compare of a record with the newest version of its profile gives the same checks, with no request. The card
+"Move to" of a profile names each one in an amber note above its table of packs. The set profile-checks holds the move of
+barney-base, with two required variables and a skip, and the move of wilma-gateway, with one required variable. */
+
+// The section of servicePage about the card "Move to" of a profile.
+const profileMoveSection = "## The move to a newer profile version"
+
+// The note of barney-base names its two required variables and what Palette does at the update. It names its skip with the rule of
+// Kubernetes and the minor version of the next step. The compare reads no registry, so the skip names no version. The note of
+// wilma-gateway names one required variable. No click asks Palette about the move of a profile, so the card has no word of a
+// question. A move that changes no pack keeps its note.
+func TestTheCardMoveToOfAProfileNamesEachCheckOfTheMove(t *testing.T) {
+	pages := shown(t, devdata.StateProfileChecks, barneyHash, wilmaHash)
+	barney := cardOf(t, pages[0], moveCardHead)
+	mustHoldInOrder(t, "the move of barney-base", textOf(barney), baseVariables, twoValues, skipHead, noStepLine, twoProfileRules)
+	mustHoldInOrder(t, "the move of barney-base", barney, `<div class="body">`+checkNoteStart+variablesNote+`</b>`, `<div class="tw"><table>`)
+	wilma := textOf(cardOf(t, pages[1], moveCardHead))
+	mustHoldInOrder(t, "the move of wilma-gateway", wilma, oneVariable, oneValue, oneProfileRule)
+	mustNotHold(t, "the move of wilma-gateway", wilma, skipNote)
+	for where, words := range map[string]string{"barney-base": textOf(barney), "wilma-gateway": wilma} {
+		mustNotHold(t, "the move of "+where, words, paletteNoCheck, askThisMove)
+	}
+
+	dir := writeSet(t, devdata.StateProfileChecks, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
+		for i := range v.Profiles {
+			if n := v.Profiles[i].NewerVersion; n != nil && n.Move != nil {
+				n.Move.Packs = []model.MovePack{}
+			}
+		}
+	})})
+	noPack := textOf(cardOf(t, pagesOf(t, dir, wilmaHash)[0], moveCardHead))
+	mustHoldInOrder(t, "a move that changes no pack", noPack, oneVariable, oneProfileRule, "The move changes no pack.")
+}
+
+// A code, a version, and the name of a variable of a check on the move of a profile show as text on the card. render.js adds the
+// injection to the name and to the version of each profile, so the hash of the page of barney-base holds it two times. The list
+// of packs also shows the newer version of kubernetes, so the test reads the card alone.
+func TestACheckOfTheMoveOfAProfileWithMarkupShowsAsText(t *testing.T) {
+	name, version, _ := strings.Cut(testkit.BaseProfile, "@")
+	hash := "#p-" + encodeURIComponent(name+evilText+"@"+version+evilText)
+	var reached int
+	for _, s := range render(t, devdata.StateProfileChecks, true) {
+		if s.Hash != hash || s.Variant != "" {
+			continue
+		}
+		reached++
+		checkMarkup(t, s)
+		mustHold(t, s.Hash, cardOf(t, s.HTML, moveCardHead), `<span class="m">node_owner`+injection,
+			`<span class="m">`+testkit.CodeVariable+injection, `@1.37.0`+injection, "a version of 1.36"+injection)
+		mustNotHold(t, s.Hash, s.HTML, "<img")
+	}
+	if reached == 0 {
+		t.Error("no screen of the poisoned set is the page of barney-base")
+	}
+}
+
+// The page of the service quotes the words of each check of the card "Move to" of a profile, and the last sentence of its note.
+// Each word is a word of the scripts. The use case says that the card shows the checks.
+func TestTheBookQuotesTheWordsOfEachCheckOfTheMoveOfAProfile(t *testing.T) {
+	script := readScripts(t)
+	section := sectionOf(t, servicePage, profileMoveSection)
+	rows := tableRows(t, section)
+	if len(rows) != 2 {
+		t.Fatalf("the table of the checks has %d rows", len(rows))
+	}
+	for _, row := range rows {
+		mustHold(t, "the scripts", script, words(row[0]))
+	}
+	mustHold(t, "the section", unwrapped(section), `"`+oneProfileRule+`"`)
+	mustHold(t, "the scripts", script, oneProfileRule, twoProfileRules)
+	mustHold(t, "the use case", unwrapped(sectionOf(t, useCasePage, "## 5. "+askMove)), `card "Move to" of a profile`)
 }

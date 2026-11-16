@@ -30,17 +30,20 @@ type VerifyRow struct {
 	Error        *Error `json:"error"`
 }
 
-// Diff is strata-diff/1, with no a, no b, no variables, and no clusterVariables.
+// Diff is strata-diff/1, with no a, no b, no variables, and no clusterVariables. UpdateChecks holds the checks of
+// the move that strata gives for two versions of one profile. The versions cycle compares a record with the newest
+// version of its profile.
 type Diff struct {
-	Schema          string      `json:"schema"`
-	Same            bool        `json:"same"`
-	SameContent     bool        `json:"sameContent"`
-	RootB           string      `json:"rootB"`
-	Summary         DiffSummary `json:"summary"`
-	Packs           []Pack      `json:"packs"`
-	UpstreamUnknown []string    `json:"upstreamUnknown"`
-	ImageIDsChanged []KeyOnly   `json:"imageIdsChanged"`
-	Verify          *Verify     `json:"verify"`
+	Schema          string        `json:"schema"`
+	Same            bool          `json:"same"`
+	SameContent     bool          `json:"sameContent"`
+	RootB           string        `json:"rootB"`
+	Summary         DiffSummary   `json:"summary"`
+	Packs           []Pack        `json:"packs"`
+	UpstreamUnknown []string      `json:"upstreamUnknown"`
+	ImageIDsChanged []KeyOnly     `json:"imageIdsChanged"`
+	Verify          *Verify       `json:"verify"`
+	UpdateChecks    *UpdateChecks `json:"updateChecks"`
 }
 
 // KeyOnly names a pack, and keeps nothing else of the entry.
@@ -237,7 +240,9 @@ type Bump struct {
 }
 
 // UpdateChecks is what strata checks about a move beside the answer of Palette: the rules that no route
-// of Palette checks before the update. Only the detail tier sends it, as strata gives it.
+// of Palette checks before the update. The observer sends it as strata gives it. The detail tier sends it
+// in an answer of Palette, and the summary tier in the move of a profile. It holds names and versions, and
+// no value.
 type UpdateChecks struct {
 	RequiredVariables *RequiredVariables `json:"requiredVariables,omitempty"`
 	SkippedMinor      *MinorSkip         `json:"skippedMinor,omitempty"`

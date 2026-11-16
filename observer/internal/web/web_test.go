@@ -581,10 +581,12 @@ func checkMarkup(t *testing.T, s screen) {
 	}
 }
 
-// evil is a tag that runs a script, and injection is the same tag as the page must show it: as text.
+// evil is a tag that runs a script, and injection is the same tag as the page must show it: as text. evilText is the text that
+// render.js adds to a value of the poisoned set: the tag, a quote, an apostrophe, and an ampersand.
 const (
 	evilTag   = "img src=x onerror=alert(1)"
 	evil      = "<" + evilTag + ">"
+	evilText  = evil + `"'&`
 	injection = "&lt;" + evilTag + "&gt;"
 )
 
@@ -717,6 +719,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateAlertsUnset, []string{needsAttention, notSet}},
 		{devdata.StateMovedDrift, []string{needsAttention, publishedChanged, "3 of 3 packs in full", "1 profile · 1 this week"}},
 		{devdata.StateUpdateChecks, okOverview},
+		{devdata.StateProfileChecks, append([]string{"2 newer profile versions"}, okOverview...)},
 	}
 	if len(cases) != len(devdata.States) {
 		t.Fatalf("the table has %d sets, and devdata lists %d", len(cases), len(devdata.States))

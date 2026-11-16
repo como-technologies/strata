@@ -587,8 +587,9 @@ The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
 `first-seen`, `stale-unchecked`, `lost-unchecked`, `read-error`, `images`,
 `images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`, `alerts`,
-`alerts-unset`, `moved-drift`, and `update-checks`. The server listens on `127.0.0.1:8080`. The flag
-`-listen` takes another loopback address, and `-data` takes another directory of sets.
+`alerts-unset`, `moved-drift`, `update-checks`, and `profile-checks`. The server listens
+on `127.0.0.1:8080`. The flag `-listen` takes another loopback address, and `-data` takes
+another directory of sets.
 
 A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
 of each route as a JSON file. The dev server serves them through the real server
@@ -631,6 +632,12 @@ the page are those of the data.
   move of `kubernetes` skips a minor version, because the registry gained 1.37.0 after the
   versions cycle. The answer for `traefik`, a refusal, names one required variable. The
   answer for `dex`, a 403, names two. See [Ask Palette about a move](../automation/observer.md#ask-palette-about-a-move).
+- The set `profile-checks` names `ok` in a file `base`. Its `profiles.json` gives the moves
+  of two profiles the checks of strata. The versions cycle read `kubernetes` 1.37.0, and the
+  newest version `barney-base@1.6.0` moves the pack to it. The move skips a minor version and
+  adds two required variables, and the move of `wilma-gateway` adds one. Its `newer.json`,
+  `cluster.json`, and `replies.json` agree with the move of `kubernetes`. See [The move to a
+  newer profile version](../automation/observer.md#the-move-to-a-newer-profile-version).
 - The file `alerts.json` is the answer of `/v1/alerts`. A set can lack it: the page is then
   the page of an observer that started without `--alerts`. The set `alerts` names `ok`
   and holds seven rules, in the four states. A test gives the same rules to the real

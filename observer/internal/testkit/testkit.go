@@ -108,6 +108,8 @@ const (
 	// The codes of Palette: CodeDependency refuses a move, and CodeVariable refuses a required variable with no value.
 	CodeDependency = "DependencyPackUpgradeNotSupported"
 	CodeVariable   = "InvalidVariable"
+	// PlatformOwner is the required variable with no default value that the move to aws-stack@1.1.1 adds, in the stand-in.
+	PlatformOwner = "platform_owner"
 	// AuditSentinel is in the reason of a read of the audit log that failed. No route and no log holds it.
 	AuditSentinel = "AUDIT-REASON-SENTINEL"
 	// AuditUnread is the message of an event when the observer could not read the audit log.

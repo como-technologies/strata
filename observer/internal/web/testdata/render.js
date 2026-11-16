@@ -111,11 +111,18 @@ function poison(d) {
   // versions, the diffs, and the answers of Palette name a profile by its subject, and they follow the change.
   const subjects = new Map(out.profiles.profiles.map(p => [`${p.name}@${p.version}`, `${p.name}@${tag(p.version)}`]));
   const follow = s => subjects.get(s) || s;
+  // The checks of strata, in an answer of Palette and in the move of a profile: each code, version, and name of a variable.
+  const checks = c => {
+    const v = c && c.requiredVariables, s = c && c.skippedMinor;
+    if (v) { v.code = tag(v.code); v.names = v.names.map(tag); }
+    if (s) ["from", "to", "nextMinor", "nextStep"].forEach(k => { s[k] = tag(s[k]); });
+  };
   out.profiles.profiles.forEach(p => {
     p.type = tag(p.type);
     p.scope = tag(p.scope);
     if (p.published) { p.published.rootRecorded = lead(p.published.rootRecorded); p.published.rootLive = lead(p.published.rootLive); }
     if (p.clusterCopy) p.clusterCopy.rootB = lead(p.clusterCopy.rootB);
+    if (p.newerVersion && p.newerVersion.move) checks(p.newerVersion.move.updateChecks);
     p.packs.forEach(k => { k.kind = tag(k.kind); k.upstream = lead(k.upstream); k.version = tag(k.version); k.newer = tag(k.newer); });
     p.version = tag(p.version);
   });
@@ -124,10 +131,7 @@ function poison(d) {
     a.profile = follow(a.profile);
     a.newest = tag(a.newest);
     a.refusals.forEach(x => { x.pack = tag(x.pack); x.code = tag(x.code); x.message = tag(x.message); x.clusters = x.clusters.map(tag); });
-    // The checks of strata: each code, version, and name of a variable.
-    const v = a.updateChecks && a.updateChecks.requiredVariables, s = a.updateChecks && a.updateChecks.skippedMinor;
-    if (v) { v.code = tag(v.code); v.names = v.names.map(tag); }
-    if (s) ["from", "to", "nextMinor", "nextStep"].forEach(k => { s[k] = tag(s[k]); });
+    checks(a.updateChecks);
   });
   out.events.events.forEach(e => { e.reason = tag(e.reason); });
   out.alerts.channels = out.alerts.channels.map(tag);

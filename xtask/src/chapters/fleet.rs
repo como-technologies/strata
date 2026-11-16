@@ -57,6 +57,7 @@ fn behind(r: &mut Runner) {
     r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
     r.step("behind", 1, false, "strata behind 'releases/*/dev.json'");
     behind_rows(r);
+    compare_profile_checks(r);
     // a pin that is current against the copy of a registry whose sync stopped before its end
     r.quiet("strata snapshot 'pack:Palette Registry/csi-aws-ebs@1.65.0' -o csi-oci.json");
     r.step("behind-stale", 0, false, "strata behind csi-oci.json");
@@ -123,6 +124,29 @@ fn behind_rows(r: &mut Runner) {
         1,
         false,
         "strata behind 'releases/*/dev.json' --behind-only",
+    );
+}
+
+/// The steps of the chapter `behind` where `compare` of two versions of one profile names the
+/// checks of the move, as the bump of `behind` does (#897).
+fn compare_profile_checks(r: &mut Runner) {
+    // aws-stack@1.1.1 adds the required variable platform_owner, which has no default value
+    r.step(
+        "compare-profile-checks",
+        1,
+        false,
+        "strata compare aws-stack@1.0.0 aws-stack@1.1.1",
+    );
+    r.excerpt(
+        "compare-profile-checks-lines",
+        "compare-profile-checks",
+        r"^(\$|aws-stack|root |note )",
+    );
+    r.step(
+        "compare-profile-checks-json",
+        1,
+        false,
+        "strata compare aws-stack@1.0.0 aws-stack@1.1.1 --json | jq -c .updateChecks",
     );
 }
 

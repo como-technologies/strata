@@ -59,8 +59,8 @@ impl<'r> Asked<'r> {
     /// that waits for a cluster.
     fn of(record: &'r Snapshot) -> Option<Asked<'r>> {
         if record.source.is_profile_version() {
-            // a candidate has no uid, and no cluster runs it
-            return (!record.source.uid.is_empty()).then_some(Asked::Profile);
+            // no cluster runs a candidate
+            return record.source.is_held_version().then_some(Asked::Profile);
         }
         match &record.source.cluster {
             Some(cluster) if cluster.kind.is_cluster() && !cluster.pending => {

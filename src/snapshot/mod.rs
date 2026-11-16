@@ -283,6 +283,12 @@ impl Source {
         self.cluster.is_none() && self.pack.is_none() && !self.is_app()
     }
 
+    /// True for a record of one version of a cluster profile that Palette holds, with its uid. A
+    /// candidate is not one: Palette gives it a uid only at the create.
+    pub(crate) fn is_held_version(&self) -> bool {
+        self.is_profile_version() && !self.uid.is_empty()
+    }
+
     /// `name@version`, and `on cluster <name>` for a snapshot of a cluster, or `pending for cluster
     /// <name>` for the update that waits for it. A snapshot of two or more profiles gives their
     /// count in place of `name@version`, such as `3 profiles on cluster <name>`.

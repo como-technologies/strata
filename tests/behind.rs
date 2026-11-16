@@ -22,7 +22,7 @@ use strata::model::scope::ProfileScope;
 use strata::ops;
 use strata::reference::Ref;
 use strata::render::RowState;
-use strata::snapshot::{AppliedProfile, ClusterSource, ClusterTier, Snapshot, Tier};
+use strata::snapshot::{AppliedProfile, ClusterSource, ClusterTier, PackSource, Snapshot, Tier};
 
 use crate::common::{
     self, PROFILE_LISTING, PUBLIC_REGISTRY, PackFixture, REGISTRY_LISTING, WITH_IMPACT, behind_of,
@@ -604,13 +604,14 @@ fn kubernetes_at(version: &str) -> PackFixture<'_> {
     PackFixture::new("kubernetes", "k8s", version, "k8s", "", "", "k: 1\n")
 }
 
-#[test]
-fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_adds_and_a_skip() {
-    let dir = tempfile::tempdir().unwrap();
+/// [`serve_versions`] of [`BARNEY`], where the move from 1.3.1 to 1.4.0 adds the required variable
+/// `owner` and skips a minor version of Kubernetes.
+///
+/// 1.3.1 runs Kubernetes 1.34.9 and has the variable region. 1.4.0 moves Kubernetes to 1.36.2,
+/// and adds three variables: owner needs a value, tier has a default value, and note is not
+/// required.
+fn serve_checked_move() -> MemoryApi {
     let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
-    // 1.3.1 runs Kubernetes 1.34.9 and has the variable region. 1.4.0 moves Kubernetes to 1.36.2,
-    // and adds three variables: owner needs a value, tier has a default value, and note is not
-    // required
     let held = [packs_held()[0], kubernetes_at("1.34.9")];
     let newest = [packs_newest()[0], kubernetes_at("1.36.2")];
     let region = common::variable("region", "Region", "", false);
@@ -629,7 +630,26 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
         common::variable("tier", "Tier", "gold", false),
         note,
     ]});
-    let api = serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &newest, variables);
+    serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &newest, variables)
+}
+
+/// The line of the required variable of [`serve_checked_move`].
+fn owner_line() -> String {
+    format!(
+        "the move adds the required variable owner with no default value: give it a value at the \
+         update, or Palette refuses the update with {INVALID_VARIABLE_CODE}"
+    )
+}
+
+/// The line of the skip of [`serve_checked_move`]. The skip is a check of strata, so its line names
+/// the rule of Kubernetes and no code.
+const SKIP_LINE: &str = "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Kubernetes moves one \
+                         minor version at each upgrade; move to a version of 1.35 first";
+
+#[test]
+fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_adds_and_a_skip() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_checked_move();
     let record = record_of(&api, HELD, dir.path(), "barney.json");
     let r = behind_of(&api, &[record], &WITH_IMPACT);
     let bump = r.profiles[0].bump.as_ref().expect("1.3.1 is behind 1.4.0");
@@ -658,17 +678,11 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
 
     // the two lines come under the bump line, the variables first
     let text = common::terminal().render_behind(&r, false).unwrap();
-    let variables_line = format!(
-        "the move adds the required variable owner with no default value: give it a value at the \
-         update, or Palette refuses the update with {INVALID_VARIABLE_CODE}"
-    );
-    // the skip is a check of strata, so its line names the rule of Kubernetes and no code
-    let skip_line = "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Kubernetes moves one minor \
-                     version at each upgrade; move to a version of 1.35 first";
     assert!(
         text.contains(&format!(
-            "{} IDENTITY UPSTREAM\n      {variables_line}\n      {skip_line}\n",
-            bump.impact
+            "{} IDENTITY UPSTREAM\n      {}\n      {SKIP_LINE}\n",
+            bump.impact,
+            owner_line()
         )),
         "{text}"
     );
@@ -676,8 +690,9 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
     let markdown = common::markdown().render_behind(&r, false).unwrap();
     assert!(
         markdown.contains(&format!(
-            "<br>{variables_line}<br>{} |",
-            strata::text::html_text(skip_line)
+            "<br>{}<br>{} |",
+            owner_line(),
+            strata::text::html_text(SKIP_LINE)
         )),
         "{markdown}"
     );
@@ -695,6 +710,63 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
         None,
         "the skip gives no code of Palette"
     );
+}
+
+#[test]
+fn compare_of_two_versions_of_one_profile_gives_the_checks_of_the_bump_and_no_other_pair_does() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_checked_move();
+    let (held, newest) = (
+        snapshot_of(&api, HELD).unwrap(),
+        snapshot_of(&api, NEWEST).unwrap(),
+    );
+    let compared = ops::compare(&held, &newest, CREATED);
+    let checks = &compared.update_checks;
+    assert_eq!(
+        checks.required_variables.as_ref().map(|v| v.names.clone()),
+        Some(vec!["owner".to_string()])
+    );
+    let skip = checks.skipped_minor.as_ref().map(|s| (&*s.from, &*s.to));
+    assert_eq!(skip, Some(("1.34.9", "1.36.2")));
+    // the bump of behind reads the same comparison, so it gives the same checks
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let r = behind_of(&api, &[record], &WITH_IMPACT);
+    assert_eq!(&r.profiles[0].bump.as_ref().unwrap().update_checks, checks);
+
+    // the report names each check in a note, and the JSON gives them in updateChecks
+    let text = common::terminal()
+        .render(&compared, &held, &newest, false)
+        .unwrap();
+    for line in [owner_line().as_str(), SKIP_LINE] {
+        let note = |l: &str| l.starts_with("note ") && l.ends_with(line);
+        assert!(text.lines().any(note), "{text}");
+    }
+    let doc = serde_json::to_value(&compared).unwrap();
+    assert_eq!(
+        doc["updateChecks"]["requiredVariables"]["names"],
+        json!(["owner"])
+    );
+
+    // the other pairs: another profile, a side with no uid such as a candidate, one version, and
+    // a pack
+    let edit = |edit: fn(&mut Snapshot)| {
+        let mut s = newest.clone();
+        edit(&mut s);
+        s
+    };
+    let other = edit(|s| s.source.name = "fred-addons".to_string());
+    let no_uid = edit(|s| s.source.uid.clear());
+    let pack = edit(|s| s.source.pack = Some(PackSource::default()));
+    for (a, b, pair) in [
+        (&held, &other, "another profile"),
+        (&held, &no_uid, "a side with no uid"),
+        (&no_uid, &held, "a side A with no uid"),
+        (&newest, &newest, "one version"),
+        (&held, &pack, "a pack"),
+    ] {
+        let d = ops::compare(a, b, CREATED);
+        assert!(d.update_checks.is_empty(), "{pair}: {:?}", d.update_checks);
+    }
 }
 
 #[test]

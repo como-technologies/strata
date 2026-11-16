@@ -509,9 +509,35 @@ under the answer:
   belongs to the profile. So for the move of a pack, `behind` gives the skip of a minor version
   alone. It names the variables that a move adds in the bump of a profile version: see
   [The move to the newest profile version](../commands/behind.md#the-move-to-the-newest-profile-version).
+  The page shows them on the card "Move to" of a profile: see
+  [The move to a newer profile version](#the-move-to-a-newer-profile-version).
 
 [Ask Palette about a move](../reference/observer-api.md#ask-palette-about-a-move) gives
 the route, how long the observer keeps an answer, and when it asks again.
+
+## The move to a newer profile version
+
+The page of a profile with a newer published version has the card
+`Move to <profile>@<version>`. The versions cycle compares the record with the newest
+version, by its uid. The card shows the impact level, the change flags, and each pack
+that the move changes, adds, or removes.
+
+The comparison of two versions of one profile also gives the checks of the move: see
+[The checks of a move](../commands/compare/versions.md#the-checks-of-a-move). Strata
+makes them with no request. The card names each check that finds something in an amber
+note above its table of packs:
+
+| The card "Move to" | Meaning |
+| --- | --- |
+| `The move adds a required variable: <name>` | The newest version adds a required variable with no default value. The note says that Palette refuses an update that gives it no value, with `InvalidVariable`. With more variables, the words name the count and each variable. |
+| `The move skips a minor version: <pack>@<from> → <pack>@<to>` | The move of the Kubernetes pack skips a minor version. The note names the rule of Kubernetes, `Kubernetes moves one minor version at each upgrade`. It names the next step, `a version of <minor>`. The comparison reads no registry, so the note names no version of that minor version. The note gives no code of Palette. |
+
+- **The card asks Palette nothing.** So its note ends with "Strata checks this rule,
+  because no question to Palette checks it."
+- **A move with no check has no note.**
+- **The summary tier holds the checks**, in `newerVersion.move.updateChecks`. They hold
+  the names of the variables and the versions of the pack, and no value. See
+  [The routes](../reference/observer-api.md#the-routes).
 
 ## Alerts
 

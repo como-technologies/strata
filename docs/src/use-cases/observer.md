@@ -188,6 +188,12 @@ the page shows each check that finds something beside each of the three answers:
   variable only when strata gives one. A variable belongs to the profile, so `behind` names
   the variables of a move in the bump of a profile version.
 
+The card "Move to" of a profile shows the same checks for the move to the newest version of
+the profile. It needs no click. The versions cycle compares the record with that version,
+and strata makes the checks with no request. The card names each check in an amber note
+above its table of packs: see [The move to a newer profile
+version](../automation/observer.md#the-move-to-a-newer-profile-version).
+
 A second click on a move with an answer sends nothing. The observer asks again after
 "Palette gave no answer". Nothing asks on a timer. The column "Palette" of the table
 shows the short words "No error", "Refuses", and "No answer".

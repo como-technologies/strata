@@ -64,7 +64,8 @@ impl Bump {
     }
 
     /// What a move of a profile version to the version `to` of its profile does, from the
-    /// comparison `d` of the two versions. The impact is the most severe level that `d` gives.
+    /// comparison `d` of the two versions. The impact is the most severe level that `d` gives, and
+    /// the checks of the update are the checks of `d`.
     pub fn of_profile(to: &str, d: &Diff) -> Bump {
         let flags = ChangeFlag::ALL
             .iter()
@@ -78,7 +79,7 @@ impl Bump {
             packs: d.packs.iter().filter_map(BumpPack::of).collect(),
             palette_validation: None,
             palette_validation_error: None,
-            update_checks: UpdateChecks::default(),
+            update_checks: d.update_checks.clone(),
         }
     }
 }

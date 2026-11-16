@@ -20,6 +20,8 @@ aws-application-loadbalancer, and adds aws-load-balancer-controller. They need n
 const (
 	wilmaHash    = "#p-" + testkit.GatewayProfile
 	moveQuestion = "What does the move to the newest version change?"
+	// moveCardHead starts the head of the card "Move to" of a profile.
+	moveCardHead = "<h2>Move to "
 	// albPack is the pack that the move of wilma-gateway removes.
 	albPack = "aws-application-loadbalancer"
 )
@@ -29,8 +31,8 @@ const (
 // of the record links to its page. The card "Check this yourself" gives the command of the same compare.
 func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T) {
 	page := shown(t, devdata.StateOK, wilmaHash)[0]
-	card := cardOf(t, page, "<h2>Move to ")
-	mustHold(t, cardHead, card, "<h2>Move to "+wilmaNewest+` <span class="sub">Created `,
+	card := cardOf(t, page, moveCardHead)
+	mustHold(t, cardHead, card, moveCardHead+wilmaNewest+` <span class="sub">Created `,
 		"</h2>"+badge("y", "In place"))
 	for _, flag := range []string{docs.FlagIdentity, docs.FlagUpstream, docs.FlagAuthored, docs.FlagImages, docs.FlagCharts} {
 		mustHold(t, "the flags", card, plainFlag("b", flag))
@@ -51,7 +53,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	}
 	// a profile with no newer version shows no move
 	other := shown(t, devdata.StateOK, fredHash)[0]
-	mustNotHold(t, testkit.NoNewerProfile, other, "<h2>Move to ", moveQuestion)
+	mustNotHold(t, testkit.NoNewerProfile, other, moveCardHead, moveQuestion)
 }
 
 // The Compare menu of a pack page has the choice "Record → Newest version" when strata compared the record with the newest version
@@ -86,7 +88,7 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 		}
 	})})
 	pages := pagesOf(t, dir, wilmaHash, vendorHash)
-	mustHold(t, "the card of "+notCompared, cardOf(t, pages[0], "<h2>Move to "),
+	mustHold(t, "the card of "+notCompared, cardOf(t, pages[0], moveCardHead),
 		badge("y", "Not read"), "Strata could not compare the record with this version now.")
 	mustNotHold(t, "the pack page of "+notCompared, pages[1], newestOption)
 }

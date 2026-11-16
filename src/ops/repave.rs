@@ -207,9 +207,7 @@ impl<'a> Role<'a> {
                 pending: c.pending,
                 uid: Some(&c.uid),
             }),
-            None if record.source.is_profile_version() && !record.source.uid.is_empty() => {
-                Role::Profile
-            }
+            None if record.source.is_held_version() => Role::Profile,
             None => Role::Other,
         }
     }

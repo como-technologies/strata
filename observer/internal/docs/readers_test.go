@@ -16,7 +16,7 @@ import (
 )
 
 // forwarded lists the fields that no code reads, and that the detail tier sends as they are. The page
-// reads them there. The summary tier sends none of them.
+// reads them there. The summary tier sends only the fields of UpdateChecks, in the move of a profile.
 var forwarded = []string{
 	"Impact.Level", "Impact.Text",
 	"Leaf.Op", "Leaf.Old", "Leaf.New",

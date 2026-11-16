@@ -1,0 +1,2 @@
+$ strata compare aws-stack@1.0.0 aws-stack@1.1.1 --json | jq -c .updateChecks
+{"requiredVariables":{"code":"InvalidVariable","names":["platform_owner"]}}

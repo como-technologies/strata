@@ -132,8 +132,9 @@ and of each wave, checks them.
    - No validate route checks the minor step of Kubernetes, or a value of a
      required variable. Palette checks a variable only at the update. A live
      run shows that the update takes a move that skips a minor version of
-     Kubernetes, so that check is a check of strata. `behind` and
-     `compare --validate` check both for a move. When a route of Palette checks
+     Kubernetes, so that check is a check of strata. `behind`,
+     `compare --validate`, and `compare` of two versions of one profile check
+     both for a move. When a route of Palette checks
      a rule before the update, strata removes its check. See
      [The checks of an update](./internals/palette/profiles.md#the-checks-of-an-update).
 2. **Do not repeat a status that Palette shows.** Palette shows flags and

@@ -17,8 +17,8 @@ Then compare two of the versions it built:
 ```
 
 The add-on `cert-manager` has a new manifest, so its line shows `AUTHORED`. The
-version also adds a required variable. The impact is `in-place`, so Palette
-replaces no node.
+version also adds a required variable with no default value, and the `note` line
+names it. The impact is `in-place`, so Palette replaces no node.
 
 ## With a tenant
 
@@ -88,7 +88,9 @@ alone. Palette lists `payments` as one of the clusters that use the version.
 ```
 
 Exit `1`: the versions differ. The report names each changed layer and the
-impact on running clusters.
+impact on running clusters. The `note` line names the required variable that the
+move adds: give it a value at the update. See
+[The checks of a move](./commands/compare/versions.md#the-checks-of-a-move).
 
 ### 6. Ask Palette if the move repaves the cluster
 
