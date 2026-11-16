@@ -1198,6 +1198,13 @@ field, a value, an input, or an option is in the sections above.
   `newerVersion.move` of `/v1/profiles` can hold the new field `updateChecks`. The card names each
   check in an amber note. A check that reads the words of the page must read the new lines. See
   [The move to a newer profile version](../automation/observer.md#the-move-to-a-newer-profile-version).
+- **A text of Palette on the terminal escapes each control character.** Such a text is a name
+  or the message of an error, for example. The report, the notes, the warnings, and the line
+  `strata: error:` show an ESC as `\u{1b}`, and a line break as `\n`. Before, strata wrote each
+  control character as it was, so a text could change the color of the terminal. `--json` and
+  the records keep each text as Palette gave it. A script that reads the text of the terminal
+  must read the escapes. See
+  [A control character of a text of Palette](./formats.md#a-control-character-of-a-text-of-palette).
 
 ### For a user of the library of strata
 
@@ -1206,6 +1213,11 @@ field, a value, an input, or an option is in the sections above.
   the checks. Two versions of one profile have one name and two versions, and each side names its
   uid. A program that compares a `Diff` must read the field. `ops::Bump::of_profile` copies the
   checks of its `Diff`, so the bump of a profile version of `behind` keeps the same checks.
+- The new `text::terminal_text` gives a text with each control character as a visible escape.
+  `term::progress::error_line`, `Progress::note`, `Progress::warn`, `render::palette_line`, and
+  the terminal renderer give each text of Palette through it. A program that compares their
+  text must compare the escapes. The new `Progress::painted_note` writes a note that has colors
+  of its own, and it keeps each control character of the note.
 
 ## Release 0.34.0: changes that need action
 
