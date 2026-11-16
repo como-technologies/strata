@@ -146,8 +146,10 @@ before any request: see
 [The gaps that strata fills](../internals/palette/profiles.md#the-gaps-that-strata-fills).
 
 When Palette refuses, strata prints one line for each error, exits `2`, and
-writes no record. The candidate here comes from the published 1.1.1, and the
-project holds that version:
+writes no record. With `--json`, the error holds each error in `errors`, and
+strata prints no such line: see [Errors](../reference/errors.md). The
+candidate here comes from the published 1.1.1, and the project holds that
+version:
 
 ```text
 {{#include ../output/candidate-validate-exists.txt}}

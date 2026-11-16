@@ -781,15 +781,6 @@ jq -s '.[0] * {listmeta: .[1].listmeta}' "$FAKE_ROUTES/page-${offset}.json" "$FA
     );
 }
 
-/// A pack of the listing: its name, version, and registry, and the uid and the values of the pack.
-fn listed_pack(name: &str, version: &str, registry: &str) -> serde_json::Value {
-    let (uid, values) = (
-        format!("pk-{name}-{version}"),
-        format!("values of {name}\n"),
-    );
-    PackFixture::new(name, "addon", version, &uid, registry, "", &values).summary(&[])
-}
-
 #[test]
 fn api_sh_packs_where_reads_a_page_at_a_time_and_stops_at_the_first_pack_that_matches() {
     let root = tempfile::tempdir().unwrap();
@@ -8131,8 +8122,8 @@ fn registry_kinds_sh_gets_the_error_of_several_registries_as_json_from_a_command
     stage.env("FAKE_PALETTE", &palette);
     stage.wrap_strata(FAKE_STRATA_NO_REGISTRY);
     let (_, steps) = stage.run("registry-kinds.sh", &[]);
-    // strata refuses -o with --json with a usage error, which also exits 2. That error is no JSON,
-    // so slash-several-uid fails on it
+    // a usage error of the command line also exits 2. That error is no JSON, so
+    // slash-several-uid fails on it
     passed(&steps, &["slash-several", "slash-several-uid"]);
     let err = std::fs::read_to_string(stage.path("out/slash-several.err")).unwrap();
     let err: serde_json::Value = serde_json::from_str(&err).unwrap();

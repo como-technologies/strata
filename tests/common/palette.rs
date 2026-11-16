@@ -412,6 +412,15 @@ pub const PUBLIC_REGISTRY: &str = "reg-public";
 /// second registry.
 pub const PROD_REGISTRY: &str = "reg-prod";
 
+/// The two registries that the key can see, as [`REGISTRY_LISTING`] lists them:
+/// [`PUBLIC_REGISTRY`] and [`PROD_REGISTRY`].
+pub fn two_registries() -> Value {
+    json!({"items": [
+        {"name": "Public Repo", "uid": PUBLIC_REGISTRY, "kind": "pack"},
+        {"name": "Prod Repo", "uid": PROD_REGISTRY, "kind": "pack"},
+    ]})
+}
+
 /// A pack as a fixture states it: the fields that its pack ref, its pack manifests, and its entry
 /// in the pack listing share.
 ///
@@ -521,6 +530,15 @@ impl<'a> PackFixture<'a> {
         }
         v
     }
+}
+
+/// A pack of the listing: its name, version, and registry, and the uid and the values of the pack.
+pub fn listed_pack(name: &str, version: &str, registry: &str) -> Value {
+    let (uid, values) = (
+        format!("pk-{name}-{version}"),
+        format!("values of {name}\n"),
+    );
+    PackFixture::new(name, "addon", version, &uid, registry, "", &values).summary(&[])
 }
 
 /// The values of the pack of virtual machines `pack`, with `address` as the YAML text of the

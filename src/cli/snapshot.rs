@@ -53,10 +53,13 @@ fn record_object(
     let snap = ops::snapshot_object(source, options, connect, now, &progress)?;
     // the answer of Palette is what --validate asks for, so -q does not hide it; it goes to
     // standard error, beside the record on standard output. The error of a refusal follows the
-    // lines of its errors, and the line of an accept follows the record
+    // lines of its errors, and the line of an accept follows the record. With --json, the error
+    // document holds the errors, so standard error gets only its JSON line
     let answer = |line: &str| eprintln!("{}", stderr_paint_auto().line(LineClass::Answer, line));
-    for line in render::refusal_lines(&snap) {
-        answer(&line);
+    if !a.json {
+        for line in render::refusal_lines(&snap) {
+            answer(&line);
+        }
     }
     ops::require_acceptance(&snap)?;
     for warning in render::invalid_pack_warnings(&snap) {

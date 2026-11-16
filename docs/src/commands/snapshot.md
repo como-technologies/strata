@@ -37,8 +37,11 @@ takes:
   error `palette-refuses`, and writes no record. If Palette accepts them, the
   last line says so after the record, as the answer of a check:
   `palette    accepts`.
-- `--format` and `--json` need `--dir`: they set the format of the report of
-  a set. A record is always JSON.
+- `--format` needs `--dir`: it sets the format of the report of a set. A
+  record is always JSON. With `--dir`, `--json` is `--format json`. Without
+  `--dir`, `--json` writes an error as one JSON line on standard error, also
+  with `-o`. Give `--quiet` too, so that no progress note shares the stream:
+  see [Errors](../reference/errors.md).
 - A cluster record holds the value of each variable that nobody marked
   sensitive, in clear. When the name of such a variable reads as a secret, a
   note names it. The exit does not change: see
@@ -72,5 +75,5 @@ takes:
 | `--dir` | For `tag:` or `filter:`: writes one record for each cluster of the set into a directory. | [A set of clusters](snapshot/set.md) |
 | `--prune` | With `--dir`: removes each cluster record of the directory whose cluster the query no longer selects. | [A set of clusters](snapshot/set.md) |
 | `--format` | With `--dir`: the format of the report, `terminal`, `markdown`, or `json`. | [The report as JSON](snapshot/set.md#the-report-as-json) |
-| `--json` | With `--dir`: the same as `--format json`. Writes the `strata-set/1` document. | [The report as JSON](snapshot/set.md#the-report-as-json) |
+| `--json` | With `--dir`: the same as `--format json`. Writes the `strata-set/1` document. Without `--dir`: writes an error as one JSON line. | [The report as JSON](snapshot/set.md#the-report-as-json), [Errors](../reference/errors.md) |
 | `-q`, `--quiet` | Drops the progress messages. | |

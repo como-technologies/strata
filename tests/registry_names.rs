@@ -15,19 +15,11 @@ use strata::term::progress::Progress;
 
 use crate::common::{
     self, PROD_REGISTRY, PROFILE_LISTING, PUBLIC_REGISTRY, REGISTRY_LISTING, UID_A, listing,
-    serve_fixture, snapshot_of_ref,
+    serve_fixture, snapshot_of_ref, two_registries,
 };
 
 /// The uid that the tests give the fixture `a3`, beside `a` at `UID_A`.
 const UID_A3: &str = "64f0000000000000000000a3";
-
-/// The two registries that the key can see, as `GET /v1/registries/metadata` lists them.
-fn two_registries() -> Value {
-    json!({"items": [
-        {"name": "Public Repo", "uid": PUBLIC_REGISTRY, "kind": "pack"},
-        {"name": "Prod Repo", "uid": PROD_REGISTRY, "kind": "pack"},
-    ]})
-}
 
 /// `a` at `UID_A` and `a3` at `UID_A3`, listed as `lab-profile@1.2.0` and `lab-prod@1.2.0`, with
 /// the registry listing `registries` when it is given. The fixtures are written under `root`.

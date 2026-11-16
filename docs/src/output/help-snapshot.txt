@@ -34,7 +34,7 @@ Options:
       --format <FORMAT>
           With --dir: the report format: terminal, markdown, or json
       --json
-          With --dir: the same as --format json
+          With --dir: the same as --format json. Without --dir: write an error as one JSON line on standard error. A record is always JSON
   -q, --quiet
           No progress messages, no note of an unknown value, and no warning of the send
   -h, --help

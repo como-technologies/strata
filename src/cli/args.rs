@@ -356,12 +356,9 @@ pub(crate) struct SnapshotArgs {
         hide_possible_values = true
     )]
     pub(crate) format: Option<Format>,
-    /// With --dir: the same as --format json
-    #[arg(
-        long,
-        requires = "dir",
-        conflicts_with_all = ["format", "output", "raw_dir", "from_raw", "from_candidate"]
-    )]
+    /// With --dir: the same as --format json. Without --dir: write an error as one JSON line on
+    /// standard error. A record is always JSON
+    #[arg(long, conflicts_with = "format")]
     pub(crate) json: bool,
     #[command(flatten)]
     pub(crate) quiet: QuietArgs,
