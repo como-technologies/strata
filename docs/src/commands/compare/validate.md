@@ -116,4 +116,6 @@ names one: see
 
 `--json` gives the two checks in `updateChecks`: see
 [`strata-diff/1`](../../reference/documents.md#strata-diff1). The checks send no
-request, and they do not change the exit.
+request, and they do not change the exit. `compare` of two versions of one
+profile makes the same checks with no option: see [The checks of a
+move](versions.md#the-checks-of-a-move).

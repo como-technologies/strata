@@ -15,11 +15,20 @@ func pinWith(bump *docs.Bump, err *docs.Error) docs.Pin {
 	return p
 }
 
-// The checks of the update that strata gives for the move from the pin of pinWith to kubernetes 1.37.0.
+// The checks of the update that strata gives for the move from the pin of pinWith to kubernetes 1.37.0. noStep is the
+// skip with no next step. Then no version of the next minor version is in the registry, or strata read no registry, as
+// for the move of a profile.
 var (
 	skipped    = &docs.MinorSkip{Pack: "kubernetes", From: "1.35.3", To: "1.37.0", NextMinor: "1.36", NextStep: "1.36.2"}
+	noStep     = &docs.MinorSkip{Pack: skipped.Pack, From: skipped.From, To: skipped.To, NextMinor: skipped.NextMinor}
 	required   = &docs.RequiredVariables{Code: testkit.CodeVariable, Names: []string{"cost_center", "owner"}}
 	bothChecks = &docs.UpdateChecks{RequiredVariables: required, SkippedMinor: skipped}
+)
+
+// The JSON of required and of noStep, as strata gives it. skipJSON has no end, so that a test can add the next step.
+const (
+	requiredJSON = `"requiredVariables":{"code":"` + testkit.CodeVariable + `","names":["cost_center","owner"]}`
+	skipJSON     = `"skippedMinor":{"pack":"kubernetes","from":"1.35.3","to":"1.37.0","nextMinor":"1.36"`
 )
 
 // The verdict comes from the pin that `behind --pin` gives. Issue #867: strata checks two rules of the update that no
@@ -63,17 +72,13 @@ func TestAnswerOfReadsEachVerdictFromThePinThatBehindGives(t *testing.T) {
 
 // The detail tier sends the checks as strata gives them. An answer with no check has no field, as the document of strata.
 func TestAnAnswerSendsTheChecksAsStrataGivesThem(t *testing.T) {
-	// The skip of bothChecks with no next step: no version of the next minor version is in the registry.
-	noStep := *skipped
-	noStep.NextStep = ""
-	const skipJSON = `{"pack":"kubernetes","from":"1.35.3","to":"1.37.0","nextMinor":"1.36"`
 	for _, c := range []struct {
 		checks *docs.UpdateChecks
 		want   string
 	}{
 		{nil, `"status":0}`},
-		{bothChecks, `"status":0,"updateChecks":{"requiredVariables":{"code":"` + testkit.CodeVariable + `","names":["cost_center","owner"]},"skippedMinor":` + skipJSON + `,"nextStep":"1.36.2"}}}`},
-		{&docs.UpdateChecks{SkippedMinor: &noStep}, `"status":0,"updateChecks":{"skippedMinor":` + skipJSON + `}}}`},
+		{bothChecks, `"status":0,"updateChecks":{` + requiredJSON + `,` + skipJSON + `,"nextStep":"1.36.2"}}}`},
+		{&docs.UpdateChecks{SkippedMinor: noStep}, `"status":0,"updateChecks":{` + skipJSON + `}}}`},
 	} {
 		raw := testkit.MustJSON(t, Answer{Refusals: []docs.Refusal{}, UpdateChecks: c.checks})
 		if !strings.HasSuffix(string(raw), c.want) {

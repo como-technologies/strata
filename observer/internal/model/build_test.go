@@ -536,6 +536,60 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 	}
 }
 
+// Issue #897. The compare of a record with the newest version of its profile gives the checks of the move that strata makes.
+// They are a required variable with no default value that the move adds, and a skip of a minor version of Kubernetes. The move
+// of the row keeps each check, as strata gives it, and a move with no check has none. The compare reads no registry, so a skip
+// has no next step.
+func TestTheMoveToTheNewestProfileVersionKeepsEachCheckThatStrataGives(t *testing.T) {
+	records := content(t, rec("barney-base", "1.5.0", docs.VerifyUnchanged, pk("k8s", "kubernetes", "1.35.3")))
+	for _, c := range []struct {
+		name   string
+		checks *docs.UpdateChecks
+		json   string
+	}{
+		{"a required variable", &docs.UpdateChecks{RequiredVariables: required}, `"updateChecks":{` + requiredJSON + `}}`},
+		{"a skip", &docs.UpdateChecks{SkippedMinor: noStep}, `"updateChecks":{` + skipJSON + `}}}`},
+		{"both", &docs.UpdateChecks{RequiredVariables: required, SkippedMinor: noStep}, `"updateChecks":{` + requiredJSON + `,` + skipJSON + `}}}`},
+		{"no check", nil, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{},
+				Profiles:     []docs.ProfilePin{profilePin("barney-base", "1.5.0", "1.6.0", at(-2*time.Hour))},
+				ProfileMoves: map[string]docs.Diff{testkit.BaseProfile: {Summary: docs.DiffSummary{MaxImpact: "repave"}, UpdateChecks: c.checks}}}
+			n := build(&records, v).Profiles[0].NewerVersion
+			if n == nil || n.Move == nil {
+				t.Fatalf("the newer version %+v", n)
+			}
+			if !reflect.DeepEqual(n.Move.UpdateChecks, c.checks) {
+				t.Errorf("the checks %+v, want %+v", n.Move.UpdateChecks, c.checks)
+			}
+			raw := string(testkit.MustJSON(t, n.Move))
+			if c.checks == nil {
+				testkit.HoldsNone(t, "the move", raw, "updateChecks")
+				return
+			}
+			if !strings.HasSuffix(raw, c.json) {
+				t.Errorf("%s does not end with %s", raw, c.json)
+			}
+		})
+	}
+}
+
+// The document of a real compare, from the contract script. It compares the record of aws-stack@1.0.0 with the newest version
+// of its profile, aws-stack@1.1.1, by its uid, as the versions cycle does. The move adds a required variable, and the move of
+// the row names it.
+func TestTheMoveOfARealCompareOfTwoProfileVersionsNamesTheRequiredVariable(t *testing.T) {
+	var d docs.Diff
+	testkit.ReadDoc(t, "profile-move.json", &d)
+	m := ProfileMoveOf(d)
+	if m.UpdateChecks == nil || m.UpdateChecks.SkippedMinor != nil || len(m.Packs) == 0 {
+		t.Fatalf("the move %+v", m)
+	}
+	if v := m.UpdateChecks.RequiredVariables; v == nil || v.Code != testkit.CodeVariable || !slices.Equal(v.Names, []string{testkit.PlatformOwner}) {
+		t.Errorf("the variables %+v", v)
+	}
+}
+
 // The pack row and the newer row name the newer profile version that carries a newer version of the pack (#709). They name it
 // as `behind` names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed
 // read says that the carrier was not read. A profile that the pin does not name has no carrier on its row.

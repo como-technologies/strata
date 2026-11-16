@@ -14,6 +14,7 @@ use crate::candidate::pack::pack_snapshot;
 use crate::diff::{self, Diff, Side};
 use crate::error::{Error, Result};
 use crate::json::{first_nonempty, str_at, text};
+use crate::model::update::UpdateChecks;
 use crate::reference::Ref;
 use crate::snapshot::{AppliedProfile, GroupMember, Snapshot, Source, SubjectKind};
 use crate::term::progress::Progress;
@@ -693,6 +694,11 @@ pub fn draft_snapshot<A: PaletteApi>(
 /// `a` is the base side and `b` is the candidate side: the diff reads a move from `a` to `b`.
 /// `generated_at` is the time of the diff, in RFC 3339. The comparison reads nothing from Palette.
 ///
+/// When `a` and `b` are two versions of one profile, the diff also holds the checks of the move
+/// in [`Diff::update_checks`]. They are the required variables that `b` adds, and the skip of a
+/// minor version of Kubernetes. Two versions of one profile have one name and two versions, and
+/// each side names its uid.
+///
 /// # Examples
 ///
 /// Two records of one profile version have one root, so the diff says that nothing changed:
@@ -740,7 +746,9 @@ pub fn draft_snapshot<A: PaletteApi>(
 /// # Ok::<(), strata::Error>(())
 /// ```
 pub fn compare(a: &Snapshot, b: &Snapshot, generated_at: &str) -> Diff {
-    diff::compute(a, b, generated_at, None)
+    let mut d = diff::compute(a, b, generated_at, None);
+    d.update_checks = UpdateChecks::of_versions(a, b);
+    d
 }
 
 /// The scope that the project uid `project` names: `None`, the scope of the connection, when it

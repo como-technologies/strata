@@ -703,8 +703,8 @@ function askCell(subject, p) {
 // refusalLines draws one error that Palette gives: the code, the message, and the clusters.
 const refusalLines = r => h`<div class="mt3"><b>Palette refuses:</b> <span class="m">${r.code}</span></div>${r.message ? h`<div>${r.message}</div>` : ""}${r.clusters && r.clusters.length ? h`<div class="mut">on ${r.clusters.join(", ")}</div>` : ""}`;
 
-/* The checks of the update that strata gives beside the answer: the rules that the question to Palette does not check. checksOf gives each check that found something, in the order of strata: the required variables, then the skip of a
-   minor version. Each check has the words of its row in the table and the lines of the card. An observer of an older release gives none. */
+/* The checks of the update that strata gives beside the answer, and in the move of a profile. They are the rules that the question to Palette does not check. checksOf gives each check that found something, in the order of strata: the
+   required variables, then the skip of a minor version. Each check has the words of its row in the table and the lines of the card. An observer of an older release gives none. */
 const codeList = names => names.map((n, i) => h`${i ? ", " : ""}<span class="m">${n}</span>`);
 function variablesCheck(v) {
   const names = v.names || [], n = names.length;
@@ -721,12 +721,18 @@ const checksOf = a => {
   const c = a.updateChecks || {};
   return [c.requiredVariables && variablesCheck(c.requiredVariables), c.skippedMinor && skipCheck(c.skippedMinor)].filter(Boolean);
 };
-// checkNote is the note of the checks on the card "Move to", under the answer of Palette. It is empty when strata found nothing.
-function checkNote(a) {
+// The last sentence of the note of the checks, for one check and for more. The card "Move to" of a pack asks Palette about the move. The
+// card of a profile asks nothing, because no question to Palette checks the move of a profile.
+const CHECKS_WHY = {
+  ask: ["Strata checks this rule, because the question to Palette does not check it.", "Strata checks these rules, because the question to Palette does not check them."],
+  profile: ["Strata checks this rule, because no question to Palette checks it.", "Strata checks these rules, because no question to Palette checks them."],
+};
+// checkNote is the note of the checks of a on the card "Move to": under the answer of Palette, or in the move of a profile. why gives its
+// last sentence. It is empty when strata found nothing.
+function checkNote(a, why = CHECKS_WHY.ask) {
   const list = checksOf(a);
   if (!list.length) return "";
-  const why = plural(list.length, "Strata checks this rule, because the question to Palette does not check it.", "Strata checks these rules, because the question to Palette does not check them.");
-  return h`<div class="note a small">${list.map(c => c.card)}<div class="mt6">${why}</div></div>`;
+  return h`<div class="note a small">${list.map(c => c.card)}<div class="mt6">${plural(list.length, why[0], why[1])}</div></div>`;
 }
 
 // askBlock is the part of the card "Move to" that asks Palette, or that shows its answer.

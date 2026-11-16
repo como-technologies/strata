@@ -165,7 +165,7 @@ func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 		StateStaleUnchecked: model.PageStale, StateLostUnchecked: model.PageLost, StateReadError: model.PageOK,
 		StateImages: model.PageOK, StateImagesSplit: model.PageOK, StateImagesOff: model.PageOK, StateImagesUnread: model.PageOK,
 		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK, StateAlerts: model.PageOK, StateAlertsUnset: model.PageOK,
-		StateMovedDrift: model.PageOK, StateUpdateChecks: model.PageOK}
+		StateMovedDrift: model.PageOK, StateUpdateChecks: model.PageOK, StateProfileChecks: model.PageOK}
 	if len(pages) != len(States) {
 		t.Fatalf("States lists %d sets, and the table of pages %d", len(States), len(pages))
 	}
@@ -833,6 +833,55 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 		t.Errorf("%d skips and %d variables, want 1 and 3", skips, variables)
 	}
 	sameAsOK(t, ok, checks, StateUpdateChecks, &checks.Asks)
+}
+
+// The set profile-checks holds the checks of strata on the move of two profiles (#897). It changes nothing of ok but the
+// profiles, the newer rows, the counts, and the replies. The versions cycle read kubernetes 1.37.0. So the row of the pack,
+// the move of barney-base, and the reply for the pack agree on it. The skip of the move of a profile has no next step,
+// because the compare reads no registry.
+func TestTheSetProfileChecksHoldsEachCheckOnTheMoveOfAProfile(t *testing.T) {
+	ok, checks := load(t, StateOK), load(t, StateProfileChecks)
+	moves := movesOf(checks)
+	var versions, skips, variables int
+	for _, p := range checks.Profiles.Profiles {
+		n := p.NewerVersion
+		if n == nil {
+			continue
+		}
+		versions++
+		subject := model.Subject(p.Name, p.Version)
+		if n.Move == nil || n.Move.UpdateChecks == nil {
+			t.Fatalf("the move of %s holds no check", subject)
+		}
+		if s := n.Move.UpdateChecks.SkippedMinor; s != nil {
+			skips++
+			i := slices.IndexFunc(n.Move.Packs, func(q model.MovePack) bool { return q.Key == testkit.KubernetesKey })
+			row := moveOf(moves, model.Answer{Profile: subject, Key: testkit.KubernetesKey})
+			if i < 0 || row < 0 || s.From != n.Move.Packs[i].From || s.To != n.Move.Packs[i].To || s.To != moves[row].Newest || s.NextStep != "" {
+				t.Errorf("the skip %+v of %s", s, subject)
+			}
+			newer := slices.IndexFunc(checks.Newer.Newer, func(r model.Newer) bool { return r.Name == s.Pack })
+			if newer < 0 || checks.Newer.Newer[newer].Newest != s.To {
+				t.Errorf("the newer row of %s does not move to %s", s.Pack, s.To)
+			}
+		}
+		if v := n.Move.UpdateChecks.RequiredVariables; v != nil {
+			variables += len(v.Names)
+			if v.Code != testkit.CodeVariable || len(v.Names) == 0 || !slices.IsSorted(v.Names) {
+				t.Errorf("the variables %+v of %s", v, subject)
+			}
+		}
+	}
+	if versions != checks.Cluster.Counts.NewerProfileVersions || skips != 1 || variables != 3 {
+		t.Errorf("%d newer profile versions, and the counts give %d; %d skips and %d variables, want 1 and 3",
+			versions, checks.Cluster.Counts.NewerProfileVersions, skips, variables)
+	}
+	for _, a := range checks.Replies.Asks {
+		if !isMove(moves, a) {
+			t.Errorf(notAMove, "reply", a.Profile+" "+a.Key)
+		}
+	}
+	sameAsOK(t, ok, checks, StateProfileChecks, &checks.Profiles, &checks.Newer, &checks.Cluster, &checks.Replies)
 }
 
 // A click gives the answer that the set holds. A move with no answer gets its reply, and the set keeps

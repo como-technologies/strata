@@ -162,11 +162,13 @@ type NewerVersion struct {
 
 // ProfileMove is what the observer keeps of the compare of a record and the newest version of its
 // profile. It holds the impact level, each flag of its packs, and each pack that changes. It holds no
-// value.
+// value. UpdateChecks holds the checks of the move that strata gives, as the compare gives them. It is nil
+// when strata finds nothing, as in the document.
 type ProfileMove struct {
-	Impact string     `json:"impact"`
-	Flags  []string   `json:"flags"`
-	Packs  []MovePack `json:"packs"`
+	Impact       string             `json:"impact"`
+	Flags        []string           `json:"flags"`
+	Packs        []MovePack         `json:"packs"`
+	UpdateChecks *docs.UpdateChecks `json:"updateChecks,omitempty"`
 }
 
 // MovePack is one pack that the move of a profile changes, adds, or removes. From is absent for a

@@ -27,6 +27,11 @@
 // no reply gives "not found", as a move that the observer does not know. The set ok holds a reply for
 // each move of its Newer table but one.
 //
+// The set profile-checks is ok with the checks of strata on the move of two profiles. The versions cycle
+// read kubernetes 1.37.0, and the newest version barney-base@1.6.0 moves the pack to it. The move skips a
+// minor version and adds two required variables. The move of wilma-gateway adds one required variable. The
+// reply for the move of kubernetes is for 1.37.0, with its skip.
+//
 // The file alerts.json is optional: it holds the answer of /v1/alerts. A set that lacks it, and whose base lacks
 // it, is a page of an observer that started without --alerts. The set alerts is ok with rules, and the set
 // alerts-unset is ok with that answer written out.
@@ -96,15 +101,18 @@ const (
 	// The state of a move. Moved-drift holds a record with a finding of a version that the cluster no longer runs.
 	StateMovedDrift State = "moved-drift"
 
-	// The state of the checks of strata. Update-checks holds answers of Palette with the checks of the update that strata gives
-	// beside them: a move of Kubernetes that skips a minor version, and moves that add required variables.
-	StateUpdateChecks State = "update-checks"
+	// The states of the checks of strata. Update-checks holds answers of Palette with the checks of the update that strata gives
+	// beside them: a move of Kubernetes that skips a minor version, and moves that add required variables. Profile-checks holds
+	// the moves of two profiles with the checks that strata gives. One adds a required variable. The other adds two, and it
+	// skips a minor version of Kubernetes.
+	StateUpdateChecks  State = "update-checks"
+	StateProfileChecks State = "profile-checks"
 )
 
 // States lists the sets, in the order that the recipe `observer-dev` names them.
 var States = []State{StateOK, StateQuiet, StateFirstLoad, StateNoRecords, StateStale, StateLost, StateFirstSeen,
 	StateStaleUnchecked, StateLostUnchecked, StateReadError, StateImages, StateImagesSplit, StateImagesOff, StateImagesUnread,
-	StateAsks, StateTextTooLarge, StateAlerts, StateAlertsUnset, StateMovedDrift, StateUpdateChecks}
+	StateAsks, StateTextTooLarge, StateAlerts, StateAlertsUnset, StateMovedDrift, StateUpdateChecks, StateProfileChecks}
 
 // Reference is the time that the data is written for. Load moves each time of a set by the
 // difference between now and Reference, so that the ages on the page are those of the data.

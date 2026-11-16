@@ -197,6 +197,13 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	if s := skip.Pins[0].Bump.UpdateChecks.SkippedMinor; s == nil || s.From != skip.Pins[0].Version || s.To != skip.Pins[0].Bump.To || s.NextMinor == "" || s.NextStep == "" {
 		t.Errorf("the bump of the skip holds the check %+v", s)
 	}
+	// The compare of a record with the newest version of its profile, as the versions cycle runs it (#897). The move adds
+	// a required variable, and the compare holds the check of strata.
+	var profile Diff
+	decodeFile(t, dir, "profile-move.json", &profile)
+	if c := profile.UpdateChecks; profile.Schema != DiffSchema || c == nil || c.RequiredVariables == nil || c.RequiredVariables.Code == "" || len(c.RequiredVariables.Names) == 0 {
+		t.Errorf("the compare of the move of a profile holds the checks %+v", c)
+	}
 	for _, name := range []string{"compare-payments-aws-stack.json", "compare-payments-platform-addons.json"} {
 		var d Diff
 		decodeFile(t, dir, name, &d)

@@ -66,6 +66,8 @@ A `note` line follows `root` in these cases:
 | `a repave of cluster <c> waits for approval, since <time>: <code> <pack> (<keys>). Palette refuses an update of its profiles until a person approves it` | A cluster side whose record says that a repave waits. | [Whether a repave waits](snapshot/cluster.md#whether-a-repave-waits) |
 | `cluster <c> runs <pack> <version>, and its profile declares <version>` | A cluster side whose `running` tier holds another version of a pack than its profile. | [Two clusters on one release differ](../use-cases/cluster-tiers.md) |
 | `uid <uid> is <name>@<a> on one side and <name>@<b> on the other` | One uid under two versions. Strata prints one note for each such uid, also under `IDENTICAL`. `verify` omits it when its verdict already names the overwrite. | [A version bump overwrites a version](../use-cases/overwritten.md) |
+| `the move adds the required variable <name> with no default value: ...` | Side B adds a required variable with no default value. Two versions of one profile, or `--validate`. | [The checks of a move](compare/versions.md#the-checks-of-a-move) |
+| `<pack> <from> -> <to> skips a minor version: ...` | The pack of the `k8s` layer moves more than one minor version, or to a higher major version. Two versions of one profile, or `--validate`. | [The checks of a move](compare/versions.md#the-checks-of-a-move) |
 
 The report prints each note one time. Two records of one cluster can give the
 same note on each side, such as the note of a pack at another version than its

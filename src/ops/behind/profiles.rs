@@ -25,7 +25,6 @@ use crate::api::PaletteApi;
 use crate::error::{ErrorDocument, Result, found};
 use crate::json::{arr, text};
 use crate::model::scope::ProfileScope;
-use crate::model::update::UpdateChecks;
 use crate::reference::{name_version, version};
 use crate::snapshot::Snapshot;
 use crate::term::progress::Progress;
@@ -233,8 +232,8 @@ fn newer_of<A: PaletteApi>(
 }
 
 /// Give `profile` its bump: what a move to the newest version of its profile does. `compare` of
-/// the two versions gives it, with the checks of [`UpdateChecks::between`]. `at` is the time of
-/// the report, in RFC 3339. A comparison that fails is the error of `profile`.
+/// the two versions gives it, with the checks of the move: see [`crate::ops::compare`]. `at` is
+/// the time of the report, in RFC 3339. A comparison that fails is the error of `profile`.
 fn read_move<A: PaletteApi>(
     documents: &mut ProfileDocuments<'_, A>,
     profile: &mut ProfilePin,
@@ -251,9 +250,10 @@ fn read_move<A: PaletteApi>(
     progress.note(&format!("comparing profile {held} with {to}"));
     let compared = version_record(documents, &profile.uid, &held, at, progress).and_then(|a| {
         let b = version_record(documents, &newest.uid, &to, at, progress)?;
-        let mut bump = Bump::of_profile(&newest.version, &crate::ops::compare(&a, &b, at));
-        bump.update_checks = UpdateChecks::between(&a, &b);
-        Ok(bump)
+        Ok(Bump::of_profile(
+            &newest.version,
+            &crate::ops::compare(&a, &b, at),
+        ))
     });
     match compared {
         Ok(bump) => profile.bump = Some(bump),

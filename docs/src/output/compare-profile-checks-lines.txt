@@ -1,0 +1,5 @@
+$ strata compare aws-stack@1.0.0 aws-stack@1.1.1
+aws-stack@1.0.0 (uid 64e0000000000000000000a1)  ->  aws-stack@1.1.1 (uid 64e0000000000000000000c3)
+root       aee66c68d829 -> 088136c929bd   CHANGED
+note       the move adds the required variable platform_owner with no default value: give it a value at the update, or Palette refuses the update with InvalidVariable
+...
