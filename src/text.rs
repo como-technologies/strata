@@ -9,10 +9,12 @@
 //!
 //! `strata-preflight` calls the public ones, so both tools write each of these in one way.
 
-use std::borrow::Cow;
-
 use schemars::Schema;
 use serde_json::Value;
+
+mod terminal;
+
+pub use terminal::terminal_text;
 
 /// The name of an object, or its uid when Palette gives no name.
 pub fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
@@ -137,28 +139,6 @@ pub fn html_text(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
-}
-
-/// `s` with each control character as a visible escape, such as `\u{1b}` for ESC and `\n` for a
-/// line break. So a text of Palette does not change what a terminal shows.
-///
-/// A control character can start an escape sequence of the terminal, move the cursor back, or
-/// start a new line in a one-line text. Each line that strata writes on a terminal puts a text of
-/// Palette here before it paints the text. The JSON documents and the records keep the text as
-/// Palette gave it.
-pub fn terminal_text(s: &str) -> Cow<'_, str> {
-    if !s.chars().any(char::is_control) {
-        return Cow::Borrowed(s);
-    }
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        if c.is_control() {
-            out.extend(c.escape_default());
-        } else {
-            out.push(c);
-        }
-    }
-    Cow::Owned(out)
 }
 
 /// `s` as the text of one cell of a markdown table, or of one line of markdown.
@@ -483,6 +463,7 @@ mod tests {
         assert_answer_marks_as_text, assert_answer_mentions_as_text,
     };
     use super::*;
+    use std::borrow::Cow;
 
     #[test]
     fn a_noun_agrees_with_its_count_and_only_one_takes_the_singular() {
