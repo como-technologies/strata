@@ -2,12 +2,14 @@
 //!
 //! - A phrase from a list of names, and the name of an object.
 //! - A long text cut to a length.
-//! - A mark for an empty text, a text of HTML, a text in a cell of a markdown table, a text in a
-//!   code span, and a text in a fenced code block.
+//! - A mark for an empty text, a text of HTML, a text on a terminal, a text in a cell of a markdown
+//!   table, a text in a code span, and a text in a fenced code block.
 //! - A command as a person types it in a shell.
 //! - A JSON Schema as text, with its descriptions in plain words.
 //!
 //! `strata-preflight` calls the public ones, so both tools write each of these in one way.
+
+use std::borrow::Cow;
 
 use schemars::Schema;
 use serde_json::Value;
@@ -135,6 +137,28 @@ pub fn html_text(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+}
+
+/// `s` with each control character as a visible escape, such as `\u{1b}` for ESC and `\n` for a
+/// line break. So a text of Palette does not change what a terminal shows.
+///
+/// A control character can start an escape sequence of the terminal, move the cursor back, or
+/// start a new line in a one-line text. Each line that strata writes on a terminal puts a text of
+/// Palette here before it paints the text. The JSON documents and the records keep the text as
+/// Palette gave it.
+pub fn terminal_text(s: &str) -> Cow<'_, str> {
+    if !s.chars().any(char::is_control) {
+        return Cow::Borrowed(s);
+    }
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_control() {
+            out.extend(c.escape_default());
+        } else {
+            out.push(c);
+        }
+    }
+    Cow::Owned(out)
 }
 
 /// `s` as the text of one cell of a markdown table, or of one line of markdown.
