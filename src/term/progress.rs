@@ -7,8 +7,9 @@ use std::io::Write;
 
 /// Writes short progress notes to stderr unless quiet.
 ///
-/// A note or a warning can quote a text of Palette, such as the message of an error. So each one
-/// shows a control character of its message as a visible escape: see [`terminal_text`].
+/// A note or a warning can quote a text of Palette, such as the message of an error. So
+/// [`Progress::note`] and [`Progress::warn`] show each control character of the message as a
+/// visible escape: see [`terminal_text`].
 #[derive(Debug, Clone, Copy)]
 pub struct Progress {
     quiet: bool,
@@ -50,9 +51,8 @@ impl Progress {
     /// Write one note that has colors of its own, prefixed with the tool name.
     ///
     /// The escape codes of a color are control characters, so this note keeps each control
-    /// character of `line`. The caller puts each text of Palette in `line` through
-    /// [`terminal_text`] before it paints the text. The lines of `--verbose` of
-    /// `strata-preflight` come here.
+    /// character of `line`. The caller gives each text of Palette in `line` to [`terminal_text`]
+    /// before it paints the text. The lines of `--verbose` of `strata-preflight` use this note.
     pub fn painted_note(&self, line: &str) {
         self.write(LineClass::Progress, &format!("{TOOL_NAME}: {line}"));
     }
@@ -112,16 +112,12 @@ mod tests {
 
     #[test]
     fn an_error_line_shows_each_control_character_of_its_message_as_a_visible_escape() {
+        // the message clears the screen, and starts a line that reads as an error of strata
         let message = "HTTP 400: Bad: \u{1b}[2Jgone\nstrata: error: forged";
-        assert_eq!(
-            error_line("strata", message, &Paint::off()),
-            r"strata: error: HTTP 400: Bad: \u{1b}[2Jgone\nstrata: error: forged"
-        );
-        // the color of the line stays, and the message holds no escape code of its own
+        let shown = r"strata: error: HTTP 400: Bad: \u{1b}[2Jgone\nstrata: error: forged";
+        assert_eq!(error_line("strata", message, &Paint::off()), shown);
+        // the line keeps its color, and the message gives no escape code of its own
         let on = Paint::resolve(ColorMode::Always, Stream::Stderr);
-        assert_eq!(
-            error_line("strata", message, &on),
-            on.red(r"strata: error: HTTP 400: Bad: \u{1b}[2Jgone\nstrata: error: forged")
-        );
+        assert_eq!(error_line("strata", message, &on), on.red(shown));
     }
 }

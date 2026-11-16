@@ -1215,7 +1215,7 @@ field, a value, an input, or an option is in the sections above.
   checks of its `Diff`, so the bump of a profile version of `behind` keeps the same checks.
 - The new `text::terminal_text` gives a text with each control character as a visible escape.
   `term::progress::error_line`, `Progress::note`, `Progress::warn`, `render::palette_line`, and
-  the terminal renderer give each text of Palette through it. A program that compares their
+  the terminal renderer send each text of Palette to it. A program that compares their
   text must compare the escapes. The new `Progress::painted_note` writes a note that has colors
   of its own, and it keeps each control character of the note.
 
