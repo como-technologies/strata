@@ -401,7 +401,12 @@ impl Renderer for MarkdownRenderer {
         for r in &l.registries {
             out.push_str(&format!(
                 "### {}\n\n",
-                markdown_cell(&registry_heading(l, r, |_, name| name.to_string()))
+                markdown_cell(&registry_heading(
+                    l,
+                    r,
+                    |_, name| name.to_string(),
+                    str::to_string,
+                ))
             ));
             out.push_str("| version | tags | type | clouds | pack uid |\n");
             out.push_str("| --- | --- | --- | --- | --- |\n");

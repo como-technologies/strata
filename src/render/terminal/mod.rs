@@ -442,7 +442,12 @@ impl Renderer for TerminalRenderer {
         for r in &l.registries {
             out.push_str(&format!(
                 "{}\n",
-                registry_heading(l, r, |kind, name| kind.paint(p, &terminal_text(name)))
+                registry_heading(
+                    l,
+                    r,
+                    |kind, name| kind.paint(p, &terminal_text(name)),
+                    |note| terminal_text(note).into_owned(),
+                )
             ));
             // the note column only where a version has a note, so a registry in use reads as before
             let notes: Vec<Option<String>> = r.versions.iter().map(version_note).collect();
