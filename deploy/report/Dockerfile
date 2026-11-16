@@ -4,7 +4,7 @@
 #
 # The binary reads the token of GitHub from GITHUB_TOKEN, which Cloud Run fills from a secret when
 # the service starts. The image holds no secret.
-FROM rust:1.99.1-slim-bookworm AS build
+FROM rust:1.100.0-slim-bookworm AS build
 WORKDIR /src
 COPY . .
 RUN cargo build --release --locked -p strata-report-endpoint
