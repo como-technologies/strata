@@ -15,7 +15,8 @@ use std::process::Command;
 
 use crate::process::CommandExt;
 use crate::sentences::{
-    CommentLine, MOST_WORDS, block_sentences, comment_lines, sentences, word_faults,
+    CommentLine, MOST_WORDS, Marks, block_sentences, comment_lines, marks_of, sentences,
+    word_faults,
 };
 
 /// The start of the path of each file that a tool writes. `just docs-theme` installs them: see
@@ -85,31 +86,6 @@ fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
         return Err(format!("{command}: {}", message.trim()));
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
-/// The comments that a kind of file holds.
-#[derive(Debug, PartialEq, Eq)]
-struct Marks {
-    /// The mark of a line comment, when the kind has one.
-    line: Option<&'static str>,
-    /// True when the kind has block comments.
-    block: bool,
-}
-
-/// The comments of the file at `path`, by its extension or its name. `None` for a kind of file
-/// with no comments that the check reads, such as a page of the book or a JSON document.
-fn marks_of(path: &str) -> Option<Marks> {
-    let name = path.rsplit('/').next().unwrap_or(path);
-    let (line, block) = match name.rsplit_once('.').map(|(_, extension)| extension) {
-        Some("rs" | "go" | "js") => (Some("//"), true),
-        Some("css") => (None, true),
-        Some("sh" | "yml" | "yaml" | "toml" | "tf" | "hcl" | "jq" | "service" | "timer") => {
-            (Some("#"), false)
-        }
-        _ if name == "Dockerfile" || name == "justfile" => (Some("#"), false),
-        _ => return None,
-    };
-    Some(Marks { line, block })
 }
 
 /// The numbers of the lines that `diff` adds, for each file of the new side. `diff` is the output
@@ -314,38 +290,6 @@ rename to new.go
         assert_eq!(added.keys().collect::<Vec<_>>(), ["new.go", "src/a.rs"]);
         assert_eq!(added["src/a.rs"], set(&[3, 4, 5, 11]));
         assert_eq!(added["new.go"], set(&[4]));
-    }
-
-    #[test]
-    fn each_kind_of_file_has_the_marks_of_its_comments() {
-        let line = |mark| Marks {
-            line: Some(mark),
-            block: false,
-        };
-        for (path, marks) in [
-            (
-                "src/main.rs",
-                Some(Marks {
-                    line: Some("//"),
-                    block: true,
-                }),
-            ),
-            (
-                "observer/internal/web/assets/app.css",
-                Some(Marks {
-                    line: None,
-                    block: true,
-                }),
-            ),
-            ("examples/live/lib.sh", Some(line("#"))),
-            (".github/workflows/ci.yml", Some(line("#"))),
-            ("deploy/observer/Dockerfile", Some(line("#"))),
-            ("justfile", Some(line("#"))),
-            ("docs/src/loop.md", None),
-            ("examples/registries.json", None),
-        ] {
-            assert_eq!(marks_of(path), marks, "{path}");
-        }
     }
 
     /// The criterion of #903: a sentence of more than 25 words fails, in a line comment `//` and

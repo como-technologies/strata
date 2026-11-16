@@ -78,6 +78,30 @@ pub fn word_faults(place: &str, found: &[String], limit: usize) -> Vec<String> {
         .collect()
 }
 
+/// The comments that a kind of file holds.
+pub struct Marks {
+    /// The mark of a line comment, when the kind has one.
+    pub line: Option<&'static str>,
+    /// True when the kind has block comments, `/* ... */`.
+    pub block: bool,
+}
+
+/// The comments of the file at `path`, by its extension or its name. `None` for a kind of file
+/// with no comments that the checks read, such as a page of the book or a JSON document.
+pub fn marks_of(path: &str) -> Option<Marks> {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let (line, block) = match name.rsplit_once('.').map(|(_, extension)| extension) {
+        Some("rs" | "go" | "js") => (Some("//"), true),
+        Some("css") => (None, true),
+        Some("sh" | "yml" | "yaml" | "toml" | "tf" | "hcl" | "jq" | "service" | "timer") => {
+            (Some("#"), false)
+        }
+        _ if name == "Dockerfile" || name == "justfile" => (Some("#"), false),
+        _ => return None,
+    };
+    Some(Marks { line, block })
+}
+
 /// A line of a comment block: the number of the line in its file, from 1, and its words without
 /// the marks.
 pub struct CommentLine<'a> {

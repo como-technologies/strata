@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use common::{
     CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, MOST_WORDS, block_sentences, cells, code_of,
-    code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in, one_line, recipe,
-    repo_file, schema, script, sentences, table_rows, toml_entries, toml_table, toml_value,
+    code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in, marks_of, one_line,
+    recipe, repo_file, schema, script, sentences, table_rows, toml_entries, toml_table, toml_value,
     version_of, walk, without_code, without_link_targets, word_faults,
 };
 use strata::TOOL_NAME;
@@ -972,9 +972,14 @@ fn the_blocks_that_the_style_review_of_wave_11_named_have_six_sentences_or_fewer
     }
 }
 
-/// The comment blocks of a file of the repository: `//` in a Rust file, and `#` in any other.
+/// The mark of the line comments of the file at `path`, as [`marks_of`] gives it.
+fn line_mark(path: &str) -> Option<&'static str> {
+    marks_of(path).and_then(|marks| marks.line)
+}
+
+/// The comment blocks of a file of the repository, with the mark that [`line_mark`] gives.
 fn comments_of(file: &str) -> Vec<String> {
-    let mark = if file.ends_with(".rs") { "//" } else { "#" };
+    let mark = line_mark(file).unwrap_or_else(|| panic!("{file} has no line comments"));
     comment_blocks(&repo_file(file), mark)
 }
 
@@ -5030,6 +5035,25 @@ fn each_line_of_a_comment_block_keeps_its_number_in_the_file() {
     );
 }
 
+/// The tests of the comments and `xtask comment-words` read the comments of a file by its kind.
+/// Each kind has the mark of its line comments, and the block comments when it has them.
+#[test]
+fn each_kind_of_file_has_the_marks_of_its_comments() {
+    for (path, marks) in [
+        ("src/main.rs", Some((Some("//"), true))),
+        ("observer/internal/web/assets/app.css", Some((None, true))),
+        ("examples/live/lib.sh", Some((Some("#"), false))),
+        (".github/workflows/ci.yml", Some((Some("#"), false))),
+        ("deploy/observer/Dockerfile", Some((Some("#"), false))),
+        ("justfile", Some((Some("#"), false))),
+        ("docs/src/loop.md", None),
+        ("examples/registries.json", None),
+    ] {
+        let found = marks_of(path).map(|m| (m.line, m.block));
+        assert_eq!(found, marks, "{path}");
+    }
+}
+
 /// The directories that Wave 13 wrote. Each file in them is new since release 0.26.0.
 const SWEPT_DIRECTORIES: [&str; 7] = [
     "crates/strata-report-endpoint",
@@ -5119,16 +5143,10 @@ const NAMED_FILES: [&str; 20] = [
     "crates/strata-preflight/src/confidence.rs",
 ];
 
-/// A file with comments in the tree of `root`, by the extension that it has.
+/// A file of the tree with line comments, by the kind that [`line_mark`] reads.
 fn has_comments(path: &Path) -> bool {
-    let comment_files = ["rs", "sh", "yml", "yaml", "toml", "service", "timer"];
-    let name = path.file_name().and_then(|n| n.to_str());
-    !path.to_string_lossy().contains("/target/")
-        && (name == Some("Dockerfile")
-            || path
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| comment_files.contains(&e)))
+    let path = path.to_string_lossy();
+    !path.contains("/target/") && line_mark(&path).is_some()
 }
 
 /// The files that Wave 13 wrote or changed: each file of `SWEPT_DIRECTORIES` that has comments,
@@ -5145,13 +5163,10 @@ fn swept_files() -> Vec<PathBuf> {
     files
 }
 
-/// The comment blocks of a file of the tree: `//` in a Rust file, and `#` in any other.
+/// The comment blocks of a file of the tree, with the mark that [`line_mark`] gives.
 fn comment_blocks_of_path(path: &Path) -> Vec<String> {
-    let mark = if path.extension().is_some_and(|e| e == "rs") {
-        "//"
-    } else {
-        "#"
-    };
+    let name = path.to_string_lossy();
+    let mark = line_mark(&name).unwrap_or_else(|| panic!("{name} has no line comments"));
     comment_blocks(&read(path), mark)
 }
 
