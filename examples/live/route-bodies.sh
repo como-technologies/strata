@@ -19,35 +19,41 @@
 # The script makes each profile through the API, with the name strata-route-<case>, and publishes
 # it. A case body names its profile, and Palette answers 404 `ResourceNotFound` for a profile that
 # is gone. So the script runs `validate-route.sh BODIES` itself, while the profiles are there.
-# Only then does it delete each profile and the body of each case. It does the same when a step
-# fails, and when a signal stops it. A later `validate-route.sh BODIES` skips the four cases,
-# because no body of a case stays in BODIES. aws-clean.json stays: it names the release profile.
-# The results of validate-route.sh go under validate-route/ in the results of this script.
+# It deletes each profile and the body of each case only after that run. It does the same when a
+# step fails, and when a signal stops it.
+#
+# A later `validate-route.sh BODIES` skips the four cases, because no body of a case stays in
+# BODIES. aws-clean.json stays: it names the release profile. The results of validate-route.sh go
+# under validate-route/ in the results of this script.
 #
 # Palette can refuse a profile, and the registry can lack a pack in the state of a case. The
 # script then skips that case. steps.log says why, and no body of the case stays in BODIES. The
 # create of a profile refuses a disabled pack and a deleted pack. So the two cases of pack-state
-# stay skipped, unless a profile holds a pack that Palette disables or deletes later. The script
-# creates no content in a registry. For pack-cloud-support, it reads the pack listing of Public
-# Repo for the first pack in the layer addon whose cloud types lack aws.
+# stay skipped, unless a profile holds a pack that Palette disables or deletes later.
+#
+# The script creates no content in a registry. For pack-cloud-support, it reads the pack listing
+# of Public Repo for the first pack in the layer addon whose cloud types lack aws.
 # PACK_CLOUD_SUPPORT=<pack>@<version> names that pack instead.
 #
 # One more case makes no profile (#816). cidr-overlap.json is the clean body with the first VPC
 # of the region with a CIDR and a subnet in each zone of the pools. Each pool names the subnet of
 # that VPC in each of its zones. For a body with a VPC, the route refuses a pool with no subnet
 # with HTTP 500 and RequiredParam, as a live run shows (#824). The body also holds the values of
-# the Kubernetes pack of the release profile, with the CIDR of the VPC as the pod CIDR. The script
-# sends it to the route with api.sh post-status, and records the status and the code. The route
-# refuses it with HTTP 500 and K8SCidrOverlap: the code of Palette shows it; no live run shows it
-# yet. cidr-overlap.json stays, as aws-clean.json does. The script skips the case when Palette
-# lists no VPC with a CIDR, or when the Kubernetes pack has no podCIDR. It also skips the case
-# when no VPC with a CIDR has a subnet in each zone of the pools. A pool of the clean body with no
-# zone names no subnet, so the script skips the case for it too.
+# the Kubernetes pack of the release profile, with the CIDR of the VPC as the pod CIDR.
+#
+# The script sends the body to the route with api.sh post-status, and records the status and the
+# code. The route refuses it with HTTP 500 and K8SCidrOverlap: the code of Palette shows it; no
+# live run shows it yet. cidr-overlap.json stays, as aws-clean.json does.
+#
+# The script skips the case when Palette lists no VPC with a CIDR, or when the Kubernetes pack has
+# no podCIDR. It also skips the case when no VPC with a CIDR has a subnet in each zone of the
+# pools. A pool of the clean body with no zone names no subnet, so the script skips the case for
+# it too.
 #
 # The case cidr-variable makes the profile strata-route-cidr-variable (#829). It is a copy of the
 # release profile with the variable pod_cidr, and its Kubernetes pack reads the pod CIDR from that
 # variable. cidr-variable.json is cidr-overlap.json with that profile, and with pod_cidr in the VPC.
-# The route quotes the value of the variable in its refusal, and validate-route.sh checks that the
+# The route quotes the value of the variable in its refusal. validate-route.sh checks that the
 # three reports of palette-validate hold the mark of the variable and not its value (#614). The
 # script deletes the profile and the body after validate-route.sh, as for the four cases.
 #

@@ -214,10 +214,10 @@ pub struct PinnedBy {
     /// What the record holds, as its title: `aws-stack@1.1.1`, `aws-stack@1.1.1 on cluster
     /// payments`, or `4 profiles on cluster payments`.
     pub subject: String,
-    /// For a record of more than one profile, such as a cluster: the title with only the profile
-    /// that holds the pack, or that is the profile version, as
-    /// `monitoring@1.4.0 on cluster payments`. Absent for a record of one profile, and when the
-    /// record does not name the profile of the pack.
+    /// The title with only the profile that holds the pack, or that is the profile version, as
+    /// `monitoring@1.4.0 on cluster payments`. It is for a record of more than one profile, such
+    /// as a cluster. Absent for a record of one profile, and when the record does not name the
+    /// profile of the pack.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
 }

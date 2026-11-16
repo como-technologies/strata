@@ -29,7 +29,7 @@ work starts.
    you work in. Give that worktree its own target directory too:
 
    ```bash
-   just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs
+   just lint && just comment-words && just test && just library-example && just examples && just docs-check && just docs-lint && just docs
    ```
 
 5. Rebase on a fresh `origin/main`. Then push the branch.

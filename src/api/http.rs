@@ -136,7 +136,7 @@ impl HttpApi {
         if !(200..300).contains(&status) {
             // the whole body, on one line: a caller that reads the answer of a validate route
             // needs the JSON of the refusal. The message of the error gives only the code and
-            // the message of Palette from it, and the field `body` of `--json` gives all of it
+            // the message of Palette from it. The field `body` of `--json` gives all of it
             return Err(Error::Api {
                 method,
                 path: path.to_string(),

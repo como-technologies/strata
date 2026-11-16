@@ -15,7 +15,10 @@ jobs:
     name: lint and test
     runs-on: ubuntu-latest
     steps:
+      # the check of the comments reads the first parent of the commit, so the checkout fetches two commits
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -28,6 +31,9 @@ jobs:
           cache: false
       # CI runs the same recipes a developer runs locally
       - run: just lint
+      # Each comment sentence that the change adds has 25 words or fewer. On a pull request, the first
+      # parent is the base branch. On a push, it is the commit before.
+      - run: just comment-words HEAD^1
       - run: just test
       # a separate crate that depends on strata as a library
       - run: just library-example

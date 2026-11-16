@@ -111,7 +111,7 @@ fn head(r: &Report) -> String {
 }
 
 /// The tiles of the totals. The counts of the failures are those of the summary and of the
-/// scorecard, and the tile of the readiness names the tiers that it counts.
+/// scorecard. The tile of the readiness names the tiers that it counts.
 fn tiles(r: &Report) -> String {
     let s = &r.summary;
     let mut h = String::from("<div class=\"tiles\">");

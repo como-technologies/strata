@@ -208,11 +208,13 @@ const (
 	gaveArgs = "the command %q gave the arguments %q, want %q"
 )
 
-// places are the places of the issue: the first check, no records, lost with nothing read, a page that cannot reach the observer, a route
-// that does not exist, no findings, no newer versions, nothing unchecked, the pods off, the read of the pods failed, alerts not
-// set, a pack that matches its record, a pack not checked, a diff that a cycle holds, a text too large, an empty tab, a filter with
-// no match, and no events. The page also has a place for a first read that the observer has not ended, the stop of the checks
-// before a good one, and the read of the pods that is not done yet.
+// places are the places of the issue. They are the first check, no records, lost with nothing read, a page that cannot reach the
+// observer, and a route that does not exist. They are also no findings, no newer versions, nothing unchecked, the pods off, the read
+// of the pods failed, and alerts not set. They are also a pack that matches its record, a pack not checked, a diff that a cycle
+// holds, and a text too large. The last three are an empty tab, a filter with no match, and no events.
+//
+// The page also has a place for a first read that the observer has not ended. It also has a place for the stop of the checks
+// before a good one. A third place is for the read of the pods that is not done yet.
 var places = []place{
 	{placeFirstCheck, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateFirstLoad), "#overview", "") }, "build", "lg", "Reading the layers",
 		[]string{firstCheck + ", and this page fills in when it ends. The observer reads each record, then asks Palette for the same version."}, nil},
@@ -647,7 +649,8 @@ func tabId(d api.PackDiff) string {
 	return sideSelect(d.Profile, d.Key) + "-" + string(d.Side)
 }
 
-// sideSelect is the id of the list of the sides of the pack key of the profile subject, and the key of its choice in S.side.
+// sideSelect is the id of the list of the sides of the pack key of the profile subject. It is also the key of the choice of
+// that list in S.side.
 func sideSelect(subject, key string) string { return "side-" + subject + "-" + key }
 
 // tabOf gives the data attribute of the tabs id, and tabAttrs adds the tab k: values, manifests, images, or charts.

@@ -39,7 +39,7 @@ observer-contract *args: build stand-in
 observer-playground chapter="observer-2": build observer-build
     scripts/observer-playground.sh {{chapter}}
 
-# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error, images, images-split, images-off, images-unread, asks, text-too-large, alerts, alerts-unset, moved-drift, update-checks, profile-checks
+# Serve the dashboard of the observer from test data. The sets: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error, images, images-split, images-off, images-unread, asks, text-too-large, alerts, alerts-unset, moved-drift, update-checks, profile-checks
 [group('observer')]
 observer-dev state="ok":
     go -C observer run ./internal/web/devserver -state {{state}}
@@ -151,6 +151,14 @@ lint:
 library-example:
     cargo run --quiet --manifest-path examples/library/Cargo.toml --target-dir target/library-example
     cargo run --quiet --manifest-path examples/library-preflight/Cargo.toml --target-dir target/library-example
+
+# The job `lint and test` of CI gives the first parent of the commit as BASE. See "The check of the
+# comment sentences" in docs/src/development/documentation.md.
+
+# Fail when a comment sentence that the work tree adds after the merge base of BASE and HEAD has more than 25 words
+[group('check')]
+comment-words base="origin/main":
+    cargo run --quiet -p xtask -- comment-words "{{base}}"
 
 # The job `deny list` of CI runs this recipe with the secret STEP14_DENY. See "The deny list" in
 # docs/src/development/build-test.md.
@@ -495,7 +503,7 @@ live-cluster: build
 live-order: build
     examples/live/order.sh
 
-# The append test (#844): the stored order of the profiles of cluster A after an add and after a new version of its infrastructure profile, with cluster B as the control. Needs live-up; builds and removes cluster B, and returns the example to its baseline.
+# The append test (#844): the stored order of the profiles of cluster A after an add and after a new version of its infrastructure profile. Cluster B is the control. Needs live-up; builds and removes cluster B, and returns the example to its baseline.
 [group('live checks')]
 live-order-append: build
     examples/live/order.sh 4
@@ -664,7 +672,7 @@ live-tiers-limited: build
 live-tiers-pool: build
     examples/live/tiers.sh 7
 
-# The narrow key test (#665, #620): what Palette answers on three routes of cluster A to a key whose role does not give cluster.get, and what strata list prints with that key. Needs live-up and STRATA_LIVE_NARROW_KEY; reads only.
+# The narrow key test (#665, #620): the answers of Palette on three routes of cluster A to a key whose role does not give cluster.get. It also shows what strata list prints with that key. Needs live-up and STRATA_LIVE_NARROW_KEY; reads only.
 [group('live checks')]
 live-tiers-narrow: build
     examples/live/tiers.sh 8
@@ -674,7 +682,7 @@ live-tiers-narrow: build
 live-tiers-unknown-key: build
     examples/live/tiers.sh 9
 
-# The second user test (#838): what Palette answers to the keys of two users for a role binding of the system of cluster A, and compare of a record with each key. Needs live-up and STRATA_LIVE_SECOND_KEY; reads only.
+# The second user test (#838): what Palette answers to the keys of two users for a role binding of the system of cluster A. It also runs compare of a record with each key. Needs live-up and STRATA_LIVE_SECOND_KEY; reads only.
 [group('live checks')]
 live-tiers-second-key: build
     examples/live/tiers.sh 10

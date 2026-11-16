@@ -758,9 +758,9 @@ pub fn scope_of(project: &str) -> Option<&str> {
 }
 
 /// The client that reads a cluster of project `project`: the one already connected for that
-/// project, a new one, or `home` when the cluster names no project of its own. A cluster with no
-/// project is in the scope the operation already works in, so `home` reads it; `consumers` and
-/// `list clusters --detail` answered that differently until they shared this.
+/// project, or a new one. It is `home` when the cluster names no project of its own. A cluster
+/// with no project is in the scope the operation already works in, so `home` reads it.
+/// `consumers` and `list clusters --detail` answered that differently until they shared this.
 fn client_for<'a, A, F>(
     clients: &'a mut HashMap<Option<String>, Palette<A>>,
     home: &'a Palette<A>,

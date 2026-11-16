@@ -64,8 +64,8 @@ fn csi_ref(registry: &str) -> Ref {
     Ref::pack(Some(registry), "csi-aws-ebs", "1.28.0")
 }
 
-/// The terminal row of `csi-aws-ebs` 1.28.0 in `list --pack`, from the registry `registry`: the
-/// layer and the ref of the pack, as a person types it in a shell.
+/// The terminal row of `csi-aws-ebs` 1.28.0 in `list --pack`, from the registry `registry`. It
+/// holds the layer and the ref of the pack, as a person types it in a shell.
 fn csi_row(registry: &str) -> String {
     format!("    csi    {}\n", csi_ref(registry).shell_word())
 }
@@ -300,7 +300,7 @@ fn a_raw_directory_keeps_the_registries_and_from_raw_gives_the_same_names() {
 }
 
 /// "What registries do we even have to search?" `list registries` names each registry that the
-/// key can see, by name, with its uid and its kind. `--registry` of `packs` and a `pack:` ref take
+/// key can see, by name, with its uid and kind. `--registry` of `packs` and a `pack:` ref take
 /// the name or the uid.
 #[test]
 fn list_registries_names_each_registry_that_the_key_can_see_with_its_uid_and_kind() {

@@ -211,7 +211,7 @@ check arch-behind-json 0 '#126: --json gives newer[].drops on 3.6.7' -- \
   bash -c "\"$strata\" behind loki.json --no-impact --json | jq -e '[.pins[0].newer[] | select(.version == \"3.6.7\") | .drops] == [[\"arm64\"]]'"
 
 # A pin that is current is current against the copy of its registry in Palette. When the last sync
-# of the registry did not complete, the copy is the copy of an earlier sync, and the pin names that
+# of the registry did not complete, the copy is the copy of an earlier sync. The pin names that
 # sync (#122). The check reads the state of the sync of the Bitnami registry first, so it holds
 # for each state. With no state, the listing gives isSyncSupported false: the code of Palette shows
 # it, and bitnami-no-status checks it. strata reads no sync then, and the pin has no note (#928).

@@ -208,8 +208,10 @@ impl PaletteRefusal {
 }
 
 /// The lines of an answer of Palette to `--validate`: `accepts` when there is no error, or else
-/// one line for each error, such as `refuses: PackDependencyNotFound for pack strata-live-pack:
-/// <message>`.
+/// one line for each error.
+///
+/// An error gives a line such as
+/// `refuses: PackDependencyNotFound for pack strata-live-pack: <message>`.
 pub fn answer_lines(errors: &[PaletteRefusal]) -> Vec<String> {
     if errors.is_empty() {
         return vec!["accepts".to_string()];

@@ -1,5 +1,5 @@
-//! The tests of the fields of the policy tier: the tables of the keys, the masks of a cluster group,
-//! the comparison of an older tier, and the role bindings.
+//! The tests of the fields of the policy tier. They test the tables of the keys, the masks of a
+//! cluster group, the comparison of an older tier, and the role bindings.
 
 use super::*;
 use std::collections::BTreeSet;

@@ -1202,6 +1202,37 @@ fn the_check_job_renders_the_manifests_of_the_observer_with_and_without_each_com
     }
 }
 
+/// The criterion of #903: the job `lint and test` counts the words of each comment sentence that
+/// the change adds. The first parent of the commit is the base, so the checkout fetches two commits.
+#[test]
+fn the_check_job_counts_the_words_of_each_comment_sentence_that_the_change_adds() {
+    let runs = runs_of("checks.yml", "lint and test");
+    assert!(
+        runs.contains(&"just comment-words HEAD^1".to_string()),
+        "{runs:?}"
+    );
+    let doc = workflow("checks.yml");
+    let checkout = doc["jobs"]["check"]["steps"]
+        .as_sequence()
+        .expect("the job check has steps")
+        .iter()
+        .find(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|uses| uses.starts_with("actions/checkout@"))
+        })
+        .expect("the job check makes a checkout");
+    assert_eq!(checkout["with"]["fetch-depth"].as_u64(), Some(2));
+
+    let justfile = repo_file("justfile");
+    assert!(
+        justfile.contains(
+            "comment-words base=\"origin/main\":\n    cargo run --quiet -p xtask -- comment-words \"{{base}}\"\n"
+        ),
+        "the recipe runs the check of xtask on its base"
+    );
+}
+
 // ---- the demo of the observer in the book (#645) ---------------------------------------------------
 
 /// A step of the book runs `strata-observer`, so the recipes that write and check the output build

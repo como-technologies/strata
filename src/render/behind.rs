@@ -119,8 +119,8 @@ pub(crate) fn shown_profiles(r: &BehindReport, behind_only: bool) -> Vec<&Profil
         .collect()
 }
 
-/// The title of a record that pins a pack or holds a profile version: the title with only the
-/// profile that holds the entry, when the record names it, else the title of the record.
+/// The title of a record that pins a pack or holds a profile version. It is the title with only
+/// the profile that holds the entry, when the record names it. Else it is the title of the record.
 pub(crate) fn record_title(by: &PinnedBy) -> &str {
     by.owner.as_deref().unwrap_or(&by.subject)
 }
@@ -181,8 +181,8 @@ pub(crate) fn listed_since(pin: &Pin) -> Option<String> {
     Some(format!("{} listed since {}", newest.version, newest.listed))
 }
 
-/// The line `next patch` of a pin: the newest patch of the minor version of the pin, and the
-/// command that gives what a move to it does.
+/// The line `next patch` of a pin. It names the newest patch of the minor version of the pin, and
+/// the command that gives what a move to it does.
 ///
 /// An example is `next patch 1.36.4: strata compare <pin> <patch>`, with the pack ref of each
 /// side, such as `'pack:Public Repo/kubernetes@1.36.2'`: see [`pin_ref`]. Strata sends no request

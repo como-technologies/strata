@@ -11,9 +11,9 @@ import (
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
-/* Issue #867. Strata checks two rules of the update that no route of Palette checks before it: a move of Kubernetes that skips a
-minor version, and a required variable with no default value that the move adds. The column "Palette" and the card "Move to" show
-each check that strata gives beside the answer of Palette. */
+/* Issue #867. Strata checks two rules of the update that no route of Palette checks before it. One rule is for a move of Kubernetes
+that skips a minor version. The other is for a required variable with no default value that the move adds. The column "Palette"
+and the card "Move to" show each check that strata gives beside the answer of Palette. */
 
 // The words of the column "Palette" and of the card "Move to" for the checks of the set update-checks.
 const (
@@ -61,8 +61,8 @@ func cellWith(cell string, lines ...string) string {
 	return strings.TrimSuffix(cell, "</td>") + checks.String() + "</td>"
 }
 
-// checkAnswers gives the answers of the set update-checks for the move of kubernetes, with its skip, and for the move of traefik,
-// with its required variable.
+// checkAnswers gives the answers of the set update-checks for the move of kubernetes and for the move of traefik. The move of
+// kubernetes has its skip, and the move of traefik has its required variable.
 func checkAnswers(t *testing.T) (k8s, traefik model.Answer) {
 	t.Helper()
 	asks := loadSet(t, devdata.StateUpdateChecks).Asks.Asks
@@ -183,7 +183,7 @@ func TestACheckWithMarkupShowsAsText(t *testing.T) {
 	}
 }
 
-// The page of the service quotes the words of each check in its second table of "Ask Palette about a move", and the use case names
+// The page of the service quotes the words of each check in its second table of "Ask Palette about a move". The use case names
 // them. Each word is a word of the scripts.
 func TestTheBookQuotesTheWordsOfEachCheck(t *testing.T) {
 	script := readScripts(t)
@@ -238,7 +238,7 @@ func TestTheCardMoveToOfAProfileNamesEachCheckOfTheMove(t *testing.T) {
 }
 
 // A code, a version, and the name of a variable of a check on the move of a profile show as text on the card. render.js adds the
-// injection to the name and to the version of each profile, so the hash of the page of barney-base holds it two times. The list
+// injection to the name and to the version of each profile. So the hash of the page of barney-base holds it two times. The list
 // of packs also shows the newer version of kubernetes, so the test reads the card alone.
 func TestACheckOfTheMoveOfAProfileWithMarkupShowsAsText(t *testing.T) {
 	name, version, _ := strings.Cut(testkit.BaseProfile, "@")
@@ -259,8 +259,8 @@ func TestACheckOfTheMoveOfAProfileWithMarkupShowsAsText(t *testing.T) {
 	}
 }
 
-// The page of the service quotes the words of each check of the card "Move to" of a profile, and the last sentence of its note.
-// Each word is a word of the scripts. The use case says that the card shows the checks.
+// The page of the service quotes the words of each check of the card "Move to" of a profile. It also quotes the last sentence
+// of the note of the card. Each word is a word of the scripts. The use case says that the card shows the checks.
 func TestTheBookQuotesTheWordsOfEachCheckOfTheMoveOfAProfile(t *testing.T) {
 	script := readScripts(t)
 	section := sectionOf(t, servicePage, profileMoveSection)

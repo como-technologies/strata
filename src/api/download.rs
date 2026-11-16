@@ -5,10 +5,11 @@
 //! `profiles[].packsMetaFilePath`. The list maps the name of each pack to its `version`, its
 //! `type`, and its `filePath`. `filePath` is the path of the archive of the pack from the folder of
 //! the list.
+//!
 //! The archive of a pack is a tar archive that gzip compresses, with one top folder. An empty
 //! `filePath` means that the download holds no archive of the pack. The file of a pack can also be
-//! another file, such as an error answer of the host of a Helm chart, or no file at all: see
-//! [`PackFile::NotReadable`]. Strata keeps each other pack of such a download.
+//! another file, such as an error answer of the host of a Helm chart. It can also be absent from
+//! the download: see [`PackFile::NotReadable`]. Strata keeps each other pack of such a download.
 //!
 //! Palette resolves the macros in the other files of the download, so they can hold the value of
 //! a macro. Strata reads the two lists and the archives of the packs, and no other file. It keeps

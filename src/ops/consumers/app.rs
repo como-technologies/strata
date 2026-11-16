@@ -132,12 +132,14 @@ where
 /// What strata reads beside the consumer list of an app profile: the app deployments of each
 /// project that can use the version.
 ///
-/// For an app profile of a project, Palette names the app deployments in the consumer list only
-/// when a role of the key gives `cluster.get` in that project. Else the list is empty, with no
-/// error. So strata lists the app deployments of each project that can use the version: the
-/// project of an app profile of a project, or each project of the tenant listing for an app
-/// profile of the tenant or of the system. Each one that runs the version `uid` and is not in
-/// `list` joins it, marked `unlisted`. A project that refuses the listing is in
+/// Palette names the app deployments of an app profile of a project in its consumer list. It does
+/// so only when a role of the key gives `cluster.get` in that project. Else the list is empty,
+/// with no error.
+///
+/// So strata lists the app deployments of each project that can use the version. For an app
+/// profile of a project, that is its project. For an app profile of the tenant or of the system,
+/// it is each project of the tenant listing. Each app deployment that runs the version `uid` and
+/// is not in `list` joins it, marked `unlisted`. A project that refuses the listing is in
 /// [`ProjectsRead::unread`]. `--list-only` asks for none of it.
 ///
 /// For an app profile of the tenant or of the system, strata also sends one page of the cluster
@@ -211,9 +213,9 @@ where
     read
 }
 
-/// Add to `list` each app deployment of `deployments`, the listing of the project `project`, that
-/// runs the app profile version `uid` and that `list` does not name. It is marked `unlisted`, with
-/// the name, the state, and the version that the listing gives.
+/// Add to `list` each app deployment of `deployments` that runs the app profile version `uid` and
+/// that `list` does not name. It is marked `unlisted`, with the name, the state, and the version
+/// that the listing gives. `deployments` is the listing of the project `project`.
 fn join_running(list: &mut Vec<Consumer>, uid: &str, project: &str, deployments: &[Value]) {
     for d in deployments {
         let app_uid = text(d, "/metadata/uid");

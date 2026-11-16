@@ -98,7 +98,7 @@ check tenant-consumers-projects 0 '#621: consumers searched each project of the 
   jq -e '.profile.scope == "tenant" and .projectsRead.read >= 1 and ((.projectsRead.unread // []) | length) == 0' tenant-consumers.out
 check release-consumers 0 '#621: consumers of the release names its project by name, and searches no other project' -- \
   bash -c "\"$strata\" consumers '$R' --json | jq -e '.profile.scope == \"project\" and (.profile.projectName // \"\" | length) > 0 and (has(\"projectsRead\") | not)'"
-# the search of the edge hosts at tenant scope omits a project where the key cannot list them, so
+# the search of the edge hosts at tenant scope omits a project where the key cannot list them. So
 # consumers of the release also searches the edge hosts of its project (#892)
 check release-consumers-edge-hosts 0 '#892: consumers of the release also searches the edge hosts of its project, and the search answers' -- \
   bash -c "\"$strata\" consumers '$R' --json | jq -e '.edgeHostsRead | has(\"error\") | not'"

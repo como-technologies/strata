@@ -84,8 +84,8 @@ fn edited_in_place(r: &mut Runner) {
 
 /// The part of the chapter `edited-in-place` for a key that cannot read the audit log.
 fn edited_in_place_who_denied(r: &mut Runner) {
-    // the key loses audit.list: the verdict stays, and the note and the line give the words of
-    // the refusal of Palette, not the JSON of its body (#887)
+    // the key loses audit.list: the verdict stays. The note and the line give the words of the
+    // refusal of Palette, not the JSON of its body (#887)
     r.tenant(|t| t.deny_audit_log(DEV, A111));
     r.step(
         "edited-verify-who-denied-full",

@@ -102,9 +102,9 @@ const (
 	StateMovedDrift State = "moved-drift"
 
 	// The states of the checks of strata. Update-checks holds answers of Palette with the checks of the update that strata gives
-	// beside them: a move of Kubernetes that skips a minor version, and moves that add required variables. Profile-checks holds
-	// the moves of two profiles with the checks that strata gives. One adds a required variable. The other adds two, and it
-	// skips a minor version of Kubernetes.
+	// beside them. The checks are for a move of Kubernetes that skips a minor version, and for moves that add required
+	// variables. Profile-checks holds the moves of two profiles with the checks that strata gives. One adds a required
+	// variable. The other adds two, and it skips a minor version of Kubernetes.
 	StateUpdateChecks  State = "update-checks"
 	StateProfileChecks State = "profile-checks"
 )

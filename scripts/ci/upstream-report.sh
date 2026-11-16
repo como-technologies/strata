@@ -6,25 +6,32 @@
 #                                 [--label NAME] [--no-impact] [--save FILE] [--dry-run]
 #
 # Runs `strata behind --format json` over the records; strata expands a quoted pattern such as
-# 'releases/**/*.json'. Each pack of a registry that a record pins behind the newest version it can
-# move to has one open issue labeled NAME (default strata-behind), found by the marker
-# <!-- strata-behind: <pack> <registry uid> --> on the first line of its body: opened on the first
-# run that finds the pack behind, updated on each later run, and closed with a comment on the first
-# run where each pin of the pack is current. The second line of the body keeps the pins as JSON,
-# and the next run passes them to `strata behind --since`, so the issue names each version that
-# arrived since its last update; the issue that a run opens says that this run is the first to find
-# the pack behind. A pack that strata could not check keeps its issue as it is.
-# Issues of packs that no record pins are left alone. For a pin that is behind a newer minor
-# version, the newer column names the next patch, when the pin has one. It is the newest patch of
-# the minor version of the pin, from `nextPatch` of `strata behind`. The bump column also says
-# whether Palette accepts the move. When Palette refuses it, the column gives each error as
-# `strata behind` writes it. --no-impact skips the comparison of each pin with the newest version,
-# and the question to Palette. --save FILE keeps the report of the run. --dry-run prints each issue
-# body and the change to each issue, and calls no host.
+# 'releases/**/*.json'.
 #
-# Exit 0 when no pin is behind, 1 when one is, 2 when a pin could not be checked or strata checked
-# nothing; the issues are handled first, so a scheduled job shows the state too. Behind is a
-# decision and not an error: run this job apart from the drift report.
+# A record can pin a pack of a registry behind the newest version that it can move to. Each such
+# pack has one open issue labeled NAME (default strata-behind). The marker
+# <!-- strata-behind: <pack> <registry uid> --> on the first line of its body finds it. The first
+# run that finds the pack behind opens the issue, and each later run updates it. The first run
+# where each pin of the pack is current closes it with a comment.
+#
+# The second line of the body keeps the pins as JSON. The next run passes them to
+# `strata behind --since`, so the issue names each version that arrived since its last update. The
+# issue that a run opens says that this run is the first to find the pack behind. A pack that
+# strata could not check keeps its issue as it is. The script leaves the issues of packs that no
+# record pins as they are.
+#
+# For a pin that is behind a newer minor version, the newer column names the next patch, when the
+# pin has one. It is the newest patch of the minor version of the pin, from `nextPatch` of
+# `strata behind`. The bump column also says whether Palette accepts the move. When Palette
+# refuses it, the column gives each error as `strata behind` writes it.
+#
+# --no-impact skips the comparison of each pin with the newest version, and the question to
+# Palette. --save FILE keeps the report of the run. --dry-run prints each issue body and the change
+# to each issue, and calls no host.
+#
+# Exit 0 when no pin is behind, 1 when one is, and 2 when strata could not check a pin or checked
+# nothing. The script changes the issues first, so a scheduled job shows the state too. Behind is
+# a decision and not an error: run this job apart from the drift report.
 #
 # Hosts: GitHub through `gh`, and GitLab through the REST API v4 with `curl`. --host picks one;
 # without it, the CI variables do: GITLAB_CI or CI_PROJECT_ID means GitLab, else GitHub. On GitLab

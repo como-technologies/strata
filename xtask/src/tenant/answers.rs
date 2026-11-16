@@ -199,8 +199,9 @@ impl Tenant {
         self.deny_listing(project, name, APP_DEPLOYMENT_LISTING);
     }
 
-    /// Make Palette refuse the listing or the search `path` of `project`, which it pages, with
-    /// HTTP 500, the code of [`Denial::Project`], and a message that names the project `name`.
+    /// Make Palette refuse the listing or the search `path` of `project`, which it pages. The
+    /// refusal gives HTTP 500, the code of [`Denial::Project`], and a message that names the
+    /// project `name`.
     fn deny_listing(&self, project: &str, name: &str, path: &str) {
         let message = project_denied_message(name);
         self.deny(project, &paged(path), Denial::Project, &message);

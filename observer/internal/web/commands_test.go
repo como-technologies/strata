@@ -103,8 +103,8 @@ func secretsOf(t *testing.T, record string) string {
 	return secrets
 }
 
-// recordKey gives the key of the record of the profile name at version in the Secrets, as the page writes it: a character
-// outside A-Z a-z 0-9 . _ - becomes an underscore.
+// recordKey gives the key of the record of the profile name at version in the Secrets, as the page writes it. A character
+// outside `A-Z a-z 0-9 . _ -` becomes an underscore.
 func recordKey(name, version string) string {
 	return regexp.MustCompile(`[^A-Za-z0-9._-]`).ReplaceAllString(name+"_"+version+".json.gz", "_")
 }

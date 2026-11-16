@@ -164,7 +164,7 @@ if stage 8 "a profile variable in a repave key of a version that cluster A does 
   check var-strata-answer ? "#132: Palette says repave (0), or no repave (1), to the request of strata" -- \
     jq -e '.paletteRepave.required' var-strata.out
   # the three questions of #132 keep the earlier body of tenant.sh: 1.0.0 alone, with
-  # replaceWithProfile 1.0.1, so that each answer stays the answer to the body that it names
+  # replaceWithProfile 1.0.1. Then each answer stays the answer to the body that it names
   check var-none ? "#132: tenant.sh with no variables: no repave (0), or repave (1)" -- \
     env REPAVE_FORM=replace "$live/tenant.sh" repave "$C" "$R" "$N"
   check var-default ? "#132: tenant.sh with strata_mode 600, the default: no repave (0), or repave (1)" -- \

@@ -684,7 +684,7 @@ func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t
 }
 
 // Issue #834. A finding wins: an edit of a version that the cluster does not run stays a drift, as aws-stack@1.0.0 on ledger of the
-// book. The record still has no newer version, and no pack of it has one: Palette lists csi-aws-ebs 1.66.0 and dns 1.2.0, and the
+// book. The record still has no newer version, and no pack of it has one. Palette lists csi-aws-ebs 1.66.0 and dns 1.2.0, and the
 // summary names neither for 1.0.0. The record counts as a profile and as a drift. Its packs, its pins, and its profile version count
 // nowhere, and no event of a newer version names it.
 func TestAVersionThatTheClusterDoesNotRunWithAFindingIsADriftWithNoNewerVersion(t *testing.T) {

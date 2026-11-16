@@ -1205,6 +1205,12 @@ field, a value, an input, or an option is in the sections above.
   the records keep each text as Palette gave it. A script that reads the text of the terminal
   must read the escapes. See
   [A control character of a text of Palette](./formats.md#a-control-character-of-a-text-of-palette).
+- **Some descriptions of the schemas have shorter sentences.** `strata schema behind`, `diff`,
+  and `verify-summary` give new words for `none` of `ImpactLevel` and for
+  `UpdateChecks`. `behind` also gives new words for `owner` in `PinnedBy`, and `diff` and
+  `verify-summary` for `mintedUidOnly`. `strata schema consumers` gives new words for `unread` in
+  `ProjectsRead`. The fields and their meaning stay the same. A script that matches the whole
+  text of a description must match the new text.
 
 ### For a user of the library of strata
 

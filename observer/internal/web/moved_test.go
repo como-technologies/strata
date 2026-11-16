@@ -51,8 +51,10 @@ func versionPageOfMoved(t *testing.T, screens []screen, badgeOfStatus string) {
 
 // Issue #834. The filters All and Newer do not count the record, and the table of the profiles does not list it. A fold under the
 // table lists it, with the status "Not on this cluster" and no newer version. The fold shows with the filter All only. The tile
-// Profiles counts the profiles of the cluster. The page of the version names no move, and no pack of it says "current": strata
-// does not look for a newer version of a version that the cluster does not run.
+// Profiles counts the profiles of the cluster.
+//
+// Strata does not look for a newer version of a version that the cluster does not run. So the page of the version names no
+// move, and no pack of it says "current".
 func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testing.T) {
 	screens := crawl(t, devdata.StateOK)
 	profiles := pageOf(t, screens, "#profiles", "")
@@ -78,7 +80,7 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 // Issue #834. A finding wins: in the set moved-drift, a person edited the published version that the cluster no longer runs. Its row
 // stays in the table of the profiles with the badge "Drift", the filters count it, and no fold shows. The page of the version names no
 // move, and no pack of it says "current". The page reads the copy of this cluster for that rule, as the summary does, and not the
-// status: so the rule holds for a drift too.
+// status. So the rule holds for a drift too.
 func TestAVersionThatTheClusterNoLongerRunsWithAFindingIsADriftWithNoNewerVersion(t *testing.T) {
 	screens := crawl(t, devdata.StateMovedDrift)
 	profiles := pageOf(t, screens, "#profiles", "")
@@ -91,7 +93,7 @@ func TestAVersionThatTheClusterNoLongerRunsWithAFindingIsADriftWithNoNewerVersio
 }
 
 // The page of each pack of the version shows no fact of a newer version. Strata does not look for a newer version of a version that the
-// cluster does not run, so no side of the pack says "Current" or "No newer version". The nav of each screen holds "Newer versions",
+// cluster does not run. So no side of the pack says "Current" or "No newer version". The nav of each screen holds "Newer versions",
 // so the test looks for the label of the fact. A pack with no change shows the facts of the published version and of the copy of this
 // cluster. In the set moved-drift, the published version of traefik changed, so its page shows the change.
 func TestThePageOfAPackOfAVersionThatTheClusterNoLongerRunsHasNoFactOfANewerVersion(t *testing.T) {
@@ -136,8 +138,8 @@ func TestTheTilesOfTheNewerVersionsCountNoPackOfAVersionThatTheClusterDoesNotRun
 	}
 }
 
-// The section "A version that the cluster no longer runs" of the page of the checks quotes the words of the page for such a
-// version, and the screens of the sets ok and moved-drift show each of them.
+// The page of the checks has the section "A version that the cluster no longer runs". It quotes the words of the page for such
+// a version. The screens of the sets ok and moved-drift show each of them.
 func TestTheBookQuotesTheWordsOfAVersionThatTheClusterNoLongerRuns(t *testing.T) {
 	section := unwrapped(sectionOf(t, checksPage, "### A version that the cluster no longer runs"))
 	var shown string

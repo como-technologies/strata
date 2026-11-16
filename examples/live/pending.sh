@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The pending update test (#70, #78): when Palette says that an update waits for cluster A, what
-# a cluster record, `list clusters --detail`, and `compare` say about it, and what a record of
-# `cluster:<uid>@pending` holds.
+# The pending update test (#70, #78): Palette says that an update waits for cluster A. The test
+# shows what a cluster record, `list clusters --detail`, and `compare` say about it. It also shows
+# what a record of `cluster:<uid>@pending` holds.
 #
 #   examples/live/pending.sh [FROM_STAGE]
 #

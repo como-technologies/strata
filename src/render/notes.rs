@@ -49,8 +49,8 @@ pub(crate) enum DiffNote {
 /// The notes under the heading of a diff, in the order that the reports print them, each one
 /// time.
 ///
-/// Two records of one cluster can give the same note on each side, such as the note of a pack at
-/// another version than its profile. The report prints the first one.
+/// Two records of one cluster can give the same note on each side. An example is the note of a
+/// pack at another version than its profile. The report prints the first one.
 pub(crate) fn diff_notes(d: &Diff) -> Vec<DiffNote> {
     let mut once: Vec<DiffNote> = Vec::new();
     for note in all_notes(d) {
@@ -427,8 +427,8 @@ pub(crate) fn pending_profile_names(updates: &[PendingUpdate]) -> String {
     names.join(", ")
 }
 
-/// One note for each cluster side that Palette says holds a repave for approval: `a repave of
-/// cluster fred waits for approval, since <time>: PackValuesUpdated kubernetes
+/// One note for each cluster side that Palette says holds a repave for approval. An example is
+/// `a repave of cluster fred waits for approval, since <time>: PackValuesUpdated kubernetes
 /// (kubeadmconfig.postKubeadmCommands)`.
 fn repave_pending_notes(d: &Diff) -> Vec<String> {
     [&d.a, &d.b]
@@ -459,7 +459,7 @@ fn repave_pending_notes(d: &Diff) -> Vec<String> {
 
 /// One note for each field of a cluster tier that strata could not read on a side, in text order.
 ///
-/// For example, for a key whose role does not give `cluster.get`:
+/// For example, a key whose role does not give `cluster.get` gets the note that follows.
 /// `strata could not read policy.rbacs of cluster fred (HTTP 500: OperationForbidden: Operation 'cluster.get' is forbidden. ...), so it does not compare it`.
 /// The record keeps the body of the answer in `errors`, and the note gives its words.
 fn unread_notes(d: &Diff) -> Vec<String> {

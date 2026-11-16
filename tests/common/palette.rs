@@ -541,8 +541,8 @@ pub fn listed_pack(name: &str, version: &str, registry: &str) -> Value {
     PackFixture::new(name, "addon", version, &uid, registry, "", &values).summary(&[])
 }
 
-/// The values of the pack of virtual machines `pack`, with `address` as the YAML text of the
-/// address that its console forwards to, and the value `replicas` beside it.
+/// The values of the pack of virtual machines `pack`. The values hold `address` as the YAML text
+/// of the address that its console forwards to, and the value `replicas` beside it.
 pub fn console_pack_values(pack: &str, address: &str, replicas: u8) -> String {
     format!(
         "charts:\n  {pack}:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \

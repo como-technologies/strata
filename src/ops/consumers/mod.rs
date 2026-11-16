@@ -79,8 +79,8 @@ impl ConsumerKind {
 
 /// Why strata lists no app deployment beside the consumer list of an app profile with no scope.
 ///
-/// Strata lists the app deployments of each project that can use the version, and the scope in
-/// the document of the app profile gives those projects.
+/// Strata lists the app deployments of each project that can use the version. The scope in the
+/// document of the app profile gives those projects.
 pub const APP_NO_SECOND_READING: &str = "the app profile names no project that can use it";
 
 /// Why an app profile has no edge hosts: Palette binds a cluster profile to an edge host, and
@@ -435,13 +435,15 @@ where
 ///
 /// [`ProfileRefRequired`](crate::Error::ProfileRefRequired) for a ref that names no profile, and for
 /// a record of a cluster or of a pack. [`NoUid`](crate::Error::NoUid) for a record with no uid.
-/// The error of `connect` for the scope of the profile, and the error of the read of the profile:
-/// [`ProfileNotFound`](crate::Error::ProfileNotFound) and
-/// [`ProfileNameAmbiguous`](crate::Error::ProfileNameAmbiguous) for a name, and `Usage` for a uid
-/// that is the name of a profile with no version. A cluster that cannot be read stays in the report
-/// with its error. A tenant client that `connect` cannot give is no error: the second reading then
-/// uses the client of the profile. For a profile of the tenant, strata then has no project listing
-/// of the tenant, and [`ProjectsRead::error`] holds the error of `connect`.
+/// The error of `connect` for the scope of the profile, and the error of the read of the profile.
+/// The read gives [`ProfileNotFound`](crate::Error::ProfileNotFound) and
+/// [`ProfileNameAmbiguous`](crate::Error::ProfileNameAmbiguous) for a name. It gives `Usage` for a
+/// uid that is the name of a profile with no version.
+///
+/// A cluster that cannot be read stays in the report with its error. A tenant client that `connect`
+/// cannot give is no error: the second reading then uses the client of the profile. For a profile
+/// of the tenant, strata then has no project listing of the tenant, and [`ProjectsRead::error`]
+/// holds the error of `connect`.
 pub fn consumers_with<A, F>(
     reference: &Ref,
     options: &ConsumersOptions,
@@ -566,9 +568,9 @@ where
         (read, Vec::new(), None)
     };
     // the consumer list names no edge host, and the search of the edge hosts is one request a
-    // page, so it is done also with --list-only. The searches of each project above give the edge
-    // hosts of a profile of the tenant, and the search of its project those of a profile of a
-    // project
+    // page. So strata does it also with --list-only. The searches of each project above give the
+    // edge hosts of a profile of the tenant. For a profile of a project, the search of its project
+    // gives them
     let own = if shared {
         Ok(Vec::new())
     } else {

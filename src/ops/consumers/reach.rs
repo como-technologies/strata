@@ -51,7 +51,7 @@ pub struct ProjectsRead {
     pub read: usize,
     /// The projects of `read` where a search failed. A consumer in one of them can be missing.
     /// When the cluster search at tenant scope failed with an error that is not a denial, strata
-    /// searched no project, and each project of `read` is here with that error.
+    /// searched no project. Then each project of `read` is here with that error.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unread: Vec<UnreadProject>,
     /// Why Palette refused the cluster search at tenant scope, when it did. Palette lists every
@@ -181,8 +181,8 @@ pub(super) fn search_listed(
 /// The project listing of the tenant, through the client of the tenant. None when strata cannot
 /// read it, and [`ProjectsRead::error`] of `read` then says why.
 ///
-/// When strata has no client of the tenant and the client of the profile is in a project, the
-/// error is the error of the client of the tenant: in a project, Palette lists that project alone.
+/// The error is that of the client of the tenant when strata has none and the client of the
+/// profile is in a project. In a project, Palette lists that project alone.
 pub(super) fn tenant_listing<'l, A: PaletteApi>(
     scopes: &Scopes<'_, A>,
     listings: &'l mut ProjectListings,

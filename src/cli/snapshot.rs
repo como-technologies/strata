@@ -51,7 +51,7 @@ fn record_object(
 ) -> Result<ExitCode> {
     let connect = || connect_to(progress, Some(&a.project));
     let snap = ops::snapshot_object(source, options, connect, now, &progress)?;
-    // the answer of Palette is what --validate asks for, so -q does not hide it; it goes to
+    // the answer of Palette is what --validate asks for, so -q does not hide it. It goes to
     // standard error, beside the record on standard output. The error of a refusal follows the
     // lines of its errors, and the line of an accept follows the record. With --json, the error
     // document holds the errors, so standard error gets only its JSON line

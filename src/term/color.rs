@@ -192,10 +192,10 @@ impl Paint {
     }
 }
 
-/// The class of a line that strata writes. Each class has one look, so that a person can find
-/// the answer of a check and a fault, also in a log with no color.
+/// The class of a line that strata writes. Each class has one look. So a person can find the
+/// answer of a check and a fault, also in a log with no color.
 ///
-/// With no color, the text of the line keeps the class: a note starts with `strata:`, a warning
+/// With no color, the text of the line keeps the class. A note starts with `strata:`, a warning
 /// with `strata: warning:`, and an error with `strata: error:`. The answer of a check has no
 /// prefix, and it is the last line of its check.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -22,7 +22,7 @@
 #   cidr-variable          the same, with the pod CIDR from the variable pod_cidr of a profile
 # Each of the last six runs on AWS, with the engine of its body. route-bodies.sh writes
 # aws-clean.json and cidr-overlap.json, and the body of each of the five whose profile Palette
-# takes. For cidr-variable, two more checks run palette-validate with --out, and make sure that
+# takes. For cidr-variable, two more checks run palette-validate with --out. They make sure that
 # the three reports hold the mark of the variable and not its value.
 #
 # Each case has two checks. `<case>` is that the route refuses the body. `<case>-says` is that the
@@ -68,10 +68,10 @@ names() {
   jq -e --arg s "$1" '[.checks[] | select(.id == "palette-validate") | (.messages // [])[]] | any(.[]; test($s; "i"))' "$2" > /dev/null
 }
 
-# masked BODY DIR: each of the three reports in DIR holds the mark of each variable of BODY, and
-# no value of a variable of BODY. report.md writes a `\` before each bracket of the mark (#872), so
-# the check also takes `\[value of NAME\]` there. A `_` between two letters, as in pod_cidr, stays
-# as it is.
+# masked BODY DIR: each of the three reports in DIR holds the mark of each variable of BODY. It
+# holds no value of a variable of BODY. report.md writes a `\` before each bracket of the mark
+# (#872), so the check also takes `\[value of NAME\]` there. A `_` between two letters, as in
+# pod_cidr, stays as it is.
 masked() {
   local file name value marks
   for file in report.md report.json report.html; do

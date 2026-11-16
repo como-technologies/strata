@@ -193,9 +193,9 @@ pub fn palette_line(line: &str) -> String {
 
 /// The kind of a thing that the terminal report names, which gives its color.
 ///
-/// The color is a second channel. The text names the kind also with no color: a ref, such as
-/// `pack:Public Repo/kubernetes@1.36.2` or `cluster:<uid>`, or a heading or a word of the kind,
-/// such as `2 registries` or `registry Public Repo`.
+/// The color is a second channel. The text names the kind also with no color. A ref such as
+/// `pack:Public Repo/kubernetes@1.36.2` or `cluster:<uid>` names the kind. A heading or a word of
+/// the kind also names it, such as `2 registries` or `registry Public Repo`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Kind {
     /// A profile version, as `<name>@<version>`: bold.

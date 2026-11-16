@@ -605,7 +605,8 @@ mod tests {
     }
 
     /// The first criterion of #857: the route serves [`MASKED`] in place of the value of a
-    /// sensitive variable that is not empty, after the create and after a change of the value.
+    /// sensitive variable that is not empty. It does this after the create and after a change of
+    /// the value.
     /// An empty value, and the value of a variable that nobody marked sensitive, stay.
     #[test]
     fn the_cluster_variables_route_serves_the_mask_for_the_value_of_a_sensitive_variable() {
@@ -627,7 +628,8 @@ mod tests {
     }
 
     /// The route serves the value of a sensitive dropdown variable as it is: the label of the
-    /// option that the cluster chose, after the create and after a change of the value.
+    /// option that the cluster chose. It does this after the create and after a change of the
+    /// value.
     #[test]
     fn the_cluster_variables_route_serves_the_label_of_a_sensitive_dropdown_variable() {
         let dir = tempfile::tempdir().unwrap();
@@ -695,7 +697,7 @@ mod tests {
         assert!(diff.same && !diff.variables.changed);
     }
 
-    /// The second criterion of #857: the record of such a cluster holds no value of a sensitive
+    /// The second criterion of #857. The record of such a cluster holds no value of a sensitive
     /// variable, and names no variable as a value in clear.
     #[test]
     fn a_record_of_a_cluster_with_a_sensitive_variable_holds_no_value_of_it_and_no_note() {

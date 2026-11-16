@@ -47,9 +47,9 @@ pub(super) fn terminal_behind(r: &BehindReport, behind_only: bool, p: &Paint) ->
     out
 }
 
-/// The lines under the line of `pin`: when the newest version arrived, the bump, the next patch,
-/// the arrivals, the error, the carriers, and the records. The answer of Palette about the bump is
-/// the answer of a check, so it is the last line, in bold.
+/// The lines under the line of `pin`. They give when the newest version arrived, the bump, the
+/// next patch, the arrivals, the error, the carriers, and the records. The answer of Palette about
+/// the bump is the answer of a check, so it is the last line, in bold.
 fn pin_lines(pin: &Pin, p: &Paint) -> String {
     let mut out = String::new();
     if let Some(listed) = listed_since(pin) {

@@ -509,7 +509,7 @@ const copyStatusOf = x => x.clusterCopy && x.clusterCopy.status;
 // same rule, and gives such a record no newer version. A record with a finding has the status drift, and the rule holds for it too.
 const notRunHere = x => copyStatusOf(x) === COPY.NOT_ON_CLUSTER;
 // NEWER_STATE is what strata knows of a newer version of a pack. Strata does not look for a newer version of a pack of a profile version
-// that the cluster does not run, so such a pack is NOT_RUN, and never CURRENT. Each screen reads the state from newerStateOf. The state
+// that the cluster does not run. So such a pack is NOT_RUN, and never CURRENT. Each screen reads the state from newerStateOf. The state
 // is no word of the API, so its values are numbers.
 const NEWER_STATE = {NEWER: 0, NOT_CHECKED: 1, NOT_READ: 2, CURRENT: 3, NOT_RUN: 4};
 function newerStateOf(x, p) {
@@ -727,8 +727,8 @@ const CHECKS_WHY = {
   ask: ["Strata checks this rule, because the question to Palette does not check it.", "Strata checks these rules, because the question to Palette does not check them."],
   profile: ["Strata checks this rule, because no question to Palette checks it.", "Strata checks these rules, because no question to Palette checks them."],
 };
-// checkNote is the note of the checks of a on the card "Move to": under the answer of Palette, or in the move of a profile. why gives its
-// last sentence. It is empty when strata found nothing.
+// checkNote is the note of the checks of a on the card "Move to". The note is under the answer of Palette, or in the move of a profile.
+// why gives its last sentence. It is empty when strata found nothing.
 function checkNote(a, why = CHECKS_WHY.ask) {
   const list = checksOf(a);
   if (!list.length) return "";

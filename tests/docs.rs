@@ -11,9 +11,10 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, cells, code_of, code_spans, first_cells,
-    gitlab_drop_in, one_line, recipe, repo_file, schema, script, table_rows, toml_entries,
-    toml_table, toml_value, version_of, walk, without_code,
+    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, MOST_WORDS, block_sentences, cells, code_of,
+    code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in, marks_of, one_line,
+    recipe, repo_file, schema, script, sentences, table_rows, toml_entries, toml_table, toml_value,
+    version_of, walk, without_code, without_link_targets, word_faults,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute};
@@ -750,75 +751,11 @@ fn block(text: &str, anchor: &str) -> String {
         .unwrap_or_else(|| panic!("no block holds {anchor:?}"))
 }
 
-/// The sentences of `block`. A sentence ends at one of three marks: a full stop, a question mark,
-/// or an exclamation mark. The mark is outside a code span, and a space or the end follows it.
-fn sentences(block: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut current = String::new();
-    let mut in_code = false;
-    let mut chars = block.chars().peekable();
-    while let Some(c) = chars.next() {
-        current.push(c);
-        in_code ^= c == '`';
-        let ends = matches!(c, '.' | '?' | '!') && chars.peek().is_none_or(|n| n.is_whitespace());
-        if ends && !in_code {
-            out.push(std::mem::take(&mut current));
-        }
-    }
-    if !current.trim().is_empty() {
-        out.push(current);
-    }
-    out
-}
-
-/// `text` without the target of each link: `[words](target)` keeps `[words]`. A target is a path
-/// or an address, and no word of the prose.
-fn without_link_targets(text: &str) -> String {
-    let mut out = String::new();
-    let mut rest = text;
-    while let Some(at) = rest.find("](") {
-        out.push_str(&rest[..=at]);
-        rest = rest[at + 2..]
-            .find(')')
-            .map_or("", |end| &rest[at + 2 + end + 1..]);
-    }
-    out.push_str(rest);
-    out
-}
-
-/// The words of a sentence: each run of characters between spaces that holds a letter or a
-/// digit. The target of a link is not a word.
-fn words(sentence: &str) -> usize {
-    without_link_targets(sentence)
-        .split_whitespace()
-        .filter(|w| w.chars().any(char::is_alphanumeric))
-        .count()
-}
-
-/// The most words in a sentence of a description. "The style rules" of `documentation.md` give it.
-const MOST_WORDS: usize = 25;
-
 /// The most words in a sentence of a procedure. "The style rules" of `documentation.md` give it.
 const MOST_WORDS_IN_A_PROCEDURE: usize = 20;
 
 /// The most sentences in a paragraph, a list item, or a table cell.
 const MOST_SENTENCES: usize = 6;
-
-/// The faults of the sentences `found`, which `place` holds: one line for each sentence of more
-/// than `limit` words.
-fn word_faults(place: &str, found: &[String], limit: usize) -> Vec<String> {
-    found
-        .iter()
-        .filter(|s| words(s) > limit)
-        .map(|s| {
-            let count = words(s);
-            format!(
-                "{place}: {count} words in a sentence of {limit} at most: {}",
-                s.trim()
-            )
-        })
-        .collect()
-}
 
 /// The faults of the block `block`, which `place` holds. A sentence of more than `MOST_WORDS` words
 /// is a fault. A block that is no table row and has more than `MOST_SENTENCES` sentences is one too.
@@ -1035,68 +972,14 @@ fn the_blocks_that_the_style_review_of_wave_11_named_have_six_sentences_or_fewer
     }
 }
 
-/// The comment blocks of a file. A block is a run of lines that start with `mark`. A line that is
-/// not one, a blank comment line, a list item, a literal line, or a fence ends the run. A block is
-/// one line, without the marks. `///` and `//!` are `//` with one more mark.
-///
-/// A literal line has two spaces or more after the mark, as a table or a usage text has. It is a
-/// block of its own. A fenced block of code in a comment is not prose, so no block holds it. A
-/// shebang is not a comment.
-fn comment_blocks(text: &str, mark: &str) -> Vec<String> {
-    fn end_block(blocks: &mut Vec<String>, run: &mut Vec<&str>) {
-        if !run.is_empty() {
-            blocks.push(std::mem::take(run).join(" "));
-        }
-    }
-    fn is_list_item(line: &str) -> bool {
-        let digits = line.trim_start_matches(|c: char| c.is_ascii_digit());
-        line.starts_with("- ")
-            || line.starts_with("* ")
-            || (digits.len() < line.len() && (digits.starts_with(". ") || digits.starts_with(") ")))
-    }
-    let mut blocks = Vec::new();
-    let mut run: Vec<&str> = Vec::new();
-    let mut fenced = false;
-    for (at, line) in text.lines().enumerate() {
-        let line = line.trim_start();
-        let rest = line
-            .strip_prefix(mark)
-            .filter(|_| !(at == 0 && line.starts_with("#!")));
-        let Some(rest) = rest else {
-            end_block(&mut blocks, &mut run);
-            fenced = false;
-            continue;
-        };
-        let rest = rest.trim_start_matches(['/', '!']);
-        let words = rest.trim();
-        if words.starts_with("```") {
-            end_block(&mut blocks, &mut run);
-            fenced = !fenced;
-            continue;
-        }
-        if fenced {
-            continue;
-        }
-        if words.is_empty() {
-            end_block(&mut blocks, &mut run);
-            continue;
-        }
-        let literal = rest.starts_with("  ");
-        if literal || is_list_item(words) {
-            end_block(&mut blocks, &mut run);
-        }
-        run.push(words);
-        if literal {
-            end_block(&mut blocks, &mut run);
-        }
-    }
-    end_block(&mut blocks, &mut run);
-    blocks
+/// The mark of the line comments of the file at `path`, as [`marks_of`] gives it.
+fn line_mark(path: &str) -> Option<&'static str> {
+    marks_of(path).and_then(|marks| marks.line)
 }
 
-/// The comment blocks of a file of the repository: `//` in a Rust file, and `#` in any other.
+/// The comment blocks of a file of the repository, with the mark that [`line_mark`] gives.
 fn comments_of(file: &str) -> Vec<String> {
-    let mark = if file.ends_with(".rs") { "//" } else { "#" };
+    let mark = line_mark(file).unwrap_or_else(|| panic!("{file} has no line comments"));
     comment_blocks(&repo_file(file), mark)
 }
 
@@ -1172,7 +1055,7 @@ fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
             "The comment takes the report from the artifact",
         ),
         ("tests/docs.rs", "The block of `text` that holds"),
-        ("tests/docs.rs", "The sentences of `block`."),
+        ("tests/common/sentences.rs", "The sentences of `block`."),
         (
             "tests/docs.rs",
             "The comment of a file of the repository that holds",
@@ -1209,14 +1092,6 @@ fn the_phrasal_verbs_and_the_would_of_the_wave_11_review_are_gone() {
 }
 
 // ---- the style sweep of Wave 12 ----------------------------------------------------------------
-
-/// The sentences of a block. A table row has the sentences of each cell.
-fn block_sentences(block: &str) -> Vec<String> {
-    if block.starts_with('|') {
-        return cells(block).into_iter().flat_map(sentences).collect();
-    }
-    sentences(block)
-}
 
 /// The pages that Wave 8 touched. The style review of Wave 8 found sentences of more than 25
 /// words and blocks of more than six sentences in them.
@@ -5145,6 +5020,40 @@ fn a_literal_line_a_list_item_a_fence_and_a_shebang_are_not_joined_into_a_senten
     );
 }
 
+/// `xtask comment-words` names the line of a long sentence. So each line of a comment block keeps
+/// its number in the file, also after a shebang, a fence, and a line of code.
+#[test]
+fn each_line_of_a_comment_block_keeps_its_number_in_the_file() {
+    let script = "#!/usr/bin/env bash\n# One.\n# ```\n# a command\n# ```\necho\n# Two,\n# three.\n";
+    let numbers: Vec<Vec<(usize, &str)>> = comment_lines(script, "#")
+        .iter()
+        .map(|block| block.iter().map(|l| (l.number, l.words)).collect())
+        .collect();
+    assert_eq!(
+        numbers,
+        [vec![(2, "One.")], vec![(7, "Two,"), (8, "three.")]]
+    );
+}
+
+/// The tests of the comments and `xtask comment-words` read the comments of a file by its kind.
+/// Each kind has the mark of its line comments, and the block comments when it has them.
+#[test]
+fn each_kind_of_file_has_the_marks_of_its_comments() {
+    for (path, marks) in [
+        ("src/main.rs", Some((Some("//"), true))),
+        ("observer/internal/web/assets/app.css", Some((None, true))),
+        ("examples/live/lib.sh", Some((Some("#"), false))),
+        (".github/workflows/ci.yml", Some((Some("#"), false))),
+        ("deploy/observer/Dockerfile", Some((Some("#"), false))),
+        ("justfile", Some((Some("#"), false))),
+        ("docs/src/loop.md", None),
+        ("examples/registries.json", None),
+    ] {
+        let found = marks_of(path).map(|m| (m.line, m.block));
+        assert_eq!(found, marks, "{path}");
+    }
+}
+
 /// The directories that Wave 13 wrote. Each file in them is new since release 0.26.0.
 const SWEPT_DIRECTORIES: [&str; 7] = [
     "crates/strata-report-endpoint",
@@ -5234,16 +5143,10 @@ const NAMED_FILES: [&str; 20] = [
     "crates/strata-preflight/src/confidence.rs",
 ];
 
-/// A file with comments in the tree of `root`, by the extension that it has.
+/// A file of the tree with line comments, by the kind that [`line_mark`] reads.
 fn has_comments(path: &Path) -> bool {
-    let comment_files = ["rs", "sh", "yml", "yaml", "toml", "service", "timer"];
-    let name = path.file_name().and_then(|n| n.to_str());
-    !path.to_string_lossy().contains("/target/")
-        && (name == Some("Dockerfile")
-            || path
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| comment_files.contains(&e)))
+    let path = path.to_string_lossy();
+    !path.contains("/target/") && line_mark(&path).is_some()
 }
 
 /// The files that Wave 13 wrote or changed: each file of `SWEPT_DIRECTORIES` that has comments,
@@ -5260,13 +5163,10 @@ fn swept_files() -> Vec<PathBuf> {
     files
 }
 
-/// The comment blocks of a file of the tree: `//` in a Rust file, and `#` in any other.
+/// The comment blocks of a file of the tree, with the mark that [`line_mark`] gives.
 fn comment_blocks_of_path(path: &Path) -> Vec<String> {
-    let mark = if path.extension().is_some_and(|e| e == "rs") {
-        "//"
-    } else {
-        "#"
-    };
+    let name = path.to_string_lossy();
+    let mark = line_mark(&name).unwrap_or_else(|| panic!("{name} has no line comments"));
     comment_blocks(&read(path), mark)
 }
 
@@ -7814,4 +7714,97 @@ fn the_answer_of_each_check_is_the_last_line_that_strata_prints_in_an_output_of_
     }
     assert!(answers > 0, "no output of behind asks Palette");
     assert!(faults.is_empty(), "{}", faults.join("\n"));
+}
+
+// ---- the comments of Wave 17 (#903) ------------------------------------------------------------
+
+/// The criterion of #903 from the verify of #885. The comment on `common_palette` in
+/// `xtask/src/main.rs` names each item of `tests/common/palette.rs` that xtask uses.
+#[test]
+fn the_comment_on_common_palette_names_each_item_of_it_that_xtask_uses() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut used = BTreeSet::new();
+    for path in walk(&root.join("xtask/src"))
+        .iter()
+        .filter(|p| p.extension().is_some_and(|e| e == "rs"))
+    {
+        let text = read(path);
+        for (at, path_start) in text.match_indices("common_palette::") {
+            let rest = &text[at + path_start.len()..];
+            let names = match rest.strip_prefix('{') {
+                Some(list) => &list[..list.find('}').expect("a list of a use ends")],
+                None => rest
+                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .next()
+                    .unwrap_or_default(),
+            };
+            used.extend(
+                names
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string),
+            );
+        }
+    }
+    assert!(used.contains("system_rbacs"), "{used:?}");
+
+    let main = repo_file("xtask/src/main.rs");
+    let lines: Vec<&str> = main.lines().collect();
+    let at = lines
+        .iter()
+        .position(|line| *line == "mod common_palette;")
+        .expect("main.rs declares common_palette");
+    let comment: Vec<&str> = lines[..at]
+        .iter()
+        .rev()
+        .skip_while(|line| line.starts_with("#["))
+        .take_while(|line| line.starts_with("//"))
+        .copied()
+        .collect();
+    let comment = comment.join(" ");
+    for name in &used {
+        assert!(
+            comment.contains(&format!("`{name}`")),
+            "the comment on common_palette does not name {name}"
+        );
+    }
+}
+
+/// The criterion of #903 from the verify of #900. The two use cases with a dry run of
+/// `verify-report.sh` say what the dry run prints, with no "would".
+#[test]
+fn the_use_cases_say_what_the_dry_run_of_the_report_prints_with_no_would() {
+    for page in ["use-cases/edited-in-place.md", "use-cases/fan-out.md"] {
+        let intro = block(&read(&docs().join(page)), "The script then prints");
+        assert_eq!(
+            intro,
+            "The script then prints the change that a run with no `--dry-run` makes to each issue, and the count of the records:",
+            "{page}"
+        );
+        assert_no_faults(&wording_faults(page, &intro));
+    }
+}
+
+/// The criterion of #903 from #900. Each block of the header comments of `route-bodies.sh` and
+/// `upstream-report.sh` has six sentences or fewer, and each sentence has 25 words or fewer.
+#[test]
+fn the_headers_of_route_bodies_sh_and_upstream_report_sh_keep_to_the_limits() {
+    for file in [
+        "examples/live/route-bodies.sh",
+        "scripts/ci/upstream-report.sh",
+    ] {
+        let text = repo_file(file);
+        let header: Vec<&str> = text
+            .lines()
+            .take_while(|line| !line.starts_with("set -"))
+            .collect();
+        let blocks = comment_blocks(&header.join("\n"), "#");
+        assert!(blocks.len() > 5, "{file}: {blocks:?}");
+        let faults: Vec<String> = blocks
+            .iter()
+            .flat_map(|block| block_faults(file, block))
+            .collect();
+        assert_no_faults(&faults);
+    }
 }

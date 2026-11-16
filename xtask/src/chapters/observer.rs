@@ -91,8 +91,8 @@ fn summary(r: &mut Runner, name: &str, uid: &str, state: &str, filter: &str) {
     );
 }
 
-/// The answers of the observer after the edit: the finding of `payments`, the newer versions, the
-/// limits, the log, the text of the edit, and the answers for `ledger`.
+/// The answers of the observer after the edit. They are the finding of `payments`, the newer
+/// versions, the limits, the log, the text of the edit, and the answers for `ledger`.
 fn answers(r: &mut Runner) {
     summary(
         r,

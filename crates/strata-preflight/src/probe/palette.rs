@@ -39,9 +39,11 @@ pub(super) struct Failed {
 }
 
 impl Failed {
-    /// The outcome of a check whose one request failed: the error, with the mask of [`Mask`]
-    /// over the body before the cut, and the request when it went out. A check of Palette and an
-    /// exec check with a read give it. `world` holds the values that the mask covers.
+    /// The outcome of a check whose one request failed: the error, and the request when it went
+    /// out. The mask of [`Mask`] covers the body of the error before the cut.
+    ///
+    /// A check of Palette and an exec check with a read give it. `world` holds the values that the
+    /// mask covers.
     pub(super) fn outcome(self, world: &Value, started: Instant) -> Outcome {
         let mut out = Outcome::new(
             Verdict::Error,
