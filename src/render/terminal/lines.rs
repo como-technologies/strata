@@ -1,5 +1,5 @@
 //! The lines of a change, painted for the terminal: a leaf, a variable, and a pack with its
-//! flags and its detail.
+//! flags and its detail. Each text of Palette in a line is [`terminal_text`].
 
 use crate::api::mask::MASKED;
 use crate::closed_set::ClosedSet;
@@ -10,6 +10,7 @@ use crate::render::changes::{
 };
 use crate::render::notes::{ARCHIVE_CHANGE_HIDDEN, invalid_mark, tag_rename};
 use crate::term::color::Paint;
+use crate::text::terminal_text;
 
 /// The mark of `op` in its color: yellow for a change, green for an addition, red for a removal.
 fn opmark(op: Op, p: &Paint) -> String {
@@ -28,15 +29,15 @@ fn vline(l: &Leaf, p: &Paint) -> String {
 /// `~ path: old -> new`, `+ path: new`, or `- path: old`, with the mark and each side colored.
 pub(super) fn op_line(l: &OpLine, p: &Paint) -> String {
     let mark = opmark(l.op, p);
+    let (path, old, new) = (
+        terminal_text(&l.path),
+        terminal_text(&l.old),
+        terminal_text(&l.new),
+    );
     match l.op {
-        Op::Changed => format!(
-            "{mark} {}: {} -> {}",
-            l.path,
-            p.red(&l.old),
-            p.green(&l.new)
-        ),
-        Op::Added => format!("{mark} {}: {}", l.path, p.green(&l.new)),
-        Op::Removed => format!("{mark} {}: {}", l.path, p.red(&l.old)),
+        Op::Changed => format!("{mark} {path}: {} -> {}", p.red(&old), p.green(&new)),
+        Op::Added => format!("{mark} {path}: {}", p.green(&new)),
+        Op::Removed => format!("{mark} {path}: {}", p.red(&old)),
     }
 }
 
@@ -46,13 +47,13 @@ pub(super) fn variable_line(v: &VarLine<'_>, p: &Paint) -> String {
         VarLine::Added(s) => format!(
             "{} variable {}{}",
             opmark(Op::Added, p),
-            p.bold(&s.name),
+            p.bold(&terminal_text(&s.name)),
             traits_suffix(s)
         ),
         VarLine::Removed(s) => format!(
             "{} variable {}{}",
             opmark(Op::Removed, p),
-            p.bold(&s.name),
+            p.bold(&terminal_text(&s.name)),
             traits_suffix(s)
         ),
         VarLine::Field(name, l) => op_line(&OpLine::leaf(&format!("{name}.{}", l.path), l), p),
@@ -64,7 +65,7 @@ fn flags(pd: &PackDiff, p: &Paint) -> String {
     pd.flags()
         .into_iter()
         .map(|f| match f {
-            ChangeFlag::Identity => p.blue(rename.as_deref().unwrap_or(f.as_str())),
+            ChangeFlag::Identity => p.blue(&terminal_text(rename.as_deref().unwrap_or(f.as_str()))),
             ChangeFlag::Upstream => p.magenta(f.as_str()),
             ChangeFlag::Authored => p.yellow(f.as_str()),
             // details of AUTHORED: its color, dimmed, so AUTHORED reads as the flag
@@ -84,14 +85,13 @@ fn paint_impact(level: ImpactLevel, text: &str, p: &Paint) -> String {
 }
 
 pub(super) fn packline(pd: &PackDiff, p: &Paint) -> String {
-    let ver = version_display(pd);
-    let invalid = invalid_mark(pd).map_or_else(String::new, |m| format!("  {}", p.bred(&m)));
+    let ver = terminal_text(&version_display(pd)).into_owned();
+    let (layer, name) = (terminal_text(&pd.layer), terminal_text(&pd.name));
+    let invalid =
+        invalid_mark(pd).map_or_else(String::new, |m| format!("  {}", p.bred(&terminal_text(&m))));
     let (mark, word) = (status_mark(pd.status), status_word(pd.status));
     if pd.status == Status::Unchanged {
-        let line = p.dim(&format!(
-            "{mark} [{:<5}] {:<26} {:<18} {word}",
-            pd.layer, pd.name, ver
-        ));
+        let line = p.dim(&format!("{mark} [{layer:<5}] {name:<26} {ver:<18} {word}"));
         return format!("{line}{invalid}");
     }
     let (mark, st) = match pd.status {
@@ -100,10 +100,8 @@ pub(super) fn packline(pd: &PackDiff, p: &Paint) -> String {
         _ => (p.yellow(mark), flags(pd, p)),
     };
     format!(
-        "{mark} [{:<5}] {} {:<18} {st}{invalid}",
-        pd.layer,
-        p.bold(&format!("{:<26}", pd.name)),
-        ver
+        "{mark} [{layer:<5}] {} {ver:<18} {st}{invalid}",
+        p.bold(&format!("{name:<26}"))
     )
 }
 
@@ -121,15 +119,15 @@ pub(super) fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
             "      {}",
             p.yellow(&format!(
                 "masked: {}: the record holds {MASKED} in place of the secret",
-                pd.masked.join(", ")
+                terminal_text(&pd.masked.join(", "))
             ))
         ));
     }
-    if let Some(line) = upstream_line(pd, p, str::to_string) {
+    if let Some(line) = upstream_line(pd, p, |s| terminal_text(s).into_owned()) {
         out.push(format!("      {line}"));
     }
     for line in artifact_lines(pd) {
-        out.push(format!("      {line}"));
+        out.push(format!("      {}", terminal_text(&line)));
     }
     if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
         out.push(format!("      {}", values_summary(&pd.values)));
@@ -144,12 +142,16 @@ pub(super) fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
         )));
     }
     for m in &pd.manifests {
-        out.push(format!("      {} manifest {}", opmark(m.op, p), m.name));
+        out.push(format!(
+            "      {} manifest {}",
+            opmark(m.op, p),
+            terminal_text(&m.name)
+        ));
     }
     if pd.impact.level != ImpactLevel::None || !pd.impact.text.is_empty() {
         out.push(format!(
             "      impact: {}",
-            paint_impact(pd.impact.level, &pd.impact.text, p)
+            paint_impact(pd.impact.level, &terminal_text(&pd.impact.text), p)
         ));
     }
 }

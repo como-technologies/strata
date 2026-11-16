@@ -2,8 +2,8 @@
 //!
 //! - A phrase from a list of names, and the name of an object.
 //! - A long text cut to a length.
-//! - A mark for an empty text, a text of HTML, a text in a cell of a markdown table, a text in a
-//!   code span, and a text in a fenced code block.
+//! - A mark for an empty text, a text of HTML, a text on a terminal, a text in a cell of a markdown
+//!   table, a text in a code span, and a text in a fenced code block.
 //! - A command as a person types it in a shell.
 //! - A JSON Schema as text, with its descriptions in plain words.
 //!
@@ -11,6 +11,10 @@
 
 use schemars::Schema;
 use serde_json::Value;
+
+mod terminal;
+
+pub use terminal::terminal_text;
 
 /// The name of an object, or its uid when Palette gives no name.
 pub fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
@@ -433,8 +437,8 @@ pub fn query_value(text: &str) -> String {
     out
 }
 
-// The text of an answer with tags of HTML, in the file that the tests of strata use. A unit test
-// here uses the text only, so the checks of a markdown output are dead code here.
+// The texts of an answer, in the file that the tests of strata use. A unit test
+// here uses the texts and some of the checks, so the other checks are dead code here.
 #[cfg(test)]
 #[allow(dead_code)]
 #[path = "../tests/common/answer_tags.rs"]
@@ -454,11 +458,12 @@ mod span_read;
 #[cfg(test)]
 mod tests {
     use super::answer_tags::{
-        ANSWER_ADDRESSES, ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS,
-        assert_answer_addresses_as_they_are, assert_answer_marks_as_text,
-        assert_answer_mentions_as_text,
+        ANSWER_ADDRESSES, ANSWER_CONTROLS, ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS,
+        assert_answer_addresses_as_they_are, assert_answer_controls_as_text,
+        assert_answer_marks_as_text, assert_answer_mentions_as_text,
     };
     use super::*;
+    use std::borrow::Cow;
 
     #[test]
     fn a_noun_agrees_with_its_count_and_only_one_takes_the_singular() {
@@ -559,6 +564,18 @@ mod tests {
         // an entity of the answer shows as it is, and not as the character that it names
         assert_eq!(html_text("a &lt; b & c"), "a &amp;lt; b &amp; c");
         assert_eq!(html_text("plain"), "plain");
+    }
+
+    #[test]
+    fn a_text_on_a_terminal_shows_each_control_character_as_a_visible_escape() {
+        assert_answer_controls_as_text(&terminal_text(ANSWER_CONTROLS));
+        // a tab, a delete, and a control character of C1, such as the one that starts a sequence
+        assert_eq!(terminal_text("a\tb\u{7f}c\u{9b}d"), r"a\tb\u{7f}c\u{9b}d");
+        // a text with no control character is the same text, with no copy
+        assert!(matches!(
+            terminal_text("plain é \\n"),
+            Cow::Borrowed("plain é \\n")
+        ));
     }
 
     #[test]

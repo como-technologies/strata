@@ -29,7 +29,7 @@ use crate::ops::{
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
-use crate::text::{cut, plural};
+use crate::text::{cut, plural, terminal_text};
 
 pub use behind::RowState;
 pub use consumers::Reading;
@@ -184,8 +184,11 @@ pub(crate) fn key_line(key: &str, text: impl std::fmt::Display) -> String {
 }
 
 /// One line of the answer of Palette, as a report prints it: `palette    accepts`.
+///
+/// The line quotes the words of Palette, so it shows each control character of `line` as a
+/// visible escape: see [`terminal_text`].
 pub fn palette_line(line: &str) -> String {
-    key_line("palette", line)
+    key_line("palette", terminal_text(line))
 }
 
 /// The kind of a thing that the terminal report names, which gives its color.
@@ -419,6 +422,11 @@ mod tests {
     #[test]
     fn a_line_of_the_answer_of_palette_starts_with_the_word_palette_in_the_key_column() {
         assert_eq!(palette_line("accepts"), "palette    accepts");
+        // a control character of the words of Palette is a visible escape
+        assert_eq!(
+            palette_line("refuses: \u{1b}[1Ka\nb"),
+            r"palette    refuses: \u{1b}[1Ka\nb"
+        );
     }
 
     #[test]

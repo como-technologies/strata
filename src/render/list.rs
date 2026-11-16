@@ -156,11 +156,13 @@ fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
 ///
 /// The heading names the kind of each name, so the rows below it give a version alone. It states
 /// what the registry holds. A flag that cuts the list says so, so that a reader never takes the
-/// count for the inventory of the registry. `named` puts each name in the form of the report.
+/// count for the inventory of the registry. `named` puts each name in the form of the report, and
+/// `text` puts the note in it. The note can hold a state of the registry that Palette gives.
 pub(crate) fn registry_heading(
     l: &PackListing,
     r: &crate::ops::PackRegistry,
     named: impl Fn(Kind, &str) -> String,
+    text: fn(&str) -> String,
 ) -> String {
     let offered = count_of(r.versions_offered, "version");
     let count = if r.versions.len() == r.versions_offered {
@@ -169,7 +171,7 @@ pub(crate) fn registry_heading(
         format!("{} of {offered}", r.versions.len())
     };
     let note = registry_note(r)
-        .map(|n| format!(", {n}"))
+        .map(|n| format!(", {}", text(&n)))
         .unwrap_or_default();
     format!(
         "registry {}, pack {}: {count}{note}",

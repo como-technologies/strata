@@ -154,6 +154,35 @@ standard output, and the progress lines go to standard error, so each stream
 gets its own decision. `strata-preflight` takes `--color` with a value: `auto`,
 `always`, or `never`.
 
+### A control character of a text of Palette
+
+The terminal report, the notes, the warnings, and the line `strata: error:`
+quote the texts of Palette. A name, a state, and the message of an error are
+such texts. Such a text can hold a control character. An ESC can start an escape sequence
+of the terminal, which changes the color or moves the cursor. A carriage return
+moves the cursor to the start of the line, so the next text covers the text
+before it. A line break in a text of one line starts a new line, and that line
+can read as a line of strata.
+
+So strata writes each control character of such a text as a visible escape:
+
+| Character | Escape |
+| --- | --- |
+| ESC | `\u{1b}` |
+| carriage return | `\r` |
+| line break | `\n` |
+| tab | `\t` |
+| each other control character | its number in hexadecimal, such as `\u{7f}` |
+
+The width of a column counts each character of the escape, so the columns stay
+in line. The colors of strata, and the line breaks between the lines of strata,
+do not change. The diffs of `--full` keep the line break at the end of each
+line, and escape each other control character.
+
+`--json`, the records, and the JSON object of an error keep each text as Palette
+gave it. JSON writes a control character with an escape of its own, such as
+`\u001b`.
+
 ## The markdown comment
 
 ```text

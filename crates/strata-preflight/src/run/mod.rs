@@ -210,7 +210,7 @@ pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
                 let outcome = probe::run_check(rule, &world_value, inputs.backend, &jq);
                 if inputs.verbose {
                     for line in verbose_lines(rule, &outcome, &inputs.paint) {
-                        inputs.progress.note(&line);
+                        inputs.progress.painted_note(&line);
                     }
                 }
                 outcome

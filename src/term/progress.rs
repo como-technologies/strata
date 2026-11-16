@@ -2,9 +2,14 @@
 
 use crate::TOOL_NAME;
 use crate::term::color::{LineClass, Paint};
+use crate::text::terminal_text;
 use std::io::Write;
 
 /// Writes short progress notes to stderr unless quiet.
+///
+/// A note or a warning can quote a text of Palette, such as the message of an error. So
+/// [`Progress::note`] and [`Progress::warn`] show each control character of the message as a
+/// visible escape: see [`terminal_text`].
 #[derive(Debug, Clone, Copy)]
 pub struct Progress {
     quiet: bool,
@@ -40,7 +45,16 @@ impl Progress {
 
     /// Write one note, prefixed with the tool name.
     pub fn note(&self, message: &str) {
-        self.write(LineClass::Progress, &format!("{TOOL_NAME}: {message}"));
+        self.painted_note(&terminal_text(message));
+    }
+
+    /// Write one note that has colors of its own, prefixed with the tool name.
+    ///
+    /// The escape codes of a color are control characters, so this note keeps each control
+    /// character of `line`. The caller gives each text of Palette in `line` to [`terminal_text`]
+    /// before it paints the text. The lines of `--verbose` of `strata-preflight` use this note.
+    pub fn painted_note(&self, line: &str) {
+        self.write(LineClass::Progress, &format!("{TOOL_NAME}: {line}"));
     }
 
     /// Write one warning, prefixed with the tool name and `warning:`. A warning says that the
@@ -53,7 +67,7 @@ impl Progress {
     pub fn warn(&self, message: &str) {
         self.write(
             LineClass::Warning,
-            &format!("{TOOL_NAME}: warning: {message}"),
+            &format!("{TOOL_NAME}: warning: {}", terminal_text(message)),
         );
     }
 
@@ -68,9 +82,14 @@ impl Progress {
 /// The line of an error that stops `tool`: `strata: error: <message>`, red when `paint` is on.
 ///
 /// `quiet` does not hide it. `strata` and `strata-preflight` write each error that stops them
-/// here, so a script can find the error with no color.
+/// here, so a script can find the error with no color. The message can quote a text of Palette,
+/// so the line shows each control character of `message` as a visible escape: see
+/// [`terminal_text`]. The JSON object of `--json` keeps the message as it is.
 pub fn error_line(tool: &str, message: &str, paint: &Paint) -> String {
-    paint.line(LineClass::Error, &format!("{tool}: error: {message}"))
+    paint.line(
+        LineClass::Error,
+        &format!("{tool}: error: {}", terminal_text(message)),
+    )
 }
 
 #[cfg(test)]
@@ -89,5 +108,16 @@ mod tests {
             error_line("strata-preflight", "x", &on),
             on.red("strata-preflight: error: x")
         );
+    }
+
+    #[test]
+    fn an_error_line_shows_each_control_character_of_its_message_as_a_visible_escape() {
+        // the message clears the screen, and starts a line that reads as an error of strata
+        let message = "HTTP 400: Bad: \u{1b}[2Jgone\nstrata: error: forged";
+        let shown = r"strata: error: HTTP 400: Bad: \u{1b}[2Jgone\nstrata: error: forged";
+        assert_eq!(error_line("strata", message, &Paint::off()), shown);
+        // the line keeps its color, and the message gives no escape code of its own
+        let on = Paint::resolve(ColorMode::Always, Stream::Stderr);
+        assert_eq!(error_line("strata", message, &on), on.red(shown));
     }
 }

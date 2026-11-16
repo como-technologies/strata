@@ -4,27 +4,29 @@ use crate::diff::unified::{manifest_text, sides, values_text};
 use crate::diff::{Diff, Op, Status};
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
-use crate::text::code_block;
+use crate::text::{code_block, terminal_text};
 
+/// `text`, a unified diff, for the terminal: each line in the color of its mark.
+///
+/// A line quotes a value or a manifest of Palette, so it is [`terminal_text`]. Each control
+/// character in a line shows as a visible escape, and the line breaks of the diff stay.
 fn colorize(text: &str, p: &Paint) -> String {
-    if !p.is_on() {
-        return text.to_string();
-    }
-    text.lines()
-        .map(|l| {
-            if l.starts_with("+++") || l.starts_with("---") {
-                p.bold(l)
+    text.split_inclusive('\n')
+        .map(|line| {
+            let l = terminal_text(line.strip_suffix('\n').unwrap_or(line));
+            let painted = if l.starts_with("+++") || l.starts_with("---") {
+                p.bold(&l)
             } else if l.starts_with('+') {
-                p.green(l)
+                p.green(&l)
             } else if l.starts_with('-') {
-                p.red(l)
+                p.red(&l)
             } else if l.starts_with("@@") {
-                p.cyan(l)
+                p.cyan(&l)
             } else {
-                l.to_string()
-            }
+                l.into_owned()
+            };
+            painted + "\n"
         })
-        .map(|l| l + "\n")
         .collect()
 }
 

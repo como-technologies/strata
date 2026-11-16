@@ -152,7 +152,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
     let started = Instant::now();
     if inputs.verbose {
         for line in program_lines(&rules, &inputs.paint) {
-            inputs.progress.note(&line);
+            inputs.progress.painted_note(&line);
         }
     }
     let mut ended = read_until_ended(&inputs, &uid, &rules, &jq, &base, started)?;
@@ -239,7 +239,7 @@ fn read_until_ended<A: PaletteApi>(
         let state = text_or(&read, "/cluster/status/state", UNKNOWN).to_string();
         if inputs.verbose {
             for line in reading_lines(uid, &read, &mut seen, &inputs.paint) {
-                inputs.progress.note(&line);
+                inputs.progress.painted_note(&line);
             }
         }
         let mut world = base.clone();
@@ -251,7 +251,9 @@ fn read_until_ended<A: PaletteApi>(
         if inputs.verbose {
             for rule in rules {
                 if let Some(o) = last.get(&rule.id) {
-                    inputs.progress.note(&watch_line(rule, o, &inputs.paint));
+                    inputs
+                        .progress
+                        .painted_note(&watch_line(rule, o, &inputs.paint));
                 }
             }
         }
@@ -309,7 +311,7 @@ fn note_reading<A: PaletteApi>(
     failed: bool,
 ) {
     let paint = &inputs.paint;
-    inputs.progress.note(&format!(
+    inputs.progress.painted_note(&format!(
         "{} {} after {}s, reading {readings}{}",
         paint.bold("watch:"),
         paint_state(paint, state),

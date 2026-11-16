@@ -2925,3 +2925,119 @@ fn an_app_profile_at_latest_names_its_ref_and_the_pre_release_it_skips() {
     assert_eq!(r.code, 0, "{}", r.err);
     assert!(!r.err.contains("@latest"), "{}", r.err);
 }
+
+/// The body of an error of Palette whose message holds [`common::ANSWER_CONTROLS`]. The code is
+/// no refusal, so strata sends the request again after a 500.
+static CONTROLS_ERROR: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| common::error_body("InternalError", common::ANSWER_CONTROLS));
+
+/// `strata list projects` with `more` against `api`, with the notes that a person sees.
+fn list_projects(api: &str, more: &[&str], retries: &str) -> Run {
+    let home = tempfile::tempdir().unwrap();
+    let mut command = strata_command();
+    isolate_palette(&mut command, home.path())
+        .env_remove("STRATA_QUIET")
+        .env("PALETTE_API", api)
+        .env("STRATA_RETRIES", retries)
+        .args(["list", "projects"])
+        .args(more);
+    Run::of(&mut command)
+}
+
+/// Issue #896. The message of an error of Palette can hold an escape sequence of the terminal and
+/// a line break. The line of the error shows each one as a visible escape. So the message does not
+/// paint the terminal, and it starts no line that reads as a line of strata. The JSON object of
+/// `--json` keeps the message as Palette gave it.
+#[test]
+fn the_error_line_shows_each_control_character_of_a_message_of_palette_as_a_visible_escape() {
+    let palette = common::Endpoint::answering(common::Answer::Body(400, &CONTROLS_ERROR));
+    let r = list_projects(&palette.url, &[], "0");
+    assert_eq!(r.code, 2, "{:?}", r.err);
+    common::assert_answer_controls_as_text(&r.err);
+    // the error is the last line, and the message ends it
+    let error = error_text(&format!(
+        "GET {PROJECT_LISTING} failed with HTTP 400: InternalError: {}",
+        common::ANSWER_CONTROLS
+    ));
+    assert!(r.err.ends_with(&format!("\n{error}\n")), "{:?}", r.err);
+
+    let r = list_projects(&palette.url, &["--json", "-q"], "0");
+    assert_eq!(r.code, 2, "{:?}", r.err);
+    let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+    let message = e["error"]["message"].as_str().unwrap();
+    assert!(message.contains(common::ANSWER_CONTROLS), "{message:?}");
+    assert_eq!(e["error"]["body"], CONTROLS_ERROR.as_str(), "{e}");
+}
+
+/// Issue #896. The note of a retry quotes the message of the error. It shows each control
+/// character of the message as a visible escape, as the line of the error does.
+#[test]
+fn the_note_of_a_retry_shows_each_control_character_of_a_message_of_palette_as_a_visible_escape() {
+    let palette = common::Endpoint::answering(common::Answer::Body(500, &CONTROLS_ERROR));
+    let r = list_projects(&palette.url, &[], "1");
+    assert_eq!(r.code, 2, "{:?}", r.err);
+    common::assert_answer_controls_as_text(&r.err);
+    let note = format!(
+        "strata: GET {PROJECT_LISTING} failed with HTTP 500: InternalError: {}; retry 1 of 1 in 1s",
+        strata::text::terminal_text(common::ANSWER_CONTROLS)
+    );
+    assert!(r.err.contains(&format!("\n{note}\n")), "{:?}", r.err);
+}
+
+/// Issue #896. A line `palette    refuses:` of `snapshot --validate` quotes the message of an
+/// error of Palette. It shows each control character of the message as a visible escape.
+#[test]
+fn a_refusal_line_of_snapshot_validate_shows_each_control_character_as_a_visible_escape() {
+    let mut routes = barney_tenant();
+    routes.insert(
+        format!("{}/validate/packs", common::profile_route(UID_A)),
+        serde_json::json!({"packs": {"results": [{"name": "cert-manager", "errors": [
+            {"code": "PackDependencyNotFound", "message": common::ANSWER_CONTROLS}]}]}}),
+    );
+    let stand = Stand::new(routes, "p-dev");
+    let (code, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "--validate"]);
+    assert_eq!(code, 2, "{text:?}");
+    common::assert_answer_controls_as_text(&text);
+    let refusal = palette_line(&format!(
+        "refuses: PackDependencyNotFound for pack cert-manager: {}",
+        common::ANSWER_CONTROLS
+    ));
+    assert!(text.contains(&format!("{refusal}\n")), "{text:?}");
+}
+
+/// Issue #896. A name of a listing shows each control character as a visible escape, and its
+/// column stays as wide as the escape. The JSON document keeps the name as Palette gave it.
+#[test]
+fn a_name_of_a_listing_shows_each_control_character_as_a_visible_escape() {
+    let mut routes = std::collections::BTreeMap::new();
+    routes.insert(
+        PROFILE_LISTING.to_string(),
+        serde_json::json!({"items": [listed(common::ANSWER_CONTROLS, "u1"), listed("barney", "u2")]}),
+    );
+    let stand = Stand::new(routes, "");
+    let r = stand.run(&["list", "profiles"]);
+    assert_eq!(r.code, 0, "{:?}", r.err);
+    common::assert_answer_controls_as_text(&r.out);
+    let rows: Vec<&str> = r
+        .out
+        .lines()
+        .filter(|l| l.contains("u1") || l.contains("u2"))
+        .collect();
+    assert_eq!(rows.len(), 2, "{:?}", r.out);
+    let at = |row: &str| row.find("  u").unwrap();
+    assert_eq!(
+        at(rows[0]),
+        at(rows[1]),
+        "one column for the uids: {:?}",
+        r.out
+    );
+
+    let r = stand.run(&["list", "profiles", "--json"]);
+    assert_eq!(r.code, 0, "{:?}", r.err);
+    let listing: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(
+        listing["profiles"][0]["name"],
+        common::ANSWER_CONTROLS,
+        "{listing}"
+    );
+}

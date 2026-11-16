@@ -1867,7 +1867,12 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
         );
         assert!(o.status.success(), "{}", text(&o.stderr));
         let said = text(&o.stderr);
-        let refusal = common::error_text(refusal);
+        // the error line escapes a line break of its message, so the break that ends the whole
+        // message comes after the line
+        let refusal = match refusal.strip_suffix('\n') {
+            Some(message) => format!("{}\n", common::error_text(message)),
+            None => common::error_text(refusal),
+        };
         assert!(said.contains(&refusal), "strata says why:\n{said}");
         assert!(
             said.contains("pr-comment: --repave got no answer, so the table decides"),
