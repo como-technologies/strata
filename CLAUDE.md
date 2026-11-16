@@ -62,7 +62,7 @@ comments, and the tests. A change that breaks one of its rules does not pass the
 Run the CI recipes in a clean worktree of the commit, not only in this tree:
 
 ```bash
-just lint && just test && just library-example && just examples && just docs-check && just docs
+just lint && just comment-words && just test && just library-example && just examples && just docs-check && just docs
 ```
 
 ## The live example

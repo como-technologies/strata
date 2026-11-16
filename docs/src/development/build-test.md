@@ -11,6 +11,7 @@ just observer-manifests-pods # examples/observer-pods, which lists the base and 
 just observer-manifests-alerts # examples/observer-alerts, which lists the base and the component: five objects and the flag --alerts
 just observer-playground # the observer against the stand-in, and its page at http://127.0.0.1:8080
 just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings of the public and of all items, gofmt and go vet of the observer and of the request counter
+just comment-words     # each comment sentence that the change adds has 25 words or fewer
 just test              # the unit, library, binary, and script tests, the tests of xtask, and the Go tests of the observer
 just library-example   # examples/library and examples/library-preflight, crates that use the libraries
 just examples          # examples/ from the tracked registry data
@@ -167,6 +168,7 @@ table gives the files.
 | `tests/common/variants.rs`, `tests/common/table.rs` | `common/variants.rs` holds the macro `one_of_each!`. It makes the list of one value of each variant of an enum. The build fails on a variant that the list does not hold. The tests of `src/error/`, of the edits of the stand-in in `xtask`, and of `Check` in `strata-preflight` include it. `common/table.rs` reads a markdown table: the cells of a row, the rows of a table, and the first cell of each row. The tests of the root package, the tests of `src/error/`, and the check of the facts in `xtask` use it. |
 | `tests/common/code_span.rs`, `tests/common/code_block.rs` | `common/code_span.rs` reads the code spans of a markdown text, and the text outside them. The tests of the root package and the check of the facts in `xtask` use it. `common/code_block.rs` reads the fenced code blocks of a markdown text, and the lines outside them. The tests of the root package use it. Both read a fence as GitHub reads it, and the unit tests of `src/text.rs` and of the report of `strata-preflight` include both. So each package reads a code span and a code block in one way. |
 | `tests/common/answer_tags.rs` | `common/answer_tags.rs` holds five texts of an answer. They hold tags of HTML, marks of markdown, mentions of GitHub, bare addresses, and control characters. It holds the checks that a markdown output shows each such tag, mark, and mention as text, and each such address as it is. It also holds the check that a terminal output shows each such control character as a visible escape. The unit tests of `src/text.rs` and of the report of `strata-preflight` include it too. So the tests have one text of each kind, and one list of the tags that strata writes. |
+| `tests/common/sentences.rs` | `common/sentences.rs` reads the sentences of a text and counts their words, as [The style rules](./documentation.md#the-style-rules) count them. It also reads the comment blocks of a file, with the number of each line. The tests of the book use it, and `xtask comment-words` includes it. So the tests and the check count a word in one way. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `crates/strata-knurl/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
 | `observer/` | `strata-observer` is a Go program in its own module: see [The checks of the observer](./observer.md) and [The server of the observer](./observer-api.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, `internal/check`, `internal/kube`, `internal/api`, `internal/web`, and `internal/testkit` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary, and `scripts/observer-playground.sh` runs the observer against the stand-in. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
@@ -669,7 +671,7 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 
 | Job | Runs |
 | --- | --- |
-| lint and test | `just lint`, `just test`, `just library-example`, `just examples`, `just observer-contract`, `just observer-manifests`, `just observer-manifests-pods`, and `just observer-manifests-alerts` |
+| lint and test | `just lint`, `just comment-words HEAD^1`, `just test`, `just library-example`, `just examples`, `just observer-contract`, `just observer-manifests`, `just observer-manifests-pods`, and `just observer-manifests-alerts` |
 | docs | `just docs-check`, `just docs-lint`, and `just docs`, which fails when mdbook prints a warning |
 | build | the Linux musl binary, with the step that a release uses |
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
@@ -705,7 +707,7 @@ own: see [A temporary worktree](#a-temporary-worktree).
 ```bash
 git worktree add --detach ../strata-check HEAD
 cd ../strata-check && export CARGO_TARGET_DIR="$PWD/target"
-just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && just observer-contract
+just lint && just comment-words && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && just observer-contract
 ```
 
 ### A temporary worktree

@@ -28,7 +28,7 @@ tools that they need.
 Run every check before you open a pull request:
 
 ```bash
-just lint && just test && just library-example && just examples && just docs-check && just docs
+just lint && just comment-words && just test && just library-example && just examples && just docs-check && just docs
 ```
 
 Run them in a clean checkout of your commit, and not only in your working tree.

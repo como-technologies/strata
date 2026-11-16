@@ -14,25 +14,37 @@
 //! xtask contract [OPTIONS]       ask a real tenant the requests of the facts, and compare the answers
 //!                                with the stand-in; `xtask contract --help` names the options
 //! xtask harvest DIR              write the tenant of every chapter to DIR, for xtask contract --stand-in
+//! xtask comment-words BASE       exit 1 when a comment sentence that the change since BASE adds has
+//!                                more than 25 words
 //! ```
 
 mod book;
 mod chapters;
 mod checks;
+mod comment_words;
 // The read of the code spans of a text of the book. The check of the facts reads the code spans of
 // a cell with it, and so do the tests. So the check and the tests read a code span in one way. The
 // check uses no other helper of it.
 #[path = "../../tests/common/code_span.rs"]
 #[allow(dead_code)]
 mod code_span;
-// The routes and the answers of Palette that the tests of strata serve. The stand-in builds the body
-// of each error and the message of a denial with them, so the tests and the book read one text. It
-// also gives the role bindings of a cluster to the user of a key with them. It serves the variables
-// of a cluster with the masks of Palette from them, as the cluster fixtures of the tests do. Its
-// tests serve the variables of a profile with the masks too. The tests of the contract also build
-// the body of an error with it. They and the tests of the facts use its route of the saved tag
-// filters. The stand-in, the test of its download route, and a chapter build the answer of the
-// pack listing with it. xtask uses no other item of it.
+// The routes and the answers of Palette that the tests of strata serve. xtask uses the items below
+// of it, and no other item. So the tests, the stand-in, and the book read one text.
+//
+// The stand-in builds the body of each error with `error_body`. The tests of the contract use it
+// too. The stand-in builds each denial with `access_denied_message`, `project_denied_message`,
+// `operation_forbidden_message`, and `EACH_SCOPE`. The chapter `list-denied` uses the first two.
+//
+// The stand-in gives the role bindings of a cluster to the user of a key with `rbacs_answer`. The
+// chapter `cluster-tiers` and the tests of `palette/rbacs.rs` use `system_rbacs`.
+//
+// The stand-in serves the variables of a cluster with the masks of Palette. It uses
+// `cluster_route_variable` and `is_masked_variable`, as the cluster fixtures of the tests do. Its
+// tests serve the variables of a profile with the masks and `profile_route_variable`.
+//
+// The tests of the contract and of the facts use `TAG_FILTER_LISTING`, the route of the saved tag
+// filters. The stand-in, the test of its download route, and the chapter `fields` build the answer
+// of the pack listing with `pack_listing_answer`.
 #[path = "../../tests/common/palette.rs"]
 #[allow(dead_code)]
 mod common_palette;
@@ -54,6 +66,12 @@ mod process;
 // it, and so does the change test of the catalog of strata-preflight. So the two keep one match.
 #[path = "../../tests/common/route.rs"]
 mod route;
+// The count of the sentences and the words of a text, as "The style rules" give it. The check of
+// the comment sentences of a change counts with it, and so do the tests of the book. So the two
+// count a word in one way. The check does not join the lines of a block with `comment_blocks`.
+#[path = "../../tests/common/sentences.rs"]
+#[allow(dead_code)]
+mod sentences;
 #[cfg(test)]
 mod size;
 // The read of a table of the book. The check of the facts reads a row with it, and so do the
@@ -89,6 +107,7 @@ fn main() -> ExitCode {
         ["facts", "--check"] => check_facts(),
         ["contract", rest @ ..] => contract::command(rest),
         ["harvest", dir] => contract::harvest_command(dir),
+        ["comment-words", base] => comment_words(base),
         ["docs-examples"] => examples(book::Mode::Write),
         ["docs-examples", "--check"] => examples(book::Mode::Check),
         ["playground", name] => {
@@ -99,7 +118,7 @@ fn main() -> ExitCode {
             })
         }
         _ => fail(
-            "usage: xtask [docs-examples [--check] | facts [--check] | contract [OPTIONS] | harvest DIR | playground CHAPTER[-N] | serve ROOT PORT_FILE]",
+            "usage: xtask [docs-examples [--check] | facts [--check] | contract [OPTIONS] | harvest DIR | comment-words BASE | playground CHAPTER[-N] | serve ROOT PORT_FILE]",
         ),
     }
 }
@@ -130,6 +149,25 @@ fn check_facts() -> ExitCode {
         eprintln!("xtask: {message}");
     }
     ExitCode::from(u8::from(!bad.is_empty()))
+}
+
+/// Name each comment sentence of more than 25 words that the change since `base` adds, and count
+/// the sentences that it adds. Exit 1 when it names one.
+fn comment_words(base: &str) -> ExitCode {
+    let found = match comment_words::check(&repository(), base) {
+        Ok(found) => found,
+        Err(e) => return fail(&format!("comment-words: {e}")),
+    };
+    for fault in &found.faults {
+        eprintln!("xtask: {fault}");
+    }
+    eprintln!(
+        "xtask: comment-words: the change since {base} adds or changes {} comment sentences, and {} have more than {} words",
+        found.sentences,
+        found.faults.len(),
+        sentences::MOST_WORDS
+    );
+    ExitCode::from(u8::from(!found.faults.is_empty()))
 }
 
 /// Run every chapter, and write or check `docs/src/output/`.

@@ -220,6 +220,28 @@ heading, and their own knowledge do not? If not, delete it.
 - Put a short fact in a comment on the command line, not in a sentence above it.
 - Start a warning with the instruction. Put it in a block quote with bold text.
 
+## The check of the comment sentences
+
+```bash
+just comment-words           # the comments that the change adds, against origin/main
+just comment-words v0.33.0   # the comments that the change adds after another base
+```
+
+The recipe reads the diff of the work tree against the merge base of the base
+and `HEAD`. It counts the words of each comment sentence that holds an added
+line. It reads the line comments, `//` and `#`, and the block comments,
+`/* ... */`, of the code, the scripts, and the configuration files. It names the
+file and the line of each sentence of more than 25 words, and then exits 1.
+
+The recipe counts a word and a sentence as the tests of the book do. A sentence
+that the change does not touch is not in the count. A line of a file that git
+finds as moved is not an added line. A file that git does not track is not in
+the diff. The theme files of [The theme](#the-theme) are not in the count.
+
+The job `lint and test` of CI runs `just comment-words HEAD^1`, so each change
+keeps the rule. On a pull request, the first parent of the commit is the base
+branch. On a push to `main`, it is the commit before.
+
 ## The theme
 
 `docs/gruvbox/` and `docs/mermaid*.js` are generated and tracked. `just

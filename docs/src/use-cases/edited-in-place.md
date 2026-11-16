@@ -157,7 +157,8 @@ in the issue:
 
 {{#include ../output/edited-report.txt:4:38}}
 
-The script then prints what it would do:
+The script then prints the change that a run with no `--dry-run` makes to each
+issue, and the count of the records:
 
 ```text
 {{#include ../output/edited-report.txt:40:}}
