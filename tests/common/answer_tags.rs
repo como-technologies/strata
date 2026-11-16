@@ -1,6 +1,7 @@
 //! A text of an answer with tags of HTML, one with the marks of markdown, one with mentions of
-//! GitHub, and one with bare addresses. The checks that a markdown output shows each such tag,
-//! mark, and mention as text, and each such address as it is.
+//! GitHub, one with bare addresses, and one with control characters. The checks that a markdown
+//! output shows each such tag, mark, and mention as text, and each such address as it is. The
+//! check that a terminal output shows each such control character as a visible escape.
 //!
 //! `tests/common/mod.rs` re-exports this file for the tests. The unit tests of `src/text.rs` and
 //! of the report of `strata-preflight` include it with `#[path]`. So one text of each kind and one
@@ -71,6 +72,26 @@ pub fn assert_answer_addresses_as_they_are(markdown: &str) {
         markdown.contains(ANSWER_ADDRESSES),
         "the addresses of the answer as they are in\n{markdown}"
     );
+}
+
+/// The message of an answer with an escape sequence of the terminal, a carriage return, and a line
+/// break, as a decoded message of Palette can hold them. On a terminal, the escape sequence makes
+/// the next text red, the carriage return writes over the start of the line, and the line break
+/// starts a new line.
+pub const ANSWER_CONTROLS: &str = "\u{1b}[31mred\u{1b}[0m over\rback\nnext";
+
+/// [`ANSWER_CONTROLS`] as a terminal must get it: each control character as a visible escape.
+const ANSWER_CONTROLS_AS_TEXT: &str = r"\u{1b}[31mred\u{1b}[0m over\rback\nnext";
+
+/// Make sure that `terminal`, a text with no color, shows [`ANSWER_CONTROLS`] as text. Its only
+/// control characters are the line breaks between its lines.
+pub fn assert_answer_controls_as_text(terminal: &str) {
+    assert!(
+        terminal.contains(ANSWER_CONTROLS_AS_TEXT),
+        "the control characters of the answer as text in\n{terminal:?}"
+    );
+    let control = terminal.chars().find(|c| c.is_control() && *c != '\n');
+    assert_eq!(control, None, "a control character in\n{terminal:?}");
 }
 
 /// The tags of HTML that the markdown of strata writes itself.

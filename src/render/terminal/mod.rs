@@ -1,4 +1,8 @@
 //! The terminal report: plain when piped, colored on a terminal.
+//!
+//! The report quotes the texts of Palette, such as names, states, and messages. The report puts
+//! each one in [`terminal_text`] before it paints the text. So a control character of the text
+//! shows as a visible escape, and it does not change what the terminal shows.
 
 use super::changes::{
     OpLine, artifacts_summary, moved_word, packs_heading, tier_op_lines, variable_lines,
@@ -31,7 +35,7 @@ use crate::ops::{
 use crate::reference::Ref;
 use crate::snapshot::{Snapshot, Source};
 use crate::term::color::{LineClass, Paint};
-use crate::text::dash;
+use crate::text::{dash, terminal_text};
 use lines::{op_line, packdetail, packline, variable_line};
 use list::{list_clusters, list_filters, list_profiles, list_projects, list_registries};
 use table::{column_widths, painted_text, table_line};
@@ -65,9 +69,9 @@ fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
     out.push(format!(
         "{} (uid {})  ->  {} (uid {})",
         side_title(&d.a, p),
-        p.dim(dash(d.a.shown_uid())),
+        p.dim(&terminal_text(dash(d.a.shown_uid()))),
         side_title(&d.b, p),
-        p.dim(dash(d.b.shown_uid()))
+        p.dim(&terminal_text(dash(d.b.shown_uid())))
     ));
     let word = diff_word(d);
     out.push(key_line(
@@ -84,12 +88,12 @@ fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
         ),
     ));
     if let Some((a, b)) = side_projects(&d.a.project_uid, &d.b.project_uid) {
-        out.push(key_line("project", format!("{a} -> {b}")));
+        out.push(key_line("project", terminal_text(&format!("{a} -> {b}"))));
     }
     for note in diff_notes(d) {
         match note {
-            DiffNote::Warn(text) => out.push(key_line("note", p.byellow(&text))),
-            DiffNote::Good(text) => out.push(key_line("note", p.bgreen(&text))),
+            DiffNote::Warn(text) => out.push(key_line("note", p.byellow(&terminal_text(&text)))),
+            DiffNote::Good(text) => out.push(key_line("note", p.bgreen(&terminal_text(&text)))),
             DiffNote::Palette(_) => {}
         }
     }
@@ -101,7 +105,7 @@ fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
         let noun = crate::text::plural(b, "cluster", "clusters");
         out.push(key_line("consumers", format!("{a} -> {b} {noun}")));
     } else if let Some(sentence) = consumers_sentence(d) {
-        out.push(key_line("consumers", sentence));
+        out.push(key_line("consumers", terminal_text(&sentence)));
     }
     out
 }
@@ -113,9 +117,9 @@ fn side_title(s: &Source, p: &Paint) -> String {
     match &s.pack {
         Some(pk) => {
             let r = Ref::pack_in(&pk.registry_name, &pk.registry_uid, &pk.name, &pk.version);
-            Kind::Pack.paint(p, &r.shell_word())
+            Kind::Pack.paint(p, &terminal_text(&r.shell_word()))
         }
-        None => p.bold(&s.title()),
+        None => p.bold(&terminal_text(&s.title())),
     }
 }
 
@@ -160,7 +164,13 @@ fn change_lines(d: &Diff, p: &Paint) -> Vec<String> {
         TierLine::Differ(states) => {
             let words: Vec<String> = states
                 .iter()
-                .map(|(t, same)| format!("{t} {}", moved_word(!*same, p)))
+                .map(|(t, same)| {
+                    format!(
+                        "{} {}",
+                        terminal_text(&t.to_string()),
+                        moved_word(!*same, p)
+                    )
+                })
                 .collect();
             out.push(format!("  cluster tiers {}", words.join(", ")));
             for line in tier_op_lines(d) {
@@ -184,7 +194,7 @@ impl Renderer for TerminalRenderer {
         }
         if let Some(note) = pack_order_note(d) {
             out.push(String::new());
-            out.push(p.yellow(&format!("  note: {note}")));
+            out.push(p.yellow(&format!("  note: {}", terminal_text(note))));
         }
         let mut s = out.join("\n");
         s.push('\n');
@@ -204,17 +214,21 @@ impl Renderer for TerminalRenderer {
         let parts = verdict_parts(v, d.same, &d.a);
         let mut lines = Vec::new();
         if let Some(heading) = who_heading(v) {
-            lines.push(heading);
+            lines.push(terminal_text(&heading).into_owned());
             for e in v.who.iter().flatten() {
-                lines.push(format!("  {}", who_entry(e, &v.uid)));
+                lines.push(format!("  {}", terminal_text(&who_entry(e, &v.uid))));
             }
         }
         for sentence in invalid_pack_sentences(&v.invalid_packs) {
-            lines.push(format!("{}: {sentence}", p.bred("INVALID")));
+            lines.push(format!(
+                "{}: {}",
+                p.bred("INVALID"),
+                terminal_text(&sentence)
+            ));
         }
         // the verdict is the answer of the check, so it is the last line
         let word = paint_status(p, RecordStatus::from(v.status), parts.word());
-        let verdict = format!("{word}: {}", parts.line(&d.a));
+        let verdict = format!("{word}: {}", terminal_text(&parts.line(&d.a)));
         lines.push(p.line(LineClass::Answer, &verdict));
         Some(lines.join("\n"))
     }
@@ -228,8 +242,8 @@ impl Renderer for TerminalRenderer {
             out.push_str(&format!(
                 "{word}  {}  {}  {}\n",
                 r.path,
-                p.bold(dash(&r.subject)),
-                record_detail(r)
+                p.bold(&terminal_text(dash(&r.subject))),
+                terminal_text(&record_detail(r))
             ));
         }
         out.push_str(&p.line(LineClass::Answer, &counts_line(s)));
@@ -249,21 +263,24 @@ impl Renderer for TerminalRenderer {
             };
             out.push_str(&format!(
                 "{word}  {} -> {}   {}\n",
-                pair.a,
-                pair.b,
-                p.dim(&pair_detail(pair))
+                terminal_text(&pair.a),
+                terminal_text(&pair.b),
+                p.dim(&terminal_text(&pair_detail(pair)))
             ));
             for line in pair_projects(c, index)
                 .into_iter()
                 .chain(renumber_lines(pair))
             {
-                out.push_str(&format!("               {line}\n"));
+                out.push_str(&format!("               {}\n", terminal_text(&line)));
             }
             for r in &pair.reasons {
-                out.push_str(&format!("               {r}\n"));
+                out.push_str(&format!("               {}\n", terminal_text(r)));
             }
             for note in pair_notes(pair) {
-                out.push_str(&format!("               {}\n", p.yellow(&note)));
+                out.push_str(&format!(
+                    "               {}\n",
+                    p.yellow(&terminal_text(&note))
+                ));
             }
         }
         let verdict = chain_verdict(c);
@@ -279,7 +296,7 @@ impl Renderer for TerminalRenderer {
 
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {
         let p = &self.paint;
-        let mut out = format!("{}\n", consumers_heading(r));
+        let mut out = format!("{}\n", terminal_text(&consumers_heading(r)));
         // a row starts with the ref of the consumer, which names its kind, or with its uid for a
         // kind that no ref reads
         let refs: Vec<Option<Ref>> = r.consumers.iter().map(consumer_ref).collect();
@@ -288,19 +305,19 @@ impl Renderer for TerminalRenderer {
             .iter()
             .zip(&refs)
             .map(|(c, reference)| match reference {
-                Some(reference) => reference.shell_word(),
-                None => dash(&c.uid).to_string(),
+                Some(reference) => terminal_text(&reference.shell_word()).into_owned(),
+                None => terminal_text(dash(&c.uid)).into_owned(),
             })
             .collect();
         let id_w = ids.iter().map(|i| i.chars().count()).max().unwrap_or(0);
         let width = r
             .consumers
             .iter()
-            .map(|c| dash(&c.name).chars().count())
+            .map(|c| terminal_text(dash(&c.name)).chars().count())
             .max()
             .unwrap_or(0);
         for ((c, reference), id) in r.consumers.iter().zip(&refs).zip(&ids) {
-            let state = paint_state(p, &c.state);
+            let state = paint_state(p, &terminal_text(&c.state));
             let id = format!("{id:<id_w$}");
             out.push_str(&format!(
                 "  {}  {}  project {}",
@@ -308,8 +325,8 @@ impl Renderer for TerminalRenderer {
                     Some(_) => painted_text(&id, |t| Kind::Cluster.paint(p, t)),
                     None => p.dim(&id),
                 },
-                format_args!("{:<width$}", dash(&c.name)),
-                consumer_project(c),
+                format_args!("{:<width$}", terminal_text(dash(&c.name))),
+                terminal_text(consumer_project(c)),
             ));
             // a cluster template has no state
             if !state.is_empty() {
@@ -319,11 +336,14 @@ impl Renderer for TerminalRenderer {
             if reference.is_none() {
                 out.push_str(&format!("  {}", p.dim(c.kind.noun())));
             }
-            if let Some(runs) = consumer_runs(c, r, str::to_string) {
+            if let Some(runs) = consumer_runs(c, r, |s| terminal_text(s).into_owned()) {
                 out.push_str(&format!("  {}", p.byellow(&runs)));
             }
             if let Some(msg) = entry_error(c.error.as_ref()) {
-                out.push_str(&format!("  {}", p.dim(&format!("({msg})"))));
+                out.push_str(&format!(
+                    "  {}",
+                    p.dim(&format!("({})", terminal_text(msg)))
+                ));
             }
             if c.unlisted {
                 out.push_str(&format!("  {}", p.byellow(NOT_LISTED)));
@@ -337,14 +357,18 @@ impl Renderer for TerminalRenderer {
         for (what, found) in searched_rows(r) {
             out.push_str(&format!(
                 "    {}\n",
-                p.dim(&format!("{:<width$}  {found}", what.as_str()))
+                p.dim(&format!(
+                    "{:<width$}  {}",
+                    what.as_str(),
+                    terminal_text(&found)
+                ))
             ));
         }
         if let Some(scope) = scope_line(r) {
-            out.push_str(&format!("  {}\n", p.dim(&scope)));
+            out.push_str(&format!("  {}\n", p.dim(&terminal_text(&scope))));
         }
         if let Some(unread) = not_checked_line(r) {
-            out.push_str(&format!("  {}\n", p.byellow(&unread)));
+            out.push_str(&format!("  {}\n", p.byellow(&terminal_text(&unread))));
         }
         Ok(out)
     }
@@ -354,17 +378,18 @@ impl Renderer for TerminalRenderer {
         for rec in &r.records {
             // each line names the cluster by its ref, and then by its name
             let cluster = Ref::cluster(&rec.cluster.uid).shell_word();
+            let cluster = terminal_text(&cluster);
+            let name = terminal_text(dash(&rec.cluster.name));
             out.push_str(&match &rec.root {
                 Some(root) => format!(
                     "wrote {}  {cluster}  {}  root {}\n",
                     rec.path.display(),
-                    dash(&rec.cluster.name),
+                    name,
                     short(root)
                 ),
                 None => format!(
-                    "could not record {cluster} ({}): {}\n",
-                    dash(&rec.cluster.name),
-                    super::list::set_error(rec)
+                    "could not record {cluster} ({name}): {}\n",
+                    terminal_text(super::list::set_error(rec))
                 ),
             });
         }
@@ -412,12 +437,12 @@ impl Renderer for TerminalRenderer {
         let p = &self.paint;
         let mut out = String::new();
         if let Some(sentence) = no_version_sentence(l) {
-            return Ok(format!("{sentence}\n"));
+            return Ok(format!("{}\n", terminal_text(&sentence)));
         }
         for r in &l.registries {
             out.push_str(&format!(
                 "{}\n",
-                registry_heading(l, r, |kind, name| kind.paint(p, name))
+                registry_heading(l, r, |kind, name| kind.paint(p, &terminal_text(name)))
             ));
             // the note column only where a version has a note, so a registry in use reads as before
             let notes: Vec<Option<String>> = r.versions.iter().map(version_note).collect();
@@ -466,7 +491,7 @@ impl Renderer for TerminalRenderer {
 
     fn render_list(&self, l: &Listing) -> Result<String> {
         let p = &self.paint;
-        let mut out = format!("{}\n", list_scope(l));
+        let mut out = format!("{}\n", terminal_text(&list_scope(l)));
         if let Some(profiles) = &l.profiles {
             list_profiles(&mut out, p, l, profiles);
         }
@@ -483,7 +508,7 @@ impl Renderer for TerminalRenderer {
             list_registries(&mut out, p, registries);
         }
         for line in super::list::unread_lines(l) {
-            out.push_str(&format!("\n{}\n", p.red(&line)));
+            out.push_str(&format!("\n{}\n", p.red(&terminal_text(&line))));
         }
         Ok(out)
     }

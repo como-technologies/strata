@@ -1,5 +1,6 @@
 //! The tables of `list` for the terminal: the profile versions with their packs, the clusters
-//! with their profiles, the projects, the saved tag filters, and the registries.
+//! with their profiles, the projects, the saved tag filters, and the registries. Each cell is
+//! [`terminal_text`]: see [`table_line`].
 
 use super::table::{column_widths, matched, painted_text, table_line};
 use crate::ops::{
@@ -13,7 +14,7 @@ use crate::render::list::{
 };
 use crate::render::{Kind, count_of, entry_error, paint_state};
 use crate::term::color::Paint;
-use crate::text::dash;
+use crate::text::{dash, terminal_text};
 
 /// The table of the profile versions of a listing, with its count and the packs of each one.
 pub(super) fn list_profiles(out: &mut String, p: &Paint, l: &Listing, profiles: &[ListedProfile]) {
@@ -130,7 +131,7 @@ pub(super) fn list_clusters(out: &mut String, p: &Paint, l: &Listing, clusters: 
         .into_iter()
         .chain(virtual_line(l))
     {
-        out.push_str(&format!("{}\n", p.dim(&line)));
+        out.push_str(&format!("{}\n", p.dim(&terminal_text(&line))));
     }
     let rows: Vec<Vec<String>> = clusters.iter().map(|c| cluster_row(l, c)).collect();
     let widths = column_widths(&rows);
