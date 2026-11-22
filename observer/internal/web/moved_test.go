@@ -224,14 +224,18 @@ func TestTheBookQuotesTheWordsOfAVersionThatTheClusterNoLongerRuns(t *testing.T)
 }
 
 // Issue #895. The page of the service has the section "A version that the cluster no longer runs". It quotes the words of the page
-// for a cause of Not checked that names such a version. The screens of the set moved-unchecked show each of them.
+// for a cause of Not checked that names such a version. They are the badge "Not on this cluster", and the filters "Not checked" and
+// "All". With the filter Not checked, the set moved-unchecked shows the two filters and the badge. The set ok holds the same version with
+// no cause, and its filter Not checked shows no such badge.
 func TestTheBookOfTheServiceQuotesTheWordsOfACauseOfAVersionThatTheClusterNoLongerRuns(t *testing.T) {
 	section := unwrapped(sectionOf(t, servicePage, "### A version that the cluster no longer runs"))
-	screens := crawl(t, devdata.StateMovedUnchecked)
-	shown := pageOf(t, screens, "#overview", "") + pageOf(t, screens, "#notchecked", "") +
-		pageOf(t, screens, "#profiles", "") + pageOf(t, screens, "#profiles", filterVariant(model.StatusNotChecked))
 	for _, words := range []string{notOnCluster, wordNotChecked, "All"} {
 		mustHold(t, "the book", section, `"`+words+`"`)
-		mustHold(t, "the page", shown, words)
 	}
+	filtered := func(state devdata.State) string {
+		return pageOf(t, crawl(t, state), "#profiles", filterVariant(model.StatusNotChecked))
+	}
+	mustHold(t, "the filter of the set moved-unchecked", filtered(devdata.StateMovedUnchecked), filterButton("all", "All 1", false),
+		filterButton(string(model.StatusNotChecked), wordNotChecked+" 1", true), badge("y", notOnCluster))
+	mustNotHold(t, "the filter of the set ok", filtered(devdata.StateOK), notOnCluster)
 }

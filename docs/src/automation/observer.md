@@ -154,6 +154,25 @@ The observer never writes a record. An edit in Palette moves no baseline: it ope
 finding. To try the observer with no approved record, see [First-seen
 records](#first-seen-records).
 
+### The card "Published version"
+
+The page of a profile has the card "Published version". It shows the status that
+`strata verify` gives the record, with a badge and a line of words:
+
+| Status | Badge | Words |
+| --- | --- | --- |
+| `unchanged` | "OK" | "Unchanged since the record" |
+| `unchanged`, and the last read of the profile failed in part | "Not checked" | "The last read failed, so strata cannot say that nothing changed." |
+| `drifted` | "Drift" | No words. The card shows the root of the record and the root that Palette gives now. |
+| `unverified` | "Not checked" | "Strata read this version, but not the upstream digest of each pack." |
+| `error` | "Not checked" | "Strata could not read this version." |
+
+Strata read an `unverified` version, and its content is the same as the record. But
+a pack has no upstream digest, so a change of the archive of that pack does not show:
+see [The verdicts](../commands/verify.md#the-verdicts). Strata could not read a
+version with the status `error`. A profile with no record gives the badge "No record"
+and the words "Nothing to compare with."
+
 ### A version that the cluster no longer runs
 
 A cluster moves to the next version of a profile, and the record of the old version

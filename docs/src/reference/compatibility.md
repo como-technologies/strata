@@ -1251,6 +1251,10 @@ field, a value, an input, or an option is in the sections above.
   that the cluster does not run, or a profile `newer` with a cause `pin-error`. The tile and the
   screen "Not checked" counted these causes. A check that reads the count of the filter must
   read the new count. See [Not checked](../development/observer.md#not-checked).
+- **The card "Published version" of the observer has new words for `unverified`.** They say
+  that strata read the version. Before, the card gave the words of `error`, which say that strata
+  could not read it. A check that reads the words of the card must read the new words. See [The
+  card "Published version"](../automation/observer.md#the-card-published-version).
 - **The observer shows its findings after a restart in an outage.** The state
   keeps the kind, the profile, and the packs of each finding. Before the first good content
   cycle of the process, `findings` gives the findings of the state with `unread` true, and

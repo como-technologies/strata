@@ -502,6 +502,8 @@ const digestBadge = st => badgeOf(DIGEST_BADGE, st);
 const lab = (k, v) => h`<span class="lab"><i>${k}=</i>"${v}"</span>`;
 const hbar = x => h`<span class="hbar" role="img" aria-label="Status of each pack">${x.packs.map(p => h`<i class="${(BADGE[p.status] || ["y"])[0]}" title="${p.name}: ${(BADGE[p.status] || [0, p.status])[1]}"></i>`)}</span>`;
 const mut = text => h`<span class="mut">${text}</span>`;
+// spanList writes each name in a span of the class, with a comma between two names.
+const spanList = (cls, names) => names.map((n, i) => h`${i ? ", " : ""}<span class="${cls}">${n}</span>`);
 // The images of a pack in its record are the list that its values declare, pack.content.images. Many packs declare none, and they
 // still run images: an OS pack, Kubernetes, a chart that names its images inside. So 0 reads as none listed, and not as no image.
 const IMAGES_LISTED = "The images that the values of the pack list in pack.content.images. A pack that lists none can still run images.";
@@ -716,10 +718,9 @@ const refusalLines = r => h`<div class="mt3"><b>Palette refuses:</b> <span class
 
 /* The checks of the update that strata gives beside the answer, and in the move of a profile. They are the rules that the question to Palette does not check. checksOf gives each check that found something, in the order of strata: the
    required variables, then the skip of a minor version. Each check has the words of its row in the table and the lines of the card. An observer of an older release gives none. */
-const codeList = names => names.map((n, i) => h`${i ? ", " : ""}<span class="m">${n}</span>`);
 function variablesCheck(v) {
   const names = v.names || [], n = names.length;
-  const head = h`<div class="mt3"><b>${plural(n, "The move adds a required variable:", `The move adds ${n} required variables:`)}</b> ${codeList(names)}</div>`;
+  const head = h`<div class="mt3"><b>${plural(n, "The move adds a required variable:", `The move adds ${n} required variables:`)}</b> ${spanList("m", names)}</div>`;
   const next = h`<div>${plural(n, "It has", "They have")} no default value. Give ${plural(n, "it", "each one")} a value at the update, or Palette refuses the update with <span class="m">${v.code}</span>.</div>`;
   return {row: plural(n, "Adds a required variable", `Adds ${n} required variables`), card: h`${head}${next}`};
 }

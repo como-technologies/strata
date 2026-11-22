@@ -1971,6 +1971,39 @@ func TestTheCauseOfPodsNotReadHasARowWithNoProfileAndOpensTheImages(t *testing.T
 	mustHold(t, "the heading", notChecked, wordNotChecked+` on this run <span class="sub">3.`)
 }
 
+// refCell is a cell of the columns What and Profile of the screen Not checked. keptRef is a ref in a span that keeps its text on
+// one line.
+var (
+	refCell = regexp.MustCompile(`<td class="m">(.*?)</td>`)
+	keptRef = regexp.MustCompile(`<span class="nw">([^<@]+@[^<]+)</span>`)
+)
+
+// Issue #958. On the screen Not checked of each set, each ref of a pack or of a profile is in a span of the class nw. So a ref does
+// not break at a hyphen of its name. The test fails when a cell of the table holds an @ out of such a span, and when it finds no
+// ref with a hyphen.
+func TestTheScreenNotCheckedKeepsEachRefOnOneLine(t *testing.T) {
+	hyphens := 0
+	for _, state := range devdata.States {
+		for _, s := range crawl(t, state) {
+			if s.Hash != "#notchecked" {
+				continue
+			}
+			table, _, _ := strings.Cut(s.HTML, "</tbody>")
+			for _, cell := range refCell.FindAllStringSubmatch(table, -1) {
+				for _, ref := range keptRef.FindAllStringSubmatch(cell[1], -1) {
+					hyphens += strings.Count(ref[1], "-")
+				}
+				if rest := keptRef.ReplaceAllString(cell[1], ""); strings.Contains(rest, "@") {
+					t.Errorf("%s %q: a ref of the cell %q is in no span of the class nw", state, s.Variant, cell[1])
+				}
+			}
+		}
+	}
+	if hyphens == 0 {
+		t.Error("no ref on the screen Not checked has a hyphen: the test did not reach the case")
+	}
+}
+
 // The row "Image behind a tag" says what the check does. With a read of the pods it links the images.
 // The card keeps its four rows.
 func TestTheCoverageRowOfTheImagesFollowsTheRead(t *testing.T) {
