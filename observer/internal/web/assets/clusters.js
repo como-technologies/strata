@@ -145,10 +145,18 @@ function copiesCell(s) {
   return h`${s.copies.same} of ${s.copies.of} same${differ.length ? h`<div class="small">differs on${differ}</div>` : ""}${unread}`;
 }
 
+// SCOPE names the scope of a profile that the screen of the shared versions tells apart.
+const SCOPE = {PROJECT: "project"};
+// projectName gives the name of a project of the set, by its uid.
+const projectName = uid => { const p = D.set.projects.find(x => x.uid === uid); return p ? p.name || p.uid : uid; };
+// scopeCell names the scope of a profile version. A row of project scope also names its project, because two projects can hold
+// one name and version.
+const scopeCell = s => s.scope === SCOPE.PROJECT ? `${s.scope} · ${s.projects.map(projectName).join(", ")}` : s.scope || "-";
+
 function sharedCard() {
   const rows = D.shared.filter(s => !S.project || s.projects.includes(S.project));
   const head = h`<thead><tr><th>Profile version</th><th class="narrow-hide">Scope</th><th>Clusters</th><th>Published</th><th>Copies</th></tr></thead>`;
-  const row = s => h`<tr><td class="m">${ref(s.name, s.version)}</td><td class="narrow-hide">${s.scope || "-"}</td><td>${s.clusters} ${plural(s.clusters, "cluster", "clusters")} in ${s.projects.length} ${plural(s.projects.length, "project", "projects")}</td><td>${s.published ? publishedBadge(s.published) : badge("y", "No record")}</td><td>${copiesCell(s)}</td></tr>`;
+  const row = s => h`<tr><td class="m">${ref(s.name, s.version)}</td><td class="narrow-hide">${scopeCell(s)}</td><td>${s.clusters} ${plural(s.clusters, "cluster", "clusters")} in ${s.projects.length} ${plural(s.projects.length, "project", "projects")}</td><td>${s.published ? publishedBadge(s.published) : badge("y", "No record")}</td><td>${copiesCell(s)}</td></tr>`;
   const empty = h`<tr><td colspan="5">${inline(TONE.OFF, "No cluster of the set runs a profile version yet.")}</td></tr>`;
   return h`<section class="card"><div class="chead"><h2>Shared versions <span class="sub">${rows.length}. Each profile version that a cluster of the set runs.</span></h2></div><div class="tw"><table>${head}<tbody>${rows.length ? rows.map(row) : empty}</tbody></table></div></section>`;
 }

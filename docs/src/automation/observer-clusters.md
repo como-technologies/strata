@@ -120,6 +120,9 @@ uid, with its copies:
 {{#include ../output/observer-clusters-shared.txt}}
 ```
 
+The screen `#shared` of the page shows the same rows. A row of project scope also
+names its project, as `project · dev`, so the two rows of `platform-addons@1.0.0` differ.
+
 A person changes the copy of `prod` on its cluster. The row of that cluster says
 `differs`, and the shared version names the cluster whose copy differs:
 
