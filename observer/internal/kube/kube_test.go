@@ -223,6 +223,7 @@ func TestACallThatTakesTooLongIsATimeoutAndACancelIsNotAFailureOfTheAPI(t *testi
 func TestInClusterReadsTheVariablesOfTheKubelet(t *testing.T) {
 	env := map[string]string{hostEnv: "10.96.0.1", portEnv: "443"}
 	cfg, err := InCluster(func(k string) string { return env[k] }, "/volume")
+	// The kubelet gives the files these names, so the test holds them as text, and not as the consts of kube.
 	if err != nil || cfg.Host != "10.96.0.1:443" || cfg.TokenFile != "/volume/token" || cfg.CAFile != "/volume/ca.crt" {
 		t.Errorf("config %+v, error %v", cfg, err)
 	}
