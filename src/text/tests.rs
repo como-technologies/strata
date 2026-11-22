@@ -8,6 +8,8 @@ use super::answer_tags::{
     assert_answer_issues_as_text, assert_answer_marks_as_text, assert_answer_mentions_as_text,
 };
 use super::*;
+use crate::TOOL_NAME;
+use crate::reference::PACK_PREFIX;
 use std::borrow::Cow;
 
 #[test]
@@ -146,6 +148,7 @@ fn a_cell_of_a_markdown_table_shows_each_mark_of_markdown_of_a_quoted_text_as_te
 
 #[test]
 fn a_cell_of_a_markdown_table_holds_no_mention_of_github_from_a_quoted_text() {
+    let z = ZERO_WIDTH_SPACE;
     assert_answer_mentions_as_text(&markdown_cell(ANSWER_MENTIONS));
     // a `@` with no letter or digit of ASCII after it, or with one before it, starts no mention
     assert_eq!(
@@ -154,20 +157,21 @@ fn a_cell_of_a_markdown_table_holds_no_mention_of_github_from_a_quoted_text() {
     );
     assert_eq!(
         markdown_cell("(@a) @@b é@c _@d *@e\n@f|@g"),
-        "(@&#8203;a) @@&#8203;b é@&#8203;c \\_@&#8203;d \\*@&#8203;e @&#8203;f\\|@&#8203;g"
+        format!("(@{z}a) @@{z}b é@{z}c \\_@{z}d \\*@{z}e @{z}f\\|@{z}g")
     );
     // the space is an entity of strata, so its `&` gets no escape, and an `&` of the text does
-    assert_eq!(markdown_cell("&@a <@b"), "&amp;@&#8203;a &lt;@&#8203;b");
+    assert_eq!(markdown_cell("&@a <@b"), format!("&amp;@{z}a &lt;@{z}b"));
     assert_eq!(code_cell("@a"), "`@a`");
 }
 
 #[test]
 fn a_cell_of_a_markdown_table_links_to_no_issue_of_github_from_a_quoted_text() {
+    let z = ZERO_WIDTH_SPACE;
     assert_answer_issues_as_text(&markdown_cell(ANSWER_ISSUES));
     // each `#` before a digit gets the space, and so does a `GH-` in each case of its letters
     assert_eq!(
         markdown_cell("a#1 é#2 (#3) gh-4 Gh-5 éGH-6 €gH-7 _GH-8"),
-        "a#&#8203;1 é#&#8203;2 (#&#8203;3) gh-&#8203;4 Gh-&#8203;5 éGH-&#8203;6 €gH-&#8203;7 \\_GH-&#8203;8"
+        format!("a#{z}1 é#{z}2 (#{z}3) gh-{z}4 Gh-{z}5 éGH-{z}6 €gH-{z}7 \\_GH-{z}8")
     );
     // a `#` or a `GH-` with no digit after it, or a `GH-` after a letter or a digit, is no reference
     assert_eq!(
@@ -175,22 +179,23 @@ fn a_cell_of_a_markdown_table_links_to_no_issue_of_github_from_a_quoted_text() {
         "#a # GH- GH-x G-1 H-1 high-1 1GH-2"
     );
     // the space is an entity of strata, so its `#` gets no space, and a `#` of the text does
-    assert_eq!(markdown_cell("@a &#12;"), "@&#8203;a &amp;#&#8203;12;");
+    assert_eq!(markdown_cell("@a &#12;"), format!("@{z}a &amp;#{z}12;"));
     assert_eq!(
         markdown_cell("https://example.com/#12 #12"),
-        "https://example.com/#12 #&#8203;12"
+        format!("https://example.com/#12 #{z}12")
     );
     assert_eq!(code_cell("#12 GH-3"), "`#12 GH-3`");
 }
 
 #[test]
 fn a_text_of_html_that_strata_quotes_holds_no_mention_no_link_to_an_issue_and_no_line_end() {
+    let z = ZERO_WIDTH_SPACE;
     assert_answer_mentions_as_text(&quoted_html(ANSWER_MENTIONS));
     assert_answer_issues_as_text(&quoted_html(ANSWER_ISSUES));
     // GitHub reads no markdown in a block of HTML, so a mark of markdown gets no `\`
     assert_eq!(
         quoted_html("<b> *a* `c` @octocat #12 k@1.0"),
-        "&lt;b&gt; *a* `c` @&#8203;octocat #&#8203;12 k@1.0"
+        format!("&lt;b&gt; *a* `c` @{z}octocat #{z}12 k@1.0")
     );
     // a blank line ends a block of HTML, and the rest of the text is markdown
     assert_eq!(quoted_html("a\n\n*b*\rc"), "a  *b* c");
@@ -198,6 +203,7 @@ fn a_text_of_html_that_strata_quotes_holds_no_mention_no_link_to_an_issue_and_no
 
 #[test]
 fn a_cell_of_a_markdown_table_keeps_each_bare_address_that_github_links_as_it_is() {
+    let z = ZERO_WIDTH_SPACE;
     assert_answer_addresses_as_they_are(&markdown_cell(ANSWER_ADDRESSES));
     assert_eq!(markdown_cell(ANSWER_ADDRESSES), ANSWER_ADDRESSES);
     for address in [
@@ -208,7 +214,7 @@ fn a_cell_of_a_markdown_table_keeps_each_bare_address_that_github_links_as_it_is
         assert_eq!(markdown_cell(address), address);
         assert_eq!(
             markdown_cell(&format!("*a* {address} @b")),
-            format!("\\*a\\* {address} @&#8203;b")
+            format!("\\*a\\* {address} @{z}b")
         );
     }
     // GitHub links `www.` only after a space or a `(`, and a scheme also after a quote
@@ -218,11 +224,11 @@ fn a_cell_of_a_markdown_table_keeps_each_bare_address_that_github_links_as_it_is
     );
     assert_eq!(
         markdown_cell("www.example.com/@b"),
-        "www.example.com/@&#8203;b"
+        format!("www.example.com/@{z}b")
     );
     assert_eq!(
         markdown_cell("a \"www.example.com/@b\""),
-        "a \"www.example.com/@&#8203;b\""
+        format!("a \"www.example.com/@{z}b\"")
     );
     // GitHub cuts the marks at the end from the link, and no `\` comes before them
     assert_eq!(
@@ -230,13 +236,21 @@ fn a_cell_of_a_markdown_table_keeps_each_bare_address_that_github_links_as_it_is
         "https://example.com/a_(b)) https://example.com/x&lowbar;&ast;~.\""
     );
     // a form that GitHub does not surely link keeps each escape, and each `@` gets its space
+    for text in [
+        "https://-a.example/@b",
+        "https://a_b.example/@b",
+        "https://localhost/@b",
+        "xhttps://example.com/@b",
+        "ftp://example.com/@b",
+        "https://example.com/é@b",
+    ] {
+        assert_eq!(
+            markdown_cell(text),
+            text.replace('@', &format!("@{z}")),
+            "{text}"
+        );
+    }
     for (text, escaped) in [
-        ("https://-a.example/@b", "https://-a.example/@&#8203;b"),
-        ("https://a_b.example/@b", "https://a_b.example/@&#8203;b"),
-        ("https://localhost/@b", "https://localhost/@&#8203;b"),
-        ("xhttps://example.com/@b", "xhttps://example.com/@&#8203;b"),
-        ("ftp://example.com/@b", "ftp://example.com/@&#8203;b"),
-        ("https://example.com/é@b", "https://example.com/é@&#8203;b"),
         ("https://example.com/<b>", "https://example.com/&lt;b&gt;"),
         (
             "https://example.com/a&amp;",
@@ -255,6 +269,7 @@ fn a_cell_of_a_markdown_table_keeps_each_bare_address_that_github_links_as_it_is
 
 #[test]
 fn a_line_of_markdown_keeps_each_bar_and_a_cell_escapes_each_bar_also_in_an_address() {
+    let z = ZERO_WIDTH_SPACE;
     // GitHub links `https://example.com/a\|b` to `a%5C%7Cb` outside a table
     assert_eq!(
         markdown_line("https://example.com/a|b a|b"),
@@ -265,7 +280,7 @@ fn a_line_of_markdown_keeps_each_bar_and_a_cell_escapes_each_bar_also_in_an_addr
         "https://example.com/a\\|b a\\|b"
     );
     // a line holds no line end, and its other escapes are those of a cell
-    assert_eq!(markdown_line("*a*\n@b\r#1"), "\\*a\\* @&#8203;b #&#8203;1");
+    assert_eq!(markdown_line("*a*\n@b\r#1"), format!("\\*a\\* @{z}b #{z}1"));
     for text in [
         ANSWER_TAGS,
         ANSWER_MARKS,
@@ -389,9 +404,13 @@ fn a_list_of_names_has_a_comma_before_and_only_from_three_names() {
 
 #[test]
 fn a_shell_word_is_quoted_only_when_the_shell_reads_a_character_of_it() {
+    let (a, b) = (
+        format!("{PACK_PREFIX}k@1.0"),
+        format!("{PACK_PREFIX}Public Repo/k@1.1"),
+    );
     assert_eq!(
-        shell_words(&["strata", "compare", "pack:k@1.0", "pack:Public Repo/k@1.1"]),
-        "strata compare pack:k@1.0 'pack:Public Repo/k@1.1'"
+        shell_words(&[TOOL_NAME, "compare", &a, &b]),
+        format!("{TOOL_NAME} compare {a} '{b}'")
     );
     assert_eq!(shell_words(&["", "a$b", "it's"]), "'' 'a$b' 'it'\\''s'");
 }

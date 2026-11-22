@@ -366,7 +366,7 @@ const RELEASE_0_18_0_FIELDS: &[&str] = &[
 /// that Palette did not give from a field that the release did not write.
 #[test]
 fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let table = section(&page, "### The fields of release 0.18.0", Some("\n### "));
     let rows: Vec<&str> = table.lines().filter(|l| l.starts_with('|')).collect();
     for field in RELEASE_0_18_0_FIELDS {
@@ -421,7 +421,7 @@ fn assert_release_above(page: &str, newer: &str, older: &str) {
 /// the opening of the page links to both.
 #[test]
 fn compatibility_has_a_section_for_release_0_25_0_above_release_0_24_0_and_links_to_both() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     assert_release_above(&page, "0.25.0", "0.24.0");
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
@@ -468,7 +468,7 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
         "a reusable workflow runs cosign, and the list of the tests lacks it"
     );
 
-    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.25.0");
+    let release = release_section(&read(&docs().join(COMPATIBILITY_PAGE)), "0.25.0");
     for file in INSTALLING_WORKFLOWS {
         assert!(
             release.contains(&format!("`{file}`")),
@@ -558,7 +558,7 @@ fn the_page_names_each_document_that_carries_the_record_of_a_cluster_with_the_re
         );
     }
 
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let release = release_section(&page, "0.25.0");
     let documents = one_line(section(&page, "## The documents", Some("\n## ")));
     for id in &carrying {
@@ -938,27 +938,24 @@ fn the_sentences_that_the_style_review_of_wave_11_named_keep_to_the_limits() {
 fn the_blocks_that_the_style_review_of_wave_11_named_have_six_sentences_or_fewer() {
     let blocks = [
         (
-            "reference/compatibility.md",
+            COMPATIBILITY_PAGE,
             "After 0.24.0, a record of a cluster holds why",
         ),
         (
-            "reference/compatibility.md",
+            COMPATIBILITY_PAGE,
             "A script that reads `updatesPendingError`",
         ),
         (
-            "reference/compatibility.md",
+            COMPATIBILITY_PAGE,
             "After 0.24.0, the schema states the shape",
         ),
-        ("reference/compatibility.md", "One case differs."),
+        (COMPATIBILITY_PAGE, "One case differs."),
         (
-            "reference/compatibility.md",
+            COMPATIBILITY_PAGE,
             "Strata does not read a record that holds `name: null`",
         ),
-        (
-            "reference/compatibility.md",
-            "A field can also become absent",
-        ),
-        ("reference/compatibility.md", "In 0.7.0 `source.consumers`"),
+        (COMPATIBILITY_PAGE, "A field can also become absent"),
+        (COMPATIBILITY_PAGE, "In 0.7.0 `source.consumers`"),
         (
             "reference/documents.md",
             "`tiers`: each tier that the record carries",
@@ -1131,7 +1128,7 @@ const WAVE_8_PAGES: [&str; 31] = [
     "internals/palette/packs.md",
     "internals/palette/profiles.md",
     "reference/candidate-file.md",
-    "reference/compatibility.md",
+    COMPATIBILITY_PAGE,
     "reference/documents.md",
     "reference/errors.md",
     "reference/formats.md",
@@ -1962,6 +1959,9 @@ fn files_of_tests_common_that_another_package_includes() -> BTreeSet<String> {
 /// The page of the rules of the Rust code and of the Go code.
 const CODE_PAGE: &str = "development/code.md";
 
+/// The page of the version rules of strata and of the changes of each release.
+const COMPATIBILITY_PAGE: &str = "reference/compatibility.md";
+
 /// A helper of `tests/common/` that another package includes is in a file of its own. The rule of
 /// "Tests" in `code.md` names each such file, and no other. The table "Where the code goes" of
 /// `build-test.md` has a row for each. The verify of #711 and of #721 found a file that each page
@@ -2151,7 +2151,7 @@ fn the_block_of_a_numbered_step_does_not_hold_the_next_step() {
 /// three sections.
 #[test]
 fn compatibility_has_a_section_for_release_0_26_0_above_release_0_25_0_and_links_to_all_three() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     assert_release_above(&page, "0.26.0", "0.25.0");
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
@@ -2196,7 +2196,7 @@ fn compatibility_has_a_section_for_release_0_26_0_above_release_0_25_0_and_links
 #[test]
 fn the_section_of_release_0_26_0_gives_the_action_for_the_directory_the_root_the_gate_and_the_job()
 {
-    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.26.0");
+    let release = release_section(&read(&docs().join(COMPATIBILITY_PAGE)), "0.26.0");
     for needle in [
         // A2: who has such a directory, and what to do
         "**Save each directory of a cluster group again, and search each repository that holds one.**",
@@ -2232,7 +2232,7 @@ fn the_section_of_release_0_26_0_gives_the_action_for_the_directory_the_root_the
 /// the same characters. A change of the set must change the section too.
 #[test]
 fn the_section_of_release_0_26_0_names_the_characters_that_the_canonical_text_escapes() {
-    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.26.0");
+    let release = release_section(&read(&docs().join(COMPATIBILITY_PAGE)), "0.26.0");
     assert!(
         release.contains(
             "The characters are DEL, U+0080 to U+009F, U+2028, U+2029, U+FFFE, and U+FFFF."
@@ -2282,7 +2282,7 @@ fn the_gitlab_job_that_the_section_names_keeps_the_artifact_and_strata_upstream_
 /// of the library of `strata-preflight`, and the section of release 0.26.0.
 #[test]
 fn compatibility_says_what_release_0_25_0_did_for_a_world_and_a_fixture_that_are_not_objects() {
-    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    let page = one_line(&read(&docs().join(COMPATIBILITY_PAGE)));
     for phrase in ["Before, it panicked.", "Before, each case panicked."] {
         assert!(!page.contains(phrase), "the page still says {phrase:?}");
     }
@@ -3443,7 +3443,7 @@ fn step_6_of_the_deploy_states_the_three_results_of_cloud_run() {
 /// each change.
 #[test]
 fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_of_the_report() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     assert_release_above(&page, "0.27.0", "0.26.0");
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
@@ -3498,7 +3498,7 @@ fn only_the_compatibility_page_names_the_old_names_packs_and_applied_of_list() {
         tracked_files_whose_text(root, &["src", "examples", "scripts", "docs/src"], names_old);
     assert_eq!(named, ["docs/src/reference/compatibility.md"]);
 
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let mut rest = one_line(&page);
     for (release, anchor) in [
         (
@@ -3548,7 +3548,7 @@ fn only_the_compatibility_page_names_the_old_names_packs_and_applied_of_list() {
 /// section of release 0.36.0 sits above the one of release 0.35.0, and it names each change.
 #[test]
 fn the_section_of_release_0_36_0_names_each_change_of_the_markdown_of_a_quoted_text() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     assert_release_above(&page, "0.36.0", "0.35.0");
     let release = release_section(&page, "0.36.0");
     for needed in [
@@ -3570,7 +3570,7 @@ fn the_section_of_release_0_36_0_names_each_change_of_the_markdown_of_a_quoted_t
 /// page no longer says that the old paths stay.
 #[test]
 fn the_section_of_release_0_27_0_gives_the_new_path_for_each_removed_old_path() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let release = section(
         &page,
         "## Release 0.27.0: changes that need action",
@@ -3612,7 +3612,7 @@ fn the_section_of_release_0_27_0_gives_the_new_path_for_each_removed_old_path() 
 /// One part of the section of release 0.27.0 in compatibility.md, as one line. The part starts at
 /// the heading `heading` and ends at the next heading of its level.
 fn release_0_27_0_part(heading: &str) -> String {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let release = section(
         &page,
         "## Release 0.27.0: changes that need action",
@@ -3667,7 +3667,7 @@ fn compatibility_says_that_gke_no_release_channel_is_demoted_below_4_11_only() {
     );
     assert!(rule.contains("releases: \"<4.11\""), "{rule}");
 
-    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    let page = one_line(&read(&docs().join(COMPATIBILITY_PAGE)));
     assert!(
         page.contains("`gke-no-release-channel` is `demote` for each release below 4.11, the range of the rule."),
         "the page does not give the range of the rule"
@@ -3712,7 +3712,7 @@ fn the_section_of_release_0_27_0_names_each_change_of_the_library_of_strata_pref
 /// named code is an error. Both are false for the refusal of a validate route.
 #[test]
 fn compatibility_says_that_a_refusal_of_a_validate_route_is_an_answer_with_no_code_in_the_list() {
-    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    let page = one_line(&read(&docs().join(COMPATIBILITY_PAGE)));
     let want = "So is a refusal of a validate route, such as `POST /v1/spectroclusters/{cloud}/validate`, as in 0.26.0.";
     assert_eq!(
         page.matches(want).count(),
@@ -4254,7 +4254,7 @@ fn loop_sh_has_the_check_report_log_and_the_book_has_its_row() {
 /// One part of the section of release 0.28.0 in compatibility.md, as one line. The part starts at
 /// the heading `heading` and ends at the next heading of its level.
 fn release_0_28_0_part(heading: &str) -> String {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let release = section(
         &page,
         "## Release 0.28.0: changes that need action",
@@ -4270,7 +4270,7 @@ fn release_0_28_0_part(heading: &str) -> String {
 /// of the two libraries.
 #[test]
 fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     assert_release_above(&page, "0.28.0", "0.27.0");
 
     let release = section(
@@ -4412,7 +4412,7 @@ fn the_book_states_the_cases_where_latest_is_not_the_version_that_the_ref_record
 /// 0.25.0. It points at release 0.28.0, which changes `latest`.
 #[test]
 fn the_older_paragraph_of_strata_packs_points_at_the_change_of_latest_in_release_0_28_0() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let order = one_line(section(&page, "### The order of versions", Some("\n### ")));
     let item = section(
         &order,
@@ -4476,7 +4476,7 @@ fn the_book_states_which_groups_get_a_new_values_hash_and_what_a_password_that_s
 /// reason, as it does for the changes of earlier releases.
 #[test]
 fn the_page_of_the_versions_names_the_four_values_that_change_after_0_27_0_with_no_new_id() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let documents = one_line(section(&page, "## The documents", Some("\n## ")));
     for needle in [
         "Four values change after 0.27.0 with no new id.",
@@ -4504,7 +4504,7 @@ fn the_page_of_the_versions_names_the_four_values_that_change_after_0_27_0_with_
 /// documents of the unknown values are the exception. The page of the versions says so.
 #[test]
 fn the_page_of_the_versions_says_that_the_two_documents_of_the_unknown_values_refuse_a_new_field() {
-    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    let page = one_line(&read(&docs().join(COMPATIBILITY_PAGE)));
     for needle in [
         "`strata-unknown/1` and `strata-report/1` refuse each field that they do not list",
         "A new field of either takes a new id.",
@@ -4533,7 +4533,7 @@ fn the_section_of_release_0_28_0_names_each_non_exhaustive_type_of_the_send() {
         .filter_map(|(_, item)| item.strip_prefix("pub enum ")?.split_whitespace().next())
         .collect();
     assert!(marked.len() >= 2, "the send has marked types: {marked:?}");
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let library = one_line(section(
         section(
             &page,
@@ -4710,7 +4710,7 @@ fn the_top_of_the_everyday_loop_says_what_a_row_is_and_uses_one_word_for_each_th
 /// general paragraph names each one, and the section of release 0.28.0 corrects the item.
 #[test]
 fn compatibility_names_each_hash_that_the_canonical_text_moves_and_what_same_release_says() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let general = one_line(section(
         &page,
         "One root changes after 0.25.0 with no new id.",
@@ -4742,7 +4742,7 @@ fn compatibility_names_each_hash_that_the_canonical_text_moves_and_what_same_rel
 /// orders a version with four numbers, so the reader knows whose order it is.
 #[test]
 fn the_order_of_versions_names_the_equal_versions_and_the_version_that_does_not_parse() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let order = one_line(section(
         &page,
         "### The order of versions",
@@ -4771,7 +4771,7 @@ fn the_order_of_versions_names_the_equal_versions_and_the_version_that_does_not_
 /// release states each change, and the pages of `@latest` and of `packs` state the new order.
 #[test]
 fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_numbers() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let release = release_section(&page, "0.33.0");
     for needle in [
         "**A version that does not parse reads as its first three numbers.** Palette reads it so too.",
@@ -4835,7 +4835,7 @@ fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_n
 /// rest after one text before the numbers.
 #[test]
 fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let release = release_section(&page, "0.33.0");
     for needle in [
         "**One or two numbers and a tail of text make a pre-release of the version of the numbers.**",
@@ -5676,7 +5676,7 @@ fn the_live_example_lists_the_contract_scripts_the_send_script_and_the_recipe_of
 /// correction.
 #[test]
 fn compatibility_compares_each_change_of_the_wave_with_release_0_26_0() {
-    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    let page = one_line(&read(&docs().join(COMPATIBILITY_PAGE)));
     for needle in [
         "After 0.26.0, the message of `api` for a 403 with the code `ProjectUidIsNotEmpty` says that \
          the route is of the tenant scope. The kind `api` and the exit code `2` stay.",
@@ -5797,7 +5797,7 @@ fn the_section_of_release_0_28_0_names_each_change_of_strata_preflight_that_the_
 /// `(s)`. The page states the new words of the messages (#594).
 #[test]
 fn compatibility_says_that_the_whole_text_of_the_tool_agrees_each_noun_with_its_count() {
-    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    let page = one_line(&read(&docs().join(COMPATIBILITY_PAGE)));
     for needle in [
         "After 0.27.0, the text of `strata-preflight` agrees each noun with its count.",
         "It holds for the events of `--verbose` and for the message of each rule too.",
@@ -5824,7 +5824,7 @@ fn compatibility_says_that_the_whole_text_of_the_tool_agrees_each_noun_with_its_
 /// catalog.
 #[test]
 fn the_rules_that_compatibility_names_for_the_new_nouns_are_rules_of_the_catalog() {
-    let page = read(&docs().join("reference/compatibility.md"));
+    let page = read(&docs().join(COMPATIBILITY_PAGE));
     let item = section(
         &page,
         "  - The rules are `aws-region-not-enabled`",
@@ -5875,7 +5875,7 @@ fn the_page_of_the_watch_gives_the_exit_code_and_the_verdict_of_a_deleted_cluste
         output.lines().last(),
         Some("NOT COUNTED: the cluster is gone; no check counted on aws")
     );
-    let compat = one_line(&read(&docs().join("reference/compatibility.md")));
+    let compat = one_line(&read(&docs().join(COMPATIBILITY_PAGE)));
     for needle in [
         "It was `OK: each counted check passed`, and it is `OK: the cluster is gone; no counted check failed` now.",
         "A watch with no check that ran says `OK: the cluster is gone; no check ran`.",
@@ -6084,7 +6084,7 @@ fn the_pages_of_the_report_say_that_the_send_skips_a_line_that_is_not_valid() {
             "compatibility.md lacks {needle:?}"
         );
     }
-    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    let page = one_line(&read(&docs().join(COMPATIBILITY_PAGE)));
     for old in [
         "counts the valid lines only",
         "the number of valid lines before it",
@@ -6971,7 +6971,7 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
             "preflight-rules.md lacks {needle:?}"
         );
     }
-    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.33.0");
+    let release = release_section(&read(&docs().join(COMPATIBILITY_PAGE)), "0.33.0");
     for needle in [
         "the `api.sh delete-named` of `versions-outside-state`",
         "the `--delete` of `eks-delete-waits`",

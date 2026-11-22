@@ -18991,7 +18991,11 @@ fn the_fold_of_a_pack_holds_no_mention_and_no_link_to_an_issue_from_a_tag_of_the
         .unwrap_or_else(|| panic!("the fold of the pack in\n{md}"));
     common::assert_answer_mentions_as_text(summary);
     common::assert_answer_issues_as_text(summary);
-    assert!(summary.ends_with(" *a* AUTHORED</summary>"), "{summary}");
+    let authored = ChangeFlag::Authored.as_str();
+    assert!(
+        summary.ends_with(&format!(" *a* {authored}</summary>")),
+        "{summary}"
+    );
     common::assert_answer_mentions_as_text(&md);
     common::assert_answer_issues_as_text(&md);
 }
