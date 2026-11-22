@@ -1,9 +1,9 @@
 //! A text of an answer with tags of HTML, one with the marks of markdown, and one with mentions
 //! of GitHub. Also a text with references to issues of GitHub, one with bare addresses, one with
-//! control characters, and one with a mark of direction. The checks that a markdown
-//! output shows each such tag, mark, mention, and reference as text, and each such address as it
-//! is. The checks that a terminal output and a markdown output show each such control character as
-//! a visible escape.
+//! an address at the end of a line, one with control characters, and one with a mark of
+//! direction. The checks that a markdown output shows each such tag, mark, mention, and reference
+//! as text, and each such address as it is. The checks that a terminal output and a markdown
+//! output show each such control character as a visible escape.
 //!
 //! `tests/common/mod.rs` re-exports this file for the tests. The unit tests of `src/text.rs`, and
 //! of the report and the run of `strata-preflight`, include it with `#[path]`. So one text of each
@@ -113,6 +113,21 @@ pub fn assert_answer_addresses_as_they_are(markdown: &str) {
     );
 }
 
+/// The message of an answer with a bare address at the end of its first line. GitHub ends the
+/// link of a bare address only at a space or a `<`.
+pub const ANSWER_ADDRESS_LINES: &str = "see https://example.com/a\nnext";
+
+/// Make sure that `markdown` holds [`ANSWER_ADDRESS_LINES`] in a line or in a cell of a table. The
+/// address stays as it is, and [`strata::text::ADDRESS_END`] comes before the escape of the line
+/// break. So the link that GitHub makes of the address holds only the address.
+pub fn assert_answer_address_lines_as_markdown(markdown: &str) {
+    let lines = ANSWER_ADDRESS_LINES.replace('\n', &format!(r"{}\\n", strata::text::ADDRESS_END));
+    assert!(
+        markdown.contains(&lines),
+        "the address of the answer and the escape after it in\n{markdown}"
+    );
+}
+
 /// The message of an answer with an escape sequence of the terminal, a carriage return, and a line
 /// break. A decoded message of Palette can hold them. On a terminal, the escape sequence makes the
 /// next text red, and the carriage return writes over the start of the line. The line break starts
@@ -167,7 +182,7 @@ fn assert_only_line_breaks(text: &str) {
 }
 
 /// The tags of HTML that the markdown of strata writes itself.
-const STRATA_TAGS: [&str; 7] = [
+const STRATA_TAGS: [&str; 8] = [
     "<br>",
     "<details>",
     "</details>",
@@ -175,6 +190,7 @@ const STRATA_TAGS: [&str; 7] = [
     "</summary>",
     "<code>",
     "</code>",
+    strata::text::ADDRESS_END,
 ];
 
 /// Make sure that each tag of HTML in `markdown` is a tag that strata writes. So a text that

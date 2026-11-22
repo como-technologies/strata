@@ -5,7 +5,7 @@
 //! run directory, or a job attaches it.
 
 use strata::closed_set::ClosedSet;
-use strata::text::html_text;
+use strata::text::{direction_text, html_text};
 
 use crate::probe::Verdict;
 use crate::report::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
@@ -15,8 +15,11 @@ use crate::report::{
 
 /// `s` as [`html_text`], with each `"` as an entity too, so that it can also be the value of an
 /// attribute in quotes.
+///
+/// Each mark of the direction of a text is its escape of [`direction_text`]. So a name of Palette
+/// shows its characters in their order, as on the terminal and in the markdown.
 fn esc(s: &str) -> String {
-    html_text(s).replace('"', "&quot;")
+    html_text(&direction_text(s)).replace('"', "&quot;")
 }
 
 const STYLE: &str = r#"
@@ -405,6 +408,29 @@ mod tests {
         );
         assert!(!html.contains('–'), "one mark for no percent");
         let _ = BTreeMap::<String, String>::new();
+    }
+
+    /// The criterion of #983: the page writes each mark of the direction of a text of Palette as a
+    /// visible escape, as the terminal and the markdown do. The texts are the name of the cluster
+    /// and the message of a check.
+    #[test]
+    fn the_page_shows_each_mark_of_the_direction_of_a_text_of_palette_as_an_escape() {
+        use crate::answer_tags::{ANSWER_DIRECTION, ANSWER_DIRECTION_AS_TEXT};
+        let mut report = report();
+        report.subject.name = ANSWER_DIRECTION.into();
+        report.checks[0].messages = vec![ANSWER_DIRECTION.into()];
+        let html = page(&report);
+        for shown in [
+            format!("<title>preflight: gke {ANSWER_DIRECTION_AS_TEXT}</title>"),
+            format!("gke · {ANSWER_DIRECTION_AS_TEXT}</span></h1>"),
+            format!("<div class=\"msg\">{ANSWER_DIRECTION_AS_TEXT}</div>"),
+        ] {
+            assert!(html.contains(&shown), "{shown} in\n{html}");
+        }
+        let mark = html
+            .chars()
+            .find(|c| strata::text::DIRECTION_MARKS.contains(c));
+        assert_eq!(mark, None, "a mark of direction in\n{html}");
     }
 
     #[test]

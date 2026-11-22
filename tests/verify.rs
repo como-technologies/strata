@@ -18983,6 +18983,44 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_each_control_character_of_a_mes
     }
 }
 
+/// The criterion of #983: a bare address at the end of a line of a message of Palette ends its link
+/// before the escape of the line break, in a note and in a verdict.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_ends_the_link_of_an_address_before_the_escape_of_a_line_break()
+ {
+    for md in markdown_that_quotes(common::ANSWER_ADDRESS_LINES, "see https://example.com/a") {
+        common::assert_answer_address_lines_as_markdown(&md);
+    }
+}
+
+/// The criterion of #983: a line of the values of a pack ends with a carriage return and no line
+/// break, and the diff library ends a line of the diff there. `--full` on the terminal and in the
+/// markdown shows each line of the diff on its own line, with `\r` at the end of the line.
+#[test]
+fn the_diff_of_full_shows_each_line_of_the_diff_on_its_own_line_after_a_lone_carriage_return() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let values = &a
+        .packs
+        .iter()
+        .find(|p| p.name == "ubuntu-aws")
+        .unwrap()
+        .values;
+    let b = with_os_pack(dir.path(), "values-return", |p| {
+        p["values"] = Value::from(format!("{values}\n# {}\n", common::ANSWER_CONTROLS));
+    });
+    let d = ops::compare(&a, &b, "t1");
+    let lines = concat!(r"+# \u{1b}[31mred\u{1b}[0m over\r", "\n+back\n+next\n");
+    for (form, renderer) in [
+        ("terminal", common::terminal()),
+        ("markdown", common::markdown()),
+    ] {
+        let text = renderer.render(&d, &a, &b, true).unwrap();
+        assert!(text.contains(lines), "{form}: {lines:?} in\n{text}");
+    }
+}
+
 /// The criterion of #942: the tag and the values of a pack, as the answer gives them, hold control
 /// characters. The row and the fold of the pack, its diff of values, and its diff of `--full` show
 /// each one as a visible escape. Each diff keeps its own line breaks.

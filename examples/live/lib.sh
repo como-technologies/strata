@@ -268,27 +268,30 @@ write_summary() {
 
 # The jq functions that write a text into markdown, as strata writes it. `html` is
 # `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `line`
-# is `text::markdown_line`, and `quoted` writes each word of it. `cell` is `text::markdown_cell`,
+# is `text::markdown_line`, and `word` is `text::markdown_word`. `cell` is `text::markdown_cell`,
 # a `line` that `table` gives an escape before each `|`. `controls` is `text::terminal_text`: each
 # control character and each mark of the direction of a text is a visible escape, such as `\n`.
-# `line` and `span` start with it, so a line end starts no line and ends no row.
+# `word` and `span` write each text with it, so a line end starts no line and ends no row.
 #
 # `marks` puts a `\` before each mark of markdown. A run of `_` with a letter or a digit on each
 # side starts no emphasis, so `marks` keeps it as it is. `references` is `text::reference_text`:
 # it puts a zero width space in each mention and in each reference to an issue of GitHub. So a
-# link, an emphasis, a code span, a `@name`, or a `#12` of the text shows as text.
+# link, an emphasis, a code span, a `@name`, or a `#12` of the text shows as text. `quoted` writes
+# each text of a word that is no address.
 #
 # `address` is `text::bare_address`: a bare address that GitHub surely links stays as it is.
-# `link_end` is `text::link_end`, where GitHub ends the link. `span` is `text::code_span`: its
-# fence is longer than each run of backticks in the text. `code` is `text::code_cell`, a `span` in
-# a cell of a table. `fence` is the fence of `text::code_block`, so that no line of the text ends
-# the block.
+# `link_end` is `text::link_end`, where GitHub ends the link. `hidden` is `text::shows_no_text`,
+# a character that `controls` escapes. Each one ends one of the `parts` of a word, and a part can
+# be an address. The tag `<wbr>` is `text::ADDRESS_END`: it ends the link before the escape after
+# the address. `span` is `text::code_span`: its fence is longer than each run of backticks in the
+# text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of
+# `text::code_block`, so that no line of the text ends the block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
   def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
   def hex: if . < 16 then "0123456789abcdef"[.:. + 1] else (. / 16 | floor | hex) + (. % 16 | hex) end;
+  def hidden: . < 32 or (. > 126 and . < 160) or IN(1564, 8206, 8207, 8234, 8235, 8236, 8237, 8238, 8294, 8295, 8296, 8297);
   def controls: [explode[] | if . == 9 then "\\t" elif . == 10 then "\\n" elif . == 13 then "\\r"
-      elif . < 32 or (. > 126 and . < 160) or IN(1564, 8206, 8207, 8234, 8235, 8236, 8237, 8238, 8294, 8295, 8296, 8297)
-      then "\\u{\(hex)}" else [.] | implode end] | join("");
+      elif hidden then "\\u{\(hex)}" else [.] | implode end] | join("");
   def table: split("|") | join("\\|");
   def references: gsub("(?<r>(?<![A-Za-z0-9])@(?=[A-Za-z0-9])|#(?=[0-9])|(?<![A-Za-z0-9])[Gg][Hh]-(?=[0-9]))"; "\(.r)&#8203;");
   def quoted: marks | html | references;
@@ -299,15 +302,24 @@ markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | 
           elif ($c | test("^[?!.,:*_~\\x27\";]$")) then cut($end - 1; $close)
           else $end end;
       cut(length; [scan("[)]")] | length);
-  def address($first): (if test("^[(\"\\x27]") then 1 else 0 end) as $s | .[$s:] as $rest
+  def address($before): (if test("^[(\"\\x27]") then 1 else 0 end) as $s | .[$s:] as $rest
     | (if test("^[!-~]*$") and (test("<") | not) then $rest | link_end else null end) as $e
     | if $e == null
         or ($rest[:$e] | test("^(https?://|www[.])[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?([.][A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+([/?#:]|$)") | not)
-        or (($rest | startswith("www.")) and (if $s == 0 then $first else (startswith("(") | not) end))
+        or ($s == 0 and ($before // "" | test("^[A-Za-z]$")))
+        or (($rest | startswith("www.")) and (if $s == 0 then $before != " " else (startswith("(") | not) end))
       then null else [.[:$s], $rest[:$e], $rest[$e:]] end;
-  def word($first): address($first) as $a
-    | if $a then ($a[0] | quoted) + $a[1] + ($a[2] | gsub("[*]"; "&ast;") | gsub("_"; "&lowbar;")) else quoted end;
-  def line: controls | [scan("[^ ]+| +")] | to_entries
+  def parts: reduce explode[] as $c ([[]]; .[-1] += [$c] | if $c | hidden then . + [[]] else . end)
+    | map(if length > 0 and (.[-1] | hidden) then [.[:-1], .[-1:]] else [., []] end | map(implode));
+  def word($first): reduce parts[] as [$t, $stop] ({out: "", plain: "", before: (if $first then null else " " end)};
+      .before as $b | ($t | address($b)) as $a
+      | if $a then .out += (.plain + $a[0] | controls | quoted) + $a[1]
+            + ($a[2] | gsub("[*]"; "&ast;") | gsub("_"; "&lowbar;")) + (if $stop == "" then "" else "<wbr>" end)
+          | .plain = $stop
+        else .plain += $t + $stop end
+      | .before = ($stop | controls | .[-1:]))
+    | .out + (.plain | controls | quoted);
+  def line: [scan("[^ ]+| +")] | to_entries
     | map(.key as $k | .value | if startswith(" ") then . else word($k == 0) end) | join("");
   def cell: line | table;
   def backticks($n): [range($n)] | map("`") | join("");

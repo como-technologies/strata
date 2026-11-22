@@ -5396,12 +5396,12 @@ fn each_script_that_writes_markdown_has_the_jq_functions_of_the_report_scripts()
     }
 }
 
-/// The criteria of #872, #890, #894, and #942: the jq functions of the scripts write each text as
-/// the helpers of `strata::text` do. So `cell` shows each mark of markdown of a quoted text as
-/// text, also two backticks. It keeps a run of `_` inside a word as it is. A `@name` of the text
+/// The criteria of #872, #890, #894, #942, and #983: the jq functions of the scripts write each
+/// text as the helpers of `strata::text` do. So `cell` shows each mark of markdown of a quoted text
+/// as text, also two backticks. It keeps a run of `_` inside a word as it is. A `@name` of the text
 /// notifies nobody, and a `#12` links to no issue. It keeps each bare address that GitHub surely
-/// links as it is. `line` keeps each `|`, and each function writes each control character and each
-/// mark of direction as a visible escape.
+/// links as it is, and ends its link before the escape after it. `line` keeps each `|`, and each
+/// function writes each control character and each mark of direction as a visible escape.
 #[test]
 fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
     use strata::text::{code_cell, code_span, html_text, markdown_cell, markdown_line};
@@ -5438,6 +5438,9 @@ fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
         common::ANSWER_CONTROLS,
         common::ANSWER_DIRECTION,
         "\u{1}\u{1f}\u{7f}\u{85}\u{9f} \u{61c}\u{200e}\u{200f}\u{202a}\u{2066}\u{2069} a\\nb ``\n``",
+        common::ANSWER_ADDRESS_LINES,
+        "https://a.example/b_*.\r(www.a.example/c)\u{202e} \u{1b}https://a.example/*d* \nhttps://a.example/*e*",
+        "f\u{1b}www.a.example/@g https://a.example/h~\t\u{1b}(https://a.example/i)\n https://localhost/j\nk\n",
         "",
     ] {
         for (function, helper) in helpers {
@@ -5460,6 +5463,7 @@ fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
     common::assert_answer_issues_as_text(&markdown_cell(common::ANSWER_ISSUES));
     common::assert_answer_addresses_as_they_are(&markdown_cell(common::ANSWER_ADDRESSES));
     common::assert_answer_controls_as_markdown(&markdown_cell(common::ANSWER_CONTROLS));
+    common::assert_answer_address_lines_as_markdown(&markdown_cell(common::ANSWER_ADDRESS_LINES));
 }
 
 /// The GitLab functions and the host block of `pr-comment.sh` are those of `verify-report.sh`, line

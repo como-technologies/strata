@@ -15,8 +15,9 @@ use serde_json::Value;
 
 mod terminal;
 
+use terminal::shows_no_text;
 pub(crate) use terminal::terminal_lines;
-pub use terminal::{DIRECTION_MARKS, terminal_text};
+pub use terminal::{DIRECTION_MARKS, direction_text, terminal_text};
 
 /// The name of an object, or its uid when Palette gives no name.
 pub fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
@@ -157,18 +158,17 @@ pub fn markdown_cell(s: &str) -> String {
 ///
 /// Each control character is the visible escape of [`terminal_text`], so a line end starts no new
 /// line. A bare address that GitHub surely links stays as it is, so its link goes to its target.
-/// Each other word is [`html_text`], with a `\` before each mark of markdown. It also gets a zero
-/// width space in each mention and each reference to an issue. So a text that strata quotes from
-/// an answer, such as a message of Palette, shows as text. A `@name` in it notifies nobody, and a
-/// `#12` in it links to no issue.
+/// The link ends before the escape after the address. Each other word is [`html_text`], with a
+/// `\` before each mark of markdown. It also gets a zero width space in each mention and each
+/// reference to an issue. So a text that strata quotes from an answer, such as a message of
+/// Palette, shows as text. A `@name` in it notifies nobody, and a `#12` in it links to no issue.
 ///
 /// GitHub links an address with a scheme only when no letter comes before the scheme. So a
 /// caller puts no letter right before the line. A `|` outside a table needs no escape, and a `\`
 /// before it stays in the link of an address. So the line keeps each `|` as it is.
 pub fn markdown_line(s: &str) -> String {
-    // each other white space of ASCII is a control character, so the escape leaves only the space
-    terminal_text(s)
-        .split_inclusive(' ')
+    // each other white space of ASCII is a control character, so a word ends only at a space
+    s.split_inclusive(' ')
         .enumerate()
         .map(|(i, piece)| {
             let word = piece.trim_end_matches(' ');
@@ -184,21 +184,50 @@ pub fn markdown_line(s: &str) -> String {
 /// as a space.
 pub const LINE_ENDS: [char; 2] = ['\n', '\r'];
 
+/// The tag of HTML between a bare address and the escape of a character right after it.
+///
+/// GitHub ends the link of a bare address only at a space or a `<`. Without the tag, the link
+/// holds the escape and the text after it, as in `https://example.com/a\nnext`. GitHub shows no
+/// character for the tag.
+pub const ADDRESS_END: &str = "<wbr>";
+
 /// `word`, a text with no space of ASCII, as markdown. `first` is true for the first word of the
 /// text, which can follow the text of the caller with no space.
 ///
-/// A bare address stays as it is. GitHub cuts the marks at the end of the address from the link,
-/// and a `\` before such a mark stays in the link. So a cut `*` is `&ast;` and a cut `_` is
-/// `&lowbar;`, and GitHub shows each one as text. HTML names no entity for a `~`. A cut `~` stays
-/// as it is, and GitHub shows it as text, as its markdown route shows.
+/// Each character that [`terminal_text`] escapes ends a part of the word. A part that is a bare
+/// address stays as it is, and [`ADDRESS_END`] comes after it when an escape follows. GitHub cuts
+/// the marks at the end of the address from the link, and a `\` before such a mark stays in the
+/// link. So a cut `*` is `&ast;` and a cut `_` is `&lowbar;`, and GitHub shows each one as text.
+/// HTML names no entity for a `~`. A cut `~` stays as it is, and GitHub shows it as text, as its
+/// markdown route shows. Each other text of the word is [`quoted_text`] of its escape.
 fn markdown_word(word: &str, first: bool) -> String {
-    let Some(link) = bare_address(word, first) else {
-        return quoted_text(word);
-    };
-    let cut = word[link.end..]
-        .replace('*', "&ast;")
-        .replace('_', "&lowbar;");
-    format!("{}{}{cut}", quoted_text(&word[..link.start]), &word[link])
+    let mut out = String::with_capacity(word.len());
+    let mut before = (!first).then_some(' ');
+    // `plain` is the start of the text that is no address, and that `out` does not hold yet
+    let mut plain = 0;
+    let mut start = 0;
+    for part in word.split_inclusive(shows_no_text) {
+        let text = part.strip_suffix(shows_no_text).unwrap_or(part);
+        if let Some(link) = bare_address(text, before) {
+            out.push_str(&quoted_text(&terminal_text(
+                &word[plain..start + link.start],
+            )));
+            out.push_str(&text[link.start..link.end]);
+            out.push_str(
+                &text[link.end..]
+                    .replace('*', "&ast;")
+                    .replace('_', "&lowbar;"),
+            );
+            if text.len() < part.len() {
+                out.push_str(ADDRESS_END);
+            }
+            plain = start + text.len();
+        }
+        before = terminal_text(&part[text.len()..]).chars().next_back();
+        start += part.len();
+    }
+    out.push_str(&quoted_text(&terminal_text(&word[plain..])));
+    out
 }
 
 /// `s` with the escapes of a quoted text that is no bare address. It is [`quoted_html`], with a
@@ -230,15 +259,17 @@ const WWW: &str = "www.";
 const LINK_CUTS: [char; 11] = ['?', '!', '.', ',', ':', '*', '_', '~', '\'', '"', ';'];
 
 /// The range of `word` that GitHub surely links as a bare address, or `None`. `word` is a text
-/// with no space of ASCII, and `first` is true when it starts the text.
+/// with no space of ASCII. `before` is the character of the markdown right before `word`, or
+/// `None` at the start of the text.
 ///
 /// The address starts with `https://` or `http://`, after an optional `(`, `"`, or `'`. Or it
-/// starts with `www.` after a `(`, or after a space when `first` is false. Its host has two
-/// labels or more of letters, digits, and `-` of ASCII, with a letter or a digit at each end of a
-/// label. The word holds only printable characters of ASCII, and no `<`. The markdown route of
-/// GitHub links each such address, with each mark and each `@` in it as text. The range ends where
-/// the link ends: see [`link_end`].
-fn bare_address(word: &str, first: bool) -> Option<std::ops::Range<usize>> {
+/// starts with `www.` after a `(`, or after a space. GitHub links no scheme right after a letter
+/// of ASCII, such as the `n` of the escape `\n`. Its host has two labels or more of letters,
+/// digits, and `-` of ASCII, with a letter or a digit at each end of a label. The word holds only
+/// printable characters of ASCII, and no `<`. The markdown route of GitHub links each such
+/// address, with each mark and each `@` in it as text. The range ends where the link ends: see
+/// [`link_end`].
+fn bare_address(word: &str, before: Option<char>) -> Option<std::ops::Range<usize>> {
     if !word.bytes().all(|b| b.is_ascii_graphic()) || word.contains('<') {
         return None;
     }
@@ -246,11 +277,12 @@ fn bare_address(word: &str, first: bool) -> Option<std::ops::Range<usize>> {
     let rest = &word[start..];
     let www = rest.starts_with(WWW)
         && if start == 0 {
-            !first
+            before == Some(' ')
         } else {
             word.starts_with('(')
         };
     let scheme = match SCHEMES.iter().find(|s| rest.starts_with(**s)) {
+        Some(_) if start == 0 && before.is_some_and(|c| c.is_ascii_alphabetic()) => return None,
         Some(s) => s.len(),
         None if www => WWW.len(),
         None => return None,

@@ -1215,6 +1215,20 @@ field, a value, an input, or an option is in the sections above.
   report and its lines of `--verbose` do it. A name, a state, a condition, an event, and the
   message of a check are such texts. Before, these lines wrote each text as it was. A line break
   of an event was a space, and now it is `\n`. The JSON form keeps each text as Palette gave it.
+- **A bare address in the markdown ends its link before the escape of a control character.** The
+  markdown writes the tag `<wbr>` between the address and the escape, as in
+  `https://example.com/a<wbr>\\nnext`. GitHub shows no character for the tag. Before, the link
+  held the escape and the text after it. An address right after an escape such as `\u{1b}` now
+  keeps its form. See [The markdown comment](./formats.md#the-markdown-comment).
+  - A script that reads the markdown as text must read the tag.
+  - `strata-preflight` writes its markdown in the same way.
+- **`--full` shows each line of the diff on its own line.** A line of the values or of a
+  manifest that ends with a carriage return and no line break now ends with `\r`, and the next
+  line of the diff starts a new line. Before, the next line came right after the `\r`. The field
+  `unified` of the JSON does not change.
+- **The HTML report of `strata-preflight` escapes each mark of the direction of a text.** It writes
+  U+202E as `\u{202e}`, as the terminal report and the markdown do. Before, the page wrote the
+  mark as it was, and a browser could show a name in another order.
 - **A ref that starts with `project:` and holds a `/` names its project.**
   `project:<project>/<ref>` reads the ref in that project. Before, strata read
   such a text as the path of a record file, and gave the error `io` when no file
@@ -1246,6 +1260,9 @@ field, a value, an input, or an option is in the sections above.
   is `\r`. The line of a closed issue, the line of an error, and the line that names a registry
   are lines. A cell of a table still writes `\|`. `observer-propose.sh` writes its markdown in the
   same way.
+- **`verify-report.sh` and `upstream-report.sh` end the link of a bare address before the escape
+  of a control character.** They write the tag `<wbr>` there, as the markdown form does.
+  `observer-propose.sh` writes its markdown in the same way.
 
 ### For a user of the library of strata
 
@@ -1264,6 +1281,10 @@ field, a value, an input, or an option is in the sections above.
 - `text::terminal_text` writes each mark of the direction of a text as a visible escape. The new
   `text::DIRECTION_MARKS` holds the marks. A caller that compares the text must compare the
   escapes.
+- `text::markdown_line` and `text::markdown_cell` write the tag of the new `text::ADDRESS_END`
+  between a bare address and the escape of a character after it. A caller that compares the text
+  with a quoted text must read the tag. The new `text::direction_text` writes only each mark of
+  direction as its escape.
 - `reference::Ref` has the new variant `InProject`, for
   `project:<project>/<ref>`. `Ref` has no `#[non_exhaustive]`, so a `match` on
   `Ref` with no wildcard arm must name it. `Ref::project` gives the project, and

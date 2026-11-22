@@ -89,7 +89,9 @@ in the same words: `catch <rate>, clean <rate>`.
 
 The terminal form, the markdown form, and the lines of `--verbose` write each
 control character of a text of Palette as a visible escape, such as `\u{1b}` for
-an ESC. A name, a state, and the message of an answer are such texts. See
+an ESC. A name, a state, and the message of an answer are such texts. The HTML
+form writes each mark of the direction of a text as its escape, such as
+`\u{202e}`. See
 [A control character of a text of Palette](../../reference/formats.md#a-control-character-of-a-text-of-palette).
 The JSON form keeps each text as Palette gave it.
 

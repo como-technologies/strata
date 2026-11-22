@@ -188,6 +188,12 @@ do not change. The diffs of `--full` and each fenced block of the markdown keep
 the line break at the end of each line. They escape each other control
 character.
 
+The diff library of `--full` also ends a line at a carriage return with no line
+break after it. So `--full` writes a line break after such a carriage return,
+on the terminal and in the markdown. Each line of the diff shows on its own
+line, with `\r` at its end. The field `unified` of the JSON keeps the text of
+the diff library.
+
 A line and a cell of the markdown write a `\` before the `\` of an escape, as
 before each `\` of a text. So GitHub shows the escape of the terminal. A code
 span, a fenced block, and the `<summary>` of a fold show the escape as it is:
@@ -195,7 +201,9 @@ see [The markdown comment](#the-markdown-comment).
 
 `strata-preflight` writes its terminal report, its markdown, and its lines of
 `--verbose` in the same way. A watch writes the note of each reading in the same
-way too.
+way too. A browser reads a mark of direction as a terminal does. So the HTML
+report of `strata-preflight` writes each mark of direction as its escape. It
+writes each control character as it is.
 
 Strata writes each `\` of a text as it is. So a text with the two characters
 `\n` and a text with a line break show the same. A `\` of a value or of a
@@ -293,6 +301,19 @@ GitHub ends the link before the marks at the end of an address, such as the
 markdown writes a `*` there as `&ast;`, and a `_` as `&lowbar;`. A `~` there
 stays as it is. Each other address, such as `https://localhost/`, keeps its
 escapes, and GitHub shows them in its link.
+
+An address ends at a space, and before the escape of a control character or of
+a mark of direction. GitHub ends a link only at a space or a `<`. So the
+markdown writes the tag `<wbr>` between the address and the escape, and GitHub
+shows no character for it. A text `see https://example.com/a`, a line break,
+and `next` give `` see https://example.com/a<wbr>\\nnext ``. The link holds only
+the address, and the text after it shows `\nnext`.
+
+An address can also start right after an escape. GitHub links a scheme only
+when no letter comes before it. So after `\n`, `\r`, or `\t`, the markdown
+keeps the escapes of the address, and GitHub makes no link. After an escape
+such as `\u{1b}`, the address keeps its form. GitHub makes no link of a `www.`
+right after an escape.
 
 A `|` ends a cell of a table. So a cell writes each `|` of a text as `\|`, also
 in an address. The table reads `\|` as `|` before it makes the link, so the link
