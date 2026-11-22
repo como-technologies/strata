@@ -40,7 +40,7 @@ const STATE: &str = "<!-- strata-report-state: ";
 pub const DONE_WHEN: &str = "Done when:";
 
 /// The criteria of a new issue, after the line [`DONE_WHEN`]. They are the steps of the page "What
-/// to do with a new value", each with the comment, the file, or the command that shows it.
+/// to do with a new value". Each item names the comment, the file, or the command that shows it.
 const ITEMS: &str = "\
 - [ ] A comment states where the value comes from: the answer of the lab that holds the value, or \
 why no answer holds it.\n\
@@ -174,9 +174,10 @@ fn title(set: &str, value: &str) -> String {
 }
 
 /// The criteria of the issue whose body was `old`: the text of `old` from the line [`DONE_WHEN`] to
-/// the end, with a line break after each line.
+/// the end.
 ///
-/// A new issue has no `old`. It gets the line and [`ITEMS`], and so does a body with no such line.
+/// Each line of the criteria ends with a line break. A new issue has no `old`. It gets the line and
+/// [`ITEMS`], and so does a body with no such line.
 fn criteria(old: Option<&str>) -> String {
     let kept: String = old
         .into_iter()
