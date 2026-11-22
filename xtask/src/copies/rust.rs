@@ -8,6 +8,7 @@
 //!
 //! A const gives its string, or each string of its array. A string of a const array is a const.
 
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use proc_macro2::{Delimiter, Spacing, TokenStream, TokenTree};
@@ -15,8 +16,8 @@ use syn::parse::ParseStream;
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{
-    Block, Expr, ImplItemConst, ImplItemFn, ItemConst, ItemEnum, ItemFn, ItemImpl, ItemMacro, Lit,
-    Pat, ReturnType, Signature, Type, Visibility,
+    Block, Expr, ImplItemConst, ImplItemFn, ItemConst, ItemEnum, ItemFn, ItemImpl, ItemMacro,
+    ItemStruct, Lit, Pat, ReturnType, Signature, Type, Visibility,
 };
 
 use super::keyword::Keyword;
@@ -32,7 +33,7 @@ const OPERATORS: [&str; 24] = [
 ];
 
 /// The macros whose table gives the texts of a closed set: `Variant => "text"`. True for a macro
-/// that implements a trait, so its texts reach the package.
+/// that implements a trait, so its texts reach where its type reaches.
 const TABLE_MACROS: [(&str, bool); 2] = [("impl_closed_set", true), ("impl_texts", false)];
 
 /// A value that a Rust file declares: a text of a closed set, or a string const.
@@ -147,41 +148,86 @@ fn attribute_length(trees: &[TokenTree]) -> usize {
     }
 }
 
-/// Read what the Rust source `text` declares. The error is the error of the parse.
+/// Read what the Rust source `text` declares.
+///
+/// The error is the error of the parse. It is also the error of a table of `impl_texts!` or of
+/// `impl_closed_set!` whose visibility does not parse, such as `pub(in 3)`.
 pub fn read(text: &str) -> Result<RustFile, String> {
     let file = syn::parse_file(text).map_err(|e| e.to_string())?;
+    let mut types = Types::default();
+    types.visit_file(&file);
     let mut reader = Reader {
         text,
         file: RustFile {
             tests: TestLines::of(&file),
             ..RustFile::default()
         },
+        types: types.0,
         trait_impl: false,
         self_type: None,
+        fault: None,
     };
     reader.visit_file(&file);
-    Ok(reader.file)
+    match reader.fault {
+        Some(fault) => Err(fault),
+        None => Ok(reader.file),
+    }
+}
+
+/// The name of the closed set of the name of a text, such as `Tier` of `Tier::Running`.
+pub fn set_of(name: &str) -> &str {
+    name.split("::").next().unwrap_or(name)
+}
+
+/// The scope of each enum and each struct of a file, by its name.
+#[derive(Default)]
+struct Types(BTreeMap<String, Scope>);
+
+impl<'ast> Visit<'ast> for Types {
+    fn visit_item_enum(&mut self, item: &'ast ItemEnum) {
+        self.0.insert(item.ident.to_string(), scope_of(&item.vis));
+    }
+
+    fn visit_item_struct(&mut self, item: &'ast ItemStruct) {
+        self.0.insert(item.ident.to_string(), scope_of(&item.vis));
+    }
 }
 
 /// The walk of the items of one file.
 struct Reader<'a> {
     text: &'a str,
     file: RustFile,
+    /// The scope of each type that the file declares, by its name.
+    types: BTreeMap<String, Scope>,
     /// True inside an `impl Trait for Type`.
     trait_impl: bool,
     /// The name of the type of the `impl` around the item, for `Self`.
     self_type: Option<String>,
+    /// The first item that the read cannot read.
+    fault: Option<String>,
 }
 
 impl Reader<'_> {
-    /// Note a value. A function of a trait impl reaches each file that names the type, so its texts
-    /// reach the package.
-    fn value(&mut self, name: String, value: String, line: usize, closed: bool, vis: &Visibility) {
-        let scope = if self.trait_impl {
-            Scope::Package
+    /// The scope of a value of an item with the visibility `vis`. A function or a const of a trait
+    /// impl reaches each file that names its type, so its value reaches where the type reaches.
+    fn scope(&self, vis: &Visibility) -> Scope {
+        if self.trait_impl {
+            self.type_scope(self.self_type.as_deref())
         } else {
             scope_of(vis)
-        };
+        }
+    }
+
+    /// Where the type `name` reaches: the scope of its declaration in the file. The check cannot
+    /// see the visibility of a type of another file, so such a type reaches the package.
+    fn type_scope(&self, name: Option<&str>) -> Scope {
+        name.and_then(|name| self.types.get(name))
+            .copied()
+            .unwrap_or(Scope::Package)
+    }
+
+    /// Note a value with the scope `scope`.
+    fn value(&mut self, name: String, value: String, line: usize, closed: bool, scope: Scope) {
         self.file.values.push(RustValue {
             name,
             value,
@@ -226,9 +272,10 @@ impl Reader<'_> {
             line: sig.fn_token.span.start().line,
             last: block.brace_token.span.close().end().line,
         });
+        let scope = self.scope(vis);
         let owner = self.self_type.as_deref();
         for (name, text, line) in match_table(block, owner, returns_str(&sig.output)) {
-            self.value(name, text, line, true, vis);
+            self.value(name, text, line, true, scope);
         }
     }
 }
@@ -253,34 +300,45 @@ impl<'ast> Visit<'ast> for Reader<'_> {
     }
 
     fn visit_item_enum(&mut self, item: &'ast ItemEnum) {
+        let scope = self.scope(&item.vis);
         for (name, text, line) in serde_names(item) {
-            self.value(name, text, line, true, &item.vis);
+            self.value(name, text, line, true, scope);
         }
     }
 
     fn visit_item_macro(&mut self, item: &'ast ItemMacro) {
         let name = item.mac.path.segments.last().map(|s| s.ident.to_string());
-        let Some((_, implements)) = TABLE_MACROS
+        let Some((table, implements)) = TABLE_MACROS
             .into_iter()
             .find(|(table, _)| name.as_deref() == Some(*table))
         else {
             return;
         };
-        let vis = item
-            .mac
-            .parse_body_with(visibility)
-            .unwrap_or(Visibility::Inherited);
+        let vis = match item.mac.parse_body_with(visibility) {
+            Ok(vis) => vis,
+            Err(e) => {
+                // the compiler refuses such a call, so the check gives its error
+                let line = e.span().start().line;
+                self.fault
+                    .get_or_insert_with(|| format!("line {line}: {table}!: {e}"));
+                return;
+            }
+        };
         let tokens = convert(item.mac.tokens.clone().into_iter().collect());
-        let trait_impl = std::mem::replace(&mut self.trait_impl, implements);
         for (name, value, line) in macro_table(&tokens) {
-            self.value(name, value, line, true, &vis);
+            // the table of a macro that implements a trait reaches where its type reaches
+            let scope = match implements {
+                true => self.type_scope(Some(set_of(&name))),
+                false => scope_of(&vis),
+            };
+            self.value(name, value, line, true, scope);
         }
-        self.trait_impl = trait_impl;
     }
 
     fn visit_item_const(&mut self, item: &'ast ItemConst) {
+        let scope = self.scope(&item.vis);
         for (text, line) in const_texts(&item.expr) {
-            self.value(item.ident.to_string(), text, line, false, &item.vis);
+            self.value(item.ident.to_string(), text, line, false, scope);
         }
         visit::visit_item_const(self, item);
     }
@@ -290,20 +348,22 @@ impl<'ast> Visit<'ast> for Reader<'_> {
             Some(owner) => format!("{owner}::{}", item.ident),
             None => item.ident.to_string(),
         };
+        let scope = self.scope(&item.vis);
         for (text, line) in const_texts(&item.expr) {
-            self.value(name.clone(), text, line, false, &item.vis);
+            self.value(name.clone(), text, line, false, scope);
         }
     }
 }
 
-/// The scope of an item with the visibility `vis`: `pub` and `pub(crate)` reach the package, and a
-/// private item reaches its module.
+/// The scope of an item with the visibility `vis`. `pub` reaches the package, and `pub(crate)` and
+/// `pub(in path)` reach the crate. A private item reaches its module.
 fn scope_of(vis: &Visibility) -> Scope {
     match vis {
         Visibility::Inherited => Scope::Module,
         Visibility::Restricted(r) if r.path.is_ident(Keyword::Super.as_str()) => Scope::Parent,
         Visibility::Restricted(r) if r.path.is_ident(Keyword::SelfValue.as_str()) => Scope::Module,
-        Visibility::Public(_) | Visibility::Restricted(_) => Scope::Package,
+        Visibility::Restricted(_) => Scope::Crate,
+        Visibility::Public(_) => Scope::Package,
     }
 }
 

@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::place::word_char;
+use super::routes::route;
 use super::source::{Source, Tree};
 use super::{ByValue, Hit, Holder, Place, shown};
 
@@ -13,6 +14,9 @@ const SHORTEST: usize = 3;
 
 /// The least count of letters of a plain value, such as `ok`.
 const SHORTEST_WORD: usize = 2;
+
+/// The end of the scheme of a URL, as in `https://`.
+const SCHEME_END: &str = "://";
 
 /// The lines that the change adds to a file, by its path.
 pub type Added<'a> = dyn Fn(&str) -> &'a BTreeSet<usize> + 'a;
@@ -36,17 +40,41 @@ pub fn counts(value: &str) -> bool {
     }
 }
 
-/// True when `value` stands in `text` as a whole: no character of a word touches an end of
-/// `value` that is itself such a character. So `read-error` is in `the read-error names`, and
-/// not in `read-errors`.
+/// True when `value` stands in `text` as a whole. An end of `value` that is a part of a word
+/// touches no other part of a word. So `read-error` is in `the read-error names`, and not in
+/// `read-errors`.
+///
+/// A dot between two characters of a word is a part of the word, as in a host name or a file
+/// name. So `k8s` is not in `registry.k8s.io`, and `www.` is not in `www.example.com`.
 fn holds_word(text: &str, value: &str) -> bool {
-    let first = value.chars().next().is_some_and(word_char);
-    let last = value.chars().last().is_some_and(word_char);
+    let chars: Vec<char> = text.chars().collect();
+    let length = value.chars().count();
     text.match_indices(value).any(|(at, _)| {
-        let before = text[..at].chars().last();
-        let after = text[at + value.len()..].chars().next();
-        (!first || !before.is_some_and(word_char)) && (!last || !after.is_some_and(word_char))
+        let start = text[..at].chars().count();
+        let end = start + length;
+        let joined = |left: usize| in_word(&chars, left) && in_word(&chars, left + 1);
+        !(start > 0 && joined(start - 1)) && !joined(end - 1)
     })
+}
+
+/// True when the character at `at` of `chars` is a part of a word. It is a character of a word,
+/// or a dot between two of them.
+fn in_word(chars: &[char], at: usize) -> bool {
+    let word = |at: Option<usize>| {
+        at.and_then(|at| chars.get(at))
+            .is_some_and(|c| word_char(*c))
+    };
+    match chars.get(at) {
+        Some('.') => word(at.checked_sub(1)) && word(Some(at + 1)),
+        Some(c) => word_char(*c),
+        None => false,
+    }
+}
+
+/// True for a value that counts only as the whole literal: a plain value, or a scheme of a URL
+/// such as `https://`. Each URL starts with a scheme, so a URL is no copy of it.
+fn whole_only(value: &str) -> bool {
+    is_plain(value) || value.ends_with(SCHEME_END)
 }
 
 /// The values of `values` that the literal `text` holds. A value with a mark, a capital, or a
@@ -54,13 +82,19 @@ fn holds_word(text: &str, value: &str) -> bool {
 /// with no more than spaces at its ends, such as `"newer "`. A plain word also counts beside one
 /// word that is a value and no plain word, such as `"drift DriftFound "`. So a phrase of plain
 /// words, such as `"newer version"`, is no copy.
+///
+/// A route is a copy only of the same route, also after a method: `GET /v1/packs` holds the value
+/// `/v1/packs`, and `/v1/packs/{uid}/diff` does not. So a route of another program, such as the
+/// observer, is no copy of a route of Palette with the same start.
 pub fn held<'a>(text: &str, values: &ByValue<'a>) -> BTreeSet<&'a str> {
     let alone = text.trim();
+    let text_route = route(text);
     let mut out: BTreeSet<&'a str> = values
         .keys()
-        .filter(|value| match is_plain(value) {
-            true => alone == **value,
-            false => holds_word(text, value),
+        .filter(|value| match route(value) {
+            Some(value_route) => text_route.as_ref() == Some(&value_route),
+            None if whole_only(value) => alone == **value,
+            None => holds_word(text, value),
         })
         .copied()
         .collect();

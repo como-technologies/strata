@@ -19,7 +19,7 @@
 
 mod fresh;
 mod go;
-pub(crate) mod go_lex;
+mod go_lex;
 mod hits;
 mod keyword;
 mod place;
@@ -53,7 +53,10 @@ pub enum Scope {
     Module,
     /// The module above its module, and each child of that module: `pub(super)`.
     Parent,
-    /// Its whole package tree: `pub` or `pub(crate)`, or a Go name with a capital letter.
+    /// Its crate: `pub(crate)`. The integration tests of a package are a crate of their own, so
+    /// such an item of the library does not reach them.
+    Crate,
+    /// Its whole package tree: `pub`, or a Go name with a capital letter.
     Package,
 }
 

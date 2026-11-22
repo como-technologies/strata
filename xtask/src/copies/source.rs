@@ -48,9 +48,11 @@ enum Parsed {
 }
 
 /// Read each Rust and Go file of the tree of the commit `head`.
+///
+/// The error names a file of the tree whose name is not UTF-8, as `just comment-words` does.
 pub fn read_tree(repo: &Path, head: &str) -> Result<Tree, String> {
-    let listing = git(repo, &["ls-tree", "-r", "-z", "--name-only", head])?;
-    let paths: Vec<&str> = listing.split('\0').filter(|p| !p.is_empty()).collect();
+    let listing = git_bytes(repo, &["ls-tree", "-r", "-z", "--name-only", head])?;
+    let paths = tree_paths(&listing)?;
     let mut roots: BTreeMap<Lang, Vec<String>> = BTreeMap::new();
     for path in &paths {
         for lang in Lang::ALL {
@@ -87,6 +89,39 @@ pub fn read_tree(repo: &Path, head: &str) -> Result<Tree, String> {
     Ok(build(parsed, &roots, &modules))
 }
 
+/// The names of `listing`, the output of `git ls-tree -z`. The check reads a Rust or a Go file, and
+/// the file at the root of a package tree. Another file with a name that is not UTF-8 is out.
+///
+/// The error names a file that the check reads and whose name is not UTF-8.
+pub fn tree_paths(listing: &[u8]) -> Result<Vec<&str>, String> {
+    let mut paths = Vec::new();
+    for name in listing
+        .split(|b| *b == b'\0')
+        .filter(|name| !name.is_empty())
+    {
+        match std::str::from_utf8(name) {
+            Ok(path) => paths.push(path),
+            Err(_) if !is_read(&String::from_utf8_lossy(name)) => {}
+            Err(_) => {
+                return Err(format!(
+                    "git ls-tree: the file name {} is not UTF-8",
+                    name.escape_ascii()
+                ));
+            }
+        }
+    }
+    Ok(paths)
+}
+
+/// True for the name of a file that the check reads. It is a Rust or a Go file, or the file at
+/// the root of a package tree.
+fn is_read(path: &str) -> bool {
+    Lang::of(path).is_some()
+        || Lang::ALL
+            .iter()
+            .any(|lang| path.ends_with(lang.root_file()))
+}
+
 /// The path and the text of each file of `paths` in the tree of `head`.
 fn archive(repo: &Path, head: &str, paths: &[&str]) -> Result<Vec<(String, String)>, String> {
     if paths.is_empty() {
@@ -96,16 +131,17 @@ fn archive(repo: &Path, head: &str, paths: &[&str]) -> Result<Vec<(String, Strin
     let mut args = vec!["--literal-pathspecs", "archive", "--format=tar", head, "--"];
     args.extend(paths);
     let bytes = git_bytes(repo, &args)?;
+    let archive_error = |e: std::io::Error| format!("git archive: {e}");
     let mut out = Vec::new();
     let mut tar = tar::Archive::new(bytes.as_slice());
-    for entry in tar.entries().map_err(|e| format!("git archive: {e}"))? {
-        let mut entry = entry.map_err(|e| format!("git archive: {e}"))?;
+    for entry in tar.entries().map_err(archive_error)? {
+        let mut entry = entry.map_err(archive_error)?;
         if !entry.header().entry_type().is_file() {
             continue;
         }
         let path = entry
             .path()
-            .map_err(|e| format!("git archive: {e}"))?
+            .map_err(archive_error)?
             .to_string_lossy()
             .into_owned();
         let mut text = String::new();
@@ -371,9 +407,7 @@ fn rust_holders(path: &str, root: &str, roots: &[String], file: &RustFile) -> Ve
             path: path.to_string(),
             line: value.line,
             kind: if value.closed {
-                // the name of a text of a closed set is `Set::Variant`
-                let set = value.name.split("::").next().unwrap_or(&value.name);
-                Kind::Text(set.to_string())
+                Kind::Text(rust::set_of(&value.name).to_string())
             } else {
                 Kind::Const
             },

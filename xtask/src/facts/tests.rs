@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use strata::api::Method;
+use strata::api::{Method, ROUTE_PREFIX};
 use strata_preflight::rule::Catalog;
 
 use super::check::{NOT_FACTS, check as faults_of, template_matches};
@@ -517,13 +517,17 @@ fn only_a_request_fact_has_a_request_and_each_request_fact_has_one() {
 
 #[test]
 fn a_request_must_be_a_method_and_a_path_under_v1() {
-    let mut sources = world();
-    sources.facts[0].request = Some("DELETE /v1/clusterprofiles/{uid}".to_string());
-    let found = faults_of(&sources);
-    assert!(
-        found.iter().any(|m| m.contains("must be GET or POST")),
-        "{found:#?}"
-    );
+    for request in [
+        "DELETE /v1/things/{uid}",
+        "GET /v2/things/{uid}",
+        "GET /v1things",
+    ] {
+        let mut sources = world();
+        sources.facts[0].request = Some(request.to_string());
+        let found = faults_of(&sources);
+        let fault = format!("must be GET or POST and a path under {ROUTE_PREFIX}");
+        assert!(found.iter().any(|m| m.ends_with(&fault)), "{found:#?}");
+    }
 }
 
 #[test]

@@ -67,6 +67,7 @@ mod palette;
 #[path = "../../tests/common/process.rs"]
 #[allow(dead_code)]
 mod process;
+mod quoted;
 // The match of a route of Palette with a pattern. The checks of the facts and of the stand-in use
 // it, and so does the change test of the catalog of strata-preflight. So the two keep one match.
 #[path = "../../tests/common/route.rs"]
@@ -85,6 +86,10 @@ mod sentences;
 mod server;
 #[cfg(test)]
 mod size;
+// The git repository of a test of a check of a change. The tests of `comment-words` and of `copies`
+// build their changes in it, so the two do each git step in one way.
+#[cfg(test)]
+mod test_repo;
 // The read of a table of the book. The check of the facts reads a row with it, and so do the
 // tests. So the check and the tests read a row in one way. The check uses no other helper of it.
 #[path = "../../tests/common/table.rs"]
