@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -121,13 +122,20 @@ func TestADirectoryThatAStoppedProcessLeftIsRemovedAtTheStart(t *testing.T) {
 	}
 }
 
-func TestTheStateHoldsTheFirstSightAndNoValue(t *testing.T) {
+// The state keeps the kind, the profile, and the pack keys of a finding. They are names, as the summary
+// shows them. It holds no value, no changed path, and no writer of the audit log.
+func TestTheStateHoldsEachFindingWithItsNamesAndNoValue(t *testing.T) {
 	r, w := edited(t)
 	o := r.observer(w)
-	once(t, o)
-	testkit.StateHoldsNone(t, r.state, sentinel, "charts.a.b", "Betty", "John", "csi-aws-ebs")
-	keepsFirstSight(t, r, model.FindingID(model.PublishedChanged, testkit.AWSStackProfile))
-	if state := readState(t, r); state.StartedAt != t0 {
+	s := once(t, o)
+	testkit.StateHoldsNone(t, r.state, sentinel, "charts.a.b", "Betty", "John")
+	id := model.FindingID(model.PublishedChanged, testkit.AWSStackProfile)
+	keepsFirstSight(t, r, id)
+	state := readState(t, r)
+	if f, k := s.Findings[0], state.Findings[id]; k.Kind != f.Kind || k.Profile != f.Profile || !slices.Equal(k.Packs, f.Packs) || len(k.Packs) == 0 || !k.LastSeen.Equal(t0) {
+		t.Errorf("the state keeps %+v of the finding %+v", k, f)
+	}
+	if state.StartedAt != t0 {
 		t.Errorf("state %+v", state)
 	}
 	if entries := entries(t, r.state); len(entries) != 1 || entries[0] != stateFile {

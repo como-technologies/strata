@@ -7,7 +7,9 @@
 // the API sends it. A set can name another set in a file `base`. A file that the set does not hold
 // then comes from the other set. The sets stale, lost, and first-seen use this, because they differ
 // from ok in cluster.json only. The sets stale-unchecked and lost-unchecked differ from first-load in
-// cluster.json only.
+// cluster.json only. The set lost-held names first-load too. It is a restart in an outage after the
+// finding of ok. The state holds the finding, and no content check of the new process ended well. So
+// the set holds that finding with unread true, and its event.
 //
 // The file images.json is the document of the pods, strata-observed/1. The set ok has pods that the
 // observer reads. The sets quiet, first-load, no-records, and read-error have pods that it does not read.
@@ -69,7 +71,8 @@ type State string
 
 // The states of the page that the dev server shows. Quiet, first-seen, and read-error are states of the
 // data, and the others are the values of `page`. The sets stale-unchecked and lost-unchecked are a page
-// that no content check has ended well for, as after a restart in an outage.
+// that no content check has ended well for, as after a restart in an outage. The set lost-held is
+// lost-unchecked with a finding that the state holds.
 const (
 	StateOK        State = "ok"
 	StateQuiet     State = "quiet"
@@ -81,6 +84,7 @@ const (
 
 	StateStaleUnchecked State = "stale-unchecked"
 	StateLostUnchecked  State = "lost-unchecked"
+	StateLostHeld       State = "lost-held"
 	StateReadError      State = "read-error"
 
 	// The states of the pods. Images and images-split hold a finding of an image. Images-off and
@@ -115,7 +119,7 @@ const (
 
 // States lists the sets, in the order that the recipe `observer-dev` names them.
 var States = []State{StateOK, StateQuiet, StateFirstLoad, StateNoRecords, StateStale, StateLost, StateFirstSeen,
-	StateStaleUnchecked, StateLostUnchecked, StateReadError, StateImages, StateImagesSplit, StateImagesOff, StateImagesUnread,
+	StateStaleUnchecked, StateLostUnchecked, StateLostHeld, StateReadError, StateImages, StateImagesSplit, StateImagesOff, StateImagesUnread,
 	StateAsks, StateTextTooLarge, StateAlerts, StateAlertsUnset, StateMovedDrift, StateMovedUnchecked, StateUpdateChecks,
 	StateProfileChecks}
 

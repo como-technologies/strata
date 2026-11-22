@@ -70,6 +70,11 @@ plain text. The route `/` serves the page of the dashboard.
   works when only one profile has that name.
 - `/v1/cluster` gives the fields of the summary up to `counts`. `page` has one value
   of [the page state](../development/observer.md#the-page-state).
+- A finding of `/v1/findings` holds `unread` true when no content cycle ended well since
+  the start, as after a restart in an outage. The finding then comes from the state, and
+  no check read it now. Its `impact` and its `who` are empty, and it
+  has no `images`. The field is absent after a good content cycle. An observer of 0.35.0
+  and before does not give it. See [The findings](../development/observer.md#the-findings).
 - A profile holds `status`, `published` and `clusterCopy` with their roots, its packs
   with their `status` and `flags`, its `findings`, and `who`. A profile with a newer
   published version also holds `newerVersion`: `version`, `created`, and `new`.

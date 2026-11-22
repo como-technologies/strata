@@ -1212,6 +1212,14 @@ field, a value, an input, or an option is in the sections above.
   that the cluster does not run, or a profile `newer` with a cause `pin-error`. The tile and the
   screen "Not checked" counted these causes. A check that reads the count of the filter must
   read the new count. See [Not checked](../development/observer.md#not-checked).
+- **The observer shows its findings after a restart in an outage.** The state
+  keeps the kind, the profile, and the packs of each finding. Before the first good content
+  cycle of the process, `findings` gives the findings of the state with `unread` true, and
+  `counts.findings` counts them. Before, the list was empty until a good content cycle. See [The
+  findings](../development/observer.md#the-findings).
+  - `once` exits 1 in place of 2 when the state holds a finding and no content cycle ends well.
+  - The page shows these findings under the bar of `lost` or `stale`, with the badge "Not read
+    now".
 
 ### For a user of the CI drop-ins
 

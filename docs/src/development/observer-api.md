@@ -280,6 +280,12 @@ then shows a splash with the error and the next step. A lost page shows "We lost
 from Palette", and a stale page shows "Checks stopped before one ended well". The nav shows `-`.
 No screen says "Nothing changed", "Nothing needs attention", or "All 0 packs current".
 
+The state can still hold findings from before the restart: see [The
+state](./observer.md#the-state). The overview and the screen Findings then show the bar of the
+state over the list "Needs attention", and no splash. Each finding of the list has the badge
+"Not read now", because no check of the new process read it. The nav counts these findings. The
+other screens show the splash. The first good check reads each finding again, and the badge goes.
+
 A page that holds no data and cannot reach the observer shows the splash "This page lost its
 line to the observer". The splash has the command `kubectl port-forward` and a button
 "Try now". With data on the page, the same fault stays an amber bar over that data.
@@ -434,7 +440,8 @@ scripts.
   no severity.
 - A pod that never started and a local image with no repository digest read "Not
   checked". They never read "OK".
-- `re-baseline needed` is beside a drift and does not replace it.
+- `re-baseline needed` is beside a drift and does not replace it. "Not read now" is beside it
+  too: the state holds the finding, and no check read it since the start.
 - `same-content` reads "Same content" on the row of the cluster copy. It is not
   a drift.
 - With no `--read-pods`, the nav item Images says "Off", as the nav item Alerts says
@@ -586,7 +593,7 @@ just observer-dev stale    # the set stale
 
 The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
-`first-seen`, `stale-unchecked`, `lost-unchecked`, and `read-error`. The other sets
+`first-seen`, `stale-unchecked`, `lost-unchecked`, `lost-held`, and `read-error`. The other sets
 are `images`, `images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`,
 `alerts`, `alerts-unset`, `moved-drift`, `moved-unchecked`, `update-checks`, and
 `profile-checks`. The server listens on `127.0.0.1:8080`. The flag `-listen` takes
@@ -609,6 +616,11 @@ the page are those of the data.
 - The sets `stale-unchecked` and `lost-unchecked` name `first-load` in a file
   `base`. They differ in `cluster.json` only. They show a page with no good
   content check.
+- The set `lost-held` names `first-load` in a file `base`. It is a restart in an outage
+  after the finding of `ok`. The state holds the finding, and no content check of the new
+  process ended well. So its `findings.json` holds that finding with `unread` true. A test
+  runs the observer through such a restart, and it makes sure that the set holds the
+  fields of the output.
 - The set `read-error` holds 3 profiles. One has a `verify` row that strata could
   not read, and one has a cluster side that it could not read. One has a move
   that it could not compare.

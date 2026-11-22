@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -142,5 +143,40 @@ func TestTheFindingsComeInTheOrderOfTheProfileAndTheKind(t *testing.T) {
 	want := []string{"a-stack@1.0.0 " + string(ClusterDiffers), "a-stack@1.0.0 " + string(PublishedChanged), "b-stack@1.0.0 " + string(PublishedChanged)}
 	if !slices.Equal(order, want) {
 		t.Fatalf("order %v", order)
+	}
+}
+
+// Before a good content cycle, the summary gives each finding of the state with unread true. The order is that of the
+// profile and the kind. An entry with no kind comes from the state of an older observer, and the summary does not give it.
+// A good content cycle gives its own findings, and none of them is unread.
+func TestBeforeAGoodContentCycleTheFindingsComeFromTheStateAndAreUnread(t *testing.T) {
+	csi := FindingID(PublishedChanged, testkit.AWSStackProfile)
+	kept := map[string]KeptFinding{
+		FindingID(Gone, testkit.AddonsProfile): {FirstSeen: t0, LastSeen: t0.Add(time.Hour), Kind: Gone, Profile: testkit.AddonsProfile},
+		csi:                                    {FirstSeen: t0, LastSeen: t0.Add(time.Hour), Kind: PublishedChanged, Profile: testkit.AWSStackProfile, Packs: []string{testkit.CSIKey}},
+		FindingID(ClusterDiffers, testkit.AWSStackProfile): {FirstSeen: t0.Add(-time.Hour), LastSeen: t0, Kind: ClusterDiffers, Profile: testkit.AWSStackProfile, Packs: []string{testkit.UbuntuKey}},
+		FindingID(Renamed, testkit.AWSStackNewer):          {FirstSeen: t0},
+	}
+	in := goodInput(nil, nil)
+	in.Content, in.ContentClock, in.Kept = nil, Clock{Every: testkit.ContentEvery}, kept
+	s := Build(in)
+	var order []string
+	for _, f := range s.Findings {
+		k := kept[f.ID]
+		if !f.Unread || f.ID != FindingID(f.Kind, f.Profile) || !f.FirstSeen.Equal(k.FirstSeen) || !f.LastSeen.Equal(k.LastSeen) || !slices.Equal(f.Packs, k.Packs) {
+			t.Errorf("finding %+v from %+v", f, k)
+		}
+		order = append(order, f.Profile+" "+string(f.Kind))
+	}
+	want := []string{testkit.AWSStackProfile + " " + string(ClusterDiffers), testkit.AWSStackProfile + " " + string(PublishedChanged), testkit.AddonsProfile + " " + string(Gone)}
+	if !slices.Equal(order, want) || s.Counts.Findings != 3 || len(s.Profiles) != 0 {
+		t.Fatalf("order %v, counts %+v", order, s.Counts)
+	}
+	c := content(t, drifted(aws(), &docs.Verify{}, testkit.CSIKey))
+	in = goodInput(&c, nil)
+	in.Kept = kept
+	s = Build(in)
+	if len(s.Findings) != 1 || s.Findings[0].ID != csi || s.Findings[0].Unread || !s.Findings[0].FirstSeen.Equal(t0) {
+		t.Errorf("after a good content cycle: findings %+v", s.Findings)
 	}
 }

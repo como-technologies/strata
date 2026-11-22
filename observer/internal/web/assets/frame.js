@@ -22,7 +22,7 @@ const inOrder = byKey => ORDER.filter(k => byKey[k]).map(k => byKey[k]);
 function navLinks(cur) {
   const c = D.cluster, n = c.counts;
   const sections = {
-    findings: ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${num(n.findings)}</span>`],
+    findings: ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${heldOnly() ? n.findings : num(n.findings)}</span>`],
     images: ["images", "Images", imagesCount()],
     newer: ["newer", "Newer versions", h`<span class="cnt">${versionsRead() ? num(n.newer) : "-"}</span>`],
     notchecked: ["notchecked", "Not checked", h`<span class="cnt">${num(n.notChecked)}</span>`],
@@ -172,7 +172,8 @@ function topBar(crumbs) {
 
 const crumbs = (...a) => a.map((x, i) => i === a.length - 1 ? h`<b>${x}</b>` : h`${x} <span>/</span> `);
 
-function alertBars() {
+// alertBars gives the bars over a screen. held says that the screen shows the findings that the state holds, as withChecks gives them.
+function alertBars(held = false) {
   const c = D.cluster, bars = [];
   const content = c.content;
   if (S.offline) {
@@ -180,8 +181,9 @@ function alertBars() {
   }
   const counts = content.checkedAt ? h`Counts below are from ${clock(content.checkedAt)}` : h`No check has ended well`;
   const failed = content.failedRuns > 0 ? h`The last ${content.failedRuns} ${plural(content.failedRuns, "check", "checks")} failed${content.lastError ? h`: ${errorWords(content.lastError)}` : ""}. ` : "";
-  // A page with nothing read tells its state in a splash. A page with a good check behind it keeps its data under a bar.
-  if (hasChecks()) {
+  // A page with nothing read tells its state in a splash. A page with a good check behind it keeps its data under a bar. A screen
+  // that shows only the findings of the state does the same.
+  if (hasChecks() || held) {
     switch (c.page) {
       case PAGE.LOST:
         bars.push(h`<div class="alertbar r">Lost contact with Palette. <span>${failed}${counts}, and no finding clears until a check proves it.</span></div>`);
@@ -256,18 +258,19 @@ const findingBadge = f => IMAGE_KINDS.includes(f.kind) ? badgeOf(IMAGE_FINDING_B
 // imageLab is the label of an image reference. A reference is long, so it can wrap.
 const imageLab = ref => h`<span class="lab wrap"><i>image=</i>"${ref}"</span>`;
 
-// findingLabs names what a finding is about: the images for a finding of the pods, else the packs.
-const findingLabs = f => IMAGE_KINDS.includes(f.kind) ? (f.images || []).map(imageLab) : f.packs.map(k => lab("pack", packName(k)));
+// findingLabs names what a finding is about: the images for a finding of the pods, else the packs. The state keeps no image
+// reference, so a finding of the pods that the state holds names its packs.
+const findingLabs = f => IMAGE_KINDS.includes(f.kind) && f.images ? f.images.map(imageLab) : f.packs.map(k => lab("pack", packName(k)));
 
 function findingsCard() {
   const rows = D.findings;
   const body = rows.length ? h`<div class="tw"><table><tbody>${rows.map(f => {
     const href = findingHref(f);
-    return h`<tr class="link" data-go="${href}"><td class="w90">${findingBadge(f)}${f.reBaselineNeeded ? h` <span class="badge y">re-baseline needed</span>` : ""}</td>
+    return h`<tr class="link" data-go="${href}"><td class="w90">${findingBadge(f)}${f.reBaselineNeeded ? h` <span class="badge y">re-baseline needed</span>` : ""}${f.unread ? h` <span class="badge y">${NOT_READ_NOW}</span>` : ""}</td>
       <td><div class="fw"><a href="${href}">${findingTitle(f)}</a></div><div>${lab("profile", f.profile)}${findingLabs(f)}</div><div class="mut small narrow-show">${ago(f.firstSeen)}</div></td>
       <td class="n mut small w60 nw narrow-hide">${ago(f.firstSeen)}</td></tr>`;
   })}</tbody></table></div>` : noFindings();
-  return h`<section class="card"><div class="chead"><h2>Needs attention <span class="sub">${known(rows.length)}</span></h2><a class="small" href="#findings">All findings</a></div>${body}</section>`;
+  return h`<section class="card"><div class="chead"><h2>Needs attention <span class="sub">${rows.length || known(0)}</span></h2><a class="small" href="#findings">All findings</a></div>${body}</section>`;
 }
 
 // objectLinks names the objects of an event. A profile or an image that the page holds is a link to its page.

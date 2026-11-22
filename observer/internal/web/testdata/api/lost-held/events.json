@@ -1,0 +1,5 @@
+{
+  "events": [
+    {"type":"drift","reason":"DriftFound","time":"2026-11-03T06:09:00Z","object":"fred-identity@2.3.0","message":"The published version differs from its record."}
+  ]
+}

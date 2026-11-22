@@ -22,7 +22,10 @@ func eventsAt(c *Content, v *Versions, firstSeen map[string]time.Time) []Event {
 // seenAt builds the summary of goodInput, with the first sight of each finding in firstSeen.
 func seenAt(c *Content, v *Versions, firstSeen map[string]time.Time) Summary {
 	in := goodInput(c, v)
-	in.FirstSeen = firstSeen
+	in.Kept = map[string]KeptFinding{}
+	for id, first := range firstSeen {
+		in.Kept[id] = KeptFinding{FirstSeen: first}
+	}
 	return Build(in)
 }
 

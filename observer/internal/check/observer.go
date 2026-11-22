@@ -185,7 +185,7 @@ func (o *Observer) RunContent(ctx context.Context) error {
 			o.content, o.contentAt = &content, &content.At
 			o.keepFirstDigests(content)
 			held = o.heldIDs(content)
-			o.keepFirstSeen(content, held)
+			o.keepFindings(content, held)
 			good = true
 		})
 	o.alertStep(ctx, good, held)
@@ -194,7 +194,7 @@ func (o *Observer) RunContent(ctx context.Context) error {
 
 // heldIDs gives the ids of the findings that this content cannot clear: the ones of a part that the
 // cycle could not read, and the ones that a file with no last record can hold. The caller reads it
-// before keepFirstSeen changes the first sights.
+// before keepFindings changes the findings of the state.
 func (o *Observer) heldIDs(content model.Content) map[string]bool {
 	held := map[string]bool{}
 	for _, id := range model.HeldIDs(content) {
@@ -324,17 +324,13 @@ func errorRefOf(err error) model.ErrorRef {
 	return model.ErrorRef{Kind: docs.KindUnknown}
 }
 
-// keepFirstSeen keeps the first sight of each finding of a good cycle, and drops the others. The ids in
-// held keep their first sights too, because only a read that works clears a finding. This holds also
+// keepFindings keeps each finding of a good cycle with its first sight, and drops the others. The ids in
+// held keep what the state holds too, because only a read that works clears a finding. This holds also
 // when the process has no last answer in memory.
-func (o *Observer) keepFirstSeen(content model.Content, held map[string]bool) {
-	kept := map[string]FindingState{}
+func (o *Observer) keepFindings(content model.Content, held map[string]bool) {
+	kept := map[string]model.KeptFinding{}
 	for _, f := range model.FindingsOf(content, o.state.Images.First) {
-		seen, ok := o.state.Findings[f.ID]
-		if !ok {
-			seen = FindingState{FirstSeen: content.At.UTC().Truncate(time.Second)}
-		}
-		kept[f.ID] = seen
+		kept[f.ID] = model.Keep(f, o.state.Findings[f.ID].FirstSeen, content.At)
 	}
 	for id := range held {
 		if seen, ok := o.state.Findings[id]; ok {
@@ -404,10 +400,6 @@ func (o *Observer) save() {
 
 // input collects what Build reads. The caller holds the lock.
 func (o *Observer) input() model.Input {
-	firstSeen := make(map[string]time.Time, len(o.state.Findings))
-	for id, f := range o.state.Findings {
-		firstSeen[id] = f.FirstSeen
-	}
 	return model.Input{
 		Now: o.now(), ClusterUID: o.cfg.ClusterUID, StartedAt: o.state.StartedAt,
 		Files: o.files, FilesKnown: o.filesKnown,
@@ -415,7 +407,7 @@ func (o *Observer) input() model.Input {
 		ContentClock:  model.Clock{Every: o.cfg.ContentEvery, Last: o.contentAt, FailedRuns: o.state.Content.FailedRuns, LastError: o.state.Content.LastError, Running: o.runningOf(cycleContent)},
 		Versions:      o.versions,
 		VersionsClock: model.Clock{Every: o.cfg.VersionsEvery, Last: o.versionsAt, FailedRuns: o.state.Versions.FailedRuns, LastError: o.state.Versions.LastError, Running: o.runningOf(cycleVersions)},
-		FirstSeen:     firstSeen,
+		Kept:          o.state.Findings,
 		ReadPods:      o.pods != nil,
 		FirstDigests:  o.state.Images.First,
 	}
