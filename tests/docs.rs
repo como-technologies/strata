@@ -12,14 +12,15 @@ use std::path::{Path, PathBuf};
 
 use common::{
     CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, MOST_WORDS, block_sentences, cells, code_of,
-    code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in, marks_of, one_line,
-    recipe, repo_file, schema, script, sentences, table_rows, toml_entries, toml_table, toml_value,
-    version_of, walk, without_code, without_link_targets, word_faults,
+    code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in, go_line, marks_of,
+    one_line, recipe, repo_file, schema, script, sentences, table_rows, toml_entries, toml_table,
+    toml_value, version_of, walk, without_code, without_link_targets, word_faults,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute};
 use strata::content::canonical_json;
 use strata::ops::ConsumerKind;
+use strata::reference::version::compare;
 use strata::reference::{
     APP_PROFILE_PREFIX, CLUSTER_GROUP_PREFIX, CLUSTER_PREFIX, EDGE_HOST_PREFIX, PACK_PREFIX,
 };
@@ -56,15 +57,25 @@ fn linked(text: &str, prefix: &str) -> Vec<String> {
     out
 }
 
+/// The part of `text` from the first `from` up to the first `to` after it, or up to the end. The
+/// search for `to` starts after `from`, so `from` can start with `to`, as `"\n## A\n"` does.
 fn section<'a>(text: &'a str, from: &str, to: Option<&str>) -> &'a str {
     let start = text
         .find(from)
         .unwrap_or_else(|| panic!("the page has no {from:?} heading"));
     let rest = &text[start..];
-    match to.and_then(|t| rest.find(t)) {
-        Some(end) => &rest[..end],
+    match to.and_then(|t| rest[from.len()..].find(t)) {
+        Some(end) => &rest[..from.len() + end],
         None => rest,
     }
+}
+
+#[test]
+fn a_section_ends_at_the_first_end_after_its_heading_also_when_the_heading_starts_with_the_end() {
+    let page = "# Page\n\n## One\ntext\n## Two\nmore\n";
+    assert_eq!(section(page, "\n## One\n", Some("\n## ")), "\n## One\ntext");
+    assert_eq!(section(page, "## One", Some("\n## ")), "## One\ntext");
+    assert_eq!(section(page, "## Two", Some("\n## ")), "## Two\nmore\n");
 }
 
 #[test]
@@ -2397,6 +2408,56 @@ fn each_cache_and_the_state_of_a_session_are_in_a_folder_that_the_session_can_wr
         "A session sets no `GOCACHE`, no `GOPATH`, and no `XDG_STATE_HOME`.".to_string(),
     ] {
         assert!(page.contains(&needle), "changes.md lacks {needle:?}");
+    }
+}
+
+/// The value of the build argument `name` of `dockerfile`: the text after `ARG name=`.
+fn build_arg<'a>(dockerfile: &'a str, name: &str) -> &'a str {
+    let line = format!("ARG {name}=");
+    dockerfile
+        .lines()
+        .find_map(|l| l.strip_prefix(line.as_str()))
+        .unwrap_or_else(|| panic!("the Dockerfile sets no {name}"))
+}
+
+/// The session image sets `GOTOOLCHAIN=local`, so its Go stops at a module whose `go` line names a
+/// newer Go (#945). The test compares `GO_VERSION` with the `go` line of each `go.mod` that Git
+/// tracks. It also reads the step of the book that changes the two together.
+#[test]
+fn the_go_of_the_session_image_is_not_older_than_the_go_line_of_each_module() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let image = code_of("deploy/session/Dockerfile");
+    let go = build_arg(&image, "GO_VERSION");
+    assert!(
+        image.contains("GOTOOLCHAIN=local"),
+        "the session image downloads the Go that a module needs"
+    );
+
+    // the observer and the counter of the live example
+    let modules = tracked_files(root, &[":(glob)**/go.mod"]);
+    assert!(modules.len() >= 2, "{modules:?}");
+    let mut newer = Vec::new();
+    for module in &modules {
+        let path = module.strip_prefix(root).unwrap().display();
+        let text = read(module);
+        let needs = go_line(&text).unwrap_or_else(|| panic!("{path} has no go line"));
+        if compare(go, needs).is_lt() {
+            newer.push(format!("{path} needs go >= {needs}"));
+        }
+    }
+    assert!(
+        newer.is_empty(),
+        "the session image has Go {go}, and {newer:?}: change GO_VERSION and GO_SHA256 of its \
+         Dockerfile"
+    );
+
+    let changes = read(&docs().join("development/changes.md"));
+    let page = one_line(section(&changes, "\n## The session image\n", Some("\n## ")));
+    for needle in [
+        "When a pull request changes the `go` line of a `go.mod`, change `GO_VERSION` and `GO_SHA256` in the same pull request.",
+        "The test fails when `GO_VERSION` is older than the `go` line of a module that Git tracks.",
+    ] {
+        assert!(page.contains(needle), "changes.md lacks {needle:?}");
     }
 }
 

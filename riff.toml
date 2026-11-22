@@ -4,7 +4,7 @@
 [session]
 # The session image, pinned by its digest. The workflow "Session image" builds it from
 # deploy/session/.
-image = "ghcr.io/como-technologies/strata-session@sha256:dde84f80c4e7eff5cd8ff9324e76f0207de2403c9a5c13b2660aaa6b1ff9ecdc"
+image = "ghcr.io/como-technologies/strata-session@sha256:1fb19de3fa6641b41bff35eafc2189fa333e66a21ec52994860e30705dea74c2"
 
 # The package sources that the auto mode of each session trusts: the hosts of crates.io.
 sources = ["crates.io", "index.crates.io", "static.crates.io"]
