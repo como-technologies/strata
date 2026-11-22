@@ -410,6 +410,17 @@ fn the_go_tokens_decode_each_text_and_keep_its_lines() {
 }
 
 #[test]
+fn unquote_gives_the_bytes_of_one_whole_text_in_quotes() {
+    assert_eq!(
+        go_lex::unquote("\"caf\\303\\251 \\\"\\t\\351\"").unwrap(),
+        b"caf\xc3\xa9 \"\t\xe9"
+    );
+    for wrong in ["caf.rs", "\"a\" b", "\"open", "\"\\q\""] {
+        assert!(go_lex::unquote(wrong).is_err(), "{wrong}");
+    }
+}
+
+#[test]
 fn a_go_file_gives_its_consts_its_tables_its_structs_its_functions_and_its_aliases() {
     let file = go::read(
         "package model\n\nimport (\n\t\"fmt\"\n\tm \"example.com/m/names\"\n)\n\n\

@@ -19,7 +19,7 @@
 
 mod fresh;
 mod go;
-mod go_lex;
+pub(crate) mod go_lex;
 mod hits;
 mod keyword;
 mod place;

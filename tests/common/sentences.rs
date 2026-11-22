@@ -91,7 +91,8 @@ pub struct Marks {
 pub fn marks_of(path: &str) -> Option<Marks> {
     let name = path.rsplit('/').next().unwrap_or(path);
     let (line, block) = match name.rsplit_once('.').map(|(_, extension)| extension) {
-        Some("rs" | "go" | "js") => (Some("//"), true),
+        // `ql` is a query of CodeQL
+        Some("rs" | "go" | "js" | "ql") => (Some("//"), true),
         Some("css") => (None, true),
         Some("sh" | "yml" | "yaml" | "toml" | "tf" | "hcl" | "jq" | "service" | "timer") => {
             (Some("#"), false)
