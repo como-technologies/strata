@@ -136,9 +136,9 @@ body shows the same state: the lines, the reports, the releases of strata, and t
 list holds 20 items at most. The state of an older service can hold the lists `palette` and
 `refusals`. The service reads such a state and ignores those lists.
 
-- The body ends with the criteria of the issue: the line `Done when:`, and an item for each step of
-  [What to do with a new value](./facts.md#what-to-do-with-a-new-value). Each issue of strata has
-  such a line: see [The issue](./changes.md#the-issue).
+- The body ends with the criteria of the issue: the line `Done when:` and its items. The items are
+  the steps of [What to do with a new value](./facts.md#what-to-do-with-a-new-value). Each issue of
+  strata has such a line: see [The issue](./changes.md#the-issue).
 - A later report of the value changes the body of the issue. It writes no comment, so it sends no
   notification.
 - A later report writes the body again up to the line `Done when:`, and keeps the text from that
