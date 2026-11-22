@@ -12,7 +12,7 @@ use strata::api::codes::{
     OPERATION_FORBIDDEN_CODE, PACKS_IN_CONFLICT_CODE, PROFILE_EXISTS_CODE,
     UPGRADE_NOT_SUPPORTED_CODE,
 };
-use strata::api::{MASKED, Method, PROJECT_UID_HEADER};
+use strata::api::{JSON_TYPE, MASKED, Method, PROJECT_UID_HEADER};
 use strata::closed_set::ClosedSet;
 use strata::model::cloud::Cloud;
 use strata::model::pack_state::PackState;
@@ -2125,7 +2125,7 @@ fn tenant_sh_diagnose_saves_what_holds_a_cluster_without_keeping_its_kubeconfig(
         |key: &str| std::fs::read_to_string(root.path().join("routes/sent").join(key)).unwrap();
     let kubeconfig_request = sent("GET_v1_spectroclusters_c-1_assets_kubeconfig.request");
     assert!(
-        !kubeconfig_request.contains("application/json"),
+        !kubeconfig_request.contains(JSON_TYPE),
         "asked for JSON, Palette answers {{\"Reader\":{{}}}} instead of the kubeconfig: {kubeconfig_request}"
     );
     let events_request = sent("GET_v1_events_components_spectrocluster_c-1.request");

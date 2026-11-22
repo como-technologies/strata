@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::Value;
-use strata::api::{API_KEY_HEADER, PROJECT_UID_HEADER};
+use strata::api::{API_KEY_HEADER, JSON_TYPE, PROJECT_UID_HEADER};
 
 /// The reason phrase of each answer. HTTP gives the phrase no meaning, and no client reads it.
 const REASON: &str = "Stand-in";
@@ -94,15 +94,14 @@ pub struct HttpAnswer {
 }
 
 impl HttpAnswer {
-    /// An answer with `status` and the JSON text `body`.
+    /// An answer with `status` and the JSON text `body`, of the type [`JSON_TYPE`].
     ///
-    /// The type is the text of `JSON_TYPE` of `src/api/http.rs`, which is not public. The
-    /// integration tests of strata, `strata-preflight`, and `xtask` include this file. They can name
-    /// only a public item of strata, so this file keeps its own copy.
+    /// Each package that includes this file can name a public item of strata. So the file names the
+    /// type of the library, and keeps no copy of it.
     pub fn json(status: u16, body: impl Into<Vec<u8>>) -> HttpAnswer {
         HttpAnswer {
             status,
-            kind: "application/json",
+            kind: JSON_TYPE,
             body: body.into(),
         }
     }
