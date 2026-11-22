@@ -50,8 +50,8 @@ leaf_version=$(jq -r --arg n "$leaf" '.packs[] | select(.name == $n) | .version'
 [ -n "$leaf" ] || die "$R@1.0.0 has no oci pack to read as a leaf"
 
 summary() {
-  write_summary "knurl adapter test" ", profile \`$N@$V\`," \
-    "leaf \`$leaf $leaf_version\`, two archives \`$two $two_version\`."
+  write_summary "knurl adapter test" ", profile $(md span "$N@$V")," \
+    "leaf $(md span "$leaf $leaf_version"), two archives $(md span "$two $two_version")."
 }
 trap summary EXIT
 

@@ -103,7 +103,7 @@ EOF
 }
 
 summary() {
-  write_summary "the observer on kind" ", cluster \`$C\`, image \`$image\`, revision \`$revision\`."
+  write_summary "the observer on kind" ", cluster $(md span "$C"), image $(md span "$image"), revision $(md span "$revision")."
 }
 # the port-forward and the kind cluster go at the end, also when a check stops the script
 cleanup() {

@@ -30,7 +30,7 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "registry-move check" ". Move profile 1.0.0 \`${M1:-}\`, 1.0.1 \`${M2:-}\`."
+  write_summary "registry-move check" ". Move profile 1.0.0 $(md span "${M1:-}"), 1.0.1 $(md span "${M2:-}")."
 }
 trap summary EXIT
 

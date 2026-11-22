@@ -48,8 +48,8 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "image digest test" ", cluster \`${C:-}\`," \
-    "add-on \`${AD:-}\`, image \`$image\`, digest \`$digest\`."
+  write_summary "image digest test" ", cluster $(md span "${C:-}")," \
+    "add-on $(md span "${AD:-}"), image $(md span "$image"), digest $(md span "$digest")."
 }
 trap summary EXIT
 

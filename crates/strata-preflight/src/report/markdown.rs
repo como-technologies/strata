@@ -1,6 +1,6 @@
 //! The markdown form of a report: a pull request comment.
 
-use strata::text::{code_block, code_span, markdown_cell, plural};
+use strata::text::{code_block, code_span, markdown_cell, markdown_line, plural};
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, FAILED_REQUESTS, FailedRequest, Report, SectionScore, pct};
@@ -18,7 +18,7 @@ pub fn markdown(r: &Report) -> String {
     // to the source
     out.push_str(&format!(
         "## strata-preflight: {} cluster {}\n\n",
-        markdown_cell(&r.subject.cloud),
+        markdown_line(&r.subject.cloud),
         code_span(r.subject.name_or_dash())
     ));
     out.push_str(&format!(
@@ -40,7 +40,7 @@ pub fn markdown(r: &Report) -> String {
     if s.not_run > 0 {
         out.push_str(&format!(
             "\n{}\n",
-            markdown_cell(&not_run_text(&s.not_run_reasons))
+            markdown_line(&not_run_text(&s.not_run_reasons))
         ));
     }
     out.push_str(&format!("\n{}\n", written_text(&r.options)));
@@ -85,7 +85,7 @@ fn failed_request_section(failed: &[FailedRequest<'_>]) -> String {
         out.push_str(&format!(
             "{} {}.\n\n",
             code_span(&f.request),
-            markdown_cell(&f.stopped_text())
+            markdown_line(&f.stopped_text())
         ));
         // the messages quote the body of the answer
         out.push_str(&code_block("text", &f.messages.join("\n")));
