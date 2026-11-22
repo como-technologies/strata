@@ -7,7 +7,7 @@ use crate::api::{MemoryApi, RawCluster, ReadErrors};
 use crate::closed_set::ClosedSet;
 use crate::model::registry_kind::RegistryKind;
 use crate::model::scope::ProfileScope;
-use crate::reference::{LATEST, Ref};
+use crate::reference::{LATEST, Ref, in_project};
 
 fn listing() -> Value {
     json!({"items": [
@@ -831,7 +831,7 @@ fn a_uid_that_palette_does_not_have_and_that_is_a_profile_name_gives_its_version
         id: id.to_string(),
         version: None,
     };
-    for (reference, refs, latest) in [
+    let cases = [
         (
             uid("aws-stack"),
             "aws-stack@1.0.0, aws-stack@1.9.0, aws-stack@1.10.0",
@@ -842,7 +842,19 @@ fn a_uid_that_palette_does_not_have_and_that_is_a_profile_name_gives_its_version
             "aws-stack@1.0.0@draft, aws-stack@1.9.0@draft, aws-stack@1.10.0@draft",
             "aws-stack@latest@draft",
         ),
-    ] {
+    ];
+    // a ref in a project gets each ref in that project, so a copy of one reads there
+    let in_dev = |r: &str| in_project("dev", r);
+    let in_dev_cases = cases.clone().map(|(reference, refs, latest)| {
+        let refs: Vec<String> = refs.split(", ").map(in_dev).collect();
+        let reference = Ref::InProject {
+            project: "dev".into(),
+            reference: Box::new(reference),
+        };
+        (reference, refs.join(", "), in_dev(latest))
+    });
+    let cases = cases.map(|(reference, refs, latest)| (reference, refs.into(), latest.into()));
+    for (reference, refs, latest) in cases.into_iter().chain(in_dev_cases) {
         let err = read(&reference, "aws-stack").unwrap_err();
         assert_eq!(err.kind(), "usage", "{err}");
         assert_eq!(
@@ -854,7 +866,7 @@ fn a_uid_that_palette_does_not_have_and_that_is_a_profile_name_gives_its_version
             )
         );
     }
-    assert_eq!(api.calls(PROFILE_LISTING), 2);
+    assert_eq!(api.calls(PROFILE_LISTING), 4);
     // a name that no profile has keeps the 404 of Palette
     let err = read(&uid("barney"), "barney").unwrap_err();
     assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
@@ -871,7 +883,7 @@ fn a_uid_that_palette_does_not_have_and_that_is_a_profile_name_gives_its_version
     };
     let err = read(&named, "aws-stack").unwrap_err();
     assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
-    assert_eq!(api.calls(PROFILE_LISTING), 3);
+    assert_eq!(api.calls(PROFILE_LISTING), 5);
 }
 
 #[test]
@@ -890,10 +902,34 @@ fn the_project_of_a_text_is_the_project_with_that_uid_else_the_project_with_that
     assert_eq!(palette.project_uid_of("p-other").unwrap(), "p-other");
     let err = palette.project_uid_of("staging").unwrap_err();
     assert!(
-        matches!(&err, Error::ProjectNotFound { name, available }
+        matches!(&err, Error::ProjectNotFound { name, available, .. }
             if name == "staging" && available == &["p-prod", "prod"]),
         "{err}"
     );
     // a name of the listing is no uid for --project-name
     assert!(palette.project_uid_named("p-other").is_err());
+}
+
+#[test]
+fn a_project_that_no_project_has_is_named_as_a_uid_for_a_text_of_a_uid_and_else_as_a_name() {
+    let api = MemoryApi::new().with(
+        PROJECT_LISTING,
+        json!({"items": [{"metadata": {"name": "prod", "uid": "64f20000000000000000a0d2"}}]}),
+    );
+    let palette = Palette::new(api);
+    let uid = "64f20000000000000000a0ff";
+    let words = |err: Error| err.to_string().split(" that ").next().unwrap().to_string();
+    assert_eq!(
+        words(palette.project_uid_of("staging").unwrap_err()),
+        "no project named 'staging'"
+    );
+    assert_eq!(
+        words(palette.project_uid_of(uid).unwrap_err()),
+        format!("no project with the uid '{uid}'")
+    );
+    // --project-name reads a name, also a text with the form of a uid
+    assert_eq!(
+        words(palette.project_uid_named(uid).unwrap_err()),
+        format!("no project named '{uid}'")
+    );
 }

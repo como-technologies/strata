@@ -1,0 +1,5 @@
+$ strata same-release project:dev/aws-stack@1.1.1 project:prod/aws-stack@1.1.1
+strata: looking up project dev
+strata: fetching profile 64e4000000000000000000c3
+strata: looking up project prod
+strata: error: several profiles in this scope are named 'aws-stack' with version '1.1.1': 64e1000000000000000000c3 (project), 64e4000000000000000000c3 (tenant); give the uid in place of the name

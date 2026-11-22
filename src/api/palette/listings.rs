@@ -15,9 +15,10 @@ use super::{
 };
 use crate::api::{AuditKind, PaletteApi};
 use crate::closed_set::ClosedSet;
-use crate::error::{Error, Result, served};
+use crate::error::{Error, Identifier, Result, served};
 use crate::json::{arr, items, opt_text, str_at, take_array, text};
 use crate::model::registry_kind::RegistryKind;
+use crate::model::uid::looks_like_uid;
 use crate::reference::one_named;
 
 impl<A: PaletteApi> Palette<A> {
@@ -54,7 +55,7 @@ impl<A: PaletteApi> Palette<A> {
     /// [`Error::ProjectNotFound`] when no project has the name. Each error of the request.
     pub fn project_uid_named(&self, name: &str) -> Result<String> {
         let listing = self.project_listing()?;
-        uid_of_project_named(&named_entries(&listing), name)
+        uid_of_project_named(&named_entries(&listing), name, Identifier::Name)
     }
 
     /// The uid of the project that `text` names, from [`Palette::project_listing`]. Call it at
@@ -66,7 +67,8 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// # Errors
     ///
-    /// [`Error::ProjectNotFound`] when no project has the uid or the name. Each error of the
+    /// [`Error::ProjectNotFound`] when no project has the uid or the name. Its message names a
+    /// text with the form of a uid as a uid, and each other text as a name. Each error of the
     /// request.
     pub fn project_uid_of(&self, text: &str) -> Result<String> {
         let listing = self.project_listing()?;
@@ -74,7 +76,12 @@ impl<A: PaletteApi> Palette<A> {
         if projects.iter().any(|(_, uid)| uid == text) {
             return Ok(text.to_string());
         }
-        uid_of_project_named(&projects, text)
+        let by = if looks_like_uid(text) {
+            Identifier::Uid
+        } else {
+            Identifier::Name
+        };
+        uid_of_project_named(&projects, text, by)
     }
 
     /// The uid of the one cluster named `name` in the scope.
@@ -388,12 +395,18 @@ impl<A: PaletteApi> Palette<A> {
 ///
 /// # Errors
 ///
-/// [`Error::ProjectNotFound`] when no project has the name. It lists the names of `projects`.
-fn uid_of_project_named(projects: &[(String, String)], name: &str) -> Result<String> {
+/// [`Error::ProjectNotFound`] when no project has the name. It lists the names of `projects`, and
+/// its message names `name` as `by` says.
+fn uid_of_project_named(
+    projects: &[(String, String)],
+    name: &str,
+    by: Identifier,
+) -> Result<String> {
     match projects.iter().find(|(n, _)| n == name) {
         Some((_, uid)) => Ok(uid.clone()),
         None => Err(Error::ProjectNotFound {
             name: name.to_string(),
+            by,
             available: sorted_names(projects),
         }),
     }

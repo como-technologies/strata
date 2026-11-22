@@ -1,0 +1,8 @@
+$ strata consumers project:prod/64e1000000000000000000c3
+aws-stack@1.1.1 (uid 64e1000000000000000000c3): no consumers
+  searched:
+    consumer list    no clusters, no cluster templates
+    cluster search   1 other cluster with the profile: 0 on this version, 1 on other versions
+    cluster groups   none pins the version
+    edge hosts       none found
+  scope: project profile, so only project prod can use it

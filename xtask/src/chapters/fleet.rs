@@ -1,5 +1,6 @@
 //! The chapters of the fleet, the registries, and the retire of a version. `projects.rs` holds the
-//! chapter of the projects, and `retire.rs` holds the chapters of the retire.
+//! chapter of the projects, and `retire.rs` holds the chapters of the retire. `two_contents.rs`
+//! holds the chapter of one version label with two contents.
 
 use super::edits::{OCI_CSI, RETAIN};
 use super::ids::{
@@ -13,6 +14,7 @@ use serde_json::json;
 
 mod projects;
 mod retire;
+mod two_contents;
 
 /// Run the chapters of the fleet, the registries, and the retire of a version.
 pub(super) fn run(r: &mut Runner) {
@@ -21,6 +23,7 @@ pub(super) fn run(r: &mut Runner) {
     fleet(r);
     same_names(r);
     projects::projects(r);
+    two_contents::two_contents(r);
     packs(r);
     palette_latest(r);
     behind_pre_release(r);

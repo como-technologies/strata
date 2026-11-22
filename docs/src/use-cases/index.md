@@ -84,6 +84,9 @@ identity. The uid is, in the project that holds it.
 - [Environments in the projects of one tenant](./projects.md): each environment
   is a project of one tenant, and a question about dev and prod reads two
   projects.
+- [One version label holds two contents](./two-contents.md): a project holds a
+  copy of a version of the tenant, with its name and its version, and another
+  content.
 - [Find the profiles that carry a pack](./find-a-pack.md): a pack version has a
   security problem, and you need every profile and cluster that carries it.
 

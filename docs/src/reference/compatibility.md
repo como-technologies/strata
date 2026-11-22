@@ -1221,6 +1221,13 @@ field, a value, an input, or an option is in the sections above.
   was there. A file at that path stays a file. A refusal of the key in that
   project is the new kind `project-denied`, which names the project. See
   [Refs](./refs.md) and [Errors](./errors.md).
+  - When no project of the key has the text of the project, the error is
+    `project-not-found`. For a text with the form of a uid, its message reads
+    `no project with the uid '<text>'`. For each other text, it reads
+    `no project named '<text>'`.
+  - A ref in a project with no version, such as `project:dev/aws-stack`, is
+    `usage`. Its message lists each version as a ref in that project, such as
+    `project:dev/aws-stack@1.1.0`.
 - **The filter "Not checked" of the observer shows more profiles.** It shows each profile that a
   cause of "Not checked" names. Before, it showed a profile only when the profile was
   `not-checked` or `no-record`, or when a pack of it was `not-checked`. It did not show a record
@@ -1272,6 +1279,11 @@ field, a value, an input, or an option is in the sections above.
   client of that project. `api::project_uid_of` finds the uid of the project.
 - `error::Error` has the new variant `ProjectDenied`. A `match` on `Error` with
   no wildcard arm must name it.
+- `error::Error::ProjectNotFound` has the new field `by`, an `error::Identifier`.
+  `Identifier::Name` gives the message `no project named`, and `Identifier::Uid`
+  gives `no project with the uid`. Code that builds the variant must give the
+  field. A pattern of the variant with no `..` must name it. The JSON of the
+  error does not change.
 
 ## Release 0.35.0: changes that need action
 

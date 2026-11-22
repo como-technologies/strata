@@ -8024,3 +8024,66 @@ fn the_headers_of_route_bodies_sh_and_upstream_report_sh_keep_to_the_limits() {
         assert_no_faults(&faults);
     }
 }
+
+// ---- one version label with two contents (#629) -------------------------------------------------
+
+/// The use case of one version label with two contents.
+const TWO_CONTENTS_PAGE: &str = "use-cases/two-contents.md";
+
+/// The start of the name of each output of the chapter `two-contents` of the runner.
+const TWO_CONTENTS_OUTPUTS: &str = "two-contents-";
+
+/// The criterion of #629: the use case shows the problem, the commands, the output, and the fix.
+/// It includes each output of the chapter `two-contents`, and its fix names the seed of the
+/// state after the fix. It links the live run of the behavior of Palette that it shows.
+#[test]
+fn the_use_case_of_one_label_with_two_contents_shows_the_problem_the_commands_the_output_and_the_fix()
+ {
+    let page = read(&docs().join(TWO_CONTENTS_PAGE));
+    for heading in ["## The problem", "## The fix", "## What to do"] {
+        assert!(
+            page.contains(&format!("\n{heading}\n")),
+            "{TWO_CONTENTS_PAGE} has no heading {heading:?}"
+        );
+    }
+    // the problem is two roots under one label, and the fix gives the cluster one root
+    let different = docs().join("output/two-contents-different.txt");
+    let text = read(&different);
+    assert!(text.contains("\nDIFFERENT "), "{text}");
+    let fixed = read(&docs().join("output/two-contents-fixed.txt"));
+    assert!(fixed.contains(" IDENTICAL\n"), "{fixed}");
+    let folder = different.parent().expect("the folder of the outputs");
+    let mut outputs: Vec<String> = std::fs::read_dir(folder)
+        .expect("the outputs of the book")
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|name| name.starts_with(TWO_CONTENTS_OUTPUTS))
+        .collect();
+    outputs.sort();
+    assert!(outputs.len() > 5, "{outputs:?}");
+    for output in &outputs {
+        let include = format!("{{{{#include ../output/{output}}}}}");
+        assert!(
+            page.contains(&include),
+            "{TWO_CONTENTS_PAGE} does not include {output}"
+        );
+    }
+    let fix = section(&page, "\n## The fix\n", Some("\n## "));
+    assert!(fix.contains("`just playground two-contents-2`"), "{fix}");
+    assert!(
+        page.contains("live-runs.md#scopesh)"),
+        "{TWO_CONTENTS_PAGE} does not link the live run of the scope of a version"
+    );
+}
+
+/// The use case of one version label with two contents keeps to the limits and the words of "The
+/// style rules".
+#[test]
+fn the_use_case_of_one_label_with_two_contents_keeps_to_the_style_rules() {
+    let page = read(&docs().join(TWO_CONTENTS_PAGE));
+    let mut faults = Vec::new();
+    for block in blocks_of(&page) {
+        faults.extend(block_faults(TWO_CONTENTS_PAGE, &block));
+        faults.extend(wording_faults(TWO_CONTENTS_PAGE, &block));
+    }
+    assert_no_faults(&faults);
+}

@@ -168,6 +168,8 @@ clusters. A label also selects them: see [Find the fleet from Palette](./fleet.m
   `releases/1.1.0/prod.json`.
 - When a name means two objects, give the uid: see
   [The same names in two projects](./same-names.md).
+- When a project holds a copy of a version of the tenant with another content,
+  see [One version label holds two contents](./two-contents.md).
 - [What the live example verifies](../development/live-runs.md#projectssh)
   holds the live check of the flags and of the refs in two projects of one
   tenant.

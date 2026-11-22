@@ -9,14 +9,15 @@ use strata::Error;
 use strata::api::codes::Denial;
 use strata::api::{Method, project_uid_named};
 use strata::config::Config;
-use strata::reference::{FILTER_PREFIX, PACK_PREFIX, PROJECT_PREFIX, TAG_PREFIX};
+use strata::error::Identifier;
+use strata::reference::{DRAFT_SUFFIX, FILTER_PREFIX, PACK_PREFIX, PROJECT_PREFIX, TAG_PREFIX};
 use strata::term::progress::Progress;
 
 use crate::common::{
-    PROJECT_LISTING, Run, Stand, UID_A, UID_B, against_closed_port, command_names, error_body,
-    manifests_route, no_manifests, no_variables, profile_document, profile_route,
-    project_denied_message, project_listing, serve_tenants, strata_command, template,
-    variables_route,
+    PROFILE_LISTING, PROJECT_LISTING, Run, Stand, UID_A, UID_B, against_closed_port, command_names,
+    error_body, listed, manifests_route, no_manifests, no_variables, profile_document,
+    profile_route, project_denied_message, project_listing, serve_tenants, strata_command,
+    template, variables_route,
 };
 
 /// The uids of the projects `dev` and `prod` of the stand-in.
@@ -417,6 +418,7 @@ fn a_ref_in_a_project_that_no_visible_project_has_is_project_not_found_with_the_
     let missing = in_project("staging", UID_A);
     let not_found = Error::ProjectNotFound {
         name: "staging".into(),
+        by: Identifier::Name,
         available: vec!["dev".into(), "prod".into()],
     };
     for args in ref_commands(&missing, UID_B) {
@@ -427,6 +429,69 @@ fn a_ref_in_a_project_that_no_visible_project_has_is_project_not_found_with_the_
             stand.asked(),
             [(PROJECT_LISTING.to_string(), None)],
             "{args:?}: the lookup is the one request"
+        );
+    }
+}
+
+#[test]
+fn the_message_of_a_project_that_no_visible_project_has_names_a_name_or_a_uid_as_the_text_is() {
+    let stand = tenant_stand();
+    let cases = [
+        ("staging", "no project named 'staging' ".to_string()),
+        (UID_B, format!("no project with the uid '{UID_B}' ")),
+    ];
+    for (project, words) in cases {
+        for args in ref_commands(&in_project(project, UID_A), UID_B) {
+            let r = stand.run(&args);
+            assert_eq!(r.code, 2, "{args:?}");
+            assert!(r.err.contains(&words), "{args:?}: {}", r.err);
+        }
+    }
+    // --project-name reads a name, also a text with the form of a uid
+    let r = stand.run(&["snapshot", UID_A, "--project-name", UID_B]);
+    assert_eq!(r.code, 2);
+    let words = format!("no project named '{UID_B}' ");
+    assert!(r.err.contains(&words), "{}", r.err);
+}
+
+#[test]
+fn a_ref_in_a_project_with_no_version_lists_each_version_as_a_ref_in_that_project() {
+    let mut routes = tenant();
+    routes.insert(
+        PROFILE_LISTING.to_string(),
+        json!({"items": [listed("aws-stack", UID_A)]}),
+    );
+    let stand = Stand::new(routes, ENV_PROJECT);
+    let usage = Error::Usage {
+        message: String::new(),
+    };
+    let name = in_project("dev", "aws-stack");
+    let draft = in_project("dev", &format!("aws-stack{DRAFT_SUFFIX}"));
+    let commands = [
+        vec!["snapshot", name.as_str()],
+        vec!["compare", &name, UID_B],
+        vec!["compare", UID_B, &name],
+        vec!["same-release", UID_B, &name],
+        vec!["consumers", &name, "--list-only"],
+        vec!["snapshot", &draft],
+    ];
+    for args in commands {
+        let r = stand.run(&[&args[..], &["--json"]].concat());
+        assert_eq!(r.code, 2, "{args:?}: {}", r.err);
+        let e = error_of(&r);
+        assert_eq!(e["kind"], usage.kind(), "{args:?}: {e}");
+        let message = e["message"].as_str().unwrap();
+        // each ref of the message names the project, as the ref of the command does
+        let suffix = if args.contains(&draft.as_str()) {
+            DRAFT_SUFFIX
+        } else {
+            ""
+        };
+        let version = in_project("dev", &format!("aws-stack@1.0.0{suffix}"));
+        let latest = in_project("dev", &format!("aws-stack@latest{suffix}"));
+        assert!(
+            message.contains(&format!("versions: {version}. Or give {latest}, ")),
+            "{args:?}: {message}"
         );
     }
 }

@@ -323,7 +323,9 @@ impl Error {
     /// than one.
     fn put_lookup_fields(&self, m: &mut Map<String, Value>) {
         match self {
-            Error::ProjectNotFound { name, available } => {
+            Error::ProjectNotFound {
+                name, available, ..
+            } => {
                 put(m, "name", name.as_str());
                 put(m, "available", available.clone());
             }

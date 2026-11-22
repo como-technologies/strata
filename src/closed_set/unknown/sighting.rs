@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::TOOL_VERSION;
 use crate::api::ROUTE_PREFIX;
+use crate::model::uid::looks_like_uid;
 use crate::reference::version;
 use crate::text::cut_with;
 
@@ -29,9 +30,6 @@ const LONGEST_ROUTE: usize = 200;
 
 /// The mark at the end of a value that [`shown`] cut.
 const CUT_MARK: &str = "...";
-
-/// The fewest characters of a uid. A uid of Palette has 24 hexadecimal digits, and a UUID has more.
-const UID_LENGTH: usize = 24;
 
 /// One unknown value that Palette gave: where it came from, and what it is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -135,12 +133,6 @@ pub(super) fn route_fault(route: &str) -> Option<String> {
 /// break.
 fn is_route_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '.' | '{' | '}')
-}
-
-/// True when `segment` is as long as a uid and holds only hexadecimal digits and hyphens. A word
-/// of a route holds other letters, and a placeholder such as `{uid}` holds braces.
-fn looks_like_uid(segment: &str) -> bool {
-    segment.len() >= UID_LENGTH && segment.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
 /// What is wrong with the text `text` of the field `name`, or `None`. A field of this kind is not

@@ -20,6 +20,7 @@ pub(crate) use json::{ErrorDocument, MESSAGE_AT};
 
 pub use class::FailureClass;
 use hint::{answer_words, status_hint};
+pub use words::Identifier;
 use words::{at_version, list_or_none, pending_ref, profile_not_found_hint, with_tag};
 
 /// Everything that can go wrong in the library.
@@ -169,14 +170,18 @@ pub enum Error {
         /// The names of the profiles applied to the cluster, in order.
         applied: Vec<String>,
     },
-    /// A project name matches no project the key can see.
+    /// A project name, or the uid of a ref `project:<project>/<ref>`, matches no project the key
+    /// can see.
     #[error(
-        "no project named '{name}' that this key can see; projects: {}",
+        "no project {} that this key can see; projects: {}",
+        by.words(name),
         list_or_none(available)
     )]
     ProjectNotFound {
-        /// The name asked for.
+        /// The text asked for: a name, or a uid.
         name: String,
+        /// What `name` is. The message names it as a name or as a uid.
+        by: Identifier,
         /// The names of the projects the key can see, in order.
         available: Vec<String>,
     },

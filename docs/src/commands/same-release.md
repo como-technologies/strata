@@ -51,6 +51,11 @@ uid or a name:
 Each ref names its own project, so a chain of three projects needs no record
 file. The project of a ref has priority over each flag.
 
+A project can hold a copy of a version of the tenant, with its name and its
+version. Then the name in that project names two versions, and strata refuses
+it. Give the uid of the copy, as in `project:prod/<uid>`: see
+[One version label holds two contents](../use-cases/two-contents.md).
+
 ## Which pairs pass
 
 | Result | Cause | Passes |

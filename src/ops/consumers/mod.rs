@@ -478,7 +478,7 @@ where
     let uid = uid_of_ref(read, uid_hint, &home, progress).map_err(denied)?;
     progress.note(&format!("listing consumers of profile {uid}"));
     let doc = home
-        .or_name_with_no_version(read, home.profile_document(&uid))
+        .or_name_with_no_version(reference, home.profile_document(&uid))
         .map_err(denied)?;
 
     let mut list = listed_consumers(&doc, &uid, &home, &mut clients, &mut connect);

@@ -182,6 +182,14 @@ A ref names the thing that a command reads.
     {{#include ../output/projects-ref-missing.txt}}
     ```
 
+    A text with the form of a uid has 24 characters or more, and holds only
+    hexadecimal digits and hyphens. The message names such a text as a uid, and
+    each other text as a name:
+
+    ```text
+    {{#include ../output/projects-ref-missing-uid.txt}}
+    ```
+
   - A ref with no `project:` reads in the configured project, or in the project
     of a flag. The project of a ref has priority over each flag.
   - The record keeps the ref as typed in `source.ref`, and the uid of the
@@ -234,6 +242,13 @@ each version of the name as a ref, and names `<name>@latest`:
 A ref with `@draft` gets each ref with `@draft`, such as
 `aws-stack@1.1.1@draft`. When no profile has the name either, the error stays
 `api`, with the code `ResourceNotFound` of Palette.
+
+A ref in a project gets each ref in that project, so a copy of a listed ref
+reads there too:
+
+```text
+{{#include ../output/projects-ref-no-version.txt}}
+```
 
 ## Which commands take which refs
 
