@@ -212,7 +212,8 @@ adds to the Rust files and the Go files. A package tree is the directory of a
 
 The check reads a word of capital letters as the method of a route, so it keeps
 no list of the methods. `strata::api::Method` holds only the methods that strata
-sends, and a script of a test also sends `PUT`, `PATCH`, and `DELETE`.
+sends. The live scripts also send `PUT`, `PATCH`, and `DELETE`, and their tests
+name these requests.
 
 A finding is one of these:
 
@@ -245,8 +246,8 @@ A literal of the kind 1 is a copy only of a value that its file can name:
 
 - A private Rust item reaches its module and the children of its module. A
   `pub(crate)` item reaches its crate, and a `pub` item reaches its package.
-- The integration tests in `tests/` are a crate of their own. So they reach
-  only a `pub` item of the library, and only they reach an item of their own.
+- The integration tests in `tests/` are a crate of their own. They reach only
+  a `pub` item of the library, and an item of the tests reaches only the tests.
 - The table of `impl_closed_set!` and the texts of a function of a trait impl,
   such as `fmt` of `Display`, reach where their type reaches. A file that names
   the type can call the trait. When the file does not declare the type, they
@@ -259,8 +260,9 @@ A literal of the kind 1 is a copy only of a value that its file can name:
 
 A value that strata defines has one owner. A value of the world outside strata
 is no copy, also when a value of strata has the same text. Such a value is a
-part of a URL or of a host name, the name of a program such as `bash`, a word
-of a sentence, or a key of a document of Palette. The check finds two of them:
+part of a URL or of a host name, or the name of a program, such as `bash`. It
+can also be a word of a sentence, or a key of a document of Palette. The check
+knows two kinds of them, and they are no findings:
 
 - A dot between two characters of a word is a part of the word, as in a host
   name or a file name. So `k8s` is no value of `registry.k8s.io`.

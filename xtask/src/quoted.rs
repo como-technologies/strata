@@ -105,7 +105,7 @@ mod tests {
     }
 
     /// The criterion of #960. The read gives the count of the chars of the text and of its end
-    /// quote, so the lexer goes on after the text.
+    /// quote, so the lexer can read the token after the text.
     #[test]
     fn the_read_of_a_text_gives_its_bytes_and_its_length_with_the_end_quote() {
         let chars: Vec<char> = "a\\x41é\" rest".chars().collect();
