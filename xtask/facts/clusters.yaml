@@ -1336,6 +1336,21 @@ facts:
     code:
       - src/snapshot/pack.rs
 
+  # ---- clusters.md: One pack in two profiles of a cluster
+
+  - id: cluster-one-pack-two-profiles
+    kind: behavior
+    reads:
+      codes:
+        - ClusterProfilePacksInConflict
+        - DuplicateClusterPacksForbidden
+    stand_in: []
+    unchecked: The code of Palette shows the refusal of the edit in place and of the move. The checks in-place-refused, validate-names-duplicate, and move-refused of platform.sh have no result yet.
+    pages:
+      - internals/palette/clusters.md#one-pack-in-two-profiles-of-a-cluster
+    code:
+      - src/api/codes.rs
+
   # ---- clusters.md: What the cluster listing answers
 
   - id: cluster-listing-array

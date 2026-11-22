@@ -5,11 +5,27 @@
 # is left, 1 while anything is, 2 when the cloud cannot be asked.
 #
 #   examples/live/inventory.sh
+#   examples/live/inventory.sh --platform
+#
+# --platform reads wilma of platform.sh instead, on AWS. `platform.sh inventory` runs it so, with the
+# state of terraform-platform/. It also counts what its workloads, its zone, and the policy of its nodes
+# leave.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
-vars=$(echo '{cloud = var.cloud, region = var.region, project = var.gcp_project, a = var.cluster_name, b = var.second_cluster_name}' \
-  | "$here/tf.sh" console 2>&1) || { echo "inventory: cannot read the variables: $vars" >&2; exit 2; }
+case "${1:-}" in
+  "") query='{cloud = var.cloud, region = var.region, project = var.gcp_project, a = var.cluster_name, b = var.second_cluster_name}' ;;
+  --platform)
+    query='{region = var.region, a = var.cluster_name, domain = var.domain, role = var.node_role_name, policy = var.node_policy_name}'
+    ;;
+  *) echo "inventory: the one option is --platform" >&2; exit 2 ;;
+esac
+vars=$(echo "$query" | "$here/tf.sh" console 2>&1) || { echo "inventory: cannot read the variables: $vars" >&2; exit 2; }
 get() { sed -n "s/^ *\"*$1\"* *= *\"\(.*\)\"$/\1/p" <<<"$vars"; }
+if [ -n "${1:-}" ]; then
+  echo "== aws, cluster $(get a)"
+  exec "$here/aws-inventory.sh" "$(get a)" "$(get region)" --kubernetes-tags --csi-volumes \
+    --zone "$(get domain)" --role-policy "$(get role):$(get policy)"
+fi
 cloud=$(get cloud)
 
 code=0

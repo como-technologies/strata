@@ -1,0 +1,21 @@
+# The pins of wilma. `examples/live/platform.sh pins` reads the registry of each pack, and the mark
+# `# behind`, from this file. It writes terraform.tfvars (gitignored) with the version and the type
+# of each pack, as the tenant lists them. A pack with the mark pins the version before the newest,
+# so that `strata behind` has rows. When a registry here does not hold the pack, pins names the
+# registries that do: change the line, and run pins again.
+packs = {
+  cert-manager              = { registry = "Public Repo", version = "", type = "" } # behind
+  vault                     = { registry = "Palette Registry", version = "", type = "" }
+  external-secrets-operator = { registry = "Palette Community Registry", version = "", type = "" }
+  kyverno                   = { registry = "Public Repo", version = "", type = "" }
+  envoy-gateway             = { registry = "Public Repo", version = "", type = "" }
+  external-dns              = { registry = "Bitnami", version = "", type = "" } # behind
+  cloudnative-pg            = { registry = "Palette Community Registry", version = "", type = "" } # behind
+  keycloak                  = { registry = "Bitnami", version = "", type = "" }
+  argo-cd                   = { registry = "Public Repo", version = "", type = "" } # behind
+  prometheus-operator       = { registry = "Public Repo", version = "", type = "" }
+  grafana                   = { registry = "Bitnami", version = "", type = "" } # behind
+  loki                      = { registry = "Palette Community Registry", version = "", type = "" }
+  fluentbit                 = { registry = "Public Repo", version = "", type = "" }
+  crossplane                = { registry = "Public Repo", version = "", type = "" }
+}

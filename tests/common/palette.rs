@@ -237,6 +237,11 @@ pub fn cluster_variables_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}/variables")
 }
 
+/// The kubeconfig of the cluster `uid`, which `api.sh get-kubeconfig` reads.
+pub fn cluster_kubeconfig_route(uid: &str) -> String {
+    format!("{}/assets/kubeconfig", cluster_route(uid))
+}
+
 /// The role bindings of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/rbacs`.
 pub fn cluster_rbacs_route(uid: &str) -> String {
     format!("{}/config/rbacs", cluster_route(uid))
