@@ -74,12 +74,15 @@ impl fmt::Display for ProfileScope {
     }
 }
 
+/// The pointer of the annotation in which a document names the uid of its project.
+pub(crate) const PROJECT_UID_AT: &str = "/metadata/annotations/projectUid";
+
 /// The project that the document `doc` names in `metadata.annotations.projectUid`, or empty text
 /// when it names none.
 ///
 /// A profile of a project names its project there, and so do a cluster and an app deployment.
 pub(crate) fn project_of_document(doc: &Value) -> &str {
-    str_at(doc, "/metadata/annotations/projectUid")
+    str_at(doc, PROJECT_UID_AT)
 }
 
 /// A profile uid with its scope, when strata could read it.
