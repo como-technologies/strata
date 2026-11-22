@@ -36,7 +36,7 @@ fn colorize(text: &str, p: &Paint) -> String {
 ///
 /// The diff library ends a line at such a carriage return too, so the next line of the diff comes
 /// right after it. With the line break, the terminal and the markdown show each line of the diff
-/// on its own line, and [`terminal_lines`] writes the carriage return as `\r` at its end.
+/// on its own line. [`terminal_lines`] writes the carriage return as `\r` at the end of the line.
 fn break_lone_returns(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();

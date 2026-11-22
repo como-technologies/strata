@@ -1,7 +1,7 @@
 //! A text of an answer with tags of HTML, one with the marks of markdown, and one with mentions
-//! of GitHub. Also a text with references to issues of GitHub, one with bare addresses, one with
-//! an address at the end of a line, one with control characters, and one with a mark of
-//! direction. The checks that a markdown output shows each such tag, mark, mention, and reference
+//! of GitHub. Also a text with references to issues of GitHub, and one with bare addresses. Three
+//! more texts hold an address at the end of a line, control characters, and a mark of direction.
+//! The checks that a markdown output shows each such tag, mark, mention, and reference
 //! as text, and each such address as it is. The checks that a terminal output and a markdown
 //! output show each such control character as a visible escape.
 //!

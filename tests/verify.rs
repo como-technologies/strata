@@ -18983,8 +18983,8 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_each_control_character_of_a_mes
     }
 }
 
-/// The criterion of #983: a bare address at the end of a line of a message of Palette ends its link
-/// before the escape of the line break, in a note and in a verdict.
+/// The criterion of #983: a message of Palette has a bare address at the end of a line. In a note
+/// and in a verdict, the link of the address ends before the escape of the line break.
 #[test]
 fn the_markdown_of_a_note_and_of_a_verdict_ends_the_link_of_an_address_before_the_escape_of_a_line_break()
  {
@@ -18993,9 +18993,9 @@ fn the_markdown_of_a_note_and_of_a_verdict_ends_the_link_of_an_address_before_th
     }
 }
 
-/// The criterion of #983: a line of the values of a pack ends with a carriage return and no line
-/// break, and the diff library ends a line of the diff there. `--full` on the terminal and in the
-/// markdown shows each line of the diff on its own line, with `\r` at the end of the line.
+/// The criterion of #983: a line of the values of a pack ends with a lone carriage return. The diff
+/// library ends a line of the diff there. On the terminal and in the markdown, `--full` shows each
+/// line of the diff on its own line. The line ends with `\r`.
 #[test]
 fn the_diff_of_full_shows_each_line_of_the_diff_on_its_own_line_after_a_lone_carriage_return() {
     let dir = tempfile::tempdir().unwrap();

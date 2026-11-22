@@ -410,9 +410,9 @@ mod tests {
         let _ = BTreeMap::<String, String>::new();
     }
 
-    /// The criterion of #983: the page writes each mark of the direction of a text of Palette as a
-    /// visible escape, as the terminal and the markdown do. The texts are the name of the cluster
-    /// and the message of a check.
+    /// The criterion of #983: the page writes each mark of direction of a text of Palette as a
+    /// visible escape. The terminal and the markdown do the same. The texts are the name of the
+    /// cluster and the message of a check.
     #[test]
     fn the_page_shows_each_mark_of_the_direction_of_a_text_of_palette_as_an_escape() {
         use crate::answer_tags::{ANSWER_DIRECTION, ANSWER_DIRECTION_AS_TEXT};
