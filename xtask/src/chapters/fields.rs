@@ -36,6 +36,7 @@ pub(super) fn run(r: &mut Runner) {
     cluster_and_group(r);
     app_profile(r);
     profile(r);
+    cluster_variables(r);
     registries_and_packs(r);
     audit_log(r);
 }
@@ -135,6 +136,12 @@ fn profile(r: &mut Runner) {
                 "description": "The platform team", "default": true}],
         }]}),
     );
+}
+
+/// The variables of the cluster that Palette deletes. The cluster runs the profile of [`profile`],
+/// so its route serves each field of the variable of that profile, with the value of the cluster.
+fn cluster_variables(r: &mut Runner) {
+    r.tenant(|t| t.write_cluster_variables(DEV, FIELDS_CLUSTER, &[FIELDS_PROFILE], &[]));
 }
 
 /// The summary of the registries of each kind: a registry whose sync stopped has a message, and a

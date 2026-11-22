@@ -228,7 +228,7 @@ impl Tenant {
     /// that it names; each other variable keeps its default. The route serves the fields and the
     /// value of a sensitive variable as Palette does: see [`cluster_route_variable`] and
     /// [`served_value`].
-    fn write_cluster_variables(
+    pub fn write_cluster_variables(
         &self,
         project: &str,
         uid: &str,

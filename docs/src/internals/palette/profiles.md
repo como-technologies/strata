@@ -699,6 +699,12 @@ no request:
 | One upgrade moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the move with the version of the pin, of the cluster, or of side A of `compare`. | Kubernetes. A live run shows that Palette takes an update that skips a minor version. | None: the line names the rule. |
 | Each required variable has a value or a default value. The default value of a dropdown variable counts only when it is the label of an option. Palette also accepts a dropdown variable with a default option. Strata names each required variable with no such default that the move adds. | Palette, at the update | `InvalidVariable` |
 
+For a sensitive variable, the variables route gives `********` in place of a
+default value that is not empty. See [The variables route](#the-variables-route).
+At the update, Palette takes the default value that the profile holds. So strata
+reads `********` as a default value at a move, and does not name the variable.
+The code of Palette shows it; no live run shows it yet.
+
 When a route of Palette checks a rule before the update, strata removes its
 check and reads the answer of the route. See
 [A move that skips a minor version](../../commands/behind.md#a-move-that-skips-a-minor-version)
