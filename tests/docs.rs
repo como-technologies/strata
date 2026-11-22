@@ -1124,7 +1124,7 @@ const WAVE_8_PAGES: [&str; 31] = [
     "commands/verify.md",
     "development/build-test.md",
     "development/changes.md",
-    "development/code.md",
+    CODE_PAGE,
     "development/documentation.md",
     "development/live-runs.md",
     "install.md",
@@ -1959,6 +1959,9 @@ fn files_of_tests_common_that_another_package_includes() -> BTreeSet<String> {
         .collect()
 }
 
+/// The page of the rules of the Rust code and of the Go code.
+const CODE_PAGE: &str = "development/code.md";
+
 /// A helper of `tests/common/` that another package includes is in a file of its own. The rule of
 /// "Tests" in `code.md` names each such file, and no other. The table "Where the code goes" of
 /// `build-test.md` has a row for each. The verify of #711 and of #721 found a file that each page
@@ -1970,7 +1973,7 @@ fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
         included.contains("git.rs") && included.contains("palette.rs"),
         "the scan finds the includes: {included:?}"
     );
-    let code = one_line(&read(&docs().join("development/code.md")));
+    let code = one_line(&read(&docs().join(CODE_PAGE)));
     let rule = code
         .split(". ")
         .find(|s| s.ends_with(" have such users"))
@@ -1992,6 +1995,63 @@ fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
             "the table Where the code goes of build-test.md has no row of {cell}"
         );
     }
+}
+
+/// The names of the functions of `src/json.rs`, from the code before its tests.
+fn functions_of_src_json() -> BTreeSet<String> {
+    let source = repo_file("src/json.rs");
+    let code = source.split("#[cfg(test)]").next().unwrap_or(&source);
+    code.lines()
+        .filter_map(|line| {
+            let head = ["pub ", "pub(crate) "]
+                .iter()
+                .find_map(|vis| line.strip_prefix(vis))
+                .unwrap_or(line);
+            let rest = head.strip_prefix("fn ")?;
+            rest.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .next()
+                .map(String::from)
+        })
+        .collect()
+}
+
+/// The rule of "Types and data" in `code.md` names each function of `src/json.rs`. Each name of
+/// its list of the reads is a function of that file.
+#[test]
+fn the_rule_of_the_reads_in_code_md_names_each_function_of_src_json() {
+    let functions = functions_of_src_json();
+    assert!(
+        functions.contains("take_array") && functions.contains("opt_set"),
+        "the scan finds the functions: {functions:?}"
+    );
+    let page = read(&docs().join(CODE_PAGE));
+    let types = one_line(section(&page, "\n## Types and data\n", Some("\n## ")));
+    let rule = section(
+        &types,
+        "Read them with the helpers of `src/json.rs`.",
+        Some(" - "),
+    );
+    let named: BTreeSet<&str> = code_spans(rule).into_iter().collect();
+    let left_out: Vec<&String> = functions
+        .iter()
+        .filter(|f| !named.contains(f.as_str()))
+        .collect();
+    assert!(
+        left_out.is_empty(),
+        "code.md does not name {left_out:?}: {rule}"
+    );
+    let reads = rule
+        .split(". ")
+        .find(|s| s.starts_with("They are "))
+        .expect("the rule lists the reads");
+    let unknown: Vec<&str> = code_spans(reads)
+        .into_iter()
+        .filter(|s| !functions.contains(*s))
+        .collect();
+    assert!(
+        unknown.is_empty(),
+        "src/json.rs has no function {unknown:?}"
+    );
 }
 
 /// The public items show their comments to each user of the library. So each sentence of the
@@ -4834,11 +4894,11 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
             "So `--pre-release` names it as newer than `1.65.0`.",
         ),
         (
-            "development/code.md",
+            CODE_PAGE,
             "`tests/version_order.rs` compares the order with the crate, row by row.",
         ),
         (
-            "development/code.md",
+            CODE_PAGE,
             "Each difference needs a rule that names it, and the test holds the count of differences for each rule.",
         ),
     ] {

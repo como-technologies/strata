@@ -81,9 +81,11 @@ where each module goes. The Go code of the observer follows
   method.
 - Palette documents stay `serde_json::Value`. Read them with the helpers of
   `src/json.rs`. They are `text`, `str_at`, `text_or`, `opt_text`, `opt_str`,
-  `arr`, `strings`, `text_map`, `items`, `take_items`, `first_nonempty`, `flag`,
-  `opt_flag`, `opt_set`, `object_at`, `value_at`, `value_or_null`, and
-  `value_or_empty_object`.
+  `arr`, `strings`, `text_map`, `items`, `take_items`, `take_array`,
+  `first_nonempty`, `flag`, `opt_flag`, `opt_set`, `object_at`, `value_at`,
+  `value_or_null`, and `value_or_empty_object`. The file also has `set_at`, for
+  a write, and `is_zero`, for `skip_serializing_if` on a count. A test makes
+  sure that this rule names each function of the file.
 - Do not write a pointer read of text, of an array, of an object, of a flag, or
   of a value in a module. The rule holds for `crates/strata-preflight/` and `crates/strata-knurl/` too.
   `text`, `str_at`, `text_or`, `opt_text`, `opt_str`, `arr`, `strings`,

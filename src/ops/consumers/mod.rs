@@ -16,7 +16,7 @@ use crate::error::{Error, ErrorDocument, Result};
 use crate::json::{arr, first_nonempty, is_zero, str_at, text};
 use crate::model::cluster_template::ClusterTemplateRef;
 use crate::model::profile_type::ProfileType;
-use crate::model::scope::ProfileScope;
+use crate::model::scope::{ProfileScope, project_of_document};
 use crate::reference::Ref;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
@@ -172,10 +172,7 @@ impl Consumer {
     /// that the document does not give keeps its value.
     fn fill_from_document(&mut self, doc: &Value) {
         self.name = first_nonempty(&[str_at(doc, "/metadata/name"), &self.name]);
-        self.project_uid = first_nonempty(&[
-            str_at(doc, "/metadata/annotations/projectUid"),
-            &self.project_uid,
-        ]);
+        self.project_uid = first_nonempty(&[project_of_document(doc), &self.project_uid]);
         self.state = first_nonempty(&[str_at(doc, "/status/state"), &self.state]);
     }
 
@@ -694,11 +691,11 @@ where
 /// scope of the profile (#181). The project is empty for a profile of the tenant.
 fn search_scope(doc: &Value) -> (String, String) {
     let project = if ProfileScope::of_document(doc) == Some(ProfileScope::Tenant) {
-        String::new()
+        ""
     } else {
-        text(doc, "/metadata/annotations/projectUid")
+        project_of_document(doc)
     };
-    (text(doc, "/metadata/name"), project)
+    (text(doc, "/metadata/name"), project.to_string())
 }
 
 /// What strata read beside the consumer list, for [`report`].
@@ -731,7 +728,7 @@ fn report(
     // the document of an app profile gives its scope in the same annotations
     let scope = ProfileScope::of_document(doc);
     let project_uid = if scope == Some(ProfileScope::Project) {
-        text(doc, "/metadata/annotations/projectUid")
+        project_of_document(doc).to_string()
     } else {
         String::new()
     };

@@ -14,7 +14,7 @@ use crate::api::{Palette, PaletteApi};
 use crate::error::Result;
 use crate::json::{arr, text};
 use crate::model::profile_type::ProfileType;
-use crate::model::scope::ProfileScope;
+use crate::model::scope::{ProfileScope, project_of_document};
 use crate::ops::client_for;
 use crate::ops::list::{ListedProject, ProjectListings, TENANT_SCOPE};
 use crate::term::progress::Progress;
@@ -179,12 +179,12 @@ where
         return readings("", None);
     }
     let mut projects = ProjectsRead::default();
-    let project = text(doc, "/metadata/annotations/projectUid");
+    let project = project_of_document(doc);
     let (listed, stopped) = match ProfileScope::of_document(doc) {
         Some(ProfileScope::Project) if !project.is_empty() => {
             let own = ListedProject {
                 name: String::new(),
-                uid: project,
+                uid: project.to_string(),
             };
             (vec![own], None)
         }
