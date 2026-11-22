@@ -67,6 +67,11 @@ const (
 	AddonsProfile   = "platform-addons@1.0.0"
 	// EdgeProfile is a profile that a cluster runs and that no record holds.
 	EdgeProfile = "fred-edge@1.0.0"
+	// SetHome is the project of the key api-key in the tests of a set of clusters, and SetHomeKey is that key. SetProd
+	// selects the clusters with the label env=prod.
+	SetHome    = "p-home"
+	SetHomeKey = "key-of-home"
+	SetProd    = "tag:env=prod"
 	// RecordFile is the file of the record of AWSStackProfile, which AWSStack gives. MetaFile is the meta file of the
 	// records, which WriteMeta writes.
 	RecordFile = AWSStackProfile + ".json.gz"

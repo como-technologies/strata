@@ -273,11 +273,14 @@ func (s *Set) reconcile(keys []runner.Key, finds map[string]found, checked map[s
 	return out
 }
 
+// leftSet is the message of the log line of a cluster that left the set.
+const leftSet = "a cluster left the set"
+
 // leave drops a cluster that left the set: its member, its state, and its items in the store of the alerts. The
 // alerts send no message for it: no check showed that a finding of the cluster is fixed. The caller holds the lock.
 func (s *Set) leave(m *setMember) {
 	dropped := s.state.Alerts.Leave(m.uid)
 	m.obs.removeState()
 	delete(s.members, m.uid)
-	s.log.Info("a cluster left the set", "cluster", m.uid, "alerts", dropped)
+	s.log.Info(leftSet, "clusterUid", m.uid, "items", dropped)
 }

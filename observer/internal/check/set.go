@@ -18,8 +18,11 @@ import (
 	"github.com/como-technologies/strata/observer/internal/runner"
 )
 
-// membersDir is the directory of the state of each member, under the directory of the state of the set.
-const membersDir = "clusters"
+// membersOf gives the directory of the state of the members, under the directory of the state of the set. Each member
+// has its state in the directory of its uid there.
+func membersOf(state string) string {
+	return filepath.Join(state, "clusters")
+}
 
 // SetConfig holds the flags of a set of clusters, beside the flags of Config. Config.ClusterUID is the cluster where
 // the observer runs. It is always in the set, and it can be empty: the observer can run on a cluster that Palette does
@@ -89,7 +92,7 @@ func newSet(cfg SetConfig, strata Strata, pods Pods, log *slog.Logger, now func(
 		members: map[string]*setMember{}, projects: map[string]*setProject{}}
 	s.pods = pods
 	s.runContent, s.runVersions = s.RunContent, s.RunVersions
-	entries, err := os.ReadDir(filepath.Join(cfg.State, membersDir))
+	entries, err := os.ReadDir(membersOf(cfg.State))
 	if err != nil {
 		return s
 	}
@@ -111,8 +114,8 @@ func newSet(cfg SetConfig, strata Strata, pods Pods, log *slog.Logger, now func(
 func (s *Set) newMember(uid string) *Observer {
 	cfg := s.cfg
 	cfg.ClusterUID = uid
-	cfg.State = filepath.Join(s.cfg.State, membersDir, uid)
-	m := buildObserver(cfg, s.strata, s.log.With("cluster", uid), s.now)
+	cfg.State = filepath.Join(membersOf(s.cfg.State), uid)
+	m := buildObserver(cfg, s.strata, s.log.With("clusterUid", uid), s.now)
 	m.procs, m.versionsSlot = s.procs, s.versionsSlot
 	m.member = &membership{home: s.scfg.Home, keys: s.currentKeys}
 	if uid == s.cfg.ClusterUID {

@@ -30,11 +30,11 @@ func (s setStub) StartCycle(string) (model.Start, bool) {
 }
 
 // setRoutes are the routes of the set itself. Each other route of a set is a route of one cluster under its uid.
-var setRoutes = []string{patternHealth, patternClusters, patternShared, patternAlerts, patternCycle}
+var setRoutes = []string{patternHealth, PatternClusters, PatternShared, patternAlerts, patternCycle}
 
 // memberPath gives the path of a route of one cluster of a set.
 func memberPath(uid, path string) string {
-	return "/v1/clusters/" + uid + strings.TrimPrefix(path, routePrefix)
+	return PatternClusters + "/" + uid + strings.TrimPrefix(path, routePrefix)
 }
 
 func TestEachRouteOfASetIsARouteOfTheSetOrARouteOfOneClusterUnderItsUid(t *testing.T) {
@@ -73,12 +73,12 @@ func TestEachSummaryRouteOfAClusterOfASetHoldsNoSentinelAndAnUnknownClusterGets4
 		}
 	}
 	var got model.SetSummary
-	decode(t, get(h, patternClusters), &got)
+	decode(t, get(h, PatternClusters), &got)
 	if len(got.Clusters) != 1 || got.Clusters[0].UID != testkit.PaymentsUID {
 		t.Errorf("the clusters %+v", got)
 	}
 	var shared SharedView
-	decode(t, get(h, patternShared), &shared)
+	decode(t, get(h, PatternShared), &shared)
 	if shared.Shared == nil {
 		t.Error("the list of the shared versions is null, and not empty")
 	}

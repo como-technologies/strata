@@ -76,18 +76,24 @@ func missing(root, node map[string]any, t reflect.Type, path string, seen map[re
 	return out
 }
 
+// kindOf gives the kind of `strata schema` of the id of a schema: the name in strata-KIND/1.
+func kindOf(schema string) string {
+	kind, _, _ := strings.Cut(strings.TrimPrefix(schema, "strata-"), "/")
+	return kind
+}
+
 func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
 	bin := contractEnv(t, "STRATA_BIN")
 	for _, c := range []struct {
 		kind string
 		typ  any
 	}{
-		{"verify-summary", VerifySummary{}},
-		{"diff", Diff{}},
-		{"behind", Behind{}},
-		{"snapshot", Record{}},
-		{"snapshot", ClusterRead{}},
-		{"list", ClusterList{}},
+		{kindOf(VerifySummarySchema), VerifySummary{}},
+		{kindOf(DiffSchema), Diff{}},
+		{kindOf(BehindSchema), Behind{}},
+		{kindOf(SnapshotSchema), Record{}},
+		{kindOf(SnapshotSchema), ClusterRead{}},
+		{kindOf(ListSchema), ClusterList{}},
 	} {
 		out, err := exec.Command(bin, "schema", c.kind).Output()
 		if err != nil {

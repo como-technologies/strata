@@ -21,8 +21,10 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
@@ -304,7 +306,7 @@ func TestNoLocalNameHidesAPackageThatItsFileImports(t *testing.T) {
 			}
 			imported[name] = true
 		}
-		check := func(ids ...*ast.Ident) {
+		hides := func(ids ...*ast.Ident) {
 			for _, id := range ids {
 				if imported[id.Name] {
 					t.Errorf("%s: the name %s hides the package", fset.Position(id.Pos()), id.Name)
@@ -313,7 +315,7 @@ func TestNoLocalNameHidesAPackageThatItsFileImports(t *testing.T) {
 		}
 		fields := func(l *ast.FieldList) {
 			for _, field := range l.List {
-				check(field.Names...)
+				hides(field.Names...)
 			}
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
@@ -322,7 +324,7 @@ func TestNoLocalNameHidesAPackageThatItsFileImports(t *testing.T) {
 				if n.Tok == token.DEFINE {
 					for _, e := range n.Lhs {
 						if id, ok := e.(*ast.Ident); ok {
-							check(id)
+							hides(id)
 						}
 					}
 				}
@@ -330,12 +332,12 @@ func TestNoLocalNameHidesAPackageThatItsFileImports(t *testing.T) {
 				if n.Tok == token.DEFINE {
 					for _, e := range []ast.Expr{n.Key, n.Value} {
 						if id, ok := e.(*ast.Ident); ok {
-							check(id)
+							hides(id)
 						}
 					}
 				}
 			case *ast.ValueSpec:
-				check(n.Names...)
+				hides(n.Names...)
 			case *ast.FuncDecl:
 				if n.Recv != nil {
 					fields(n.Recv)
@@ -674,14 +676,7 @@ func TestSeedNeedsTheClusterAndThePod(t *testing.T) {
 	exitsTwoSaying(t, []string{"seed", "--cluster-uid", testkit.PaymentsUID, "--namespace", "strata-observer", "--strata", "/no/strata"}, docs.KindKubeConfig)
 }
 
-// The project of the key api-key and the keys of a run of `once` with --clusters.
-const (
-	setHome    = "p-home"
-	setHomeKey = "key-of-home"
-	setProd    = "tag:env=prod"
-)
-
-// setStrata writes a fake of strata for a set of one cluster, payments, in the project setHome. It runs the
+// setStrata writes a fake of strata for a set of one cluster, payments, in the project testkit.SetHome. It runs the
 // profile aws-stack@1.1.0, by the uid of its record. Each run writes its command, its key, and its project to the
 // file keys of the directory of the script.
 func setStrata(t *testing.T) (bin, keys string) {
@@ -689,7 +684,7 @@ func setStrata(t *testing.T) (bin, keys string) {
 	cluster := testkit.ClusterHead + testkit.PaymentsUID + `","name":"` + testkit.PaymentsName + `","profiles":[{"uid":"u-aws-stack","name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}`
 	bin = testkit.Strata(t, `echo "$cmd $PALETTE_API_KEY $PALETTE_PROJECT_UID" >> "$(dirname "$0")/keys"
 case $cmd in
-list) echo '{"schema":"`+docs.ListSchema+`","clusters":[{"uid":"`+testkit.PaymentsUID+`","name":"`+testkit.PaymentsName+`","projectUid":"`+setHome+`"}]}' ;;
+list) echo '{"schema":"`+docs.ListSchema+`","clusters":[{"uid":"`+testkit.PaymentsUID+`","name":"`+testkit.PaymentsName+`","projectUid":"`+testkit.SetHome+`"}]}' ;;
 verify) echo '`+testkit.VerifyUnchanged+`' ;;
 snapshot) case $ref in */*) echo '{}' > "$out" ;; *) echo '`+cluster+`' > "$out" ;; esac ;;
 compare) echo '`+testkit.CompareSame+`' ;;
@@ -703,14 +698,14 @@ func setArgs(t *testing.T, bin string) []string {
 	t.Helper()
 	args := onceArgs(t, bin)
 	keys := t.TempDir()
-	testkit.WriteIn(t, keys, "api-key", setHomeKey)
+	testkit.WriteIn(t, keys, check.HomeKeyFile, testkit.SetHomeKey)
 	i := slices.Index(args, "--cluster-uid")
-	return append(slices.Delete(args, i, i+2), "--clusters", setProd, "--keys", keys)
+	return append(slices.Delete(args, i, i+2), "--clusters", testkit.SetProd, "--keys", keys)
 }
 
 func TestOnceWithClustersPrintsTheSummaryOfTheSetAndEachRunHasTheKeyOfItsProject(t *testing.T) {
-	t.Setenv(envHome, setHome)
-	t.Setenv("PALETTE_API_KEY", "SENTINEL-KEY-OF-THE-ENVIRONMENT")
+	t.Setenv(runner.EnvProjectUID, testkit.SetHome)
+	t.Setenv(runner.EnvKey, "SENTINEL-KEY-OF-THE-ENVIRONMENT")
 	bin, keys := setStrata(t)
 	var out, errs bytes.Buffer
 	code := run(setArgs(t, bin), &out, &errs)
@@ -721,17 +716,17 @@ func TestOnceWithClustersPrintsTheSummaryOfTheSetAndEachRunHasTheKeyOfItsProject
 	}
 	runs := strings.Split(strings.TrimSpace(string(testkit.ReadFile(t, keys))), "\n")
 	for _, line := range runs {
-		if _, rest, _ := strings.Cut(line, " "); rest != setHomeKey+" "+setHome {
+		if _, rest, _ := strings.Cut(line, " "); rest != testkit.SetHomeKey+" "+testkit.SetHome {
 			t.Errorf("a run got %q", line)
 		}
 	}
-	if !slices.ContainsFunc(runs, func(l string) bool { return strings.HasPrefix(l, "list ") }) {
+	if !slices.ContainsFunc(runs, func(l string) bool { return strings.HasPrefix(l, runner.CmdList+" ") }) {
 		t.Errorf("no search ran: %q", runs)
 	}
 }
 
 func TestTheFlagsOfASetRefuseWhatTheyCannotUse(t *testing.T) {
-	t.Setenv(envHome, setHome)
+	t.Setenv(runner.EnvProjectUID, testkit.SetHome)
 	good := setArgs(t, "strata")
 	keys := good[slices.Index(good, "--keys")+1]
 	rules := testkit.WriteIn(t, t.TempDir(), "alerts.json", testkit.OncallRules("f", `{"level": "cluster", "match": "payments", "news": "drift", "send": "now", "to": "oncall"}`))
@@ -742,13 +737,13 @@ func TestTheFlagsOfASetRefuseWhatTheyCannotUse(t *testing.T) {
 	}{
 		{"a set with no keys", slices.Delete(slices.Clone(good), len(good)-2, len(good)), "--clusters needs --keys"},
 		{"a selector that strata cannot read", append(slices.Clone(good), "--clusters", "env=prod"), "is not tag:KEY=VALUE"},
-		{"a selector with an empty part", append(slices.Clone(good), "--clusters", "tag:env=prod+"), "an empty part"},
+		{"a selector with an empty part", append(slices.Clone(good), "--clusters", testkit.SetProd+"+"), "an empty part"},
 		{"the read of the pods with no cluster uid", append(slices.Clone(good), "--read-pods"), "--read-pods needs --cluster-uid"},
 		{"keys with no set", append(onceArgs(t, "strata"), "--keys", keys), "--keys is for a set of clusters"},
 		{"a cluster rule with a match and no set", append(onceArgs(t, "strata"), "--alerts", rules), "only with --clusters"},
 	} {
 		t.Run(c.name, func(t *testing.T) { exitsTwoSaying(t, c.args, c.want) })
 	}
-	t.Setenv(envHome, "")
-	exitsTwoSaying(t, good, "needs "+envHome)
+	t.Setenv(runner.EnvProjectUID, "")
+	exitsTwoSaying(t, good, "needs "+runner.EnvProjectUID)
 }

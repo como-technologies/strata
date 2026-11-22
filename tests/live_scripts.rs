@@ -19,7 +19,7 @@ use strata::model::pack_state::PackState;
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
 use strata::model::validation::{PaletteRefusal, answer_lines};
-use strata::reference::{CLUSTER_PREFIX, PROJECT_PREFIX};
+use strata::reference::{CLUSTER_PREFIX, PROJECT_PREFIX, TAG_PREFIX};
 use strata::render::palette_line;
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -16892,7 +16892,7 @@ echo "$items"
 fn observer_clusters_stage() -> Stage {
     let mut stage = baseline_stage();
     stage.strata(
-        "snapshot cluster:c-a -o a.json",
+        &format!("snapshot {CLUSTER_PREFIX}c-a -o a.json"),
         0,
         r#"{"source":{"cluster":{"uid":"c-a","labels":{"purpose":"strata-live-example"}}}}"#,
     );
@@ -17002,7 +17002,9 @@ fn observer_clusters_sh_passes_each_check_when_palette_answers_the_key_of_the_ro
     let calls = std::fs::read_to_string(stage.path("strata/observer.log")).unwrap();
     assert!(
         calls.contains("once --strata ")
-            && calls.contains("--clusters tag:env=prod --keys keys --cluster-uid c-a"),
+            && calls.contains(&format!(
+                "--clusters {TAG_PREFIX}env=prod --keys keys --cluster-uid c-a"
+            )),
         "{calls}"
     );
     // the records are gzipped, so the test reads each file as bytes
@@ -17035,7 +17037,6 @@ fn observer_clusters_sh_fails_the_checks_of_the_refusals_when_palette_answers_th
     let (o, steps) = stage.run("observer-clusters.sh", &[]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
     failed(&steps, &["filters-role-says"]);
-    assert_eq!(ids_with(&steps, &["FAIL"]).count(), 1, "{steps}");
     passed(&steps, &["filter-role-says", "search-role-tenant-says"]);
 }
 

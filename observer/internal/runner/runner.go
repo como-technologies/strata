@@ -49,15 +49,15 @@ var allowedCommands = []string{CmdVerify, CmdCompare, CmdSnapshot, CmdBehind, Cm
 // The variables of the key of a run. A run with a Key gets the key and the project of the Key in
 // place of the ones of the observer.
 const (
-	envKey        = "PALETTE_API_KEY"
-	envProjectUID = "PALETTE_PROJECT_UID"
-	envProject    = "PALETTE_PROJECT"
+	EnvKey        = "PALETTE_API_KEY"
+	EnvProjectUID = "PALETTE_PROJECT_UID"
+	EnvProject    = "PALETTE_PROJECT"
 )
 
 // allowedEnv holds each variable that a strata process gets, when the observer has it. The runner
 // also sets STRATA_REPORT to 0, which stops the send of the report. It sets no other variable:
 // every call has -q and none writes a terminal report, so STRATA_QUIET and NO_COLOR change nothing.
-var allowedEnv = []string{"PALETTE_API", envKey, envProjectUID, envProject, "HOME", "TMPDIR", "XDG_STATE_HOME", "PATH"}
+var allowedEnv = []string{"PALETTE_API", EnvKey, EnvProjectUID, EnvProject, "HOME", "TMPDIR", "XDG_STATE_HOME", "PATH"}
 
 // Key is the key of one project. A set of clusters has one key for each project. A run with a Key gets
 // its secret and its project, and none of the key of the observer: see WithKey.
@@ -185,7 +185,7 @@ func check(args []string) error {
 func env(key Key, keyed bool) []string {
 	out := []string{"STRATA_REPORT=0"}
 	for _, k := range allowedEnv {
-		if keyed && (k == envKey || k == envProjectUID || k == envProject) {
+		if keyed && (k == EnvKey || k == EnvProjectUID || k == EnvProject) {
 			continue
 		}
 		if v, ok := os.LookupEnv(k); ok {
@@ -193,7 +193,7 @@ func env(key Key, keyed bool) []string {
 		}
 	}
 	if keyed {
-		out = append(out, envKey+"="+key.Secret, envProjectUID+"="+key.Project)
+		out = append(out, EnvKey+"="+key.Secret, EnvProjectUID+"="+key.Project)
 	}
 	return out
 }

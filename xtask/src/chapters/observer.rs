@@ -6,6 +6,7 @@
 //! registry with newer versions. The steps run `strata-observer once`, which the runner puts on the `PATH`. The
 //! playground script `scripts/observer-playground.sh` serves the page of the same tenant.
 
+use super::DEV_PROJECT;
 use super::edits::RETAIN;
 use super::ids::{
     A100, A110, A111_TENANT, ADDONS_DEV, ADDONS_PACK, ADDONS_PROD, ADDONS_PROD_PACK, DEV, LEDGER,
@@ -204,11 +205,7 @@ fn alerts(r: &mut Runner) {
 
 /// The environment of the chapter `observer-clusters`: the project of the key `api-key`, by its
 /// name for the playground and by its uid for the observer, and the revision of the records.
-const SET_ENV: &[(&str, &str)] = &[
-    ("PALETTE_PROJECT", "dev"),
-    ("PALETTE_PROJECT_UID", DEV),
-    ("GIT_SHA", REVISION),
-];
+const SET_ENV: &[(&str, &str)] = &[ENV[0], ("PALETTE_PROJECT_UID", DEV), ENV[1]];
 
 /// The command line of a run of `once` for the set of the chapter `observer-clusters`. Two
 /// selectors pick the clusters of the teams payments and search, and the observer runs on
@@ -225,7 +222,7 @@ fn once_set(state: &str) -> String {
 /// of their own project: one name and version with two uids.
 pub(super) fn clusters(r: &mut Runner) {
     r.chapter("observer-clusters", SET_ENV);
-    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    r.tenant(|t| t.projects(&[(DEV_PROJECT, DEV), ("prod", PROD)]));
     r.tenant(|t| t.registries(DEV));
     r.tenant(|t| t.registries(PROD));
     r.tenant_profile(A111_TENANT, "1.1.1", "aws-stack@1.1.1", &[]);
@@ -293,8 +290,8 @@ pub(super) fn clusters(r: &mut Runner) {
 fn set_records(r: &mut Runner) {
     r.quiet("mkdir -p releases work state keys");
     for (uid, project, file) in [
-        (A111_TENANT, "dev", "aws-stack_1.1.1"),
-        (ADDONS_DEV, "dev", "platform-addons_1.0.0_dev"),
+        (A111_TENANT, DEV_PROJECT, "aws-stack_1.1.1"),
+        (ADDONS_DEV, DEV_PROJECT, "platform-addons_1.0.0_dev"),
         (ADDONS_PROD, "prod", "platform-addons_1.0.0_prod"),
     ] {
         r.quiet(&format!(
@@ -307,11 +304,12 @@ fn set_records(r: &mut Runner) {
         false,
         "jq -c '.source | {name, version, uid, projectUid, scope}' releases/aws-stack_1.1.1.json",
     );
+    let sha = ENV[1].0;
     r.step(
         "observer-clusters-records",
         0,
         false,
-        "scripts/ci/observer-records.sh --set --revision \"$GIT_SHA\" releases/*.json \\\n  | grep -E '^  [a-z]+[-_.0-9a-z]*[.]json(.gz)?:' | sed -E 's/^(  [^ :]+[.]json(.gz)?):.*/\\1/'",
+        &format!("scripts/ci/observer-records.sh --set --revision \"${sha}\" releases/*.json \\\n  | grep -E '^  [a-z]+[-_.0-9a-z]*[.]json(.gz)?:' | sed -E 's/^(  [^ :]+[.]json(.gz)?):.*/\\1/'"),
     );
     r.quiet(&format!(
         "mkdir records && for f in releases/*.json; do gzip -c \"$f\" > \"records/$(basename \"$f\").gz\"; done && echo '{{\"baseline\":\"approved\",\"revision\":\"{REVISION}\"}}' > records/meta.json"

@@ -13,6 +13,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
@@ -131,7 +132,7 @@ func TestEachSummaryRouteHoldsNoSentinelAndTheDetailRouteHoldsIt(t *testing.T) {
 
 func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
 	const key = "SENTINEL-KEY"
-	t.Setenv("PALETTE_API_KEY", key)
+	t.Setenv(runner.EnvKey, key)
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
 	noSummaryRouteHolds(t, h, key, sentinelVariable)

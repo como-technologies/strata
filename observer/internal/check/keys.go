@@ -11,11 +11,11 @@ import (
 	"github.com/como-technologies/strata/observer/internal/runner"
 )
 
-// homeKeyFile is the entry of the Secret strata-observer-key that holds the key of the project of the ConfigMap. Each
+// HomeKeyFile is the entry of the Secret strata-observer-key that holds the key of the project of the ConfigMap. Each
 // other entry of a set of clusters holds the key of one more project, with the uid of the project as its name.
-const homeKeyFile = "api-key"
+const HomeKeyFile = "api-key"
 
-// readKeys reads the keys of a set from the directory of the mounted Secret. The entry homeKeyFile is the key of the
+// readKeys reads the keys of a set from the directory of the mounted Secret. The entry HomeKeyFile is the key of the
 // project home, and it must be there. A project uid can start with a digit, so it is not a portable name of an
 // environment variable: the observer reads the files, again at the start of each cycle, because the kubelet updates
 // a mounted Secret. The kubelet also writes entries whose names start with a dot, and they are no key. The keys come
@@ -42,7 +42,7 @@ func readKeys(dir, home string) ([]runner.Key, error) {
 		}
 		secret := strings.TrimSpace(string(raw))
 		project := name
-		if name == homeKeyFile {
+		if name == HomeKeyFile {
 			project, homeFound = home, true
 		}
 		if secret == "" {
@@ -54,7 +54,7 @@ func readKeys(dir, home string) ([]runner.Key, error) {
 		keys = append(keys, runner.Key{Project: project, Secret: secret})
 	}
 	if !homeFound {
-		return nil, errors.New("the keys have no entry " + homeKeyFile)
+		return nil, errors.New("the keys have no entry " + HomeKeyFile)
 	}
 	slices.SortFunc(keys, func(a, b runner.Key) int { return strings.Compare(a.Project, b.Project) })
 	return keys, nil

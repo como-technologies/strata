@@ -96,6 +96,6 @@ fn the_check_of_the_names_finds_a_whole_word_in_each_case_and_not_the_name_of_a_
     assert_eq!(found("a host other than Docker Hub"), 0);
     assert_eq!(found("nginxHub and hubble and spoken"), 0);
     // a code span and a code block of the book are examples
-    let page = "Run `observer --clusters tag:role=hub`.\n\n```text\nhub\n```\n";
+    let page = "Run `kubectl config use-context hub`.\n\n```text\nhub\n```\n";
     assert_eq!(found(&without_code(&outside_code_blocks(page))), 0);
 }

@@ -92,7 +92,7 @@ func (o *options) flags(fs *flag.FlagSet) {
 		o.clusters = append(o.clusters, v)
 		return nil
 	})
-	fs.StringVar(&o.keys, "keys", "", "with --clusters, the directory of the keys: api-key for the project of PALETTE_PROJECT_UID, and one file for each other project, by its uid")
+	fs.StringVar(&o.keys, "keys", "", "with --clusters, the directory of the keys: "+check.HomeKeyFile+" for the project of "+runner.EnvProjectUID+", and one file for each other project, by its uid")
 	fs.StringVar(&o.Records, "records", "", "the directory of *.json.gz and meta.json (required)")
 	fs.StringVar(&o.Work, "work", "", "a volume in memory for the files of a cycle (required)")
 	fs.StringVar(&o.State, "state", "", "a directory for state.json (required)")
@@ -151,9 +151,6 @@ func (o *options) loadRules() error {
 	return nil
 }
 
-// envHome names the variable of the project of the key api-key: the project of the ConfigMap.
-const envHome = "PALETTE_PROJECT_UID"
-
 // checkSet reads the selectors of --clusters, and refuses the flags that do not fit them. With no --clusters, the
 // observer watches one cluster, so --cluster-uid is required. With --clusters, --cluster-uid is optional, so the
 // observer can run on a cluster that Palette does not manage, and --keys and the project of api-key are required.
@@ -173,8 +170,8 @@ func (o *options) checkSet() error {
 		return errors.New("the flag --keys is for a set of clusters: give --clusters")
 	case len(selectors) > 0 && o.keys == "":
 		return errors.New("the flag --clusters needs --keys")
-	case len(selectors) > 0 && os.Getenv(envHome) == "":
-		return errors.New("the flag --clusters needs " + envHome + ", the project of the key api-key")
+	case len(selectors) > 0 && os.Getenv(runner.EnvProjectUID) == "":
+		return errors.New("the flag --clusters needs " + runner.EnvProjectUID + ", the project of the key " + check.HomeKeyFile)
 	case o.readPods && o.ClusterUID == "":
 		return errors.New("the flag --read-pods needs --cluster-uid")
 	}
@@ -217,7 +214,7 @@ func (o *options) observer(log *slog.Logger) (watcher, error) {
 		pods = kube.New(cfg)
 	}
 	if len(o.selectors) > 0 {
-		set := check.NewSet(check.SetConfig{Config: o.Config, Selectors: o.selectors, Keys: o.keys, Home: os.Getenv(envHome)}, strata, pods, log)
+		set := check.NewSet(check.SetConfig{Config: o.Config, Selectors: o.selectors, Keys: o.keys, Home: os.Getenv(runner.EnvProjectUID)}, strata, pods, log)
 		return watcher{obs: set.Observer, set: set}, nil
 	}
 	obs := check.New(o.Config, strata, log)

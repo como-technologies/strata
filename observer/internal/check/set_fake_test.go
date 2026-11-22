@@ -23,22 +23,21 @@ import (
 
 // The projects, the keys, and the clusters of the tests of a set. Home is the project of the key api-key.
 const (
-	home      = "p-home"
+	home      = testkit.SetHome
 	other     = "p-other"
-	homeKey   = "key-of-home"
+	homeKey   = testkit.SetHomeKey
 	otherKey  = "key-of-other"
-	prod      = "tag:env=prod"
-	nothing   = "tag:env=nowhere"
-	cPayments = "c-cPayments"
-	cLedger   = "c-cLedger"
-	cSearch   = "c-cSearch"
-	webName   = "web"
-	webV1     = "1.0.0"
+	prod      = testkit.SetProd
+	nothing   = "tag:env=void"
+	cPayments = "c-1001"
+	cLedger   = "c-1002"
+	cSearch   = "c-1003"
+	webName   = "storefront"
+	webV1     = "4.2.0"
 	webHome   = "u-web-home"
 	webOther  = "u-web-other"
 	dbName    = "db"
 	dbHome    = "u-db-home"
-	setLostAt = "a cluster left the set"
 )
 
 // fleetCluster is one cluster of the fake: its project, its name, and the uid of each profile that it runs.
@@ -123,23 +122,18 @@ func selectorOf(args []string) string {
 	return tagPrefix + strings.Join(labels, labelJoin)
 }
 
-// list answers the cSearch of one selector in one project, as Palette answers the cSearch of one project.
+// list answers the search of one selector in one project, as Palette answers the search of one project.
 func (f *fleet) list(args []string) (runner.Result, error) {
 	project := after(args, runner.FlagProject)
-	doc := docs.ClusterList{Schema: docs.ListSchema, Clusters: []docs.ListedCluster{}}
+	list := docs.ClusterList{Schema: docs.ListSchema, Clusters: []docs.ListedCluster{}}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, uid := range f.selected[selectorOf(args)] {
 		if c := f.clusters[uid]; c.project == project {
-			doc.Clusters = append(doc.Clusters, docs.ListedCluster{UID: uid, Name: c.name, ProjectUID: c.project, ProjectName: "name-of-" + c.project})
+			list.Clusters = append(list.Clusters, docs.ListedCluster{UID: uid, Name: c.name, ProjectUID: c.project, ProjectName: "name-of-" + c.project})
 		}
 	}
-	return docOf(doc, 0)
-}
-
-func docOf(v any, exit int) (runner.Result, error) {
-	b, err := json.Marshal(v)
-	return runner.Result{Stdout: b, Exit: exit}, err
+	return doc(list, 0)
 }
 
 // readRecord reads a record file of the directory of a run.
@@ -171,7 +165,7 @@ func (f *fleet) verify(dir string, args []string) (runner.Result, error) {
 		f.mu.Unlock()
 		s.Records = append(s.Records, row)
 	}
-	return docOf(s, 0)
+	return doc(s, 0)
 }
 
 // snapshot writes the read of a cluster, or the side of one profile, which names the cluster for the compare.
@@ -196,7 +190,7 @@ func (f *fleet) snapshot(dir string, args []string) (runner.Result, error) {
 	read.Source.Cluster.UID, read.Source.Cluster.Name = uid, c.name
 	for _, p := range c.profiles {
 		nv := f.records[p]
-		read.Source.Cluster.Profiles = append(read.Source.Cluster.Profiles, docs.ClusterProfile{UID: p, Name: nv[0], Version: nv[1], Type: "cluster"})
+		read.Source.Cluster.Profiles = append(read.Source.Cluster.Profiles, docs.ClusterProfile{UID: p, Name: nv[0], Version: nv[1]})
 	}
 	raw, err := json.Marshal(read)
 	if err != nil {
@@ -225,9 +219,9 @@ func (f *fleet) compare(dir string, args []string) (runner.Result, error) {
 	differs := f.differs[side.Cluster+"/"+r.Source.UID]
 	f.mu.Unlock()
 	if differs {
-		return docOf(docs.Diff{Schema: docs.DiffSchema, RootB: "r-cluster", Packs: []docs.Pack{{Key: testkit.CertManagerKey, Status: docs.PackChanged, Authored: true}}}, 1)
+		return doc(docs.Diff{Schema: docs.DiffSchema, RootB: "r-cluster", Packs: []docs.Pack{{Key: testkit.CertManagerKey, Status: docs.PackChanged, Authored: true}}}, 1)
 	}
-	return docOf(docs.Diff{Schema: docs.DiffSchema, Same: true, SameContent: true, RootB: r.Root}, 0)
+	return doc(docs.Diff{Schema: docs.DiffSchema, Same: true, SameContent: true, RootB: r.Root}, 0)
 }
 
 // behind answers that nothing is newer, and names the profile version of the record.
@@ -237,7 +231,7 @@ func (f *fleet) behind(dir string, args []string) (runner.Result, error) {
 		return runner.Result{}, err
 	}
 	subject := r.Source.Name + "@" + r.Source.Version
-	return docOf(docs.Behind{Schema: docs.BehindSchema, Tool: docs.Tool{Version: "0.36.0"},
+	return doc(docs.Behind{Schema: docs.BehindSchema, Tool: docs.Tool{Version: "0.36.0"},
 		Profiles: []docs.ProfilePin{{Name: r.Source.Name, Version: r.Source.Version, PinnedBy: []docs.PinnedBy{{Subject: subject}}}}}, 0)
 }
 
@@ -267,7 +261,7 @@ type setRig struct {
 func newSetRig(t *testing.T, sels ...string) *setRig {
 	t.Helper()
 	r := &setRig{rig: newRig(t), keys: t.TempDir(), f: newFleet()}
-	testkit.WriteIn(t, r.keys, homeKeyFile, homeKey)
+	testkit.WriteIn(t, r.keys, HomeKeyFile, homeKey)
 	testkit.WriteIn(t, r.keys, other, otherKey)
 	var selectors []Selector
 	for _, s := range sels {

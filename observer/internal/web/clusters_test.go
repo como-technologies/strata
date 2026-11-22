@@ -6,14 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
-/* The tests below hold the page of a set of clusters, with the set clusters of testdata/api. With no --clusters, the page
+/* The tests below hold the page of a set of clusters, with the set fleet of testdata/api. With no --clusters, the page
 is the page of one cluster, and the tests of the other files hold it. */
 
-// The clusters of the set clusters: quarry-1 runs the observer and has a drift, ledger is OK, and the key of the project
+// The clusters of the set fleet: quarry-1 runs the observer and has a drift, ledger is OK, and the key of the project
 // of search is refused.
 const (
 	quarryHash = "#c-" + testkit.ClusterUID
@@ -36,7 +37,7 @@ func screenOf(t *testing.T, screens []screen, hash string) string {
 }
 
 func TestEachScreenOfASetRendersAndEachLinkOfAClusterStaysInItsCluster(t *testing.T) {
-	screens := crawl(t, devdata.StateClusters)
+	screens := crawl(t, devdata.StateFleet)
 	hashes := map[string]bool{}
 	for _, s := range screens {
 		checkMarkup(t, s)
@@ -63,31 +64,31 @@ func TestEachScreenOfASetRendersAndEachLinkOfAClusterStaysInItsCluster(t *testin
 }
 
 func TestTheScreenOfTheClustersShowsTheWorstFirstARefusedKeyAndASelectorThatSelectsNoCluster(t *testing.T) {
-	html := screenOf(t, crawl(t, devdata.StateClusters), "#clusters")
-	mustHold(t, "the clusters", html, "Clusters", "Drift", "Newer versions", "Not checked", "Drift 1", "runs the observer",
+	html := screenOf(t, crawl(t, devdata.StateFleet), "#clusters")
+	mustHold(t, "the clusters", html, "Clusters", "Drift", newerVersions, wordNotChecked, "Drift 1", "runs the observer",
 		"HTTP 403, the API key was refused", "No cluster matches", "tag:env=nowhere", "Check the label on the clusters, or the saved filter in Palette.")
 	mustHoldInOrder(t, "the rows", html, ">quarry-1<", ">search<", ">ledger<")
 	// a cluster that is not checked, and a selector with no cluster, keep the calm away
-	mustNotHold(t, "the clusters", html, "Nothing changed", "All quiet")
+	mustNotHold(t, "the clusters", html, calmChanged, calmQuiet)
 }
 
 func TestAScreenOfAClusterOfASetNamesTheSetAndItsImagesSayThatTheObserverReadsItsOwnClusterOnly(t *testing.T) {
-	pages := shown(t, devdata.StateClusters, ledgerHash+"/overview", ledgerHash+"/images", quarryHash+"/images")
+	pages := shown(t, devdata.StateFleet, ledgerHash+"/overview", ledgerHash+"/images", quarryHash+"/images")
 	mustHold(t, "the overview of ledger", pages[0], `<a href="#clusters">Clusters</a>`, `<a href="`+ledgerHash+`/overview">ledger</a>`, "Own cluster only")
 	mustHold(t, "the images of ledger", pages[1], "Pods of another cluster", "The observer reads the pods of its own cluster only.")
 	mustNotHold(t, "the images of quarry-1", pages[2], "Own cluster only", "Pods of another cluster")
 }
 
 func TestTheScreenOfTheSharedVersionsCountsTheClustersAndLinksEachCopyThatDiffers(t *testing.T) {
-	html := screenOf(t, crawl(t, devdata.StateClusters), "#shared")
+	html := screenOf(t, crawl(t, devdata.StateFleet), "#shared")
 	mustHold(t, "the shared versions", html, "2 clusters in 1 project", "1 of 2 same", `href="`+ledgerHash+`/p-`+wilmaShared+`"`, "No record", "1 not read")
 }
 
 func TestTheChoiceOfAProjectFiltersTheClustersAndTheSharedVersions(t *testing.T) {
-	clusters := pageWith(t, "testdata/api", devdata.StateClusters, "#clusters", `S.project = "p-prod"`)
+	clusters := pageWith(t, "testdata/api", devdata.StateFleet, "#clusters", `S.project = "p-prod"`)
 	mustHold(t, "the clusters of prod", clusters, ">search<", `<option value="p-prod" selected>prod</option>`)
 	mustNotHold(t, "the clusters of prod", clusters, ">ledger<", ">quarry-1<")
-	shared := pageWith(t, "testdata/api", devdata.StateClusters, "#shared", `S.project = "p-prod"`)
+	shared := pageWith(t, "testdata/api", devdata.StateFleet, "#shared", `S.project = "p-prod"`)
 	mustHold(t, "the shared versions of prod", shared, "edge-agent")
 	mustNotHold(t, "the shared versions of prod", shared, "wilma-gateway")
 }
@@ -96,10 +97,10 @@ func TestTheChoiceOfAProjectFiltersTheClustersAndTheSharedVersions(t *testing.T)
 // later read of a cluster names its uid.
 func TestThePageOfASetReadsTheSetAfterThe404OfTheRouteOfOneCluster(t *testing.T) {
 	var paths []string
-	for _, r := range requestsOf(t, devdata.StateClusters) {
+	for _, r := range requestsOf(t, devdata.StateFleet) {
 		paths = append(paths, r.Path)
 	}
-	first := slices.Index(paths, "/v1/clusters")
+	first := slices.Index(paths, api.PatternClusters)
 	if first < 0 || slices.Index(paths, "/v1/cluster") > first || slices.Contains(paths[first:], "/v1/cluster") {
 		t.Errorf("the requests %q", paths)
 	}
@@ -109,7 +110,7 @@ func TestThePageOfASetReadsTheSetAfterThe404OfTheRouteOfOneCluster(t *testing.T)
 }
 
 func TestAValueWithMarkupShowsAsTextOnEachScreenOfASet(t *testing.T) {
-	screens := render(t, devdata.StateClusters, true)
+	screens := render(t, devdata.StateFleet, true)
 	var all strings.Builder
 	for _, s := range screens {
 		checkMarkup(t, s)
@@ -135,7 +136,7 @@ func TestWithNoClustersTheHashesOfThePageAreTheHashesOfOneCluster(t *testing.T) 
 		}
 	}
 	for _, r := range requestsOf(t, devdata.StateOK) {
-		if strings.HasPrefix(r.Path, "/v1/clusters") || strings.HasPrefix(r.Path, "/v1/shared") {
+		if strings.HasPrefix(r.Path, api.PatternClusters) || strings.HasPrefix(r.Path, api.PatternShared) {
 			t.Errorf("the page of one cluster asked %s", r.Path)
 		}
 	}

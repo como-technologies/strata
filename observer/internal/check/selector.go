@@ -39,7 +39,7 @@ func ParseSelector(text string) (Selector, error) {
 		s.Filter = strings.TrimPrefix(text, filterPrefix)
 		parts = []string{s.Filter}
 	default:
-		return s, fmt.Errorf("the selector %q is not tag:KEY=VALUE, tag:KEY, or filter:NAME", text)
+		return s, fmt.Errorf("the selector %q is not %sKEY=VALUE, %sKEY, or %sNAME", text, tagPrefix, tagPrefix, filterPrefix)
 	}
 	for _, part := range parts {
 		switch {

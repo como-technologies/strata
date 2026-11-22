@@ -13,16 +13,16 @@ import (
 	"github.com/como-technologies/strata/observer/internal/model"
 )
 
-// StateClusters is the set of a set of clusters, with --clusters. It holds the answer of /v1/clusters in clusters.json,
+// StateFleet is the set of a set of clusters, with --clusters. It holds the answer of /v1/clusters in clusters.json,
 // the answer of /v1/shared in shared.json, and the rules of the alerts of the set. The directory members holds one set
 // of each cluster, by its uid, and each one names a set of one cluster in its base. The cluster quarry-1 runs the
 // observer and holds the finding of ok, ledger is quiet, and the key of the project of search is refused. A second
 // selector selects no cluster.
-const StateClusters State = "clusters"
+const StateFleet State = "fleet"
 
 // SetStates lists the sets of a set of clusters. They are not in States: the routes of one cluster of a set are under
 // the uid of the cluster.
-var SetStates = []State{StateClusters}
+var SetStates = []State{StateFleet}
 
 // The files of a set of clusters, and the directory of its clusters.
 const (

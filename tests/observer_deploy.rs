@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::Command;
 
 use serde_yaml::Value;
+use strata::config::KEY_VARS;
 
 use crate::common::{
     CommandExt, block_with, fake_bin, go_line, kubectl_args, kubectl_input, on_path, page_section,
@@ -17,6 +18,15 @@ use crate::common::{
 fn deploy_doc(file: &str) -> Value {
     serde_yaml::from_str(&repo_file(&format!("deploy/observer/{file}")))
         .unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
+}
+
+/// The flag of the observer that names a set of clusters. Its component in `deploy/observer/` and its
+/// key of the `ConfigMap` have the name of the flag, with no `--`.
+const SET_FLAG: &str = "--clusters";
+
+/// The name of the component of a set of clusters, and of its key of the `ConfigMap`.
+fn set_component() -> &'static str {
+    SET_FLAG.trim_start_matches('-')
 }
 
 /// The files that the kustomization renders, with the kind of the one object in each.
@@ -928,10 +938,10 @@ fn the_component_lists_its_files_and_each_holds_one_object() {
     };
     assert_eq!(
         folders("deploy/observer"),
-        ["alerts", "clusters", "pods"],
+        ["alerts", set_component(), "pods"],
         "the base holds the three components only"
     );
-    for component in ["alerts", "clusters", "pods"] {
+    for component in ["alerts", set_component(), "pods"] {
         assert!(
             folders(&format!("deploy/observer/{component}")).is_empty(),
             "no kustomization sits inside the base"
@@ -1383,7 +1393,7 @@ fn the_live_run_makes_the_binding_of_the_install_steps() {
 /// the entry of the key of the project of the `ConfigMap` is the entry that the base reads.
 #[test]
 fn the_clusters_component_adds_the_flags_the_selectors_and_the_volume_of_the_keys_and_no_object() {
-    let component = component_doc("clusters", "kustomization.yaml");
+    let component = component_doc(set_component(), "kustomization.yaml");
     assert_eq!(component["kind"], "Component");
     assert!(
         component.get("resources").is_none(),
@@ -1394,7 +1404,7 @@ fn the_clusters_component_adds_the_flags_the_selectors_and_the_volume_of_the_key
 
     let base_container = container();
     let base = strings(&base_container["args"]);
-    let with_set = pod_with("clusters");
+    let with_set = pod_with(set_component());
     let set_container = &with_set["containers"][0];
     let args = strings(&set_container["args"]);
     assert_eq!(
@@ -1404,7 +1414,10 @@ fn the_clusters_component_adds_the_flags_the_selectors_and_the_volume_of_the_key
     );
     assert_eq!(
         args[base.len()..],
-        ["--clusters=$(STRATA_CLUSTERS)", "--keys=/keys"]
+        [
+            format!("{SET_FLAG}=$(STRATA_CLUSTERS)").as_str(),
+            "--keys=/keys"
+        ]
     );
     let main = repo_file("observer/main.go");
     assert!(main.contains(r#"fs.Func("clusters", "#) && main.contains(r#""keys", """#));
@@ -1415,7 +1428,10 @@ fn the_clusters_component_adds_the_flags_the_selectors_and_the_volume_of_the_key
         selectors["valueFrom"]["configMapKeyRef"]["name"],
         "strata-observer"
     );
-    assert_eq!(selectors["valueFrom"]["configMapKeyRef"]["key"], "clusters");
+    assert_eq!(
+        selectors["valueFrom"]["configMapKeyRef"]["key"],
+        set_component()
+    );
 
     let mounts = set_container["volumeMounts"].as_sequence().unwrap();
     let keys = mounts.iter().find(|m| m["name"] == "keys").unwrap();
@@ -1435,17 +1451,17 @@ fn the_clusters_component_adds_the_flags_the_selectors_and_the_volume_of_the_key
         .as_sequence()
         .unwrap()
         .iter()
-        .find(|e| e["name"] == "PALETTE_API_KEY")
+        .find(|e| e["name"] == KEY_VARS[0])
         .unwrap()["valueFrom"]["secretKeyRef"]
         .clone();
     assert_eq!(volume["secret"]["secretName"], base_key["name"]);
     let keys_go = repo_file("observer/internal/check/keys.go");
     assert_eq!(
-        go_const(&keys_go, "homeKeyFile"),
+        go_const(&keys_go, "HomeKeyFile"),
         base_key["key"].as_str().unwrap()
     );
     assert!(
-        patched.iter().all(|p| p["target"]["kind"] == "Deployment"),
+        set_container.get("ports").is_none(),
         "the component opens no port"
     );
 }

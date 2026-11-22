@@ -609,7 +609,7 @@ sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
 `first-seen`, `stale-unchecked`, `lost-unchecked`, `lost-held`, and `read-error`. The other sets
 are `images`, `images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`,
 `alerts`, `alerts-unset`, `moved-drift`, `moved-unchecked`, `update-checks`, and
-`profile-checks`. The set `clusters` is a set of clusters. The server listens on `127.0.0.1:8080`. The flag `-listen` takes
+`profile-checks`. The set `fleet` is a set of clusters. The server listens on `127.0.0.1:8080`. The flag `-listen` takes
 another loopback address, and `-data` takes another directory of sets.
 
 A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
@@ -647,7 +647,7 @@ the page are those of the data.
   record. The filter "Not checked" shows the row of the record in the table.
 - The set `no-records` is the output of the observer with no record. A test runs
   the observer on a stand-in and makes sure of this.
-- The set `clusters` is the page of a set of three clusters in two projects. It holds
+- The set `fleet` is the page of a set of three clusters in two projects. It holds
   `clusters.json`, `shared.json`, and the rules of the alerts. Each cluster has a set in
   `members/`, under its uid, that names a set of one cluster in a file `base`. `quarry-1`
   runs the observer and holds the finding of `ok`. `ledger` is quiet, and the key of the

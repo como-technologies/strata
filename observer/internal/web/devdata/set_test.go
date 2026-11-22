@@ -29,7 +29,7 @@ func TestEachSetOfClustersMatchesTheTypesOfItsRoutesAndEachRowHasItsCluster(t *t
 	for _, state := range SetStates {
 		s := loadSet(t, state)
 		h := (&api.Server{Set: s}).Handler()
-		for route, file := range map[string]string{"/v1/clusters": fileClusters, "/v1/shared": fileShared} {
+		for route, file := range map[string]string{api.PatternClusters: fileClusters, api.PatternShared: fileShared} {
 			raw := testkit.ReadFile(t, path.Join("../testdata/api", string(state), file))
 			rec := testkit.Get(h, route)
 			if rec.Code != http.StatusOK {
@@ -73,10 +73,10 @@ func TestEachSetOfClustersMatchesTheTypesOfItsRoutesAndEachRowHasItsCluster(t *t
 	}
 }
 
-// The set clusters holds a cluster of each state: a drift, a cluster that is OK, and a cluster of a refused key. One
+// The set fleet holds a cluster of each state: a drift, a cluster that is OK, and a cluster of a refused key. One
 // selector selects no cluster.
 func TestTheSetClustersHoldsEachStateOfACluster(t *testing.T) {
-	s := loadSet(t, StateClusters)
+	s := loadSet(t, StateFleet)
 	var statuses []model.ClusterStatus
 	for _, r := range s.Summary.Clusters {
 		statuses = append(statuses, r.Status)

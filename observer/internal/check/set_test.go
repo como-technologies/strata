@@ -19,7 +19,7 @@ func twoProjects(t *testing.T) *setRig {
 	r := newSetRig(t, prod)
 	r.setRecord(webHome, webName, webV1, home)
 	r.setRecord(dbHome, dbName, webV1, "")
-	r.cluster(cPayments, home, "payments", []string{webHome}, prod)
+	r.cluster(cPayments, home, testkit.PaymentsName, []string{webHome}, prod)
 	r.cluster(cLedger, home, "ledger", []string{webHome}, prod)
 	r.cluster(cSearch, other, "search", []string{dbHome}, prod)
 	return r
@@ -183,7 +183,7 @@ func TestTwoProjectsWithOneNameAndVersionKeepTwoRecordsByTheirUids(t *testing.T)
 	r := newSetRig(t, prod)
 	r.setRecord(webHome, webName, webV1, home)
 	r.setRecord(webOther, webName, webV1, other)
-	r.cluster(cPayments, home, "payments", []string{webHome}, prod)
+	r.cluster(cPayments, home, testkit.PaymentsName, []string{webHome}, prod)
 	r.cluster(cSearch, other, "search", []string{webOther}, prod)
 	// only the version of other changed after its record
 	r.f.drifted[webOther] = true
@@ -237,5 +237,5 @@ func TestAClusterThatLeavesTheSetLeavesThePageAndTheAlertsWithNoClearMessage(t *
 	if len(s.state.Alerts.Items) != 0 {
 		t.Errorf("the store keeps %+v", s.state.Alerts.Items)
 	}
-	testkit.HoldsAll(t, "the log", r.log.String(), setLostAt, "cluster="+cLedger)
+	testkit.HoldsAll(t, "the log", r.log.String(), leftSet, "clusterUid="+cLedger)
 }
