@@ -1387,10 +1387,10 @@ fn the_live_run_makes_the_binding_of_the_install_steps() {
     );
 }
 
-/// The component of a set of clusters adds the flags `--clusters` and `--keys`, the variable of the
-/// selectors from the key `clusters` of the `ConfigMap`, and the read-only volume of the Secret of
-/// the keys. It adds no object, no role, and no egress rule. The flags are flags of the observer, and
-/// the entry of the key of the project of the `ConfigMap` is the entry that the base reads.
+/// The component of a set of clusters adds the flags `--clusters` and `--keys`. It adds the variable
+/// of the selectors from the key `clusters` of the `ConfigMap`, and the read-only volume of the Secret
+/// of the keys. It adds no object, no role, and no egress rule. The flags are flags of the observer.
+/// The entry of the key of the project of the `ConfigMap` is the entry that the base reads.
 #[test]
 fn the_clusters_component_adds_the_flags_the_selectors_and_the_volume_of_the_keys_and_no_object() {
     let component = component_doc(set_component(), "kustomization.yaml");
@@ -1445,8 +1445,8 @@ fn the_clusters_component_adds_the_flags_the_selectors_and_the_volume_of_the_key
         .iter()
         .find(|v| v["name"] == "keys")
         .unwrap();
-    // the volume holds the Secret of the key of the base, and the entry of the project of the
-    // ConfigMap is the entry that the base hands to PALETTE_API_KEY
+    // the volume holds the Secret of the key of the base. The entry of the project of the ConfigMap
+    // is the entry that the base hands to PALETTE_API_KEY.
     let base_key = base_container["env"]
         .as_sequence()
         .unwrap()

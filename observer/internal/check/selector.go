@@ -26,8 +26,8 @@ type Selector struct {
 	Filter string
 }
 
-// ParseSelector reads one selector. A selector with another prefix, an empty part, or a part that starts with a
-// dash is an error: strata reads a part that starts with a dash as a flag.
+// ParseSelector reads one selector. A selector with another prefix, or with an empty part, is an error. A part that
+// starts with a dash is an error too, because strata reads it as a flag.
 func ParseSelector(text string) (Selector, error) {
 	s := Selector{Text: text}
 	var parts []string

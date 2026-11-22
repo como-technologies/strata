@@ -39,7 +39,7 @@ observer-contract *args: build stand-in
 observer-playground chapter="observer-2": build observer-build
     scripts/observer-playground.sh {{chapter}}
 
-# Serve the dashboard of the observer from test data. The sets: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, lost-held, read-error, images, images-split, images-off, images-unread, asks, text-too-large, alerts, alerts-unset, moved-drift, moved-unchecked, update-checks, profile-checks, fleet
+# Serve the dashboard of the observer from test data. The sets: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, lost-held, read-error, and asks. The other sets: images, images-split, images-off, images-unread, text-too-large, alerts, alerts-unset, moved-drift, moved-unchecked, update-checks, profile-checks, and fleet.
 [group('observer')]
 observer-dev state="ok":
     go -C observer run ./internal/web/devserver -state {{state}}
@@ -476,7 +476,7 @@ live-observer: build
 live-observer-role: build
     examples/live/observer-role.sh
 
-# The observer of a set of clusters (#702), with the key of a user whose one role is Project Viewer: the saved filters and the cluster search at tenant scope, the search of the project, list --tag with --project, and one cycle of the observer with --clusters. Needs live-up and OBSERVER_ROLE_KEY. Adds a label to cluster A and a saved filter, and removes both.
+# The observer of a set of clusters (#702), with the key of a user whose one role is Project Viewer. It reads the saved filters and the cluster search at tenant scope, and the search of the project. It runs list --tag with --project, and one cycle of the observer with --clusters. Needs live-up and OBSERVER_ROLE_KEY. Adds a label to cluster A and a saved filter, and removes both.
 [group('live checks')]
 live-observer-clusters: build observer-build
     examples/live/observer-clusters.sh

@@ -183,10 +183,10 @@ pub struct Source {
     /// record in this project unless told otherwise.
     #[serde(default)]
     pub project_uid: String,
-    /// The scope of the profile, from `metadata.annotations.scope` of its document. A profile of
-    /// the tenant that a request of a project records has the uid of that project in
-    /// `project_uid`, and the scope says that each project can use it. It is absent in a record
-    /// of a cluster, of a pack, and of strata 0.35 and before. It is not part of the root.
+    /// The scope of the profile, from `metadata.annotations.scope` of its document. A request of a
+    /// project can record a profile of the tenant. Then `project_uid` has the uid of that project,
+    /// and the scope says that each project can use the profile. It is absent in a record of a
+    /// cluster, of a pack, and of strata 0.35 and before. It is not part of the root.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<ProfileScope>,
     /// Profile name.

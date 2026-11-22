@@ -66,8 +66,9 @@ type ClusterRow struct {
 	LastError  *ErrorRef     `json:"lastError,omitempty"`
 }
 
-// SetCounts holds the numbers of the tiles of the screen of the clusters: the clusters, the clusters with a drift
-// or a copy that differs, the clusters with a newer version, and the clusters that are not checked.
+// SetCounts holds the numbers of the tiles of the screen of the clusters. They count all the clusters, and the
+// clusters with a drift or a copy that differs. They also count the clusters with a newer version, and the clusters
+// that are not checked.
 type SetCounts struct {
 	Clusters   int `json:"clusters"`
 	Drift      int `json:"drift"`

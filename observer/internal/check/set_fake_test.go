@@ -19,7 +19,7 @@ import (
 )
 
 // The tests of a set give it a fake strata that answers for many clusters in many projects. The fake reads the key of
-// each run, as the runner gives it to strata, and it refuses each run with the key of a project that a test names.
+// each run, as the runner gives it to strata. It refuses each run with the key of a project that a test names.
 
 // The projects, the keys, and the clusters of the tests of a set. Home is the project of the key api-key.
 const (
@@ -287,8 +287,8 @@ func (r *setRig) setRecord(uid, name, version, project string) {
 	r.f.records[uid] = [2]string{name, version}
 }
 
-// cluster adds a cluster of a project to the fake, with the uid of each profile that it runs, and makes each
-// selector of sels select it.
+// cluster adds a cluster of a project to the fake, with the uid of each profile that it runs. Each selector of sels
+// selects it.
 func (r *setRig) cluster(uid, project, name string, profiles []string, sels ...string) {
 	r.f.clusters[uid] = fleetCluster{project: project, name: name, profiles: profiles}
 	for _, s := range sels {

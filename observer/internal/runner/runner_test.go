@@ -190,8 +190,8 @@ func TestCodeMdNamesEachVariableThatTheRunnerSets(t *testing.T) {
 	testkit.HoldsAll(t, "the rule", rule, "`STRATA_REPORT=0`")
 }
 
-// A set of clusters has one key for each project. A run with a key gets the key and the project of the key, and none
-// of the variables of the key of the observer, also not the name of its project.
+// A set of clusters has one key for each project. A run with a key gets the key and the project of the key. It gets
+// none of the variables of the key of the observer, also not the name of its project.
 func TestARunWithAKeyGetsOnlyTheKeyAndTheProjectOfThatKey(t *testing.T) {
 	t.Setenv(EnvKey, "SENTINEL-KEY-OF-THE-OBSERVER")
 	t.Setenv(EnvProjectUID, "p-observer")

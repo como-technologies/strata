@@ -36,19 +36,19 @@ type SetConfig struct {
 	Home string
 }
 
-// Set observes a set of clusters. It finds the clusters of its selectors in the project of each key, checks each
-// record one time for its project, and reads each cluster in turn. Each cluster is a member: an Observer of its own,
+// Set observes a set of clusters. It finds the clusters of its selectors in the project of each key. It checks each
+// record one time for its project, and it reads each cluster in turn. Each cluster is a member: an Observer of its own,
 // with its own findings and its own state. The set holds the cycles, the pool of processes, the clocks of the set,
 // the cache of the moves, and the alerts. The embedded Observer holds them: a member never runs a cycle of its own.
 type Set struct {
 	*Observer
 	scfg SetConfig
 	// versionsTurn lets one versions cycle of the set run. The cycle takes the versions slot for one project at a
-	// time, so a click "Ask Palette" waits for one project, and not for the whole cycle.
+	// time. So a click "Ask Palette" waits for one project, and not for the whole cycle.
 	versionsTurn chan struct{}
 
-	// keysMu guards keys, the keys of the last read. A member reads them with this lock and never with the lock of
-	// the set, so a member that holds its own lock can read them.
+	// keysMu guards keys, the keys of the last read. A member reads them with this lock, and never with the lock of
+	// the set. So a member that holds its own lock can read them.
 	keysMu sync.Mutex
 	keys   []runner.Key
 
@@ -81,8 +81,8 @@ type setProject struct {
 }
 
 // NewSet makes the observer of a set of clusters. It reads the state of the set, and the state of each member that
-// a run before this one left, so that a restart lists the clusters before the first search ends. pods reads the
-// pods of the cluster where the observer runs, and it is nil when the observer reads no pod.
+// a run before this one left. So a restart lists the clusters before the first search ends. pods reads the pods of
+// the cluster where the observer runs, and it is nil when the observer reads no pod.
 func NewSet(cfg SetConfig, strata Strata, pods Pods, log *slog.Logger) *Set {
 	return newSet(cfg, strata, pods, log, time.Now)
 }
@@ -161,8 +161,8 @@ func (s *Set) project(uid string) *setProject {
 	return p
 }
 
-// projectOf gives the project whose key checks a record: its project, or the project of api-key for a record that
-// a request at tenant scope took.
+// projectOf gives the project whose key checks a record: its project. A request at tenant scope took a record with
+// no project, and the key api-key checks it.
 func (s *Set) projectOf(r docs.Record) string {
 	if r.Source.ProjectUID == "" {
 		return s.scfg.Home

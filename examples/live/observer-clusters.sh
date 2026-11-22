@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The observer of a set of clusters (#702), with the key of a user whose one role is Project Viewer in
-# the project of cluster A. The code of Palette gives the answer that each check of the role expects.
+# The observer of a set of clusters (#702). The key is the key of a user whose one role is Project
+# Viewer in the project of cluster A. The code of Palette gives the answer that each check of the role
+# expects.
 # The book states each answer as a fact of the code until a run of this script shows it.
 #
 #   OBSERVER_ROLE_KEY=KEY examples/live/observer-clusters.sh [FROM_STAGE]
@@ -17,7 +18,8 @@
 #   5  the baseline: the filter goes, and the labels of cluster A are as they were
 #
 # Make the user of the key as observer-role.sh says, with the role Project Viewer. The key stays in the
-# environment of one command at a time, and in the file of the keys of stage 4, which the run removes.
+# environment of one command at a time. It is also in the file of the keys of stage 4, and the run
+# removes that file.
 # With no key, the script says "could not check" and exits 2.
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
@@ -128,8 +130,8 @@ observer_records() {
   echo '{"baseline":"approved","revision":"live"}' > records/meta.json
 }
 
-# observer_once: one content cycle and one versions cycle of the observer for tag:env=prod, with the
-# key of the role as the key of the project of cluster A
+# observer_once: one content cycle and one versions cycle of the observer for tag:env=prod. The key of
+# the role is the key of the project of cluster A.
 observer_once() {
   ( umask 077 && mkdir -p keys && printf %s "$OBSERVER_ROLE_KEY" > keys/api-key ) || return 2
   "$observer_bin" once --strata "$strata" --clusters tag:env=prod --keys keys --cluster-uid "$C" \

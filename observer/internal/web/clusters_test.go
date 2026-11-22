@@ -14,7 +14,7 @@ import (
 /* The tests below hold the page of a set of clusters, with the set fleet of testdata/api. With no --clusters, the page
 is the page of one cluster, and the tests of the other files hold it. */
 
-// The clusters of the set fleet: quarry-1 runs the observer and has a drift, ledger is OK, and the key of the project
+// The clusters of the set fleet: quarry-1 runs the observer and has a drift, and ledger is OK. The key of the project
 // of search is refused.
 const (
 	quarryHash = "#c-" + testkit.ClusterUID
@@ -93,7 +93,7 @@ func TestTheChoiceOfAProjectFiltersTheClustersAndTheSharedVersions(t *testing.T)
 	mustNotHold(t, "the shared versions of prod", shared, "wilma-gateway")
 }
 
-// A set serves no route of one cluster at the top, so the first read of the page gets 404, and the page reads the set. Each
+// A set serves no route of one cluster at the top. So the first read of the page gets 404, and the page reads the set. Each
 // later read of a cluster names its uid.
 func TestThePageOfASetReadsTheSetAfterThe404OfTheRouteOfOneCluster(t *testing.T) {
 	var paths []string
@@ -120,7 +120,7 @@ func TestAValueWithMarkupShowsAsTextOnEachScreenOfASet(t *testing.T) {
 	mustHold(t, "the screens", all.String(), injection)
 }
 
-// With no --clusters, the hashes of the page are the hashes of one cluster: no screen names a cluster, and the page asks no
+// With no --clusters, the hashes of the page are the hashes of one cluster. No screen names a cluster, and the page asks no
 // route of a set.
 func TestWithNoClustersTheHashesOfThePageAreTheHashesOfOneCluster(t *testing.T) {
 	hashes := map[string]bool{}

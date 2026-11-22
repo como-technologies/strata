@@ -28,8 +28,8 @@ type State struct {
 	Versions  ClockState                   `json:"versions"`
 	Images    ImagesState                  `json:"images"`
 	Alerts    alert.Store                  `json:"alerts"`
-	// Member names the cluster of a member of a set, with its project, so that a restart lists the clusters of the
-	// set before its first search. It is absent with no --clusters.
+	// Member names the cluster of a member of a set, with its project. So a restart lists the clusters of the set
+	// before its first search. It is absent with no --clusters.
 	Member *MemberState `json:"member,omitempty"`
 }
 

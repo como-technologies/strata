@@ -16,8 +16,8 @@ import (
 // error line.
 var exitsOfAList = []int{0}
 
-// setCycle is what one content cycle of the set tells the alerts: the ids that it cannot clear, and each member
-// whose check did not end well.
+// setCycle is what one content cycle of the set tells the alerts. It holds the ids that it cannot clear, and each
+// member whose check did not end well.
 type setCycle struct {
 	held   map[string]bool
 	failed map[string]bool
@@ -44,9 +44,9 @@ func (s *Set) RunContent(ctx context.Context) error {
 	return err
 }
 
-// contentCycle runs one content cycle of the set. It reads the keys and the records, finds the clusters of each
-// project, checks the records of each project one time, and then reads each cluster in turn. files is -1 when the
-// directory of the records was not read.
+// contentCycle runs one content cycle of the set. It reads the keys and the records, and it finds the clusters of
+// each project. It checks the records of each project one time, and then it reads each cluster in turn. files is -1
+// when the directory of the records was not read.
 func (s *Set) contentCycle(ctx context.Context, c setCycle) (int, error) {
 	keys, err := readKeys(s.scfg.Keys, s.scfg.Home)
 	if err != nil {

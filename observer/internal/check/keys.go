@@ -17,9 +17,9 @@ const HomeKeyFile = "api-key"
 
 // readKeys reads the keys of a set from the directory of the mounted Secret. The entry HomeKeyFile is the key of the
 // project home, and it must be there. A project uid can start with a digit, so it is not a portable name of an
-// environment variable: the observer reads the files, again at the start of each cycle, because the kubelet updates
-// a mounted Secret. The kubelet also writes entries whose names start with a dot, and they are no key. The keys come
-// in the order of their project.
+// environment variable. So the observer reads the files, again at the start of each cycle: the kubelet updates a
+// mounted Secret. The kubelet also writes entries whose names start with a dot, and they are no key. The keys come in
+// the order of their project.
 func readKeys(dir, home string) ([]runner.Key, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

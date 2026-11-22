@@ -253,7 +253,7 @@ async function answerOf(d, pathname, u, method) {
 }
 
 // SET_ROUTES are the routes of a set of clusters. A set serves no route of one cluster at the top: each one is under
-// /v1/clusters/<uid>, and the cycles and the alerts belong to the set.
+// /v1/clusters/<uid>. The cycles and the alerts belong to the set.
 const SET_ROUTES = {"/v1/clusters": "set", "/v1/shared": "shared", "/v1/alerts": "alerts"};
 const json = body => ({ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(body))});
 

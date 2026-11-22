@@ -31,8 +31,8 @@ fn example_words(text: &str) -> Vec<(usize, String)> {
     out
 }
 
-/// The text of each place that names a set of clusters: each page of the book outside its examples, and the code of the
-/// flags, of the routes, and of the page of the observer.
+/// The text of each place that names a set of clusters. The places are each page of the book outside its examples, and
+/// the code of the flags, the routes, and the page of the observer.
 fn places() -> Vec<(String, String)> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut out = Vec::new();

@@ -11,7 +11,7 @@
 # --revision names the Git revision of records that a review approved. --first-seen records what each
 # profile of the cluster holds now. No person approved that content, and each screen of the observer
 # says so. Each record goes gzipped in one of four Secrets. An empty Secret removes the old content.
-# --set keys each record by its uid, for an observer of a set of clusters: two projects can hold one
+# --set keys each record by its uid, for an observer of a set of clusters. Two projects can hold one
 # name and version with two uids. It refuses two records of one uid.
 # Needs strata (or STRATA_BIN) for --first-seen, gzip, base64, and jq.
 set -euo pipefail

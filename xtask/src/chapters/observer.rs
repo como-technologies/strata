@@ -203,8 +203,8 @@ fn alerts(r: &mut Runner) {
     );
 }
 
-/// The environment of the chapter `observer-clusters`: the project of the key `api-key`, by its
-/// name for the playground and by its uid for the observer, and the revision of the records.
+/// The environment of the chapter `observer-clusters`: the project of the key `api-key`, and the
+/// revision of the records. The playground reads the name of the project, and the observer its uid.
 const SET_ENV: &[(&str, &str)] = &[ENV[0], ("PALETTE_PROJECT_UID", DEV), ENV[1]];
 
 /// The command line of a run of `once` for the set of the chapter `observer-clusters`. Two

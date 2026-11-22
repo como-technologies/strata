@@ -18,20 +18,20 @@ type membership struct {
 	// home is the project of the key api-key. A record with no project is checked with that key.
 	home string
 	// keys gives the keys of the set at the last read. It takes the lock of the keys of the set, and never the lock
-	// of the set, so a member that holds its own lock can call it.
+	// of the set. So a member that holds its own lock can call it.
 	keys func() []runner.Key
 }
 
-// setRead is what the set gives a member for one content cycle: the records, and the row of `verify` of each one by
-// the uid of the record. Strata is the version of the binary that checked the records.
+// setRead is what the set gives a member for one content cycle: the records, and the row of `verify` of each one.
+// The rows have the uid of the record as their key. Strata is the version of the binary that checked the records.
 type setRead struct {
 	records baseline.Set
 	rows    map[string]docs.VerifyRow
 	strata  string
 }
 
-// projectOf gives the project whose key checks a record: the project of the record, or home for a record that a
-// request at tenant scope took.
+// projectOf gives the project whose key checks a record: the project of the record. A request at tenant scope took a
+// record with no project, and the key of home checks it.
 func (m *membership) projectOf(r docs.Record) string {
 	if r.Source.ProjectUID == "" {
 		return m.home
@@ -40,7 +40,7 @@ func (m *membership) projectOf(r docs.Record) string {
 }
 
 // keyed gives a context whose runs use the key of the project of the record of subject in the last good content.
-// A project with no key gets a key with no secret, so that strata refuses the run: the key of another project must
+// A project with no key gets a key with no secret, so that strata refuses the run. The key of another project must
 // never read it. A cluster with no member link keeps ctx.
 func (o *Observer) keyed(ctx context.Context, subject string) context.Context {
 	if o.member == nil {
@@ -122,7 +122,7 @@ func (o *Observer) memberCycle(ctx context.Context, in setRead) (model.Content, 
 	return content, in.records.Files(), err
 }
 
-// failMember counts a content cycle of a member that the set could not start, such as for a refused key, with the
+// failMember counts a content cycle of a member that the set could not start, such as for a refused key. It keeps the
 // kind and the status of err. The last good answer stays.
 func (o *Observer) failMember(err error) {
 	o.mu.Lock()
@@ -178,8 +178,8 @@ func (o *Observer) memberRecord(subject string) string {
 	return r.Doc.Source.UID
 }
 
-// nameMember keeps the name and the project of the cluster of a member in its state, so that a restart lists the
-// cluster before its first search.
+// nameMember keeps the name and the project of the cluster of a member in its state. So a restart lists the cluster
+// before its first search.
 func (o *Observer) nameMember(name string, project model.ProjectRef) {
 	o.mu.Lock()
 	defer o.mu.Unlock()

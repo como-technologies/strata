@@ -136,8 +136,8 @@ impl ListOptions {
     }
 
     /// True when a query searches one project: `project` names a project, and not the tenant.
-    /// Palette refuses a search at tenant scope to a key with no `project.list` in the tenant,
-    /// such as a key with a role in one project.
+    /// Palette refuses a search at tenant scope to a key with no `project.list` in the tenant. A
+    /// key with a role in one project is such a key.
     fn searches_project(&self) -> bool {
         self.project.as_deref().is_some_and(|p| p != TENANT_SCOPE)
     }

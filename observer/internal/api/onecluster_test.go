@@ -9,13 +9,13 @@ import (
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
-// oneCluster is the file of the routes, the ids of the findings, and the ids of the subjects of the alerts of the
-// observer of one cluster, as the observer of 0.35.0 gave them. With no --clusters, the code of a set of clusters
+// oneCluster is the file of the routes of the observer of one cluster. It also holds the ids of the findings and of
+// the subjects of the alerts. The observer of 0.35.0 gave them. With no --clusters, the code of a set of clusters
 // changes none of them.
 const oneCluster = "testdata/one-cluster.txt"
 
-// oneClusterLines gives the lines of the file oneCluster: each route with its method and its tier, and then the id of
-// each finding and of each subject of the alerts after one content cycle and one versions cycle of the rig.
+// oneClusterLines gives the lines of the file oneCluster: each route with its method and its tier. Then it gives the
+// id of each finding and of each subject of the alerts, after one content cycle and one versions cycle.
 func oneClusterLines(t *testing.T) []string {
 	t.Helper()
 	r := newRig(t)

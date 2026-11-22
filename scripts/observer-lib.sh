@@ -50,9 +50,9 @@ cluster_uid() {
 }
 
 # set_records writes a record of each profile that a cluster of each project runs, by its uid, in the
-# folder records of the current directory. It writes a key for each project in the folder keys:
-# api-key for the project of PALETTE_PROJECT_UID, and a file with the uid of each other project. A
-# profile of the tenant that two projects run gets one record.
+# folder records of the current directory. It writes a key for each project in the folder keys. The
+# file api-key is for the project of PALETTE_PROJECT_UID, and each other project has a file with its
+# uid. A profile of the tenant that two projects run gets one record.
 set_records() {
   local project uid file
   mkdir -p records keys

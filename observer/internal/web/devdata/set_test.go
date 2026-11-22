@@ -23,8 +23,8 @@ func loadSet(t *testing.T, state State) *SetData {
 }
 
 // Each file of a set of clusters decodes into the type of its route, and the routes of the set serve them. Each row of
-// the clusters has the set of its cluster under its uid, with the same uid and name, and the counts are the counts of
-// the rows.
+// the clusters has the set of its cluster under its uid, with the same uid and name. The counts are the counts of the
+// rows.
 func TestEachSetOfClustersMatchesTheTypesOfItsRoutesAndEachRowHasItsCluster(t *testing.T) {
 	for _, state := range SetStates {
 		s := loadSet(t, state)

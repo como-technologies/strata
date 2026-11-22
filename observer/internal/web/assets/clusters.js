@@ -34,7 +34,7 @@ const clusterHash = uid => `#c-${enc(uid)}/overview`;
 
 /* ---- The data of a set ---- */
 // setData reads the summary of the set and the shared versions. On a screen of one cluster, it also reads the routes of that cluster.
-// On a screen of the set, the frame of the set stands for the cluster, so the top bar shows the two clocks of the set. D.wanted is the
+// On a screen of the set, the frame of the set stands for the cluster. So the top bar shows the two clocks of the set. D.wanted is the
 // cluster that the read was for.
 async function setData() {
   const uid = clusterOfHash(location.hash);
@@ -44,8 +44,8 @@ async function setData() {
   return {...part, set, shared: shared.shared, wanted: uid};
 }
 
-// setFrame gives the parts of the data that the frame of the page reads, for a screen of the set: the page, the records, the two
-// clocks, and the counts. It names no cluster, and it holds no finding and no pod.
+// setFrame gives the parts of the data that the frame of the page reads, for a screen of the set. They are the page, the records, the
+// two clocks, and the counts. It names no cluster, and it holds no finding and no pod.
 function setFrame(set, alerts) {
   const n = set.counts;
   const counts = {findings: n.findings, drift: n.drift, newer: n.newer, notChecked: n.notChecked, packs: 0, packsInFull: 0, profiles: 0, newerProfiles: 0, newerProfileVersions: 0};

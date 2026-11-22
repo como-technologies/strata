@@ -26,10 +26,10 @@ const (
 )
 
 // allowedFlags holds each flag that the observer gives to strata. A flag that asks Palette to validate
-// is not here: `--validate` and `--repave` of `compare` send a POST for a cluster side, and no cycle
+// is not here. `--validate` and `--repave` of `compare` send a POST for a cluster side, and no cycle
 // sends one. The one POST of the observer that asks Palette about a move comes from `behind` with
-// `--pin` and without `--no-impact`, for the click of a person on one move: see check.Ask. A set of
-// clusters adds one more POST, the search of `list`, which reads and changes nothing. `--full` adds
+// `--pin` and without `--no-impact`. It is for the click of a person on one move: see check.Ask. A set
+// of clusters adds one more POST, the search of `list`, which reads and changes nothing. `--full` adds
 // the unified text of the changes to the document, and only `compare` and `verify` take it.
 var allowedFlags = []string{"--summary", "--who", "--json", "--compact", "-q", FlagNoImpact, FlagFull, FlagPin, "--raw-dir", "--from-raw", "-o",
 	FlagTag, FlagFilter, FlagProject}
@@ -180,8 +180,8 @@ func check(args []string) error {
 	return nil
 }
 
-// env gives the variables of a run. With a key, the run gets the key and the project of the key, and
-// none of the variables of the key of the observer, so a run reads its own project only.
+// env gives the variables of a run. With a key, the run gets the key and the project of the key. It
+// gets none of the variables of the key of the observer, so a run reads its own project only.
 func env(key Key, keyed bool) []string {
 	out := []string{"STRATA_REPORT=0"}
 	for _, k := range allowedEnv {

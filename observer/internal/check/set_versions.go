@@ -139,9 +139,9 @@ func (o *Observer) runSubjects(projectOf func(docs.Record) string) map[string]ma
 }
 
 // versionsFor gives the versions of the records of one cluster: the pins and the profile versions that its records
-// hold, from the versions of the project of each record. byProject holds the last good versions of each project, and
-// subjects the subjects of the records of the cluster in each project. A pin of two projects is one pin, as one
-// `behind` of all the records gives it: see mergeBehind. It gives nil when no project has versions.
+// hold. They come from the versions of the project of each record. byProject holds the last good versions of each
+// project, and subjects the subjects of the records of the cluster in each project. A pin of two projects is one pin,
+// as one `behind` of all the records gives it: see mergeBehind. It gives nil when no project has versions.
 func versionsFor(byProject map[string]*model.Versions, subjects map[string]map[string]bool) *model.Versions {
 	out := &model.Versions{Moves: map[string]model.Move{}, Unread: map[string]bool{}, ProfileMoves: map[string]docs.Diff{}, ProfileUnread: map[string]bool{}}
 	var answers []docs.Behind

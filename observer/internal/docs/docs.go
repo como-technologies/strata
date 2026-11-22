@@ -392,8 +392,8 @@ func (d *Diff) CapText(limit int) {
 	}
 }
 
-// ClusterList is the part of strata-list/1 that the search of a set of clusters reads: the clusters of a label or of
-// a saved tag filter. It holds no label and no profile.
+// ClusterList is the part of strata-list/1 that the search of a set of clusters reads. It holds the clusters of a
+// label or of a saved tag filter, with no label and no profile.
 type ClusterList struct {
 	Schema   string          `json:"schema"`
 	Clusters []ListedCluster `json:"clusters"`

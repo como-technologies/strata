@@ -13,7 +13,7 @@ import (
 )
 
 // twoProjects is a set of three clusters in two projects: payments and ledger run web of home, and search runs db of
-// home, a profile of the tenant that a request of home recorded. The selector prod selects the three.
+// home. db is a profile of the tenant that a request of home recorded. The selector prod selects the three.
 func twoProjects(t *testing.T) *setRig {
 	t.Helper()
 	r := newSetRig(t, prod)

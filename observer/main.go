@@ -153,7 +153,7 @@ func (o *options) loadRules() error {
 
 // checkSet reads the selectors of --clusters, and refuses the flags that do not fit them. With no --clusters, the
 // observer watches one cluster, so --cluster-uid is required. With --clusters, --cluster-uid is optional, so the
-// observer can run on a cluster that Palette does not manage, and --keys and the project of api-key are required.
+// observer can run on a cluster that Palette does not manage. Then --keys and the project of api-key are required.
 // --read-pods reads the pods of the cluster where the observer runs, so it needs --cluster-uid.
 func (o *options) checkSet() error {
 	selectors, err := check.ParseSelectors(o.clusters)
