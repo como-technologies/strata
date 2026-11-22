@@ -207,7 +207,13 @@ adds to the Rust files and the Go files. A package tree is the directory of a
 - Each Go const of a named string type, and the texts of the rows of a Go map
   table, such as `eventKinds`.
 - Each string const of Rust and of Go.
-- Each route: a text that starts with `/v1/`.
+- Each route: a text that starts with `ROUTE_PREFIX` of `strata::api`, `/v1/`.
+  A method and a space can come before it, as in `DELETE /v1/...`.
+
+The check reads a word of capital letters as the method of a route, so it keeps
+no list of the methods. `strata::api::Method` holds only the methods that strata
+sends. The live scripts also send `PUT`, `PATCH`, and `DELETE`, and their tests
+name these requests.
 
 A finding is one of these:
 
@@ -223,27 +229,56 @@ A finding is one of these:
 3. A const that the change adds has the value of another declaration or of a
    literal of its tree. Each string of a `const` array is such a const.
 4. A function that the change adds has the same body as another function of its
-   tree, apart from the names of its arguments.
+   tree, apart from the names of its arguments. A method of Go, a function of a
+   trait impl, and a body of fewer than 6 tokens are out. An interface or a
+   trait asks for such a function in each type, and a short body, such as
+   `{ self.0 }`, is in too many functions.
 
 A const or a function of the kinds 3 and 4 is a copy also when neither of the
 two can name the other. Two private items of two modules are such a copy. Move
 the value or the body to one place that both can name.
 
+A route is a copy only of the same route, in each kind. So `/v1/packs/{uid}` is
+no copy of `/v1/packs`, and a route of the observer is no copy of a route of
+Palette with the same start.
+
 A literal of the kind 1 is a copy only of a value that its file can name:
 
 - A private Rust item reaches its module and the children of its module. A
-  `pub` or `pub(crate)` item reaches its package.
+  `pub(crate)` item reaches its crate, and a `pub` item reaches its package.
+- The integration tests in `tests/` are a crate of their own. They reach only
+  a `pub` item of the library, and an item of the tests reaches only the tests.
+- The table of `impl_closed_set!` and the texts of a function of a trait impl,
+  such as `fmt` of `Display`, reach where their type reaches. A file that names
+  the type can call the trait. When the file does not declare the type, they
+  reach the package.
 - A Go name with a small letter reaches its package. A Go name with a capital
   letter reaches each package of its module that its own package does not
   import.
 - A Go test file reaches the tests of its package, and a value of test code
   reaches only test code.
 
+A value that strata defines has one owner. A value of the world outside strata
+is no copy, also when a value of strata has the same text. Such a value is a
+part of a URL or of a host name, or the name of a program, such as `bash`. It
+can also be a word of a sentence, or a key of a document of Palette. The check
+knows two kinds of them, and they are no findings:
+
+- A dot between two characters of a word is a part of the word, as in a host
+  name or a file name. So `k8s` is no value of `registry.k8s.io`.
+- A scheme of a URL, such as `https://`, counts only as the whole literal.
+
+The check cannot find the other values of the world outside strata, so it lists
+them. Name each one with its reason in the body of the pull request. The verify
+and the lead accept such a finding by this rule.
+
 The class of a place tells what the literal does there, such as `compare`,
 `call:HoldsAll`, or `row:want`. The command lists the places of these classes
 apart, and they are no findings:
 
 - `json`: a JSON or a JS input of a test, or a key of a map literal of a test.
+  The index of a value in a test is a key too, such as `"profiles"` of
+  `manifests["profiles"]`, because it reads a key of a document.
 - `rules`: a YAML file of rules of a test.
 - `script`: a shell script of a test, such as a stand-in for a command.
 - `case`: the name of a case, an argument of `t.Run`, or a field `name` of a
@@ -255,6 +290,11 @@ apart, and they are no findings:
 Each line of a finding names the file, the line, the class, the literal, and
 each declaration that holds the value. Replace the copy with that declaration.
 The command exits 1 when it lists a finding, and 0 when it lists none.
+
+A file that the command reads and whose name is not UTF-8 stops it with exit 2,
+as it stops `just comment-words`. The message names the file. A table whose
+visibility does not parse, such as `impl_texts!(pub(in 3) ...)`, also stops it
+with exit 2, because the compiler refuses such a table.
 
 ## Comments
 
@@ -307,6 +347,9 @@ ASD-STE100.
   uses. `answer.rs`, `answer_tags.rs`, `closed_set.rs`, `code_block.rs`, `code_span.rs`,
   `download.rs`, `git.rs`, `palette.rs`, `process.rs`, `route.rs`, `sentences.rs`, `server.rs`,
   `table.rs`, `toml.rs`, `variants.rs`, and `walk.rs` have such users. A file that uses some of the helpers allows `dead_code` on the include.
+- A file of `tests/common/` that `xtask` includes cannot name an item of `xtask`, because the
+  tests of strata include it too. So `marks_of` of `sentences.rs` keeps its own text of the
+  extensions `rs` and `go`. A test of `xtask` compares each one with `Lang`.
 - A test that needs one value of each variant of an enum makes its list with `one_of_each!` of
   `tests/common/variants.rs`. Do not write the list with `vec!`. The build then fails on a new
   variant until the list holds a value of it. The tests of `error/` and of
@@ -340,6 +383,8 @@ ASD-STE100.
   [The tests send no report](./build-test.md#the-tests-send-no-report).
 - Start git with `git` or `isolate_git`, which give git its settings: see
   [The tests get no git setting of the machine](./build-test.md#the-tests-get-no-git-setting-of-the-machine).
+  A test of `xtask` that needs a git repository makes it with `Repo` of
+  `xtask/src/test_repo.rs`, which does each git step of a change.
 - Start a process with `output_locked` or `spawn_locked` of `CommandExt`, never
   with `output`, `spawn`, or `status` of `Command`. To wait for the end of a
   process, call `wait` on the result of `spawn_locked`. Write a script that a test

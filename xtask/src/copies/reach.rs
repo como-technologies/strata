@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use super::Scope;
 use super::source::dir_of;
-use crate::files::Lang;
+use crate::files::{Lang, RUST_TESTS};
 
 /// The files that a declaration reaches. A directory has a `/` at its end, or is empty for the
 /// root of the repository.
@@ -65,12 +65,16 @@ impl Reach {
 ///
 /// A module file `mod.rs`, `lib.rs`, or `main.rs` holds the module of its directory. Another file
 /// `name.rs` holds the module `name`, whose children are under `name/`.
+///
+/// The integration tests in [`RUST_TESTS`] are a crate of their own. So a `pub(crate)` item of the
+/// library does not reach them, and an item of them reaches only them.
 pub fn rust_reach(path: &str, root: &str, roots: &[String], scope: Scope, test: bool) -> Reach {
     let dir = dir_of(path);
     let module_file = ["mod.rs", "lib.rs", "main.rs"]
         .iter()
         .any(|name| path.strip_prefix(dir) == Some(name));
-    let tree = |dir: &str| Reach::Tree {
+    let tests_crate = format!("{root}{RUST_TESTS}/");
+    let tree = |dir: &str, without_tests: bool| Reach::Tree {
         dir: dir.to_string(),
         apart: roots
             .iter()
@@ -78,12 +82,17 @@ pub fn rust_reach(path: &str, root: &str, roots: &[String], scope: Scope, test: 
                 other.len() > dir.len() && other.starts_with(dir) && other.as_str() != root
             })
             .cloned()
+            .chain(without_tests.then(|| tests_crate.clone()))
             .collect(),
         tests: test,
     };
     match scope {
-        Scope::Package => tree(root),
-        Scope::Module if module_file => tree(dir),
+        Scope::Package | Scope::Crate if path.starts_with(&tests_crate) => {
+            tree(&tests_crate, false)
+        }
+        Scope::Package => tree(root, false),
+        Scope::Crate => tree(root, true),
+        Scope::Module if module_file => tree(dir, false),
         Scope::Module => Reach::File {
             file: path.to_string(),
             dir: format!(
@@ -92,7 +101,7 @@ pub fn rust_reach(path: &str, root: &str, roots: &[String], scope: Scope, test: 
             ),
             tests: test,
         },
-        Scope::Parent if module_file => tree(dir_of(dir.trim_end_matches('/'))),
-        Scope::Parent => tree(dir),
+        Scope::Parent if module_file => tree(dir_of(dir.trim_end_matches('/')), false),
+        Scope::Parent => tree(dir, false),
     }
 }

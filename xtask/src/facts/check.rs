@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::LazyLock;
 
 use regex::Regex;
+use strata::api::ROUTE_PREFIX;
 
 use super::cloud;
 use super::model::{Fact, Kind, Piece, is_placeholder, pieces, unread};
@@ -98,13 +99,14 @@ fn ids(facts: &[Fact]) -> Vec<String> {
 
 /// The fields that each fact must have, by its kind.
 fn fields(facts: &[Fact]) -> Vec<String> {
-    let method = Regex::new(&format!(r"^({}) /v1/\S+$", method_pattern())).expect("a pattern");
+    let route = regex::escape(ROUTE_PREFIX);
+    let method = Regex::new(&format!(r"^({}) {route}\S+$", method_pattern())).expect("a pattern");
     let mut bad = Vec::new();
     for fact in facts {
         let id = &fact.id;
         match (&fact.request, fact.kind) {
             (Some(request), Kind::Request) if !method.is_match(request) => bad.push(format!(
-                "fact `{id}`: the request `{request}` must be GET or POST and a path under /v1/"
+                "fact `{id}`: the request `{request}` must be GET or POST and a path under {ROUTE_PREFIX}"
             )),
             (None, Kind::Request) => {
                 bad.push(format!("fact `{id}`: a request fact needs a request"))

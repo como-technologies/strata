@@ -471,7 +471,7 @@ mkdir -p "$run" && cd "$run" || exit 2
 case "$mode" in
   up)
     up
-    write_summary "the platform cluster up" ", cluster \`$name\` \`$W\`."
+    write_summary "the platform cluster up" ", cluster $(md span "$name") $(md span "$W")."
     [ "$failures" = 0 ]
     exit
     ;;
@@ -490,7 +490,7 @@ undo() {
   [ -z "$observer" ] || observer_off >> steps.log 2>&1
 }
 summary() {
-  write_summary "the platform cluster $name" ", cluster \`$W\`, $(teams | wc -l | tr -d ' ') profiles of the teams."
+  write_summary "the platform cluster $name" ", cluster $(md span "$W"), $(teams | wc -l | tr -d ' ') profiles of the teams."
 }
 finish() {
   pf_stop
