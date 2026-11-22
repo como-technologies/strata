@@ -586,11 +586,11 @@ just observer-dev stale    # the set stale
 
 The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
-`first-seen`, `stale-unchecked`, `lost-unchecked`, `read-error`, `images`,
-`images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`, `alerts`,
-`alerts-unset`, `moved-drift`, `moved-unchecked`, `update-checks`, and `profile-checks`.
-The server listens on `127.0.0.1:8080`. The flag `-listen` takes another loopback
-address, and `-data` takes another directory of sets.
+`first-seen`, `stale-unchecked`, `lost-unchecked`, and `read-error`. The other sets
+are `images`, `images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`,
+`alerts`, `alerts-unset`, `moved-drift`, `moved-unchecked`, `update-checks`, and
+`profile-checks`. The server listens on `127.0.0.1:8080`. The flag `-listen` takes
+another loopback address, and `-data` takes another directory of sets.
 
 A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
 of each route as a JSON file. The dev server serves them through the real server
