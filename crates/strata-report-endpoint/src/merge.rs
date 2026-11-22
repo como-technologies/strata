@@ -12,7 +12,7 @@
 //!
 //! The body ends with the criteria of the issue, from the line [`DONE_WHEN`] to the end. A report
 //! writes the body again up to that line, and keeps the rest. So a tick or an item of a person
-//! stays.
+//! stays. A person can also make the line a heading or bold, such as `## Done when`.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
@@ -40,14 +40,17 @@ const STATE: &str = "<!-- strata-report-state: ";
 pub const DONE_WHEN: &str = "Done when:";
 
 /// The criteria of a new issue, after the line [`DONE_WHEN`]. They are the steps of the page "What
-/// to do with a new value". Each item names the comment, the file, or the command that shows it.
+/// to do with a new value", one item for each step, in the order of the page. Each item names the
+/// comment, the file, or the command that shows it.
 const ITEMS: &str = "\
 - [ ] A comment states where the value comes from: the answer of the lab that holds the value, or \
 why no answer holds it.\n\
-- [ ] `reads.values` of the fact of each route names the value, and `cargo xtask facts --check` \
-passes.\n\
+- [ ] A comment names the fact of each route, and the file in `code` of the fact that holds the \
+closed set.\n\
 - [ ] The closed set of strata names the value, and `tests/closed_set.rs` holds its text. Or the \
-page of the fact says why the set stays as it is. `just docs-check` passes.\n";
+page of the fact says why the set stays as it is. In both cases, `reads.values` of the fact of \
+each route names the value.\n\
+- [ ] `cargo xtask facts --check` and `just docs-check` pass.\n";
 
 /// What a merge did.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -173,16 +176,28 @@ fn title(set: &str, value: &str) -> String {
     )
 }
 
-/// The criteria of the issue whose body was `old`: the text of `old` from the line [`DONE_WHEN`] to
-/// the end.
+/// True when `line` starts the criteria: the line [`DONE_WHEN`], also as a heading or in bold, such
+/// as `## Done when` or `**Done when:**`.
 ///
-/// Each line of the criteria ends with a line break. A new issue has no `old`. It gets the line and
-/// [`ITEMS`], and so does a body with no such line.
+/// The rule removes each `*`, the `#` marks at the start, and each colon at the end. White space
+/// around them does not count. `contract-report.sh` reads the line with the same rule.
+fn starts_criteria(line: &str) -> bool {
+    let text = line.replace('*', "");
+    let text = text.trim_start().trim_start_matches('#').trim_start();
+    text.trim_end_matches(|c: char| c == ':' || c.is_whitespace())
+        == DONE_WHEN.trim_end_matches(':')
+}
+
+/// The criteria of the issue whose body was `old`: the text of `old` from the line that
+/// [`starts_criteria`] finds to the end.
+///
+/// Each line of the criteria ends with a line break. A new issue has no `old`. It gets the line
+/// [`DONE_WHEN`] and [`ITEMS`], and so does a body with no such line.
 fn criteria(old: Option<&str>) -> String {
     let kept: String = old
         .into_iter()
         .flat_map(str::lines)
-        .skip_while(|line| line.trim_end() != DONE_WHEN)
+        .skip_while(|line| !starts_criteria(line))
         .map(|line| format!("{line}\n"))
         .collect();
     if kept.is_empty() {

@@ -92,9 +92,18 @@ impl Report {
 
     /// The open issues that the stand-in lists: (number, first line of the body).
     fn open_issues(&self, issues: &[(u64, &str)]) {
+        let bodies: Vec<(u64, String)> = issues
+            .iter()
+            .map(|(number, marker)| (*number, format!("{marker}\nold")))
+            .collect();
+        self.open_bodies(&bodies);
+    }
+
+    /// The open issues that the stand-in lists: (number, the whole body).
+    fn open_bodies(&self, issues: &[(u64, String)]) {
         let list: Vec<Value> = issues
             .iter()
-            .map(|(number, marker)| json!({"number": number, "title": "t", "body": format!("{marker}\nold")}))
+            .map(|(number, body)| json!({"number": number, "title": "t", "body": body}))
             .collect();
         self.put("issues.json", &Value::Array(list).to_string());
     }
@@ -152,6 +161,16 @@ impl Report {
     /// The body that the script gave the call with this 1-based number.
     fn body(&self, number: usize) -> String {
         handed_in(self.dir.path(), "body", number)
+    }
+
+    /// The body of each call that starts with `start`, in the order of the calls.
+    fn bodies_of(&self, start: &str) -> Vec<String> {
+        self.calls()
+            .iter()
+            .enumerate()
+            .filter(|(_, call)| call.starts_with(start))
+            .map(|(at, _)| self.body(at + 1))
+            .collect()
     }
 
     fn comment(&self, number: usize) -> String {
@@ -1479,6 +1498,154 @@ fn contract_report_dry_run_prints_the_body_of_a_call_of_a_cloud_and_calls_no_hos
             .contains("Cloud drift: `aws-ec2-vcpu-quota` differs from the fixtures of the rules")
     );
     assert!(r.calls().is_empty(), "{:?}", r.calls());
+}
+
+// ---- contract-report.sh: the criteria of an issue ----------------------------------------------
+
+/// The line that starts the criteria. The tests of the endpoint make sure that the script assigns
+/// the text of the endpoint, which the tests of this package cannot import.
+const DONE_WHEN: &str = "Done when:";
+
+/// The items of the criteria of `body`. The body holds one line [`DONE_WHEN`], then an empty line,
+/// and then ends with the items, each one not ticked.
+fn criteria_items(body: &str) -> Vec<&str> {
+    assert_eq!(
+        body.lines().filter(|line| *line == DONE_WHEN).count(),
+        1,
+        "{body}"
+    );
+    let (_, items) = body
+        .split_once(&format!("\n\n{DONE_WHEN}\n\n"))
+        .unwrap_or_else(|| panic!("no line {DONE_WHEN:?} after an empty line: {body}"));
+    let items: Vec<&str> = items.lines().collect();
+    assert!(
+        items.iter().all(|item| item.starts_with("- [ ] ")),
+        "{body}"
+    );
+    items
+}
+
+#[test]
+fn contract_report_ends_the_body_of_each_issue_with_the_line_done_when_and_its_items() {
+    let r = Report::new();
+    let name = entry(
+        "cluster-listing",
+        "differs",
+        json!([{"kind": "name", "path": "items[].kind", "expected": ["Cluster"], "found": ["Node"]}]),
+    );
+    let table = cloud_entry(
+        "aws-zones",
+        "differs",
+        json!([{"kind": "table", "path": "AvailabilityZones[].ZoneId", "expected": ["use1-az3"], "found": ["use1-az1"]}]),
+    );
+    let o = r.report(
+        &document(
+            vec![
+                differing("cluster-document"),
+                name,
+                new_state("cluster-profile", &["Hibernating"]),
+                cloud_differing("aws-ec2-vcpu-quota"),
+                table,
+            ],
+            vec![release(
+                "spectrocloud/palette-sdk-go",
+                "v4.10.b",
+                Some("v4.10.a"),
+                true,
+            )],
+        ),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let bodies = r.bodies_of("issue create");
+    let counts: Vec<(&str, usize)> = bodies
+        .iter()
+        .map(|body| {
+            let marker = body.lines().next().unwrap_or_default();
+            (marker, criteria_items(body).len())
+        })
+        .collect();
+    // a `name` and a `table` difference each add the item of their step
+    assert_eq!(
+        counts,
+        [
+            ("<!-- strata-contract: cluster-document -->", 2),
+            ("<!-- strata-contract: cluster-listing -->", 3),
+            (
+                "<!-- strata-contract: values cluster-profile status.state -->",
+                4
+            ),
+            ("<!-- strata-contract: aws-ec2-vcpu-quota -->", 2),
+            ("<!-- strata-contract: aws-zones -->", 3),
+            (
+                "<!-- strata-contract: release spectrocloud/palette-sdk-go v4.10.b -->",
+                3
+            ),
+        ],
+        "{bodies:#?}"
+    );
+    let values = &bodies[2];
+    assert!(
+        values.contains("- [ ] A comment names the closed set of strata that reads `status.state`, from the files in `code` of the fact `cluster-profile`."),
+        "{values}"
+    );
+}
+
+#[test]
+fn contract_report_keeps_the_criteria_of_an_open_issue_from_the_line_done_when_in_each_form() {
+    for line in [
+        DONE_WHEN.to_string(),
+        "## Done when".to_string(),
+        format!("**{DONE_WHEN}**"),
+    ] {
+        let r = Report::new();
+        // the editor of GitHub sends CRLF
+        let body = format!(
+            "<!-- strata-contract: cluster-document -->\nThe old table.\n\n{line}\n\n\
+             - [x] A comment gives the result.\n- [ ] Mine.\n"
+        )
+        .replace('\n', "\r\n");
+        r.open_bodies(&[(7, body)]);
+        let o = r.report(&document(vec![differing("cluster-document")], vec![]), &[]);
+        assert_eq!(o.status.code(), Some(1), "{line}: {}", text(&o.stderr));
+        let edits = r.bodies_of("issue edit 7 ");
+        assert_eq!(edits.len(), 1, "{line}: {:?}", r.calls());
+        let text = &edits[0];
+        assert!(
+            text.contains("| type | `metadata.uid` | string | object |"),
+            "{line}: the text above is new: {text}"
+        );
+        assert!(!text.contains("The old table."), "{line}: {text}");
+        assert!(
+            text.ends_with(&format!(
+                ".\n\n{line}\n\n- [x] A comment gives the result.\n- [ ] Mine.\n"
+            )),
+            "{line}: {text:?}"
+        );
+        assert_eq!(
+            text.matches("- [ ] ").count(),
+            1,
+            "{line}: no item of a new issue: {text}"
+        );
+        assert!(!text.contains('\r'), "{line}: {text:?}");
+    }
+}
+
+#[test]
+fn contract_report_gives_the_items_of_a_new_issue_to_an_open_issue_with_no_line_done_when() {
+    let r = Report::new();
+    r.open_issues(&[(7, VALUES_MARKER)]);
+    let o = r.report(
+        &document(
+            vec![new_state("cluster-document", &["Hibernating"])],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let edits = r.bodies_of("issue edit 7 ");
+    assert_eq!(edits.len(), 1, "{:?}", r.calls());
+    assert_eq!(criteria_items(&edits[0]).len(), 4, "{}", edits[0]);
 }
 
 // ---- contract.sh -------------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 
 use serde_json::json;
 use strata::closed_set::unknown::report::{Report, SCHEMA};
-use strata_report_endpoint::merge::merge;
+use strata_report_endpoint::merge::{DONE_WHEN, merge};
 use strata_report_endpoint::settings::{DEFAULT_LABEL, DEFAULT_MILESTONE, Settings};
 use strata_report_endpoint::tracker::{Issue, Tracker, TrackerError};
 
@@ -37,6 +37,12 @@ fn the_contract_run_has_a_label_of_its_own_and_the_milestone_of_the_service() {
     );
     let script = read("../../examples/live/contract-report.sh");
     assert_eq!(assigned(&script, "milestone"), DEFAULT_MILESTONE);
+}
+
+#[test]
+fn the_contract_run_starts_the_criteria_of_its_issues_with_the_line_of_the_service() {
+    let script = read("../../examples/live/contract-report.sh");
+    assert_eq!(assigned(&script, "done_when"), DONE_WHEN);
 }
 
 #[test]
