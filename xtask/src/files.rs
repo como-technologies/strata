@@ -75,6 +75,18 @@ pub fn is_go_test(path: &str) -> bool {
     path.ends_with(GO_TEST)
 }
 
+/// True when the path `path` is under a directory `dir` of the repository or of a package.
+pub fn under(path: &str, dir: &str) -> bool {
+    path.starts_with(&format!("{dir}/")) || path.contains(&format!("/{dir}/"))
+}
+
+/// True for the path of a Rust file that holds only tests: a file under a directory `tests`, such
+/// as the integration tests of a package, or the file `tests.rs` of the unit tests of a module.
+pub fn is_rust_test_file(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    under(path, "tests") || name == "tests.rs"
+}
+
 /// True when `attrs` mark the item as test code: `#[test]` or `#[cfg(test)]`.
 pub fn is_test_code(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {

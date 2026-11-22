@@ -11,20 +11,11 @@ use super::reach::{Reach, rust_reach};
 use super::rust::RustFile;
 use super::token::Token;
 use super::{Func, Holder, Kind, LANGS, Lang, go, rust};
-use crate::files::{TestLines, is_go_test};
+use crate::files::{TestLines, is_go_test, is_rust_test_file, under};
 use crate::git_diff::{git, git_bytes};
-
-/// The directory of the integration tests of a Rust package, and the name of the file of the
-/// unit tests of a module.
-const TESTS: &str = "tests";
 
 /// The directory of the helpers that the integration tests of a Rust package share.
 const SHARED_TESTS: &str = "tests/common";
-
-/// True when the path `path` is under a directory `dir` of the repository or of a package.
-fn under(path: &str, dir: &str) -> bool {
-    path.starts_with(&format!("{dir}/")) || path.contains(&format!("/{dir}/"))
-}
 
 /// A Rust or Go file of the tree, as the check reads it.
 #[derive(Debug)]
@@ -258,11 +249,10 @@ fn labels_of(funcs: &[&Func], aliases: &[(String, String)]) -> Labels {
     out
 }
 
-/// The parts of a Rust file that are test code. A file of a `tests` directory and a file
-/// `tests.rs` are test code from start to end. Another file has its items for the tests.
+/// The parts of a Rust file that are test code. A file that holds only tests is test code from
+/// start to end. Another file has its items for the tests.
 fn rust_tests(path: &str, file: &RustFile) -> TestLines {
-    let whole = under(path, TESTS) || path.ends_with(&format!("/{TESTS}.rs"));
-    if whole {
+    if is_rust_test_file(path) {
         TestLines::whole()
     } else {
         file.tests.clone()

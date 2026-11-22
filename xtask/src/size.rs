@@ -9,7 +9,7 @@ use syn::visit::{self, Visit};
 use syn::{Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature};
 use syn::{TraitItemFn, parse_file};
 
-use crate::files::{files_under, is_go_test, is_test_code};
+use crate::files::{files_under, is_go_test, is_rust_test_file, is_test_code};
 
 /// The most lines that a module file has.
 const MODULE_LINES: usize = 800;
@@ -102,12 +102,15 @@ fn read_under(dir: &Path, paths: Vec<PathBuf>) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Each Rust file under `src` with its text, in name order. A file `tests.rs` holds only tests, so
-/// it is not in the list: a file of tests can be longer than the limit.
+/// Each Rust file under `src` with its text, in name order. A file that holds only tests is not in
+/// the list: a file of tests can be longer than the limit.
 fn sources(src: &Path) -> Vec<(String, String)> {
     let paths = files_under(src, "rs")
         .into_iter()
-        .filter(|path| path.file_name().is_some_and(|name| name != "tests.rs"))
+        .filter(|path| {
+            let relative = path.strip_prefix(src).unwrap_or(path);
+            !is_rust_test_file(&relative.to_string_lossy())
+        })
         .collect();
     read_under(src, paths)
 }
