@@ -718,7 +718,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateAlerts, []string{needsAttention, "Alerts"}},
 		{devdata.StateAlertsUnset, []string{needsAttention, notSet}},
 		{devdata.StateMovedDrift, []string{needsAttention, publishedChanged, movedInFull, movedNewer}},
-		{devdata.StateMovedUnchecked, []string{movedCause, movedNewer, "1 cause in Not checked limit what a check says."}},
+		{devdata.StateMovedUnchecked, []string{movedCause, movedNewer, "1 cause in " + wordNotChecked + " limit what a check says."}},
 		{devdata.StateUpdateChecks, okOverview},
 		{devdata.StateProfileChecks, append([]string{"2 newer profile versions"}, okOverview...)},
 	}
