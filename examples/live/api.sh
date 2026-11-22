@@ -185,6 +185,11 @@
 #       The request of `get`, with the status of the answer. It prints the HTTP status as
 #       `HTTP <code>` on the first line and the answer after it. It exits 0 for each status.
 #       So a check reads the status and the body of a refusal, and parses no error line.
+#   api.sh tenant-get-status PATH
+#   api.sh tenant-post-status PATH BODY_FILE
+#       get-status and post-status at tenant scope: the request has no ProjectUid header, also
+#       when PALETTE_PROJECT_UID names a project. A read, for a check of what Palette answers a key
+#       with no role of the tenant. post-status takes a search path or a validate path only.
 #   api.sh app-version [--no-key]
 #       GET /v1/mgmt/app/version, the one route that gives the release of Palette, and print the
 #       answer. With --no-key, send no ApiKey header. Neither call sends a ProjectUid header. A
@@ -1029,6 +1034,8 @@ case "${1:-}" in
   get-kubeconfig) shift; get_kubeconfig "$@" ;;
   get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
   get-status) shift; get_status "$@" ;;
+  tenant-get-status) shift; PROJECT="" get_status "$@" ;;
+  tenant-post-status) shift; PROJECT="" post_status "$@" ;;
   app-version) shift; app_version "$@" ;;
   export) shift; [ -n "${1:-}" ] || die "usage: api.sh export PROFILE_UID [yaml|json]"
     ACCEPT=application/octet-stream call GET "/v1/clusterprofiles/$1/export?format=${2:-yaml}" ;;

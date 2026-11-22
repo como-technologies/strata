@@ -100,6 +100,11 @@ type Observer struct {
 	// asks holds the answer of Palette to each question about a move, by profile and move. It stays in
 	// memory: a restart forgets it, and a pin that moves drops it.
 	asks map[askKey]model.Answer
+
+	// member links a cluster of a set to its set. It is nil with no --clusters.
+	member *membership
+	// runContent and runVersions are the cycles that Run and Once start. A set of clusters gives its own.
+	runContent, runVersions func(context.Context) error
 }
 
 // New makes an observer. It reads the state, and starts with an empty state when the file cannot be
@@ -109,6 +114,14 @@ func New(cfg Config, strata Strata, log *slog.Logger) *Observer {
 }
 
 func newObserver(cfg Config, strata Strata, log *slog.Logger, now func() time.Time) *Observer {
+	o := buildObserver(cfg, strata, log, now)
+	o.sweep()
+	return o
+}
+
+// buildObserver makes an observer with the state of its directory, and touches no file of the work directory. A
+// member of a set shares the work directory with the set, so it never removes a directory there.
+func buildObserver(cfg Config, strata Strata, log *slog.Logger, now func() time.Time) *Observer {
 	procs := cfg.Processes
 	if procs <= 0 {
 		procs = defaultProcesses
@@ -118,6 +131,7 @@ func newObserver(cfg Config, strata Strata, log *slog.Logger, now func() time.Ti
 		running: map[string]*model.Running{}, details: map[string]docs.Pack{}, asks: map[askKey]model.Answer{},
 		kicks: map[string]chan struct{}{cycleContent: make(chan struct{}, 1), cycleVersions: make(chan struct{}, 1)},
 		ended: map[string]time.Time{}, recordsPoll: recordsPoll, taken: map[string]baseline.Entry{}}
+	o.runContent, o.runVersions = o.RunContent, o.RunVersions
 	state, err := loadState(cfg.State)
 	if err != nil {
 		log.Error("the state cannot be read", "kind", docs.KindIO)
@@ -126,7 +140,6 @@ func newObserver(cfg Config, strata Strata, log *slog.Logger, now func() time.Ti
 	if o.state.StartedAt.IsZero() {
 		o.state.StartedAt = o.now().UTC().Truncate(time.Second)
 	}
-	o.sweep()
 	return o
 }
 
@@ -171,12 +184,18 @@ func (o *Observer) run(ctx context.Context, dir string, exits []int, args ...str
 // RunContent runs one content cycle, and keeps its answer or its failure. Then it hands the cycle to the
 // alerts, when the observer sends them.
 func (o *Observer) RunContent(ctx context.Context) error {
+	held, good, err := o.keepContent(ctx, o.contentCycle)
+	o.alertStep(ctx, good, held)
+	return err
+}
+
+// keepContent runs one content cycle with read, and keeps its answer or its failure. It gives the ids of the findings
+// that the content cannot clear, and says whether the cycle ended well.
+func (o *Observer) keepContent(ctx context.Context, read func(context.Context) (model.Content, int, error)) (held map[string]bool, good bool, err error) {
 	var content model.Content
-	var good bool
-	var held map[string]bool
-	err := o.runCycle(ctx, cycleContent, o.contentSlot, &o.state.Content,
+	err = o.runCycle(ctx, cycleContent, o.contentSlot, &o.state.Content,
 		func(ctx context.Context) (files int, err error) {
-			content, files, err = o.contentCycle(ctx)
+			content, files, err = read(ctx)
 			return files, err
 		},
 		func() {
@@ -188,8 +207,7 @@ func (o *Observer) RunContent(ctx context.Context) error {
 			o.keepFindings(content, held)
 			good = true
 		})
-	o.alertStep(ctx, good, held)
-	return err
+	return held, good, err
 }
 
 // heldIDs gives the ids of the findings that this content cannot clear: the ones of a part that the
@@ -431,7 +449,7 @@ func (o *Observer) Observed() model.Observed {
 // Once runs one content cycle and one versions cycle, and gives the summary. The error joins the
 // failures of the two cycles: each holds a kind and a status, and no message.
 func (o *Observer) Once(ctx context.Context) (model.Summary, error) {
-	err := errors.Join(o.RunContent(ctx), o.RunVersions(ctx))
+	err := errors.Join(o.runContent(ctx), o.runVersions(ctx))
 	return o.Summary(), err
 }
 
@@ -449,8 +467,8 @@ func (o *Observer) Run(ctx context.Context) {
 	mark := baseline.Mark(o.cfg.Records)
 	var wg sync.WaitGroup
 	wg.Add(3)
-	go func() { defer wg.Done(); o.loop(ctx, o.cfg.ContentEvery, o.kicks[cycleContent], o.RunContent) }()
-	go func() { defer wg.Done(); o.loop(ctx, o.cfg.VersionsEvery, o.kicks[cycleVersions], o.RunVersions) }()
+	go func() { defer wg.Done(); o.loop(ctx, o.cfg.ContentEvery, o.kicks[cycleContent], o.runContent) }()
+	go func() { defer wg.Done(); o.loop(ctx, o.cfg.VersionsEvery, o.kicks[cycleVersions], o.runVersions) }()
 	go func() { defer wg.Done(); o.watchRecords(ctx, mark) }()
 	wg.Wait()
 }

@@ -16,12 +16,12 @@ function viewFindings() {
     if (!rows.length) return noNewer(SIZE.CARD);
     return h`<div class="tw"><table><tbody>${rows.map(r => {
       const first = r.profiles[0], k = packOfRow(first ? profileOf(first) : null, r);
-      const href = k ? packHash(first, k) : first ? profileHash(first) : "#newer";
+      const href = k ? packHash(first, k) : first ? profileHash(first) : link("newer");
       return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.NEWER)}</td><td class="m"><a href="${href}">${move(r.name, r.version, r.newest)}</a></td><td>${r.profiles.map(s => lab("profile", s))}</td><td>${impactCell(first, k, r)}</td></tr>`;
     })}</tbody></table></div>`;
   };
   return withChecks("findings", crumbs("Findings"), () => h`${findingsCard()}
-    <section class="card"><div class="chead"><h2>Newer versions <span class="sub">${rows.length}. A choice, not a fault, so they stay out of Needs attention.</span></h2><a class="small" href="#newer">Open the table</a></div>${card()}</section>`, findingsCard);
+    <section class="card"><div class="chead"><h2>Newer versions <span class="sub">${rows.length}. A choice, not a fault, so they stay out of Needs attention.</span></h2><a class="small" href="${link("newer")}">Open the table</a></div>${card()}</section>`, findingsCard);
 }
 
 function viewNewer() {
@@ -128,7 +128,7 @@ function viewNotChecked() {
       const why = r.cause === CAUSE.OLD_COPY && r.registry ? `Current against an older copy of ${r.registry}. A newer version can be missing here.`
         : r.cause === CAUSE.NO_RECORD && D.cluster.records.baseline === BASELINE.FIRST_SEEN ? NO_RECORD_FIRST_SEEN : (CAUSE_TEXT[r.cause] || r.cause);
       const pods = r.cause === CAUSE.PODS_NOT_READ;
-      return h`<tr class="link" data-go="${pods ? "#images" : p ? profileHash(first) : "#profiles"}"><td class="m">${what || mut(pods ? "The pods" : "The profile")}</td><td class="m">${r.profiles.length ? r.profiles.join(", ") : mut("-")}</td><td>${why}</td></tr>`;
+      return h`<tr class="link" data-go="${pods ? link("images") : p ? profileHash(first) : link("profiles")}"><td class="m">${what || mut(pods ? "The pods" : "The profile")}</td><td class="m">${r.profiles.length ? r.profiles.join(", ") : mut("-")}</td><td>${why}</td></tr>`;
     })}</tbody></table></div>` : noCauses();
     return h`<section class="card"><div class="chead"><h2>Not checked on this run <span class="sub">${rows.length}. This never raises a severity, and it stops the page from saying "No change".</span></h2></div>${body}</section>${coverageCard()}`;
   });
@@ -175,7 +175,7 @@ function verdict(x) {
 
 function viewProfile(subject) {
   const x = profileOf(subject);
-  if (!x) return viewMissing(crumbs(h`<a href="#profiles">Profiles</a>`, subject), "profiles", {title: "This profile is not here", name: subject, why: "is in no record now. A new revision of the records can remove it.", home: ["#profiles", "All profiles"]});
+  if (!x) return viewMissing(crumbs(h`<a href="${link("profiles")}">Profiles</a>`, subject), "profiles", {title: "This profile is not here", name: subject, why: "is in no record now. A new revision of the records can remove it.", home: [link("profiles"), "All profiles"]});
   const r = D.cluster.records;
   const record = x.status === STATUS.NO_RECORD ? "none" : r.revision ? `rev ${r.revision}` : r.baseline;
   const fs = D.findings.filter(f => f.profile === subject);
@@ -185,7 +185,7 @@ function viewProfile(subject) {
   })}</tbody></table></div></section>` : "";
   const advice = fs.some(f => f.kind === KIND.PUBLISHED && !f.alsoOnCluster) ? h`<div class="note r small"><b>What to do.</b> Do not repair the edited version in place: that is a second edit. Publish a new version with the change through review, and move the clusters to it. A new cluster gets this edit at once. The finding clears when the version goes back to its record.${D.cluster.cluster.updatesPending ? " An update waits for this cluster. Do not accept it until the content is what the team approved." : ""}</div>` : "";
   const packs = x.packs.length ? packStack(subject, x, false, "") : h`<div class="body">${inline(TONE.OFF, x.status === STATUS.NO_RECORD ? "No record holds this profile, so the packs are not listed." : "This profile holds no pack.")}</div>`;
-  return {nav: "profiles", crumbs: crumbs(h`<a href="#profiles">Profiles</a>`, subjectRef(subject)), body: h`${alertBars()}
+  return {nav: "profiles", crumbs: crumbs(h`<a href="${link("profiles")}">Profiles</a>`, subjectRef(subject)), body: h`${alertBars()}
     <section class="card"><div class="body"><div class="title"><h1 class="m h1m">${subjectRef(subject)}</h1>${statusBadge(x.status)}</div>
     <div class="meta"><div><span>Type</span>${x.type}</div><div><span>Scope</span>${x.scope || "-"}</div><div><span>Packs</span>${x.packs.length}</div><div><span>Record</span>${record}</div></div></div></section>
     ${verdict(x)}${events}${advice}
@@ -313,6 +313,7 @@ function podsFailedSplash(err) {
 // imagesBody gives the body of the card of the list, from the state of the read of the pods.
 function imagesBody() {
   const o = D.images;
+  if (elsewhere()) return splash(TONE.OFF, "Pods of another cluster", `${ELSEWHERE_WORDS} This cluster is another cluster of the set. Open the cluster that runs the observer to see its images.`, "", SIZE.CARD);
   if (podsOff()) return podsOffSplash();
   if (o.pods === PODS.NOT_READ) {
     return o.error ? podsFailedSplash(o.error) : splash(TONE.BUILD, "Reading the pods", "No read of the pods has ended yet. This page fills in when one does.", "", SIZE.CARD);
@@ -369,8 +370,8 @@ const PODS_CATCH = h`<div class="body small"><b>When this happens</b><ul class="
 
 function viewImage(ref) {
   const img = D.images.images.find(i => i.ref === ref);
-  const cr = crumbs(h`<a href="#images">Images</a>`, ref);
-  if (!img) return viewMissing(cr, "images", {title: "No pod runs this image", name: ref, why: "runs in no pod now. A new read of the pods can remove it.", home: ["#images", "All images"]});
+  const cr = crumbs(h`<a href="${link("images")}">Images</a>`, ref);
+  if (!img) return viewMissing(cr, "images", {title: "No pod runs this image", name: ref, why: "runs in no pod now. A new read of the pods can remove it.", home: [link("images"), "All images"]});
   const id = "image-" + ref, tab = S.tabs[id] || "this";
   const profiles = [...new Set(img.packs.map(p => p.profile))];
   const packs = img.packs.length ? img.packs.map(p => lab("pack", packName(p.key))) : mut("none");
@@ -399,7 +400,7 @@ function ruleSend(r) {
 }
 
 // ruleTarget names what a rule applies to: the cluster, a profile, or a pack.
-const ruleTarget = r => r.level === "cluster" ? clusterName() : r.match;
+const ruleTarget = r => r.level !== "cluster" ? r.match : SET ? r.match || "Each cluster" : clusterName();
 
 const ruleRow = r => h`<tr><td>${badgeOf(ALERT_BADGE, r.state)}</td><td>${ALERT_LEVEL[r.level] || r.level}</td><td class="m">${ruleTarget(r)}</td><td>${ALERT_NEWS[r.news] || r.news}</td><td>${ruleSend(r)}</td><td class="m">${r.to || DASH}</td></tr>`;
 

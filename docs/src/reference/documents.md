@@ -60,6 +60,12 @@ profile, or pack version.
     `cloudType`, `type`, and `tags`. `type` is `cluster`, `infra`, `add-on`, or
     `system` for a cluster profile, as Palette gives it in `v1ProfileType`.
     Strata writes `app` for an app profile and `pack` for a pack record.
+  - `scope`, for a record of a profile version: `project`, `tenant`, or
+    `system`, from `metadata.annotations.scope` of the profile document. A
+    profile of the tenant that a request of a project records has the uid of that
+    project in `projectUid`, and the scope `tenant`. It is absent in a record of a
+    cluster and of a pack, and in a record of strata 0.35 and before. Not part of
+    the root.
   - `template`: `published`, `draft`, `applied` for a cluster, `candidate`, or
     `registry` for a pack record. `draft` is a record of `<ref>@draft`, or of a
     version that was never published.
@@ -673,7 +679,8 @@ of the secret does not show, because the two sides hold the mask: see
 
 ## strata-list/1
 
-- `projectUid` and `projectName`: the scope.
+- `projectUid` and `projectName`: the scope. With `--tag` or `--filter`, the
+  scope is the tenant, or the project of `--project` or `--project-name`.
 - `pack`: the `--pack` text, when given.
 - `cluster`: the `--cluster` text, when given.
 - `query`, with `--tag` or `--filter`: `tags[]` and `filter`, as given.

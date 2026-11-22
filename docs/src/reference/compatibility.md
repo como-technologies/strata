@@ -703,6 +703,10 @@ that `behind --since` reads follows the same rule. The JSON Schema of each
 document holds its id as a `const`. So a validator that reads
 `strata schema <kind>` refuses a document of another id too.
 
+After 0.35.0, `strata-snapshot/1` has the new field `source.scope`: the scope of the profile of
+a record of a profile version, from its document. It is outside the root, and the id stays. See
+[strata-snapshot/1](./documents.md#strata-snapshot1).
+
 ### The fields of release 0.18.0
 
 Release 0.18.0 added the fields below to the records, and kept the id
@@ -1255,6 +1259,17 @@ field, a value, an input, or an option is in the sections above.
   - `once` exits 1 in place of 2 when the state holds a finding and no content cycle ends well.
   - The page shows these findings under the bar of `lost` or `stale`, with the badge "Not read
     now".
+- **A query of `list` with `--project` searches that project.** Before, it searched each
+  project, and `projectUid` was empty. A script that gives
+  `--project` with a query and wants each project must drop `--project`. The line of the query
+  says `in this project`. See [Find the clusters of a label](../commands/list.md#find-the-clusters-of-a-label).
+- **The observer gives a profile of the tenant the scope `tenant`.** A record of 0.36.0
+  names its scope, and the observer reads it. Before, the observer gave `project` to each
+  record with a `projectUid`, also to a profile of the tenant that a project recorded. A check that
+  reads `scope` of `/v1/profiles` reads `tenant` for such a profile.
+- **With no `--clusters`, a cluster rule with a `match` stops the observer.** It says
+  `a cluster rule names a cluster in match only with --clusters`. Before,
+  the parse of the file refused it with `a cluster rule has no match`. The exit stays `2`.
 
 ### For a user of the CI drop-ins
 
@@ -1304,6 +1319,9 @@ field, a value, an input, or an option is in the sections above.
   gives `no project with the uid`. Code that builds the variant must give the
   field. A pattern of the variant with no `..` must name it. The JSON of the
   error does not change.
+- `snapshot::Source` has the new field `scope`. A struct literal of `Source` must name it.
+- With a query, `ops::ListOptions::project` keeps the search in that project. Before, a query
+  searched each project of the tenant, whatever `project` named.
 
 ## Release 0.35.0: changes that need action
 

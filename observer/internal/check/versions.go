@@ -27,13 +27,19 @@ func (o *Observer) versionsCycle(ctx context.Context) (versions model.Versions, 
 	if len(set.Entries) == 0 {
 		return versions, files, nil
 	}
+	used := map[string]bool{}
 	err = o.withCycleDir(func(dir string) error {
-		return o.readVersions(ctx, dir, set, &versions)
+		return o.readVersions(ctx, dir, set, &versions, used)
 	})
+	if err == nil {
+		o.pruneMoves(used)
+	}
 	return versions, files, err
 }
 
-func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Set, versions *model.Versions) error {
+// readVersions reads the versions of the records of set into versions. used gets the cache key of each move of
+// the read: the caller drops each other move from the cache when its cycle ends.
+func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Set, versions *model.Versions, used map[string]bool) error {
 	names, err := writeRecords(dir, set.Entries)
 	if err != nil {
 		return err
@@ -48,7 +54,7 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 		return &runner.RunError{Kind: e.Kind, Status: e.Status}
 	}
 	versions.Strata, versions.Pins, versions.Profiles = doc.Tool.Version, doc.Pins, doc.Profiles
-	versions.Moves, versions.Unread, err = o.moves(ctx, dir, doc)
+	versions.Moves, versions.Unread, err = o.moves(ctx, dir, doc, used)
 	if err == nil {
 		versions.ProfileMoves, versions.ProfileUnread, err = o.profileMoves(ctx, dir, recordFiles(set.Entries, names), doc.Profiles)
 	}
@@ -171,9 +177,8 @@ func uniquePinnedBy(by []docs.PinnedBy) []docs.PinnedBy {
 //
 // Each move of the cycle counts as used, also when its compare fails: the answer of Palette about a
 // move lives as long as the move, and a failed compare must not drop it.
-func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[string]model.Move, map[string]bool, error) {
+func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind, used map[string]bool) (map[string]model.Move, map[string]bool, error) {
 	moves, unread := map[string]model.Move{}, map[string]bool{}
-	used := map[string]bool{}
 	type job struct {
 		pin           docs.Pin
 		key, cacheKey string
@@ -220,7 +225,6 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 		}
 		moves[j.key] = move
 	}
-	o.pruneMoves(used)
 	return moves, unread, nil
 }
 

@@ -49,6 +49,8 @@ pub(super) const A111_TENANT: &str = "64e4000000000000000000c3";
 pub(super) const ADDONS_DEV: &str = "64e2000000000000000000a1";
 pub(super) const ADDONS_PROD: &str = "64e3000000000000000000a1";
 pub(super) const ADDONS_PROD2: &str = "64e3000000000000000000a2";
+// the manifest pack of platform-addons@1.0.0 in prod
+pub(super) const ADDONS_PROD_PACK: &str = "64e3000000000000000000d1";
 // charts-probe@1.0.0: one chart of a private Helm registry, and the pack that Palette made for it
 pub(super) const CHARTS_PROBE: &str = "64ed000000000000000000c1";
 pub(super) const CHART_PACK: &str = "64ed000000000000000000b1";

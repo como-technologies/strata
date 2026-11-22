@@ -422,6 +422,7 @@ fn fleet(r: &mut Runner) {
     r.tenant(|t| t.tag_filter("production", PRODUCTION, "env", "prod"));
     r.serve_here(); // state 1: two clusters of each project, and the production ones labeled so
     r.step("fleet-tag", 0, false, "strata list clusters --tag env=prod");
+    fleet_tag_project(r);
     r.step(
         "fleet-filters",
         0,
@@ -468,6 +469,13 @@ fn fleet(r: &mut Runner) {
         false,
         "strata verify 'fleet/prod/*.json' --summary",
     );
+}
+
+/// The step of the chapter `fleet` where a key with a role in one project searches that project
+/// alone (#702).
+fn fleet_tag_project(r: &mut Runner) {
+    let command = "strata list clusters --tag env=prod --project-name prod";
+    r.step("fleet-tag-project", 0, false, command);
 }
 
 /// The chapter `same-names`: two projects that hold a cluster and a profile with one name.

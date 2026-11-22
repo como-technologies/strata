@@ -204,23 +204,30 @@ const S = {filter: "all", q: "", qs: {}, sort: {}, tabs: {}, side: {}, open: {},
 
 async function getJSON(url) {
   const r = await fetch(url, {cache: "no-store"});
-  if (!r.ok) throw new Error(url + " " + r.status);
+  if (!r.ok) throw Object.assign(new Error(url + " " + r.status), {status: r.status});
   return r.json();
 }
 
-// load reads the seven summary routes, the list of answers of Palette, and the rules of the alerts. The
-// detail route of a pack is read when a screen needs it. A list of answers or of rules that cannot be read
-// keeps the last one, and it never puts the page offline.
-async function load() {
+// clusterData reads the seven summary routes of one cluster under base, the list of answers of Palette, and the rules of the
+// alerts. A list of answers or of rules that cannot be read keeps the last one, and it never puts the page offline.
+async function clusterData(base) {
   const [cluster, findings, profiles, newer, notChecked, events, images, asks, alerts] = await Promise.all([
-    ...["/v1/cluster", "/v1/findings", "/v1/profiles", "/v1/newer", "/v1/notchecked", "/v1/events", "/v1/images"].map(getJSON),
-    getJSON("/v1/asks").catch(() => null), getJSON("/v1/alerts").catch(() => null)]);
+    ...["cluster", "findings", "profiles", "newer", "notchecked", "events", "images"].map(r => getJSON(`${base}/${r}`)),
+    getJSON(`${base}/asks`).catch(() => null), getJSON(`${base}/alerts`).catch(() => null)]);
+  const answers = asks && Array.isArray(asks.asks) ? asks.asks : D ? D.asks : [];
+  const rules = alerts && Array.isArray(alerts.rules) ? alerts : D ? D.alerts : NO_ALERTS;
+  return {cluster, findings: findings.findings, profiles: profiles.profiles, newer: newer.newer, notChecked: notChecked.notChecked, limits: notChecked.limits, events: events.events, images, asks: answers, alerts: rules};
+}
+
+// load reads the routes of the page. The detail route of a pack is read when a screen needs it. A set of clusters serves no route of
+// one cluster at the top, so its 404 tells the page to read the set: see setData.
+async function load() {
+  const next = SET ? await setData() : await clusterData("/v1").catch(err => { if (err.status !== 404) throw err; SET = true; return setData(); });
+  const cluster = next.cluster;
   if (D && (D.cluster.content.checkedAt !== cluster.content.checkedAt || D.cluster.versions.readAt !== cluster.versions.readAt)) {
     S.diffs = {};
   }
-  const answers = asks && Array.isArray(asks.asks) ? asks.asks : D ? D.asks : [];
-  const rules = alerts && Array.isArray(alerts.rules) ? alerts : D ? D.alerts : NO_ALERTS;
-  D = {cluster, findings: findings.findings, profiles: profiles.profiles, newer: newer.newer, notChecked: notChecked.notChecked, limits: notChecked.limits, events: events.events, images, asks: answers, alerts: rules};
+  D = next;
   S.loadedAt = new Date().toISOString();
   // A click "Check now" waits until a read shows its cycle: one that runs, one that ended, or no sign of it for a minute.
   for (const name of Object.keys(CYCLES)) {
@@ -265,7 +272,7 @@ function diffOf(subject, p, side) {
 }
 
 async function fetchDiff(subject, p, side) {
-  const url = `/v1/packs/${enc(subject)}/${enc(p.layer)}/${enc(p.name)}/diff?side=${side}`;
+  const url = `${apiBase()}/packs/${enc(profileKey(subject))}/${enc(p.layer)}/${enc(p.name)}/diff?side=${side}`;
   try {
     const r = await fetch(url, {cache: "no-store"});
     if (r.status === 404) return {state: "none"};
@@ -294,9 +301,6 @@ const ref = (name, version) => h`${name}<span class="ver">@${version}</span>`;
 const subjectParts = subject => { const i = subject.lastIndexOf("@"); return i > 0 ? [subject.slice(0, i), subject.slice(i + 1)] : null; };
 const subjectRef = subject => { const parts = subjectParts(subject); return parts ? ref(...parts) : subject; };
 const move = (name, from, to) => h`${ref(name, from)}${ARROW}${ref(name, to)}`;
-const profileHash = subject => `#p-${enc(subject)}`;
-const packHash = (subject, p) => `#k-${enc(subject)}/${enc(p.layer)}/${enc(p.name)}`;
-const imageHash = ref => `#i-${enc(ref)}`;
 const plural = (n, one, many) => n === 1 ? one : many;
 // hex12 cuts a root to the first 12 digits. digest shows an upstream digest in the form sha256:12 digits.
 const hex12 = s => s ? s.slice(0, 12) : "";
@@ -644,7 +648,7 @@ function noFindings() {
         notchecked: [n.notChecked, "not checked"],
       })), SIZE.CARD);
   }
-  const more = n.notChecked > 0 ? next(h`<a href="#notchecked">Read the causes in Not checked.</a>`) : "";
+  const more = n.notChecked > 0 ? next(h`<a href="${link("notchecked")}">Read the causes in Not checked.</a>`) : "";
   return splash(settledTone(), "No finding", `${n.packsInFull} of ${n.packs} packs were checked in full, ${when}. ${lim.join(" ")}`, more, SIZE.CARD);
 }
 
@@ -770,7 +774,7 @@ async function askPalette(subject, key) {
   render();
   let answer = null;
   try {
-    const r = await fetch(`/v1/packs/${enc(subject)}/${enc(p.layer)}/${enc(p.name)}/ask`, {method: "POST", cache: "no-store"});
+    const r = await fetch(`${apiBase()}/packs/${enc(profileKey(subject))}/${enc(p.layer)}/${enc(p.name)}/ask`, {method: "POST", cache: "no-store"});
     if (r.ok) answer = await r.json();
   } catch (err) {
     answer = null;

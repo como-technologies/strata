@@ -1,0 +1,20 @@
+route GET /healthz health
+route GET /v1/cluster summary
+route GET /v1/findings summary
+route GET /v1/profiles summary
+route GET /v1/profiles/{name} summary
+route GET /v1/newer summary
+route GET /v1/notchecked summary
+route GET /v1/events summary
+route GET /v1/images summary
+route GET /v1/images/{ref} summary
+route GET /v1/alerts summary
+route GET /v1/packs/{profile}/{layer}/{name}/diff detail
+route GET /v1/asks detail
+route POST /v1/packs/{profile}/{layer}/{name}/ask detail
+route POST /v1/cycles/{cycle} cycle
+finding cluster-differs aws-stack@1.1.0 19a8a6676b4b1fb6
+finding published-changed aws-stack@1.1.0 e44fe6d98610c8d2
+alert 19a8a6676b4b1fb6
+alert e44fe6d98610c8d2
+alert newer:reg1/kubernetes@1.35.3->1.36.2|aws-stack@1.1.0

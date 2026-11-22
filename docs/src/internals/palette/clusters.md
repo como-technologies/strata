@@ -598,6 +598,29 @@ The code of Palette shows these facts; no live run shows the refusal yet:
   the tenant can use a profile of the tenant. The profile document names the
   project of a profile of a project in `metadata.annotations.projectUid`.
 
+The code of Palette shows these facts of a key whose one role is Project Viewer in
+one project; no live run shows them yet:
+
+- The role holds `project.list` and `cluster.list` in its project alone. So the
+  cluster search at tenant scope answers HTTP 403 with `AccessDenied`, and the
+  message names `project.list` in the scope `tenant`.
+- The search of its project, with that `ProjectUid`, gives the clusters of the
+  project. Each item names its project in `specSummary.projectMeta` and in
+  `metadata.annotations.projectUid`.
+- The listing of the saved tag filters needs `filter.list` in the tenant, and one
+  filter, `GET /v1/filters/tag/{uid}`, needs `filter.get`. No role of a project
+  holds either. The listing answers HTTP 403 with `AccessDenied`, and one filter
+  answers HTTP 500 with `OperationForbidden`.
+- Tenant Viewer, Tenant Admin, and Tenant Project Admin hold `filter.list`,
+  `filter.get`, and `project.list` in the tenant.
+
+So [the observer of a set of clusters](../../automation/observer-clusters.md)
+searches the project of each key, and `filter:` needs a role of the tenant. The
+checks `filters-role-says`, `filter-role-says`, `search-role-tenant-says`, and
+`search-role-project-says` of
+[observer-clusters.sh](../../development/live-runs.md#observer-clusterssh) show it
+on a live tenant.
+
 So [`strata consumers`](../../commands/consumers.md#a-profile-of-the-tenant)
 searches each project of the tenant listing for a profile of the tenant or of
 the system. It names each project whose search Palette refuses. A live run

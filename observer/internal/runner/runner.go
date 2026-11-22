@@ -20,14 +20,19 @@ const (
 	FlagNoImpact = "--no-impact"
 	FlagFull     = "--full"
 	FlagPin      = "--pin"
+	FlagTag      = "--tag"
+	FlagFilter   = "--filter"
+	FlagProject  = "--project"
 )
 
 // allowedFlags holds each flag that the observer gives to strata. A flag that asks Palette to validate
-// is not here: `--validate` and `--repave` of `compare` send a POST for a cluster side, and no cycle
-// sends one. The one POST of the observer comes from `behind` with `--pin` and without `--no-impact`, for
-// the click of a person on one move: see check.Ask. `--full` adds the unified text of the changes to the
-// document, and only `compare` and `verify` take it.
-var allowedFlags = []string{"--summary", "--who", "--json", "--compact", "-q", FlagNoImpact, FlagFull, FlagPin, "--raw-dir", "--from-raw", "-o"}
+// is not here. `--validate` and `--repave` of `compare` send a POST for a cluster side, and no cycle
+// sends one. The one POST of the observer that asks Palette about a move comes from `behind` with
+// `--pin` and without `--no-impact`. It is for the click of a person on one move: see check.Ask. A set
+// of clusters adds one more POST, the search of `list`, which reads and changes nothing. `--full` adds
+// the unified text of the changes to the document, and only `compare` and `verify` take it.
+var allowedFlags = []string{"--summary", "--who", "--json", "--compact", "-q", FlagNoImpact, FlagFull, FlagPin, "--raw-dir", "--from-raw", "-o",
+	FlagTag, FlagFilter, FlagProject}
 
 // The strata commands that the observer runs.
 const (
@@ -35,14 +40,47 @@ const (
 	CmdCompare  = "compare"
 	CmdSnapshot = "snapshot"
 	CmdBehind   = "behind"
+	// CmdList finds the clusters of a set. Its search is a POST that reads, and changes nothing.
+	CmdList = "list"
 )
 
-var allowedCommands = []string{CmdVerify, CmdCompare, CmdSnapshot, CmdBehind}
+var allowedCommands = []string{CmdVerify, CmdCompare, CmdSnapshot, CmdBehind, CmdList}
+
+// The variables of the key of a run. A run with a Key gets the key and the project of the Key in
+// place of the ones of the observer.
+const (
+	EnvKey        = "PALETTE_API_KEY"
+	EnvProjectUID = "PALETTE_PROJECT_UID"
+	EnvProject    = "PALETTE_PROJECT"
+)
 
 // allowedEnv holds each variable that a strata process gets, when the observer has it. The runner
 // also sets STRATA_REPORT to 0, which stops the send of the report. It sets no other variable:
 // every call has -q and none writes a terminal report, so STRATA_QUIET and NO_COLOR change nothing.
-var allowedEnv = []string{"PALETTE_API", "PALETTE_API_KEY", "PALETTE_PROJECT_UID", "PALETTE_PROJECT", "HOME", "TMPDIR", "XDG_STATE_HOME", "PATH"}
+var allowedEnv = []string{"PALETTE_API", EnvKey, EnvProjectUID, EnvProject, "HOME", "TMPDIR", "XDG_STATE_HOME", "PATH"}
+
+// Key is the key of one project. A set of clusters has one key for each project. A run with a Key gets
+// its secret and its project, and none of the key of the observer: see WithKey.
+type Key struct {
+	// Project is the uid of the project.
+	Project string
+	// Secret is the API key. It goes into the environment of a run, and never into a log line or an
+	// answer.
+	Secret string
+}
+
+type keyCtx struct{}
+
+// WithKey gives a context whose runs of strata use the key k.
+func WithKey(ctx context.Context, k Key) context.Context {
+	return context.WithValue(ctx, keyCtx{}, k)
+}
+
+// KeyOf gives the key of the runs of ctx, when WithKey set one.
+func KeyOf(ctx context.Context) (Key, bool) {
+	k, ok := ctx.Value(keyCtx{}).(Key)
+	return k, ok
+}
 
 // Runner runs one binary with one time limit for each run.
 type Runner struct {
@@ -74,16 +112,18 @@ func (e *RunError) Error() string {
 	return "strata: " + e.Kind
 }
 
-// Run starts strata and returns its stdout. It refuses a command or a flag that is not allowed.
+// Run starts strata and returns its stdout. It refuses a command or a flag that is not allowed. The key
+// of ctx, when it has one, replaces the key of the observer: see WithKey.
 func (r Runner) Run(ctx context.Context, args ...string) (Result, error) {
 	if err := check(args); err != nil {
 		return Result{}, err
 	}
+	key, keyed := KeyOf(ctx)
 	ctx, cancel := context.WithTimeout(ctx, r.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, r.Binary, args...)
 	cmd.Dir = r.Dir
-	cmd.Env = env()
+	cmd.Env = env(key, keyed)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -110,8 +150,11 @@ func (r Runner) Run(ctx context.Context, args ...string) (Result, error) {
 // flagCommands lists the commands that can take a flag with a rule of its own. A flag that is not here
 // goes to each command.
 var flagCommands = map[string][]string{
-	FlagFull: {CmdCompare, CmdVerify},
-	FlagPin:  {CmdBehind},
+	FlagFull:    {CmdCompare, CmdVerify},
+	FlagPin:     {CmdBehind},
+	FlagTag:     {CmdList},
+	FlagFilter:  {CmdList},
+	FlagProject: {CmdList},
 }
 
 func check(args []string) error {
@@ -137,12 +180,20 @@ func check(args []string) error {
 	return nil
 }
 
-func env() []string {
+// env gives the variables of a run. With a key, the run gets the key and the project of the key. It
+// gets none of the variables of the key of the observer, so a run reads its own project only.
+func env(key Key, keyed bool) []string {
 	out := []string{"STRATA_REPORT=0"}
 	for _, k := range allowedEnv {
+		if keyed && (k == EnvKey || k == EnvProjectUID || k == EnvProject) {
+			continue
+		}
 		if v, ok := os.LookupEnv(k); ok {
 			out = append(out, k+"="+v)
 		}
+	}
+	if keyed {
+		out = append(out, EnvKey+"="+key.Secret, EnvProjectUID+"="+key.Project)
 	}
 	return out
 }

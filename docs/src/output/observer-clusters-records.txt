@@ -1,0 +1,6 @@
+$ scripts/ci/observer-records.sh --set --revision "$GIT_SHA" releases/*.json \
+  | grep -E '^  [a-z]+[-_.0-9a-z]*[.]json(.gz)?:' | sed -E 's/^(  [^ :]+[.]json(.gz)?):.*/\1/'
+  meta.json
+  aws-stack_1.1.1_64e4000000000000000000c3.json.gz
+  platform-addons_1.0.0_64e2000000000000000000a1.json.gz
+  platform-addons_1.0.0_64e3000000000000000000a1.json.gz

@@ -31,15 +31,17 @@ standard library only.
 
 `just observer-contract` gives the documents of the strata binary of this commit
 to the allow-list of the observer. It builds `strata` and the stand-in. It
-serves four chapters of the book one at a time, and runs the commands of the
+serves five chapters of the book one at a time, and runs the commands of the
 observer against each one. Then it runs the contract tests of `internal/docs` on
 the documents. One test fails when a field of the allow-list is not in the schema of
 the binary. One test fails when the clear value of a cluster variable passes the
 allow-list.
 
 The script also checks the card "Check this yourself" of the page. It draws the page from
-the routes of a real server. It runs each command of the card against the stand-in. This
-step needs `node`, as the render tests of `internal/web` do.
+the routes of a real server. It runs each command of the card against the stand-in. It
+also serves the set of the chapter `observer-clusters`, and draws the screen of the
+shared versions from its routes. Each row of project scope must name its project. These
+steps need `node`, as the render tests of `internal/web` do.
 
 The script runs `compare` and `verify` with `--full`, as the cycles do, so the
 documents hold the field `unified`. It also runs `behind --pin` once, as the click

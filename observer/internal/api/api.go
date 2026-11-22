@@ -56,6 +56,21 @@ type Source interface {
 	StartCycle(name string) (model.Start, bool)
 }
 
+// Set is what the server serves for a set of clusters, with --clusters. Each cluster of the set is a Source of its
+// own, under /v1/clusters/{uid}. The alerts and the cycles belong to the whole set.
+type Set interface {
+	// Clusters gives the summary of the set: a row for each cluster, the projects, and the selectors.
+	Clusters() model.SetSummary
+	// Shared gives each profile version that a cluster of the set runs, with its copies.
+	Shared() []model.Shared
+	// Member gives the Source of one cluster. The second result is false for a cluster that is not in the set.
+	Member(uid string) (Source, bool)
+	// Alerts gives the rules of the alerts of the set with their states.
+	Alerts() alert.View
+	// StartCycle starts a cycle of the set: see Source.StartCycle.
+	StartCycle(name string) (model.Start, bool)
+}
+
 // Tier says what the answer of a route carries.
 type Tier string
 
@@ -93,6 +108,10 @@ const (
 	patternAsks       = "/v1/asks"
 	patternAsk        = "/v1/packs/{profile}/{layer}/{name}/ask"
 	patternCycle      = "/v1/cycles/{cycle}"
+	// The routes of a set of clusters. Each route of one cluster, but the health, is also under patternMember.
+	PatternClusters = "/v1/clusters"
+	PatternShared   = "/v1/shared"
+	patternMember   = "/v1/clusters/{uid}"
 )
 
 // The header that a browser sets on a request, and the value of a request from the page itself. A
@@ -102,10 +121,12 @@ const (
 	sameOrigin      = "same-origin"
 )
 
-// Server serves a Source. Page is the handler of the route `/` and of each path that no route owns.
-// With a nil Page, these paths get 404.
+// Server serves a Source, or a Set. Page is the handler of the route `/` and of each path that no route owns.
+// With a nil Page, these paths get 404. With a Set, the server serves the routes of the set, and each route of one
+// cluster under /v1/clusters/{uid}. With no Set, it serves the routes of the Source, as with no --clusters.
 type Server struct {
 	Source Source
+	Set    Set
 	Page   http.Handler
 }
 
@@ -114,26 +135,88 @@ type entry struct {
 	handler http.HandlerFunc
 }
 
-// table lists every route. The server registers no other route. A test fails when a summary route
-// has no line in the table of the sentinel test.
-func (s *Server) table() []entry {
-	return []entry{
-		{Route{patternHealth, http.MethodGet, TierHealth}, s.health},
-		{Route{patternCluster, http.MethodGet, TierSummary}, s.cluster},
-		{Route{patternFindings, http.MethodGet, TierSummary}, s.findings},
-		{Route{patternProfiles, http.MethodGet, TierSummary}, s.profiles},
-		{Route{patternProfile, http.MethodGet, TierSummary}, s.profile},
-		{Route{patternNewer, http.MethodGet, TierSummary}, s.newer},
-		{Route{patternNotChecked, http.MethodGet, TierSummary}, s.notChecked},
-		{Route{patternEvents, http.MethodGet, TierSummary}, s.events},
-		{Route{patternImages, http.MethodGet, TierSummary}, s.images},
-		{Route{patternImage, http.MethodGet, TierSummary}, s.image},
-		{Route{patternAlerts, http.MethodGet, TierSummary}, s.alerts},
-		{Route{patternPackDiff, http.MethodGet, TierDetail}, s.packDiff},
-		{Route{patternAsks, http.MethodGet, TierDetail}, s.asks},
-		{Route{patternAsk, http.MethodPost, TierDetail}, s.ask},
-		{Route{patternCycle, http.MethodPost, TierCycle}, s.startCycle},
+// clusterEntry is a route of one cluster. Its handler serves the Source of the Server that it gets.
+type clusterEntry struct {
+	Route
+	handler func(s *Server, w http.ResponseWriter, r *http.Request)
+}
+
+// clusterTable lists the routes of one cluster, with the patterns of an observer of one cluster.
+func clusterTable() []clusterEntry {
+	return []clusterEntry{
+		{Route{patternCluster, http.MethodGet, TierSummary}, (*Server).cluster},
+		{Route{patternFindings, http.MethodGet, TierSummary}, (*Server).findings},
+		{Route{patternProfiles, http.MethodGet, TierSummary}, (*Server).profiles},
+		{Route{patternProfile, http.MethodGet, TierSummary}, (*Server).profile},
+		{Route{patternNewer, http.MethodGet, TierSummary}, (*Server).newer},
+		{Route{patternNotChecked, http.MethodGet, TierSummary}, (*Server).notChecked},
+		{Route{patternEvents, http.MethodGet, TierSummary}, (*Server).events},
+		{Route{patternImages, http.MethodGet, TierSummary}, (*Server).images},
+		{Route{patternImage, http.MethodGet, TierSummary}, (*Server).image},
+		{Route{patternAlerts, http.MethodGet, TierSummary}, (*Server).alerts},
+		{Route{patternPackDiff, http.MethodGet, TierDetail}, (*Server).packDiff},
+		{Route{patternAsks, http.MethodGet, TierDetail}, (*Server).asks},
+		{Route{patternAsk, http.MethodPost, TierDetail}, (*Server).ask},
+		{Route{patternCycle, http.MethodPost, TierCycle}, (*Server).startCycle},
 	}
+}
+
+// table lists every route. The server registers no other route. With no Set, the routes are the routes of one
+// cluster, as with no --clusters. With a Set, the set has its routes, and each route of one cluster is under
+// patternMember. A test fails when a summary route has no line in the table of the sentinel test.
+func (s *Server) table() []entry {
+	out := []entry{{Route{patternHealth, http.MethodGet, TierHealth}, s.health}}
+	if s.Set == nil {
+		for _, e := range clusterTable() {
+			out = append(out, entry{e.Route, func(w http.ResponseWriter, r *http.Request) { e.handler(s, w, r) }})
+		}
+		return out
+	}
+	top := &Server{Source: setTop{set: s.Set}}
+	out = append(out,
+		entry{Route{PatternClusters, http.MethodGet, TierSummary}, s.clusters},
+		entry{Route{PatternShared, http.MethodGet, TierSummary}, s.shared},
+		entry{Route{patternAlerts, http.MethodGet, TierSummary}, top.alerts},
+		entry{Route{patternCycle, http.MethodPost, TierCycle}, top.startCycle})
+	for _, e := range clusterTable() {
+		route := e.Route
+		route.Pattern = patternMember + strings.TrimPrefix(e.Pattern, routePrefix)
+		out = append(out, entry{route, func(w http.ResponseWriter, r *http.Request) {
+			src, ok := s.Set.Member(r.PathValue("uid"))
+			if !ok {
+				notFound(w, r)
+				return
+			}
+			e.handler(&Server{Source: src}, w, r)
+		}})
+	}
+	return out
+}
+
+// setTop is the Source of the routes of a set at the top that belong to the whole set: the alerts and the cycles.
+// The set serves no other route of one cluster at the top, so its Source is nil and gets no call.
+type setTop struct {
+	Source
+	set Set
+}
+
+// Alerts gives the alerts of the set.
+func (t setTop) Alerts() alert.View { return t.set.Alerts() }
+
+// StartCycle starts a cycle of the set.
+func (t setTop) StartCycle(name string) (model.Start, bool) { return t.set.StartCycle(name) }
+
+// routePrefix starts each route of the API. A route of one cluster of a set takes patternMember in its place.
+const routePrefix = "/v1"
+
+// clusters serves the summary of the set: a row for each cluster, the projects, and the selectors.
+func (s *Server) clusters(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.Set.Clusters())
+}
+
+// shared serves each profile version that a cluster of the set runs.
+func (s *Server) shared(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, SharedView{Shared: nonNil(s.Set.Shared())})
 }
 
 // Routes lists the routes of the API, not counting the route of the page.

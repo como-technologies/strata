@@ -19,7 +19,7 @@ use strata::model::pack_state::PackState;
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
 use strata::model::validation::{PaletteRefusal, answer_lines};
-use strata::reference::{CLUSTER_PREFIX, PROJECT_PREFIX};
+use strata::reference::{CLUSTER_PREFIX, PROJECT_PREFIX, TAG_PREFIX};
 use strata::render::palette_line;
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -16852,4 +16852,203 @@ fn the_page_of_live_runs_names_each_check_of_platform_sh() {
     in_script.sort();
     on_page.sort();
     assert_eq!(in_script, on_page);
+}
+
+/// The key of the role in the tests of `observer-clusters.sh`: a user whose one role is Project
+/// Viewer in the project `p-1` of cluster A.
+const SET_ROLE_KEY: &str = "set-role-k";
+
+/// A stand-in for the observer, which logs its arguments to `$FAKE_STRATA/observer.log`. It prints
+/// the summary of a set with the row of cluster A and the selector. The key `api-key` of `--keys`
+/// must be the key of the role, and `PALETTE_PROJECT_UID` must name the project of the role.
+const FAKE_SET_OBSERVER: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_STRATA/observer.log"
+keys=""; prev=""
+for a in "$@"; do [ "$prev" = --keys ] && keys=$a; prev=$a; done
+[ "$(cat "$keys/api-key")" = set-role-k ] && [ "$PALETTE_PROJECT_UID" = p-1 ] || exit 2
+echo '{"page":"ok","clusters":[{"uid":"c-a","project":{"uid":"p-1"},"status":"ok"}],"selectors":[{"selector":"tag:env=prod","clusters":1}]}'
+"#;
+
+/// The search of the clusters: the key of the example gets cluster A at each scope. The key of the
+/// role gets HTTP 403 with `AccessDenied` at tenant scope, and cluster A in the project `p-1`. The
+/// stand-in logs the project of each search to `$FAKE_ROUTES/searches`.
+const FAKE_SET_SEARCH: &str = r#"#!/usr/bin/env bash
+key=v1_dashboard_spectroclusters_search
+project=$(sed -n 's/^ProjectUid: //p' "$FAKE_ROUTES/sent/POST_$key.request")
+echo "${project:-tenant}" >> "$FAKE_ROUTES/searches"
+items='{"items":[{"metadata":{"uid":"c-a","name":"fred","labels":{"env":"prod"}},"specSummary":{"projectMeta":{"uid":"p-1","name":"dev"}}}]}'
+if [ -n "$project" ]; then
+  echo 200 > "$FAKE_ROUTES/$key.as-set-role-k.status"; echo "$items" > "$FAKE_ROUTES/$key.as-set-role-k"
+else
+  echo 403 > "$FAKE_ROUTES/$key.as-set-role-k.status"
+  echo '{"code":"AccessDenied","message":"project.list operation is not permitted"}' > "$FAKE_ROUTES/$key.as-set-role-k"
+fi
+echo "$items"
+"#;
+
+/// A stage of `observer-clusters.sh`: Palette answers the key of the example, and answers the key of
+/// the role as the code of Palette says. strata answers the commands of the key of the role, and the
+/// stand-in of the observer runs stage 4.
+fn observer_clusters_stage() -> Stage {
+    let mut stage = baseline_stage();
+    stage.strata(
+        &format!("snapshot {CLUSTER_PREFIX}c-a -o a.json"),
+        0,
+        r#"{"source":{"cluster":{"uid":"c-a","labels":{"purpose":"strata-live-example"}}}}"#,
+    );
+    stage.route("/v1/spectroclusters/c-a/metadata", "{}");
+    stage.route("/v1/filters/tag", r#"{"uid":"f-1"}"#);
+    stage.route(TAG_FILTER_ROUTE, r#"{"items":[]}"#);
+    stage.route_as(
+        TAG_FILTER_ROUTE,
+        SET_ROLE_KEY,
+        403,
+        &error_body(
+            Denial::Route.as_str(),
+            &access_denied_message("filter.list", "tenant"),
+        ),
+    );
+    stage.route("/v1/filters/tag/f-1", "{}");
+    stage.route_as(
+        "/v1/filters/tag/f-1",
+        SET_ROLE_KEY,
+        500,
+        &error_body(
+            Denial::Object.as_str(),
+            &operation_forbidden_message("filter.get"),
+        ),
+    );
+    executable(
+        &stage.path("routes/v1_dashboard_spectroclusters_search.sh"),
+        FAKE_SET_SEARCH,
+    );
+    let listed = r#"{"projectUid":"p-1","clusters":[{"uid":"c-a","projectUid":"p-1"}]}"#;
+    stage.strata(
+        "list clusters --tag env=prod --project p-1 --json",
+        0,
+        listed,
+    );
+    stage.strata_err("list clusters --tag env=prod --json", 2, "error: HTTP 403");
+    stage.strata_err(
+        "list clusters --filter strata-live-set *",
+        2,
+        "error: HTTP 403",
+    );
+    stage.strata(
+        "list clusters --detail --cluster c-a --json",
+        0,
+        r#"{"clusters":[{"uid":"c-a","profiles":[{"uid":"r-1"}]}]}"#,
+    );
+    stage.strata(
+        "snapshot r-1 -o records/r-1.json",
+        0,
+        r#"{"schema":"strata-snapshot/1","source":{"uid":"r-1"}}"#,
+    );
+    stage.command("fake-set-observer", FAKE_SET_OBSERVER);
+    let observer = stage.path("bin/fake-set-observer").display().to_string();
+    stage.env("OBSERVER_BIN", &observer);
+    stage.env("OBSERVER_ROLE_KEY", SET_ROLE_KEY);
+    stage
+}
+
+/// The listing of the saved tag filters, with no query: the stand-in answers by the path.
+const TAG_FILTER_ROUTE: &str = "/v1/filters/metadata";
+
+/// #702: each check of `observer-clusters.sh` passes against a stand-in with the answers that the code
+/// of Palette gives the key of the role. The search of the role at tenant scope has no project, and the
+/// search of its project names `p-1`. The observer gets the key of the role as `api-key`, and no file
+/// of the run holds the key at the end.
+#[test]
+fn observer_clusters_sh_passes_each_check_when_palette_answers_the_key_of_the_role_as_its_code_says()
+ {
+    let stage = observer_clusters_stage();
+    let (o, steps) = stage.run("observer-clusters.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "record",
+            "label",
+            "filter-create",
+            "filters-control",
+            "filters-control-says",
+            "filters-role",
+            "filters-role-says",
+            "filter-role",
+            "filter-role-says",
+            "search-body",
+            "search-control",
+            "search-control-says",
+            "search-role-tenant",
+            "search-role-tenant-says",
+            "search-role-project",
+            "search-role-project-says",
+            "list-role-project",
+            "list-role-project-row",
+            "list-role-tenant",
+            "list-role-filter",
+            "observer-records",
+            "observer-once",
+            "observer-row",
+            "observer-selector",
+            "observer-no-key",
+            "unlabel",
+            "filter-delete",
+            "baseline",
+        ],
+    );
+    let searches = std::fs::read_to_string(stage.path("routes/searches")).unwrap();
+    assert_eq!(searches, "tenant\ntenant\np-1\n", "{searches}");
+    let calls = std::fs::read_to_string(stage.path("strata/observer.log")).unwrap();
+    assert!(
+        calls.contains("once --strata ")
+            && calls.contains(&format!(
+                "--clusters {TAG_PREFIX}env=prod --keys keys --cluster-uid c-a"
+            )),
+        "{calls}"
+    );
+    // the records are gzipped, so the test reads each file as bytes
+    for path in walk(&stage.path("out")) {
+        let body = std::fs::read(&path).unwrap();
+        assert!(
+            !body
+                .windows(SET_ROLE_KEY.len())
+                .any(|w| w == SET_ROLE_KEY.as_bytes()),
+            "{} holds the key of the role",
+            path.display()
+        );
+    }
+    assert!(
+        !stage.path("out/keys").exists(),
+        "the file of the keys stays"
+    );
+}
+
+/// The script judges the answer that the code of Palette gives. So with a key that Palette does not
+/// refuse at tenant scope, the check of that refusal fails.
+#[test]
+fn observer_clusters_sh_fails_the_checks_of_the_refusals_when_palette_answers_the_key_of_the_role()
+{
+    let stage = observer_clusters_stage();
+    std::fs::remove_file(stage.path(&format!(
+        "routes/v1_filters_metadata.as-{SET_ROLE_KEY}.status"
+    )))
+    .unwrap();
+    let (o, steps) = stage.run("observer-clusters.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["filters-role-says"]);
+    passed(&steps, &["filter-role-says", "search-role-tenant-says"]);
+}
+
+#[test]
+fn observer_clusters_sh_says_could_not_check_with_no_key_of_the_role() {
+    let mut stage = observer_clusters_stage();
+    stage.env("OBSERVER_ROLE_KEY", "");
+    let (o, _) = stage.run("observer-clusters.sh", &[]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("could not check"),
+        "{}",
+        text(&o.stderr)
+    );
 }

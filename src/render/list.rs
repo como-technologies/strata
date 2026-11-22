@@ -88,7 +88,10 @@ pub(crate) fn query_line(l: &Listing) -> Option<String> {
         parts.push(format!("the saved filter {name}{expr}"));
     }
     let how = match l.resolved {
-        Some(r @ Resolved::Search) => format!("from the {}, at tenant scope", r.noun()),
+        Some(r @ Resolved::Search) if l.project_uid.is_empty() => {
+            format!("from the {}, at tenant scope", r.noun())
+        }
+        Some(r @ Resolved::Search) => format!("from the {}, in this project", r.noun()),
         Some(r @ Resolved::Listing) => {
             format!("from the {}, labels matched by strata", r.noun())
         }

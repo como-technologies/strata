@@ -120,12 +120,12 @@ func (c Content) recordOfFile(file string) (Record, bool) {
 	return Record{}, false
 }
 
-// idsOf gives the ids of the findings that a profile can have, for the kinds of the lists.
-func idsOf(subject string, lists ...[]Kind) []string {
+// idsOf gives the ids of the findings that a profile of the content can have, for the kinds of the lists.
+func (c Content) idsOf(subject string, lists ...[]Kind) []string {
 	var ids []string
 	for _, kinds := range lists {
 		for _, kind := range kinds {
-			ids = append(ids, FindingID(kind, subject))
+			ids = append(ids, c.findingID(kind, subject))
 		}
 	}
 	return ids
@@ -140,13 +140,13 @@ func HeldIDs(c Content) []string {
 	for _, r := range c.Records {
 		subject := r.subject()
 		if r.rowUnread() {
-			ids = append(ids, idsOf(subject, publishedKinds)...)
+			ids = append(ids, c.idsOf(subject, publishedKinds)...)
 		}
 		if r.sideUnread() {
-			ids = append(ids, idsOf(subject, clusterKinds)...)
+			ids = append(ids, c.idsOf(subject, clusterKinds)...)
 		}
 		if c.Pods.Err != nil {
-			ids = append(ids, idsOf(subject, imageKinds)...)
+			ids = append(ids, c.idsOf(subject, imageKinds)...)
 		}
 	}
 	return ids
@@ -162,7 +162,7 @@ func BlindIDs(c Content, known []string) []string {
 	}
 	decided := map[string]bool{}
 	for _, r := range c.Records {
-		for _, id := range idsOf(r.subject(), publishedKinds, clusterKinds, imageKinds) {
+		for _, id := range c.idsOf(r.subject(), publishedKinds, clusterKinds, imageKinds) {
 			decided[id] = true
 		}
 	}

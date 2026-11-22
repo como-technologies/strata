@@ -4,7 +4,7 @@
 use super::edits::{MACRO_REGION, OCI_CSI, RETAIN, TAG_2404, TAG_LTS2404};
 use super::ids::{
     A100, A110, A110_PROD, A111, A111_PROD, A112_PROD, A113, A114, A114_PROD, ADDONS_DEV,
-    ADDONS_PACK, ADDONS_PROD, ADDONS_PROD2, DEV, PAYMENTS, PROD,
+    ADDONS_PACK, ADDONS_PROD, ADDONS_PROD_PACK, ADDONS_PROD2, DEV, PAYMENTS, PROD,
 };
 use super::{CANDIDATE_YAML, DEV_ENV, GIT};
 use crate::book::Runner;
@@ -396,15 +396,7 @@ fn manifest_pack(r: &mut Runner) {
     r.chapter("manifest-pack", &[]);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.tenant(|t| t.addons(DEV, ADDONS_DEV, ADDONS_PACK, "restricted", "1.0.0"));
-    r.tenant(|t| {
-        t.addons(
-            PROD,
-            ADDONS_PROD,
-            "64e3000000000000000000d1",
-            "restricted",
-            "1.0.0",
-        )
-    });
+    r.tenant(|t| t.addons(PROD, ADDONS_PROD, ADDONS_PROD_PACK, "restricted", "1.0.0"));
     // prod also holds 1.0.1, whose manifest sets another Pod Security level. Both versions exist
     // before the playground hands the tenant over, so every step of the page runs against it.
     r.tenant(|t| {

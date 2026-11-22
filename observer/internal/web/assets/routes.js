@@ -3,7 +3,13 @@
 
 /* ---- Routes, rendering, events ---- */
 function route() {
-  const hash = (location.hash || "#overview").slice(1);
+  let hash = (location.hash || "#overview").slice(1);
+  // a set routes its own screens, and gives the screen of one cluster after the prefix of the cluster
+  if (SET) {
+    const next = setRoute(hash);
+    if (typeof next !== "string") return next;
+    hash = next;
+  }
   try {
     if (hash === "findings") return viewFindings();
     if (hash === "profiles") return viewProfiles();
@@ -12,10 +18,10 @@ function route() {
     if (hash === "alerts") return viewAlerts();
     if (hash === "images") return viewImages();
     if (hash.startsWith("i-")) return viewImage(decodeURIComponent(hash.slice(2)));
-    if (hash.startsWith("p-")) return viewProfile(decodeURIComponent(hash.slice(2)));
+    if (hash.startsWith("p-")) return viewProfile(subjectOfKey(decodeURIComponent(hash.slice(2))));
     if (hash.startsWith("k-")) {
-      const [subject, layer, name] = hash.slice(2).split("/").map(decodeURIComponent);
-      return viewPack(subject, layer, name);
+      const [key, layer, name] = hash.slice(2).split("/").map(decodeURIComponent);
+      return viewPack(subjectOfKey(key), layer, name);
     }
   } catch (err) {
     if (!(err instanceof URIError)) throw err;
@@ -60,13 +66,24 @@ function render() {
     put(main, S.offline ? offlineSplash() : splash(TONE.BUILD, "Asking the observer", "The page reads the first answers of the observer. It fills in when they arrive."));
     return;
   }
+  S.cluster = clusterOfHash(location.hash);
+  // the data is for another cluster of the set: the page reads it, and shows the screen when it arrives
+  if (wrongCluster()) {
+    if (!S.reading) {
+      S.reading = true;
+      refresh().finally(() => { S.reading = false; });
+    }
+    put(main, S.offline ? offlineSplash() : splash(TONE.BUILD, "Reading the cluster", "The page reads the answers of this cluster. It fills in when they arrive."));
+    return;
+  }
   const active = document.activeElement;
   const typing = active && /^q(-|$)/.test(active.id || "") ? {id: active.id, start: active.selectionStart, end: active.selectionEnd} : null;
   const v = route();
   put(document.getElementById("navl"), navLinks(v.nav));
   const c = D.cluster.cluster;
-  put(document.getElementById("ctx"), h`Cluster<b>${c.name || c.uid || "-"}</b>`);
-  put(document.getElementById("top"), topBar(v.crumbs));
+  const inSet = SET && S.cluster === null, member = SET && S.cluster !== null && rowOfCluster(S.cluster);
+  put(document.getElementById("ctx"), inSet ? h`Clusters<b>${D.set.counts.clusters}</b>` : h`Cluster<b>${c.name || c.uid || "-"}</b>`);
+  put(document.getElementById("top"), topBar(member ? clusterCrumbs(v.crumbs) : v.crumbs));
   put(main, v.body);
   if (typing) {
     const q = document.getElementById(typing.id);
@@ -132,6 +149,7 @@ function start() {
   });
   document.addEventListener("change", ev => {
     if (ev.target.id === "side") { S.side[ev.target.dataset.id] = ev.target.value; render(); }
+    if (ev.target.id === "project") { S.project = ev.target.value; render(); }
   });
   document.addEventListener("toggle", ev => {
     const k = ev.target.dataset && ev.target.dataset.open;

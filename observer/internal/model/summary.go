@@ -140,6 +140,9 @@ type Finding struct {
 // Profile is one profile of the cluster or of the baseline. NewerVersion is the newest published version
 // of the profile, when it is newer than the version of the record.
 type Profile struct {
+	// UID is the uid of the profile version. Only a cluster of a set names it. A route of a set finds a profile by its
+	// uid, because two projects can hold one name and version.
+	UID          string        `json:"uid,omitempty"`
 	Name         string        `json:"name"`
 	Version      string        `json:"version"`
 	Type         string        `json:"type"`

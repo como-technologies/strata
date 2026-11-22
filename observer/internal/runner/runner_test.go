@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -143,7 +144,7 @@ func TestTheProcessGetsTheVariablesOfTheListAndStrataReportAndNoOtherVariable(t 
 			t.Setenv(name, os.TempDir())
 		}
 	}
-	t.Setenv("PALETTE_API_KEY", "key")
+	t.Setenv(EnvKey, "key")
 	for _, name := range append([]string{"SOME_OTHER_SECRET"}, notSet...) {
 		t.Setenv(name, "SENTINEL")
 	}
@@ -187,4 +188,43 @@ func TestCodeMdNamesEachVariableThatTheRunnerSets(t *testing.T) {
 		t.Errorf("code.md names %v, want %v", named, want)
 	}
 	testkit.HoldsAll(t, "the rule", rule, "`STRATA_REPORT=0`")
+}
+
+// A set of clusters has one key for each project. A run with a key gets the key and the project of the key. It gets
+// none of the variables of the key of the observer, also not the name of its project.
+func TestARunWithAKeyGetsOnlyTheKeyAndTheProjectOfThatKey(t *testing.T) {
+	t.Setenv(EnvKey, "SENTINEL-KEY-OF-THE-OBSERVER")
+	t.Setenv(EnvProjectUID, "p-observer")
+	t.Setenv(EnvProject, "observer")
+	x := fake(t, fmt.Sprintf(`echo "key=$%s project=$%s name=${%s-unset}"`, EnvKey, EnvProjectUID, EnvProject))
+	ctx := WithKey(context.Background(), Key{Project: "p2", Secret: "key-of-p2"})
+	r, err := x.Run(ctx, CmdVerify, "a.json", "--json", "-q")
+	if err != nil || string(r.Stdout) != "key=key-of-p2 project=p2 name=unset\n" {
+		t.Errorf("output %q, error %v", r.Stdout, err)
+	}
+	r, err = x.Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
+	if err != nil || string(r.Stdout) != "key=SENTINEL-KEY-OF-THE-OBSERVER project=p-observer name=observer\n" {
+		t.Errorf("a run with no key: output %q, error %v", r.Stdout, err)
+	}
+}
+
+// The search of a set reads the clusters of a label or a saved filter in one project. Only `list` takes its flags.
+func TestTheFlagsOfTheSearchAreAllowedForListOnly(t *testing.T) {
+	x := fake(t, `echo '{}'; exit 0`)
+	for _, c := range []struct {
+		args []string
+		ok   bool
+	}{
+		{[]string{CmdList, "clusters", FlagTag, "env=prod", FlagTag, "team", FlagProject, "p1", "--json", "--compact", "-q"}, true},
+		{[]string{CmdList, "clusters", FlagFilter, "production", FlagProject, "p1", "--json", "--compact", "-q"}, true},
+		{[]string{CmdList, "clusters", "--detail", "--json"}, false},
+		{[]string{CmdVerify, "a.json", FlagTag, "env=prod"}, false},
+		{[]string{CmdSnapshot, "cluster:c1", FlagProject, "p1"}, false},
+		{[]string{CmdBehind, "a.json", FlagNoImpact, FlagFilter, "production"}, false},
+	} {
+		_, err := x.Run(context.Background(), c.args...)
+		if (err == nil) != c.ok {
+			t.Errorf("%v: "+testkit.ErrorWantOK, c.args, err, c.ok)
+		}
+	}
 }

@@ -22,6 +22,7 @@ A ref names the thing that a command reads.
 | `appprofile:<uid>` | the app profile with this uid | `appprofile:64f6000000000000000000a1` |
 | `appprofile:<name>@<version>` | the app profile with this name and version, or `@latest` | `appprofile:shop@1.0.0` |
 | `tag:<key>=<value>` | the clusters with the label, each in its own project; `+` joins labels that must all hold | `tag:env=prod` |
+| `tag:<key>` | the clusters that have the label key, with any value, each in its own project | `tag:env` |
 | `filter:<name>` | the clusters that a saved tag filter selects, by its name or uid | `filter:production` |
 | `project:<project>/<ref>` | the ref, read in the project with this uid or name, and not in the configured project | `project:prod/aws-stack@1.1.1` |
 | a file | a snapshot file from `strata snapshot` | `releases/1.1.1/dev.json` |

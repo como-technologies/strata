@@ -7,17 +7,21 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 use strata::Error;
 use strata::api::codes::Denial;
-use strata::api::{Method, project_uid_named};
+use strata::api::{MemoryApi, Method, Palette, project_uid_named};
+use strata::closed_set::ClosedSet;
 use strata::config::Config;
 use strata::error::Identifier;
+use strata::model::scope::ProfileScope;
+use strata::ops::{self, ClusterQuery, ListKind, ListOptions};
 use strata::reference::{DRAFT_SUFFIX, FILTER_PREFIX, PACK_PREFIX, PROJECT_PREFIX, TAG_PREFIX};
 use strata::term::progress::Progress;
 
 use crate::common::{
-    PROFILE_LISTING, PROJECT_LISTING, Run, Stand, UID_A, UID_B, against_closed_port, command_names,
-    error_body, listed, manifests_route, no_manifests, no_variables, profile_document,
-    profile_route, project_denied_message, project_listing, serve_tenants, strata_command,
-    template, variables_route,
+    CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, PROFILE_LISTING, PROJECT_LISTING, Run, Stand, UID_A,
+    UID_B, access_denied_message, against_closed_port, command_names, error_body, listed,
+    manifests_route, no_manifests, no_variables, post, profile_document, profile_route,
+    project_denied_message, project_listing, serve_tenants, strata_command, template,
+    variables_route,
 };
 
 /// The uids of the projects `dev` and `prod` of the stand-in.
@@ -413,6 +417,24 @@ fn the_project_of_a_ref_is_a_uid_or_a_name_and_the_record_names_its_uid_and_the_
 }
 
 #[test]
+fn a_record_of_a_tenant_profile_that_a_project_request_takes_names_the_project_and_the_scope() {
+    let mut routes = tenant();
+    let doc = routes.get_mut(&profile_route(UID_A)).unwrap();
+    doc["metadata"]["annotations"] = json!({"scope": ProfileScope::Tenant});
+    let stand = Stand::new(routes, ENV_PROJECT);
+    let r = stand.run(&["snapshot", UID_A, "--project", DEV]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    let record: Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(record["source"]["projectUid"], DEV);
+    assert_eq!(record["source"]["scope"], ProfileScope::Tenant.as_str());
+    // the scope is not part of the root: the same profile with no annotation has the same root
+    let r = stand.run(&["snapshot", UID_B, "--project", DEV]);
+    let unscoped: Value = serde_json::from_str(&r.out).unwrap();
+    assert!(unscoped["source"].get("scope").is_none(), "{unscoped}");
+    assert_eq!(record["root"], unscoped["root"]);
+}
+
+#[test]
 fn a_ref_in_a_project_that_no_visible_project_has_is_project_not_found_with_the_projects() {
     let stand = tenant_stand();
     let missing = in_project("staging", UID_A);
@@ -573,4 +595,72 @@ fn a_ref_in_a_project_that_refuses_the_key_gives_an_error_that_names_the_project
     // a ref with no project gets the answer of Palette as it is
     let r = stand.run(&["snapshot", UID_B, "--project", PROD, "--json"]);
     assert_eq!(error_of(&r)["kind"], api);
+}
+
+/// The schema of a cluster search that takes `tags`.
+fn tags_schema() -> Value {
+    json!({"schema": {"properties": [{"name": "tags", "type": "string"}]}})
+}
+
+#[test]
+fn a_query_of_labels_with_a_project_searches_that_project_where_the_tenant_refuses_the_key() {
+    // Palette refuses a search at tenant scope to a key with no `project.list` in the tenant
+    let tenant = MemoryApi::new()
+        .with(CLUSTER_SEARCH_SCHEMA, tags_schema())
+        .failing(
+            post(CLUSTER_SEARCH),
+            403,
+            error_body(
+                Denial::Route.as_str(),
+                &access_denied_message("project.list", "tenant"),
+            ),
+        );
+    let item = json!({"metadata": {"uid": "c1", "name": "payments", "labels": {"env": "prod"},
+        "annotations": {"projectUid": DEV}},
+        "specSummary": {"projectMeta": {"uid": DEV, "name": "dev"}}});
+    let dev = MemoryApi::new()
+        .in_project(DEV)
+        .with(CLUSTER_SEARCH_SCHEMA, tags_schema())
+        .with(
+            post(CLUSTER_SEARCH),
+            json!({"items": [item], "listmeta": {"continue": ""}}),
+        );
+    let connect = |scope: Option<&str>| {
+        Ok(Palette::new(match scope {
+            Some(DEV) => &dev,
+            _ => &tenant,
+        }))
+    };
+    let options = ListOptions {
+        kinds: vec![ListKind::Clusters],
+        project: Some(DEV.into()),
+        query: ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+        ..ListOptions::default()
+    };
+    let l = ops::list(&options, connect, "t1", &Progress::silent()).unwrap();
+    assert_eq!(l.project_uid, DEV);
+    let names: Vec<&str> = l
+        .clusters
+        .iter()
+        .flatten()
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(names, ["payments"]);
+    let searches = |api: &MemoryApi| {
+        api.posted()
+            .iter()
+            .filter(|(path, _)| path == CLUSTER_SEARCH)
+            .count()
+    };
+    assert_eq!((searches(&dev), searches(&tenant)), (1, 0));
+    // with no project, the query searches at tenant scope, and Palette refuses the key there
+    let options = ListOptions {
+        project: None,
+        ..options
+    };
+    let err = ops::list(&options, connect, "t1", &Progress::silent()).unwrap_err();
+    assert!(matches!(err, Error::Api { status: 403, .. }), "{err:?}");
 }

@@ -1,0 +1,21 @@
+{
+  "page": "ok",
+  "strataVersion": "0.36.0",
+  "records": {"count":14,"baseline":"approved","revision":"4e1c7a2","startedAt":"2026-10-25T12:00:00Z"},
+  "content": {"checkedAt":"2026-11-03T11:54:00Z","every":"15m","failedRuns":0,"lastError":null},
+  "versions": {"readAt":"2026-11-03T10:00:00Z","every":"6h","failedRuns":0,"lastError":null},
+  "counts": {"clusters":3,"drift":1,"newer":1,"notChecked":1,"findings":1},
+  "projects": [
+    {"uid":"p-dev","name":"dev"},
+    {"uid":"p-prod","name":"prod","lastError":{"kind":"api","status":403}}
+  ],
+  "selectors": [
+    {"selector":"tag:env=prod","clusters":3},
+    {"selector":"tag:env=nowhere","clusters":0}
+  ],
+  "clusters": [
+    {"uid":"7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35","name":"quarry-1","project":{"uid":"p-dev","name":"dev"},"profiles":12,"status":"drift","drift":1,"newer":11,"notChecked":2,"checkedAt":"2026-11-03T11:54:00Z","page":"ok","here":true},
+    {"uid":"c-search","name":"search","project":{"uid":"p-prod","name":"prod"},"profiles":0,"status":"not-checked","drift":0,"newer":0,"notChecked":0,"checkedAt":null,"page":"lost","lastError":{"kind":"api","status":403}},
+    {"uid":"c-ledger","name":"ledger","project":{"uid":"p-dev","name":"dev"},"profiles":12,"status":"ok","drift":0,"newer":0,"notChecked":0,"checkedAt":"2026-11-03T11:53:00Z","page":"ok"}
+  ]
+}

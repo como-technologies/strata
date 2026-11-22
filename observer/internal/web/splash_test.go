@@ -219,7 +219,7 @@ func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testin
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	want := []string{"LICENSES.md", "app.css", "app.js", testkit.FaviconDark, testkit.FaviconLight, "fonts", "frame.js", "index.html", "pack.js", "routes.js", "screens.js", themeScript}
+	want := []string{"LICENSES.md", "app.css", "app.js", "clusters.js", testkit.FaviconDark, testkit.FaviconLight, "fonts", "frame.js", "index.html", "pack.js", "routes.js", "screens.js", themeScript}
 	if !slices.Equal(names, want) {
 		t.Errorf("assets/ holds %v, want %v", names, want)
 	}

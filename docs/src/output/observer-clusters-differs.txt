@@ -1,0 +1,7 @@
+$ strata-observer once --clusters tag:team=payments --clusters tag:team=search --keys keys \
+  --cluster-uid 64f1000000000000000000e1 --records records --work work --state state 2>/dev/null \
+  | jq -c '(.clusters[] | {name, project: .project.name, status}), (.shared[] | select(.copies.differ != []) | {name, version, differ: [.copies.differ[].name]})'
+{"name":"payments","project":"prod","status":"differs"}
+{"name":"payments","project":"dev","status":"ok"}
+{"name":"search","project":"dev","status":"ok"}
+{"name":"aws-stack","version":"1.1.1","differ":["payments"]}

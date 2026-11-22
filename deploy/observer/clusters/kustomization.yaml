@@ -1,0 +1,46 @@
+# This component lets the observer watch a set of clusters. The base of deploy/observer watches the
+# cluster where it runs. A team lists the component under `components:` of its own kustomization.
+#
+# The component adds the flags --clusters and --keys, and the volume of the keys. It adds no object,
+# no role, and no egress rule. The observer reads each cluster from the API of Palette, and it makes
+# no connection to another cluster. The key `clusters` of the ConfigMap strata-observer holds one
+# selector on each line, such as tag:env=prod or filter:production.
+#
+# The entry api-key of the Secret strata-observer-key is the key of the project of the ConfigMap.
+# Each other project has one more entry, with its uid as its name. A uid can start with a digit, so
+# it is no portable name of a variable. So the observer reads the files of the volume, again at the
+# start of each cycle. Whoever reads the Secret reads each project in it.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      kind: Deployment
+      name: strata-observer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: STRATA_CLUSTERS
+          valueFrom:
+            configMapKeyRef:
+              name: strata-observer
+              key: clusters
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --clusters=$(STRATA_CLUSTERS)
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --keys=/keys
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: keys
+          mountPath: /keys
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: keys
+          secret:
+            secretName: strata-observer-key
+            defaultMode: 0440

@@ -6,7 +6,7 @@ its checks establishes, so you can see the coverage without running anything.
 
 `verify.sh` is the read-only script over the cluster, and
 [its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
-`packs.sh`, `knurl.sh`, `observer-kind.sh`, and `observer-role.sh` read too. The other scripts below write to the tenant;
+`packs.sh`, `knurl.sh`, `observer-kind.sh`, and `observer-role.sh` read too. `observer-clusters.sh` adds a label and a saved filter, and removes both. The other scripts below write to the tenant;
 `pack-states.sh` keeps nothing that it writes. `validate-packs.sh` writes only
 in stage 4, which deletes the profile that it makes, and in stage 7, which updates a cluster
 of the lab. `route-bodies.sh` deletes each
@@ -1852,6 +1852,42 @@ needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 | `role-validate-packs` | ? | #647: the status and the error code of the same request with the key of the role under test. The click of the observer sends this request. The check records the answer and does not judge it. With Project Viewer, the request answered HTTP 200 |
 | `preflight-control-validate` | 0 | #619: with the key of the example, the rules of the validate route of the create give no `error` on cluster A. A live run passed. |
 | `preflight-role-validate` | ? | #619: the verdict and the first message of the same rules with the key of the role under test. With Project Viewer, each rule must give `error`, with HTTP 403, the code `AccessDenied`, and a message that names `cluster.create`. A live run with Project Viewer gave `error` for each rule, with HTTP 403 and the code `AccessDenied`. The message was `cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project`. |
+
+## observer-clusters.sh
+
+It checks [the observer of a set of clusters](../automation/observer-clusters.md)
+with a second key. Its user has one role: Project Viewer in the project of cluster A.
+
+Stage 1 gives cluster A the label `env=prod`, and makes a saved tag filter that
+selects it. Stage 2 sends the reads of Palette with the key of the example and with
+the key of the role. Stage 3 runs `list clusters` with the key of the role. Stage 4
+runs one cycle of the observer with `--clusters tag:env=prod` and that key. Stage
+5 removes the filter and gives cluster A its labels again.
+
+It needs the example at its baseline with cluster A, the observer binary, and
+`OBSERVER_ROLE_KEY`. Make the user as for [observer-role.sh](#observer-rolesh),
+with the role Project Viewer. With no key, the script says `could not check` and
+exits `2`. Each check of the key of the role expects the answer of the code of
+Palette: see [The reach of a
+search](../internals/palette/clusters.md#the-reach-of-a-search).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `record`, `label`, `filter-create` | 0 | #702: the label `env=prod` on cluster A, and the saved filter `strata-live-set` that selects it. No result yet: the live window of the wave runs the script. |
+| `filters-control`, `filters-control-says` | 0 | #702: the key of the example reads the saved filters at tenant scope, with HTTP 200. No result yet: the live window of the wave runs the script. |
+| `filters-role`, `filters-role-says` | 0 | #702: the key of the role gets HTTP 403 with `AccessDenied` for the saved filters at tenant scope. The role holds no `filter.list` in the tenant. No result yet: the live window of the wave runs the script. |
+| `filter-role`, `filter-role-says` | 0 | #702: the key of the role gets HTTP 500 with `OperationForbidden` for the saved filter. The role holds no `filter.get`. No result yet: the live window of the wave runs the script. |
+| `search-body` | 0 | the body of the cluster search for the label `env=prod`, as strata sends it |
+| `search-control`, `search-control-says` | 0 | #702: the key of the example searches at tenant scope, and the answer names cluster A in its project. No result yet: the live window of the wave runs the script. |
+| `search-role-tenant`, `search-role-tenant-says` | 0 | #702: the key of the role gets HTTP 403 with `AccessDenied` for the search at tenant scope. The role holds no `project.list` in the tenant. No result yet: the live window of the wave runs the script. |
+| `search-role-project`, `search-role-project-says` | 0 | #702: the search of the project of cluster A with the key of the role names cluster A, in its project. No result yet: the live window of the wave runs the script. |
+| `list-role-project`, `list-role-project-row` | 0 | #702: `list clusters --tag env=prod --project` with the key of the role names cluster A in its project. No result yet: the live window of the wave runs the script. |
+| `list-role-tenant` | 2 | #702: the same list at tenant scope fails with the key of the role. No result yet: the live window of the wave runs the script. |
+| `list-role-filter` | 2 | #702: `list clusters --filter` fails with the key of the role, because the saved filters need a role of the tenant. No result yet: the live window of the wave runs the script. |
+| `observer-records` | 0 | a record of each profile of cluster A, gzipped as the Secrets of the records hold it |
+| `observer-once`, `observer-row`, `observer-selector` | 0 | #702: one cycle of the observer with the key of the role as `api-key`. The row of cluster A names its project and is checked, and the selector selects cluster A. No result yet: the live window of the wave runs the script. |
+| `observer-no-key` | 0 | #702: no file of the run holds the key of the role |
+| `unlabel`, `filter-delete`, `baseline` | 0 | the labels of cluster A as they were, the filter deleted, and the example at its baseline |
 
 ## observer-chart.sh
 

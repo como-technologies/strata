@@ -6,7 +6,8 @@
 #
 # --write also copies the documents to observer/internal/docs/testdata/, for the tests with no binary.
 # It also builds strata-observer and runs `once` against the seeds, with the real binary of strata. It runs each command of the
-# card "Check this yourself" of the page against the stand-in, so it needs node too, as the render tests do.
+# card "Check this yourself" of the page against the stand-in. It also draws the screen of the shared versions of a set
+# from a real server. So it needs node too, as the render tests do.
 # Needs just, go, node, jq, curl, and target/release/strata.
 set -euo pipefail
 root=${STRATA_ROOT:-$(git rev-parse --show-toplevel)}
@@ -49,26 +50,37 @@ once() {
   fi
 }
 
-# serve_up CLUSTER-UID RECORDS-NAME starts `strata-observer serve` against the stand-in that runs now. The
-# server listens on port 0, so it gets a free port from the kernel. serve_up sets addr to the address of
-# the line "listening" of its log. It returns when the first content cycle ended well, and fails when that
-# takes more than two minutes. The server opens its log after the fork. So serve_up empties the log first,
-# and sed never reads a missing log or the log of an earlier server.
+# serve_up ROUTE CLUSTER-UID RECORDS-NAME [FLAG...] starts `strata-observer serve` against the stand-in that
+# runs now, with the flags that follow. The server listens on port 0, so it gets a free port from the kernel.
+# serve_up sets addr to the address of the line "listening" of its log. It returns when the page of ROUTE is
+# ok: /v1/cluster for one cluster, and /v1/clusters for a set. It fails when that takes more than two minutes.
+# The server opens its log after the fork. So serve_up empties the log first, and sed never reads a missing
+# log or the log of an earlier server.
 serve_up() {
   mkdir -p "$work/serve-work"
   : >"$work/serve.err"
-  "$observer_bin" serve --strata "$strata" --cluster-uid "$1" --records "$work/records-$2" --work "$work/serve-work" \
+  "$observer_bin" serve --strata "$strata" --cluster-uid "$2" --records "$work/records-$3" "${@:4}" --work "$work/serve-work" \
     --state "$work/serve-state" --listen 127.0.0.1:0 >"$work/serve.out" 2>"$work/serve.err" &
   serve_pid=$!
   addr=
   for _ in $(seq 120); do
     [ -n "$addr" ] || addr=$(sed -n 's/.* msg=listening addr=\([^ ]*\).*/\1/p' "$work/serve.err")
-    [ -n "$addr" ] && [ "$(curl -s "http://$addr/v1/cluster" | jq -r '.page // empty')" = ok ] && return 0
+    [ -n "$addr" ] && [ "$(curl -s "http://$addr$1" | jq -r '.page // empty')" = ok ] && return 0
     sleep 1
   done
   cat "$work/serve.err" >&2
   echo "the server did not reach the page state ok" >&2
   exit 2
+}
+# routes DIR ROUTE... writes the answer of each route of the server of serve_up to DIR/ROUTE.json. It fails for
+# an answer that is no JSON.
+routes() {
+  local route
+  mkdir -p "$1"
+  for route in "${@:2}"; do
+    curl -s "http://$addr/v1/$route" >"$1/$route.json"
+    jq -e . "$1/$route.json" >/dev/null || { echo "/v1/$route is no JSON" >&2; exit 2; }
+  done
 }
 # serve_down stops the server with SIGTERM, and fails when its exit code is not 0.
 serve_down() {
@@ -105,12 +117,8 @@ expect edited '(.findings | length) == 1 and .findings[0].kind == "published-cha
 # The card "Check this yourself" gives commands with the names of this cluster. The test draws the page from the routes of a real
 # server, and it runs each command against this stand-in. The server stops before the later seeds, and it leaves no state.
 api=$work/api/edited
-mkdir -p "$api"
-serve_up "$(cluster_uid payments)" edited
-for route in cluster findings profiles newer notchecked events images asks alerts; do
-  curl -s "http://$addr/v1/$route" >"$api/$route.json"
-  jq -e . "$api/$route.json" >/dev/null || { echo "/v1/$route is no JSON" >&2; exit 2; }
-done
+serve_up /v1/cluster "$(cluster_uid payments)" edited
+routes "$api" cluster findings profiles newer notchecked events images asks alerts
 echo '[]' >"$api/diffs.json"
 serve_down
 rm -rf "$work/serve-state" "$work/serve-work"
@@ -188,7 +196,7 @@ fi
 
 # The server shows the tiers. A summary route holds no clear value, and the server refuses a POST and a
 # Host that is not loopback.
-serve_up "$uid" values
+serve_up /v1/cluster "$uid" values
 base=http://$addr
 for route in cluster findings profiles newer notchecked events; do
   curl -s "$base/v1/$route" >"$work/serve-$route.json"
@@ -224,6 +232,20 @@ once stopped "$uid" stopped
 expect stopped '.page == "first-load" and .content.failedRuns == 1'
 once stopped "$uid" stopped
 expect stopped '.page == "lost" and .content.failedRuns == 2 and .content.lastError.kind == "transport"'
+
+# The set of the chapter observer-clusters holds platform-addons@1.0.0 in two projects, by two uids. The test draws the screen
+# of the shared versions from the routes of a real server. It reads no route of one cluster, so the folder members is empty.
+start observer-clusters-1
+set_records
+records_dir set records/*.json
+serve_up /v1/clusters "$(cluster_uid payments)" set --clusters $'tag:team=payments\ntag:team=search' --keys "$work/keys"
+api=$work/api/observer-clusters
+routes "$api" clusters shared alerts
+mkdir "$api/members"
+serve_down
+rm -rf "$work/serve-state" "$work/serve-work"
+STRATA_CHECK_SET=$api go -C "$observer" test ./internal/web/ -count=1 -run 'SharedVersionsOfTheStandIn'
+stop
 
 STRATA_BIN=$strata STRATA_DOCS=$docs go -C "$observer" test ./internal/docs/ -count=1 -run 'Schema|DocumentsOfTheBinary|ClearValue|KindOfAFailedCheck'
 if [ "${1:-}" = --write ]; then

@@ -97,10 +97,13 @@ func (r Rule) live(now time.Time) bool {
 	return !r.mute() || now.Before(r.muteEnd())
 }
 
-// covers says that the rule is about this subject. A profile rule names a profile or name@version.
-// A pack rule names the name or the key of a pack.
+// covers says that the rule is about this subject. A profile rule names a profile or name@version. A pack rule
+// names the name or the key of a pack. A cluster rule with a match names a cluster of a set, and a cluster rule with
+// no match covers each cluster.
 func (r Rule) covers(s Subject) bool {
 	switch r.Level {
+	case LevelCluster:
+		return r.Match == "" || r.Match == s.Cluster
 	case LevelProfile:
 		return s.Profile == r.Match || profileName(s.Profile) == r.Match
 	case LevelPack:
@@ -309,8 +312,6 @@ func (rs Rules) fault(r Rule) string {
 		return "level must be cluster, profile, or pack"
 	case !slices.Contains(newsKinds, r.News):
 		return "news must be drift, image, lost, or newer"
-	case r.Level == LevelCluster && r.Match != "":
-		return "a cluster rule has no match"
 	case r.Level != LevelCluster && r.Match == "":
 		return "a profile or pack rule needs match"
 	case r.News == NewsLost && r.Level != LevelCluster:

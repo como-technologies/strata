@@ -48,9 +48,17 @@ func header(cluster, title string) string {
 	return fmt.Sprintf("strata · %s · %s", cluster, title)
 }
 
+// where names the cluster of a subject in a message: the cluster of a subject of a set, else cluster.
+func (s Subject) where(cluster string) string {
+	if s.Cluster != "" {
+		return s.Cluster
+	}
+	return cluster
+}
+
 // openText is the message for a subject that opened.
 func openText(cluster string, s Subject) string {
-	lines := []string{header(cluster, s.title()), s.line()}
+	lines := []string{header(s.where(cluster), s.title()), s.line()}
 	if len(s.Packs) > 0 && s.News != NewsNewer {
 		lines = append(lines, "Packs: "+strings.Join(s.Packs, ", "))
 	}
@@ -67,7 +75,7 @@ func clearText(cluster string, s Subject, at time.Time) string {
 	if s.News == NewsLost {
 		body = "The observer reached Palette again, at " + at.UTC().Format(time.RFC3339) + "."
 	}
-	lines := []string{header(cluster, s.title()+" cleared")}
+	lines := []string{header(s.where(cluster), s.title()+" cleared")}
 	if s.Profile != "" {
 		lines = append(lines, s.Profile)
 	}
@@ -82,7 +90,11 @@ func digestText(cluster string, subjects []Subject) string {
 			lines = append(lines, fmt.Sprintf("and %d more.", len(subjects)-digestLimit))
 			break
 		}
-		lines = append(lines, "- "+s.title()+" · "+s.line())
+		line := "- " + s.title() + " · " + s.line()
+		if s.Cluster != "" {
+			line = "- " + s.Cluster + " · " + s.title() + " · " + s.line()
+		}
+		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n")
 }

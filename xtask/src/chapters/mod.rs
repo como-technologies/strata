@@ -135,6 +135,7 @@ pub fn run(r: &mut Runner) {
     fleet::run(r);
     pipeline::run(r);
     observer::run(r);
+    observer::clusters(r);
     automation::run(r);
     preflight::run(r);
     fields::run(r);

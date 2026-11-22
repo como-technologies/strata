@@ -512,10 +512,16 @@ const WRAPPERS: [Wrapper; 9] = [
             reach("--revision", "", ""),
             reach("--namespace", "namespace", "STRATA_OBSERVER_NAMESPACE"),
         ],
-        left: &[Left {
-            flags: &["--first-seen"],
-            why: "the seed of the chart writes the first-seen records, and the publish writes the approved ones",
-        }],
+        left: &[
+            Left {
+                flags: &["--first-seen"],
+                why: "the seed of the chart writes the first-seen records, and the publish writes the approved ones",
+            },
+            Left {
+                flags: &["--set"],
+                why: "the job publishes the records of one cluster, and a set of clusters keys its records by uid with the script itself",
+            },
+        ],
     },
     Wrapper {
         workflow: "retire-gate.yml",
@@ -6525,6 +6531,74 @@ fn observer_records_sh_refuses_two_records_of_one_profile_version() {
         &[],
     );
     assert_refused(&o, "two records are for aws-stack_1.0.0.json.gz");
+}
+
+/// A record of a set of clusters: `name@version` with the uid `uid`.
+fn set_record(job: &ObserverRecords, file: &str, uid: &str) -> PathBuf {
+    let mut doc = profile_doc("platform-addons", "1.0.0");
+    doc["source"]["uid"] = uid.into();
+    job.file(file, &doc)
+}
+
+/// Two projects can hold one name and version with two uids. With `--set`, the key of each record
+/// holds its uid, so the two records go in, and two records of one uid collide.
+#[test]
+fn observer_records_sh_with_set_keys_each_record_by_its_uid_and_refuses_two_of_one_uid() {
+    let job = ObserverRecords::new();
+    let dev = set_record(&job, "dev.json", "u-dev");
+    let prod = set_record(&job, "prod.json", "u-prod");
+    let o = job.run(
+        &[
+            "--set",
+            "--revision",
+            "r",
+            dev.to_str().unwrap(),
+            prod.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let keys: Vec<String> = secret_data(&records_secrets(&text(&o.stdout))[0])
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            "meta.json",
+            "platform-addons_1.0.0_u-dev.json.gz",
+            "platform-addons_1.0.0_u-prod.json.gz"
+        ]
+    );
+    // with no --set, the two records are for one profile version
+    let o = job.run(
+        &[
+            "--revision",
+            "r",
+            dev.to_str().unwrap(),
+            prod.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_refused(&o, "two records are for platform-addons_1.0.0.json.gz");
+    let copy = set_record(&job, "copy.json", "u-dev");
+    let o = job.run(
+        &[
+            "--set",
+            "--revision",
+            "r",
+            dev.to_str().unwrap(),
+            copy.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_refused(
+        &o,
+        "two records are for platform-addons_1.0.0_u-dev.json.gz",
+    );
+    let o = job.run(&["--set", "--first-seen", "c-1"], &[]);
+    assert_refused(&o, "--first-seen records one cluster, and not a set");
+    assert!(job.strata_calls().is_empty(), "strata did not run");
 }
 
 #[test]
