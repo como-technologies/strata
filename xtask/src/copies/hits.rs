@@ -1,5 +1,5 @@
-//! The rule of the literals. It finds the values of a closed set or of a const that the literals of
-//! the added lines hold, by the rules of a word.
+//! The rule of the literals. It finds each value of a closed set or of a const in the literals of
+//! the added lines.
 
 use std::collections::{BTreeMap, BTreeSet};
 

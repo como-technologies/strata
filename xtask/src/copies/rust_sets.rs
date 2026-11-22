@@ -1,4 +1,4 @@
-//! The texts of the closed sets of a Rust file. They come from the serde names of an enum, the
+//! The texts of the closed sets of a Rust file. The serde names of an enum give texts. So do the
 //! table of a macro of closed sets, and a function that matches each variant to a text.
 
 use syn::meta::ParseNestedMeta;
