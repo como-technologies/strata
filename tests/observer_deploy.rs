@@ -258,11 +258,16 @@ fn the_pod_sets_only_the_variables_that_the_observer_hands_to_strata_and_the_clu
         .lines()
         .find(|l| l.starts_with("var allowedEnv = []string{"))
         .expect("the runner lists the variables it hands on");
-    let allowed: Vec<&str> = line
+    // an item of the list is a quoted name, or a constant of the runner that holds it
+    let allowed: Vec<String> = line
         .trim_start_matches("var allowedEnv = []string{")
         .trim_end_matches('}')
         .split(',')
-        .map(|s| s.trim().trim_matches('"'))
+        .map(str::trim)
+        .map(|s| match s.strip_prefix('"') {
+            Some(quoted) => quoted.trim_end_matches('"').to_string(),
+            None => go_const(&runner, s),
+        })
         .collect();
     let container = container();
     let set: Vec<&str> = container["env"]
@@ -273,7 +278,7 @@ fn the_pod_sets_only_the_variables_that_the_observer_hands_to_strata_and_the_clu
         .collect();
     for name in &set {
         assert!(
-            *name == "STRATA_CLUSTER_UID" || allowed.contains(name),
+            *name == "STRATA_CLUSTER_UID" || allowed.iter().any(|a| a == name),
             "{name} reaches no process: the runner does not hand it on"
         );
     }
@@ -923,10 +928,10 @@ fn the_component_lists_its_files_and_each_holds_one_object() {
     };
     assert_eq!(
         folders("deploy/observer"),
-        ["alerts", "pods"],
-        "the base holds the two components only"
+        ["alerts", "clusters", "pods"],
+        "the base holds the three components only"
     );
-    for component in ["alerts", "pods"] {
+    for component in ["alerts", "clusters", "pods"] {
         assert!(
             folders(&format!("deploy/observer/{component}")).is_empty(),
             "no kustomization sits inside the base"
@@ -1369,5 +1374,78 @@ fn the_live_run_makes_the_binding_of_the_install_steps() {
     assert!(
         live.contains(needle),
         "observer.sh and lib.sh lack {needle:?}"
+    );
+}
+
+/// The component of a set of clusters adds the flags `--clusters` and `--keys`, the variable of the
+/// selectors from the key `clusters` of the `ConfigMap`, and the read-only volume of the Secret of
+/// the keys. It adds no object, no role, and no egress rule. The flags are flags of the observer, and
+/// the entry of the key of the project of the `ConfigMap` is the entry that the base reads.
+#[test]
+fn the_clusters_component_adds_the_flags_the_selectors_and_the_volume_of_the_keys_and_no_object() {
+    let component = component_doc("clusters", "kustomization.yaml");
+    assert_eq!(component["kind"], "Component");
+    assert!(
+        component.get("resources").is_none(),
+        "the component adds no object and no role"
+    );
+    let patched = component["patches"].as_sequence().unwrap();
+    assert_eq!(patched.len(), 1, "one patch, for the Deployment");
+
+    let base_container = container();
+    let base = strings(&base_container["args"]);
+    let with_set = pod_with("clusters");
+    let set_container = &with_set["containers"][0];
+    let args = strings(&set_container["args"]);
+    assert_eq!(
+        args[..base.len()],
+        base[..],
+        "the base arguments stay first"
+    );
+    assert_eq!(
+        args[base.len()..],
+        ["--clusters=$(STRATA_CLUSTERS)", "--keys=/keys"]
+    );
+    let main = repo_file("observer/main.go");
+    assert!(main.contains(r#"fs.Func("clusters", "#) && main.contains(r#""keys", """#));
+
+    let env = set_container["env"].as_sequence().unwrap();
+    let selectors = env.iter().find(|e| e["name"] == "STRATA_CLUSTERS").unwrap();
+    assert_eq!(
+        selectors["valueFrom"]["configMapKeyRef"]["name"],
+        "strata-observer"
+    );
+    assert_eq!(selectors["valueFrom"]["configMapKeyRef"]["key"], "clusters");
+
+    let mounts = set_container["volumeMounts"].as_sequence().unwrap();
+    let keys = mounts.iter().find(|m| m["name"] == "keys").unwrap();
+    assert_eq!(
+        (keys["mountPath"].as_str(), keys["readOnly"].as_bool()),
+        (Some("/keys"), Some(true))
+    );
+    let volume = with_set["volumes"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .find(|v| v["name"] == "keys")
+        .unwrap();
+    // the volume holds the Secret of the key of the base, and the entry of the project of the
+    // ConfigMap is the entry that the base hands to PALETTE_API_KEY
+    let base_key = base_container["env"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "PALETTE_API_KEY")
+        .unwrap()["valueFrom"]["secretKeyRef"]
+        .clone();
+    assert_eq!(volume["secret"]["secretName"], base_key["name"]);
+    let keys_go = repo_file("observer/internal/check/keys.go");
+    assert_eq!(
+        go_const(&keys_go, "homeKeyFile"),
+        base_key["key"].as_str().unwrap()
+    );
+    assert!(
+        patched.iter().all(|p| p["target"]["kind"] == "Deployment"),
+        "the component opens no port"
     );
 }
