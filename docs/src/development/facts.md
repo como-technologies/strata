@@ -662,9 +662,10 @@ set, such as `PackState`, and the log has the route. The fact for that route nam
 
 A user of strata can report a value too. The endpoint of the report then opens an issue with the
 label `unknown-value`: see [The issue of a value](./report-endpoint.md#the-issue-of-a-value). Do the
-same steps. The weekly run can have opened its own issue for the same value, so close both together.
-When a release of strata names the value, remove the label `unknown-value` from the issue and close
-it. A closed issue with the label still counts toward the limit of the endpoint.
+same steps: the `Done when:` line of the issue gives an item for each step. The weekly run can have
+opened its own issue for the same value, so close both together. When a release of strata names the
+value, remove the label `unknown-value` from the issue and close it. A closed issue with the label
+still counts toward the limit of the endpoint.
 
 ## The facts of the clouds
 

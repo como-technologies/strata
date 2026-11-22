@@ -136,14 +136,20 @@ body shows the same state: the lines, the reports, the releases of strata, and t
 list holds 20 items at most. The state of an older service can hold the lists `palette` and
 `refusals`. The service reads such a state and ignores those lists.
 
+- The body ends with the criteria of the issue: the line `Done when:` and its items. The items are
+  the steps of [What to do with a new value](./facts.md#what-to-do-with-a-new-value). Each issue of
+  strata has such a line: see [The issue](./changes.md#the-issue).
 - A later report of the value changes the body of the issue. It writes no comment, so it sends no
   notification.
+- A later report writes the body again up to the line `Done when:`, and keeps the text from that
+  line to the end. So a person can tick an item, or change the items, and the next report keeps
+  them. A body with no such line, as an older service wrote, gets the items of a new issue.
 - A closed issue gets the new count too, and stays closed. Users of an older release send the
   value until they update.
 - The issue has the label `unknown-value` and the milestone `Backlog`. The weekly contract run has
   the label `palette-drift` and the same milestone. A test makes sure that the milestone is the
   same text in the service and in the script of the run.
-- A person writes notes in a comment. The next report writes the body again.
+- A person writes notes in a comment. The next report writes the body above the criteria again.
 
 The lab and the users can both see a new value. Then the weekly contract run opens its issue, and
 the service opens another. This is correct, because the two issues answer two questions: what

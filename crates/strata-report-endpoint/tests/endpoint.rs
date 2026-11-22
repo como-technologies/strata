@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use strata::closed_set::unknown::log::SCHEMA as LOG_SCHEMA;
 use strata::closed_set::unknown::report::{Report, SCHEMA as REPORT_SCHEMA};
 use strata::closed_set::unknown::send::post;
+use strata_report_endpoint::merge::DONE_WHEN;
 use strata_report_endpoint::server::{Limits, MOST_AT_ONCE, Service, serve};
 use strata_report_endpoint::settings::{DEFAULT_LABEL, DEFAULT_MILESTONE};
 use strata_report_endpoint::tracker::GitHub;
@@ -307,6 +308,36 @@ fn two_sends_of_strata_for_one_value_are_one_issue_with_a_count_of_both() {
             ("GET", "/repos/o/r/issues"),
             ("PATCH", "/repos/o/r/issues/1"),
         ]
+    );
+}
+
+#[test]
+fn the_issue_that_the_service_opens_has_the_line_done_when_and_a_second_send_keeps_the_text_after_it()
+ {
+    let (github, state) = stand_in_github();
+    let running = start_service(&github);
+    post(&running.address, &report(&[entry("later", 1)]), 0).unwrap();
+    running.settle();
+    let written = {
+        let mut state = state.lock().unwrap();
+        let body = state.issues[0].body.clone();
+        let at = body
+            .find(&format!("\n\n{DONE_WHEN}\n"))
+            .unwrap_or_else(|| panic!("the body has no line {DONE_WHEN:?}: {body}"));
+        // a person adds a line in the editor of GitHub, which sends CRLF
+        let written = format!("{}A line of a person.\n", &body[at..]);
+        state.issues[0].body = format!("{}{written}", &body[..at]).replace('\n', "\r\n");
+        written
+    };
+    post(&running.address, &report(&[entry("later", 1)]), 1).unwrap();
+    running.settle();
+    let state = state.lock().unwrap();
+    assert_eq!(state.issues.len(), 1);
+    let body = &state.issues[0].body;
+    assert!(body.contains("| Lines | 2 |"), "{body}");
+    assert!(
+        body.ends_with(&written),
+        "the line of the person stays: {body}"
     );
 }
 
