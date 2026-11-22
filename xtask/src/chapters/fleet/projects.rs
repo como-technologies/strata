@@ -3,7 +3,9 @@
 
 use super::super::DEV_PROJECT;
 use super::super::edits::RETAIN;
-use super::super::ids::{A110, A110_PROD, A111, A111_PROD, DEV, PAYMENTS, PAYMENTS_PROD, PROD};
+use super::super::ids::{
+    A110, A110_PROD, A111, A111_PROD, DELETED_PROJECT, DEV, PAYMENTS, PAYMENTS_PROD, PROD,
+};
 use crate::book::Runner;
 
 /// The chapter `projects`: one tenant with a project for each environment. One run reads the
@@ -69,6 +71,18 @@ fn projects_refs(r: &mut Runner) {
         2,
         true,
         "strata snapshot project:staging/aws-stack@1.1.0",
+    );
+    r.step(
+        "projects-ref-missing-uid",
+        2,
+        true,
+        &format!("strata snapshot project:{DELETED_PROJECT}/aws-stack@1.1.0"),
+    );
+    r.step(
+        "projects-ref-no-version",
+        2,
+        true,
+        "strata snapshot project:prod/aws-stack",
     );
     r.step(
         "projects-ref-file",

@@ -56,7 +56,7 @@ the kind.
 | `registry-not-found` | No visible registry has this name. | `registry`, `available` |
 | `registry-name-ambiguous` | Two or more visible registries have this name: a registry of the system and a registry of the tenant. Give the uid in place of the name. | `name`, `uids` |
 | `pack-in-several-registries` | A `pack:` ref named no registry, and more than one has the version. The message names `strata list --pack <name>`, which gives the registry of the pack in each profile version, as a ref takes it. `registries` gives each registry as a ref takes it: by its name, or by its uid when the name holds a `/`. | `name`, `version`, `registries` |
-| `project-not-found` | No visible project has this name. A ref `project:<project>/<ref>` also gives it for a uid that no visible project has. | `name`, `available` |
+| `project-not-found` | No visible project has this name. A ref `project:<project>/<ref>` also gives it for a uid that no visible project has. The message names a text with the form of a uid as a uid, and each other text as a name. `name` holds the text. See [Refs](./refs.md). | `name`, `available` |
 | `project-denied` | Palette refused the key in the project of a ref `project:<project>/<ref>` with a [denial](#refusals-that-strata-does-not-send-again), such as `ResourceAccessDenied`. Strata reads each project with one key, so the message names the project. `error` holds the answer of Palette as an error of the kind `api`. See [Refs](./refs.md). | `project`, `error` |
 | `cluster-not-found` | No cluster in the scope has this name. | `cluster`, `available` |
 | `cluster-name-ambiguous` | Two or more clusters in the scope have this name. | `name`, `uids` |

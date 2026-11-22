@@ -3,6 +3,26 @@
 
 use crate::config::PROJECT_NAME_VAR;
 
+/// What the text of a lookup names: a name, or a uid. The message of the error of the lookup names
+/// the text as such.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Identifier {
+    /// A name, as `--project-name` gives it.
+    Name,
+    /// A uid, as the text of a ref `project:<project>/<ref>` can give it.
+    Uid,
+}
+
+impl Identifier {
+    /// `named 'dev'`, or `with the uid '64f2...'`: the words of a message for `text`.
+    pub(super) fn words(self, text: &str) -> String {
+        match self {
+            Identifier::Name => format!("named '{text}'"),
+            Identifier::Uid => format!("with the uid '{text}'"),
+        }
+    }
+}
+
 /// `a, b, c`, or `none` for an empty list.
 pub(super) fn list_or_none(items: &[String]) -> String {
     if items.is_empty() {

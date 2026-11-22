@@ -90,7 +90,9 @@ Strata exits `2`, and names each uid with its scope:
 ```
 
 Give the uid in place of the name. `strata list` marks the tenant version: see
-[A profile of the tenant](../commands/list.md#a-profile-of-the-tenant).
+[A profile of the tenant](../commands/list.md#a-profile-of-the-tenant). When
+the two versions hold two contents, see
+[One version label holds two contents](./two-contents.md).
 
 ## What to do
 

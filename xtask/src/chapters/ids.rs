@@ -7,6 +7,8 @@
 pub(super) const DEV: &str = "64f20000000000000000a0d1";
 pub(super) const PROD: &str = "64f20000000000000000a0f1";
 pub(super) const STAGING: &str = "64f20000000000000000a0c1";
+// the uid of a project that the tenant no longer has, as a script that kept it names it
+pub(super) const DELETED_PROJECT: &str = "64f20000000000000000a0e1";
 
 // the profile uids of the examples, in dev
 pub(super) const A100: &str = "64e0000000000000000000a1";

@@ -203,6 +203,18 @@ impl Ref {
         }
     }
 
+    /// `reference` in the project of this ref: `project:<project>/<reference>` for a ref in a
+    /// project, else `reference`. So a ref that a message or a read gives keeps the project.
+    pub(crate) fn with_project_of(&self, reference: Ref) -> Ref {
+        match self.project() {
+            Some(project) => Ref::InProject {
+                project: project.to_string(),
+                reference: Box::new(reference),
+            },
+            None => reference,
+        }
+    }
+
     /// True when the ref names a profile version: `<name>@<version>`, a uid, or either with
     /// `@draft`. A record file can hold one too, and the record says.
     pub fn is_profile_version(&self) -> bool {

@@ -14,6 +14,7 @@
 //! - [`registry_kind`]: the kind of a registry.
 //! - [`repave`]: the reasons of Palette for a repave, and a repave that waits for approval.
 //! - [`scope`]: the scope of a profile version.
+//! - `uid`: the form of a uid of Palette.
 //! - [`update`]: the rules of Palette for the update of a cluster that no validate route checks.
 //! - [`validation`]: the answers of Palette when strata asks whether it takes the packs.
 
@@ -30,5 +31,6 @@ pub mod profile_type;
 pub mod registry_kind;
 pub mod repave;
 pub mod scope;
+pub(crate) mod uid;
 pub mod update;
 pub mod validation;

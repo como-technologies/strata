@@ -236,16 +236,40 @@ where
     F: FnOnce() -> Result<Palette<A>>,
 {
     options.check(reference.without_project())?;
-    let text = reference.to_string();
+    in_project::read(reference, |inner| {
+        record_of(
+            reference, inner, options, connect, listing, fetched_at, progress,
+        )
+    })
+}
+
+/// The record of `inner`, the ref of `typed` with no project, for [`snapshot_in`]. `typed` is the
+/// ref as the person wrote it, so the error of a name with no version names its project. The
+/// errors are those of [`snapshot_for`].
+fn record_of<A, F>(
+    typed: &Ref,
+    inner: &Ref,
+    options: &SnapshotOptions,
+    connect: F,
+    listing: &mut Option<RegistryListing>,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot>
+where
+    A: PaletteApi,
+    F: FnOnce() -> Result<Palette<A>>,
+{
+    let text = inner.to_string();
     let mut live = |connect: F, read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| {
         read_live(connect, options.raw_dir.as_deref(), listing, read)
     };
-    match reference {
+    match inner {
         Ref::Snapshot(path) => Snapshot::load(path),
-        Ref::ClusterSet { .. } => Err(names_a_set(reference)),
-        Ref::InProject { .. } => in_project::read(reference, |r| {
-            snapshot_in(r, options, connect, listing, fetched_at, progress)
-        }),
+        Ref::ClusterSet { .. } => Err(names_a_set(inner)),
+        // in_project::read refuses a ref in a second project before this read
+        Ref::InProject { .. } => {
+            snapshot_in(inner, options, connect, listing, fetched_at, progress)
+        }
         Ref::NameVersion { name, version } => live(connect, &|palette| {
             let uid = palette.profile_uid(name, Some(version), progress)?;
             profile_snapshot(palette, &uid, options, &text, fetched_at, progress)
@@ -253,11 +277,11 @@ where
         // a text with no version can be a name, and the error of the read then says so
         Ref::Uid(uid) => live(connect, &|palette| {
             let read = profile_snapshot(palette, uid, options, &text, fetched_at, progress);
-            palette.or_name_with_no_version(reference, read)
+            palette.or_name_with_no_version(typed, read)
         }),
         Ref::Draft { id, version } => live(connect, &|palette| {
             let read = draft_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress);
-            palette.or_name_with_no_version(reference, read)
+            palette.or_name_with_no_version(typed, read)
         }),
         Ref::Pack {
             registry,
@@ -589,6 +613,9 @@ where
 
 /// The record of `r`, one side of a comparison, beside `other`, the record of the other side: see
 /// [`snapshot_pair`].
+///
+/// A ref in a project goes whole to [`snapshot_for`], so the error of a read names the ref as the
+/// person wrote it.
 fn side_beside<A, F>(
     r: &Ref,
     other: &Snapshot,
@@ -600,16 +627,15 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
-    match r {
+    match r.without_project() {
         Ref::Cluster {
             uid,
             profile: None,
             pending,
-        } if other.source.is_profile_version() => read_live(connect, None, &mut None, |palette| {
-            cluster_beside(palette, uid, *pending, &other.source, fetched_at, progress)
-        }),
-        Ref::InProject { .. } => in_project::read(r, |inner| {
-            side_beside(inner, other, connect, fetched_at, progress)
+        } if other.source.is_profile_version() => in_project::read(r, |_| {
+            read_live(connect, None, &mut None, |palette| {
+                cluster_beside(palette, uid, *pending, &other.source, fetched_at, progress)
+            })
         }),
         _ => snapshot_for(
             &narrowed(r, other),
@@ -659,9 +685,11 @@ fn cluster_beside<A: PaletteApi>(
     )
 }
 
-/// `cluster:<uid>` narrowed to the profiles that `other` pins, when `other` is a cluster group.
+/// `cluster:<uid>` narrowed to the profiles that `other` pins, when `other` is a cluster group. A
+/// ref in a project keeps its project.
 fn narrowed(r: &Ref, other: &Snapshot) -> Ref {
     match (r, other.source.cluster.as_ref()) {
+        (Ref::InProject { reference, .. }, _) => r.with_project_of(narrowed(reference, other)),
         (
             Ref::Cluster {
                 uid,

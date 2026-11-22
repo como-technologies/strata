@@ -176,6 +176,7 @@ fn each_kind_of_error() -> Vec<Error> {
         },
         Error::ProjectNotFound {
             name: "staging".into(),
+            by: Identifier::Name,
             available: vec!["lab".into(), "prod".into()],
         },
         Error::ProjectDenied {

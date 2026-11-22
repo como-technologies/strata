@@ -113,6 +113,9 @@ impl<A: PaletteApi> Palette<A> {
     /// [`Error::Usage`]. It names each version as a ref, and the ref with [`LATEST`]. Each other
     /// answer, and each other ref, returns as it is.
     ///
+    /// `reference` is the ref as the person wrote it. For `project:<project>/<ref>`, each ref of
+    /// the message names the project too, so a copy of a listed ref reads in that project.
+    ///
     /// # Errors
     ///
     /// The error of `answer`, or the `Usage` above. The error of the listing, when strata reads it.
@@ -121,7 +124,7 @@ impl<A: PaletteApi> Palette<A> {
         reference: &Ref,
         answer: Result<T>,
     ) -> Result<T> {
-        let (id, draft) = match reference {
+        let (id, draft) = match reference.without_project() {
             Ref::Uid(id) => (id, false),
             Ref::Draft { id, version: None } => (id, true),
             _ => return answer,
@@ -138,7 +141,7 @@ impl<A: PaletteApi> Palette<A> {
                 let mut versions: Vec<String> = named.into_iter().collect();
                 versions.sort_by(|a, b| version::compare(a, b));
                 let with_version = |version: &str| {
-                    if draft {
+                    reference.with_project_of(if draft {
                         Ref::Draft {
                             id: id.clone(),
                             version: Some(version.to_string()),
@@ -148,7 +151,7 @@ impl<A: PaletteApi> Palette<A> {
                             name: id.clone(),
                             version: version.to_string(),
                         }
-                    }
+                    })
                 };
                 Err(name_with_no_version(id, &versions, with_version))
             }
