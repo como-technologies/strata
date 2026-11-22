@@ -38,10 +38,18 @@ Give a project for each side, and strata reads each ref in its own project:
 
 `--project-a` or `--project-name-a` gives the project of the first ref.
 `--project-b` or `--project-name-b` gives the project of the second ref. The
-flag of a side has priority over `--project`. These flags take two refs. For a
-chain of three projects, give a record file for each ref, which
-`strata snapshot --project-name` writes. See
+flag of a side has priority over `--project`. These flags take two refs. See
 [Environments in the projects of one tenant](../use-cases/projects.md).
+
+A ref can also name its project, `project:<project>/<ref>`. The project is a
+uid or a name:
+
+```text
+{{#include ../output/projects-ref-same.txt}}
+```
+
+Each ref names its own project, so a chain of three projects needs no record
+file. The project of a ref has priority over each flag.
 
 ## Which pairs pass
 
@@ -266,8 +274,10 @@ fact. See [A secret changes in a pack value](../use-cases/masked-value.md).
 
 Each side is a ref: a snapshot file, a profile uid, `<name>@<version>`,
 `<name>@latest`, a cluster, or `pack:<name>@<version>`. Strata reads a uid, a
-name, or a cluster in the configured project, or in the project of a flag. To
-compare two projects, give a project for each side, or two files.
+name, or a cluster in the configured project, or in the project of a flag.
+`project:<project>/<ref>` reads the ref in that project. To compare two
+projects, give each ref its project, give a project for each side, or give two
+files.
 [Refs](../reference/refs.md) lists each form.
 
 ## What to expect

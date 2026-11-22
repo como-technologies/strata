@@ -60,6 +60,9 @@ project from the environment.
 `--project-b <uid>` or `--project-name-b <name>` for the second. See
 [Environments in the projects of one tenant](../use-cases/projects.md).
 
+A ref can name its own project, `project:<project>/<ref>`, with the uid or the
+name of the project. It has priority over each option. See [Refs](./refs.md).
+
 ## The address in a pipeline
 
 Strata reads the address from `PALETTE_API`, then from `SPECTROCLOUD_HOST`.

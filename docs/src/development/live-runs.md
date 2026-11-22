@@ -597,6 +597,11 @@ it deletes the copy at its end. It deletes no project. This is the source for
 | `same-release-line` | 0 | #486: the terminal verdict has the line `project <lab uid> -> <second uid>` under the pair. |
 | `compare-projects` | 0 | #486: `compare` with a project for each side gives the project and the uid of each side in `a` and `b`, and `sameContent` is true. |
 | `records-same` | 0 | #486: `same-release` of the two record files passes. |
+| `ref-same-release`, `ref-same-release-projects` | 0 | #703: `same-release project:<lab project>/<name>@<version> project:<second project>/<name>@<version>` passes. `records[0].projectUid` names the lab project, and `records[1].projectUid` names the second project. No result yet: no live window ran #703. |
+| `ref-compare` | 0 | #703: `compare` of the same two refs gives the project and the uid of each side in `a` and `b`, and `sameContent` is true. No result yet: no live window ran #703. |
+| `ref-record`, `ref-record-project` | 0 | #703: `snapshot project:<uid of the second project>/<name>@<version>` records the copy. `source.projectUid` names the second project, and `source.ref` is the ref as typed. No result yet: no live window ran #703. |
+| `ref-consumers` | 0 | #703: `consumers project:<second project>/<name>@<version> --list-only` exits `0`: no cluster runs the copy. No result yet: no live window ran #703. |
+| `ref-no-project`, `ref-no-project-kind` | 2, 0 | #703: a ref in a project that the key cannot see is the error `project-not-found`, and `available` holds the lab project. No result yet: no live window ran #703. |
 | `other-project-read` | ? | #486: what Palette answers to a `GET` of the copy with the `ProjectUid` of the lab project. `other-project-read.out` holds the status and the error code, and the check records them. Palette refuses the read: HTTP 500, with the code `OperationForbidden`. |
 | `copy-delete` | 0 | #486: the delete of the copy, with the `ProjectUid` of the second project. |
 

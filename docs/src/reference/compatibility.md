@@ -1200,6 +1200,12 @@ field, a value, an input, or an option is in the sections above.
   table. The rest of the cell was then a new row. A carriage return before a line break also
   gives a space now, so a `\r\n` gives two spaces. `strata-preflight` writes its markdown in the
   same way.
+- **A ref that starts with `project:` and holds a `/` names its project.**
+  `project:<project>/<ref>` reads the ref in that project. Before, strata read
+  such a text as the path of a record file, and gave the error `io` when no file
+  was there. A file at that path stays a file. A refusal of the key in that
+  project is the new kind `project-denied`, which names the project. See
+  [Refs](./refs.md) and [Errors](./errors.md).
 - **The filter "Not checked" of the observer shows more profiles.** It shows each profile that a
   cause of "Not checked" names. Before, it showed a profile only when the profile was
   `not-checked` or `no-record`, or when a pack of it was `not-checked`. It did not show a record
@@ -1227,6 +1233,14 @@ field, a value, an input, or an option is in the sections above.
   read `#&#8203;12` in place of `#12`.
 - `text::markdown_cell` and `text::code_cell` write a carriage return as a space. A caller that
   compares the cell with a text must read a space in place of each `\r`.
+- `reference::Ref` has the new variant `InProject`, for
+  `project:<project>/<ref>`. `Ref` has no `#[non_exhaustive]`, so a `match` on
+  `Ref` with no wildcard arm must name it. `Ref::project` gives the project, and
+  `Ref::without_project` gives the ref to read. For such a ref, the `connect` of
+  `ops::snapshot_for`, `ops::snapshot_pair`, and `ops::consumers_with` gives a
+  client of that project. `api::project_uid_of` finds the uid of the project.
+- `error::Error` has the new variant `ProjectDenied`. A `match` on `Error` with
+  no wildcard arm must name it.
 
 ## Release 0.35.0: changes that need action
 

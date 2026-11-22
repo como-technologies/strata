@@ -368,7 +368,9 @@ is bold.
 
 `--project <uid>` or `--project-name <name>` reads the version in that project,
 in place of the configured project. `--project ''` is tenant scope. Strata
-reads a record that names a project in that project. See
+reads a record that names a project in that project. A ref
+`project:<project>/<ref>` reads the version in its own project, and has priority
+over the flags: see [Refs](../reference/refs.md). See
 [Environments in the projects of one tenant](../use-cases/projects.md#7-can-i-delete-this-version).
 
 `--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`

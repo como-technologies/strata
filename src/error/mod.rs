@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::api::Method;
 use crate::api::codes::{CreateRule, Denial};
 use crate::closed_set::ClosedSet;
-use crate::config::{MAX_RETRY_AFTER_VAR, PROJECT_NAME_VAR};
+use crate::config::MAX_RETRY_AFTER_VAR;
 use crate::model::pack_state::PackState;
 use crate::snapshot::SNAPSHOT_SCHEMA;
 use crate::text::{and_list, plural};
@@ -14,11 +14,13 @@ use crate::text::{and_list, plural};
 mod class;
 mod hint;
 mod json;
+mod words;
 
 pub(crate) use json::{ErrorDocument, MESSAGE_AT};
 
 pub use class::FailureClass;
 use hint::{answer_words, status_hint};
+use words::{at_version, list_or_none, pending_ref, profile_not_found_hint, with_tag};
 
 /// Everything that can go wrong in the library.
 #[derive(Debug, thiserror::Error)]
@@ -177,6 +179,15 @@ pub enum Error {
         name: String,
         /// The names of the projects the key can see, in order.
         available: Vec<String>,
+    },
+    /// Palette refused the key in the project of a ref `project:<project>/<ref>`. Strata reads
+    /// each project with one key, so the message names the project of the ref.
+    #[error("Palette refuses the key in the project '{project}' of the ref: {source}")]
+    ProjectDenied {
+        /// The project as the ref names it: its uid or its name.
+        project: String,
+        /// The answer of Palette: an [`Error::Api`] that states a [`Denial`].
+        source: Box<Error>,
     },
     /// `cluster:<x>` is neither a cluster uid nor the name of a cluster in the scope.
     #[error(
@@ -614,56 +625,6 @@ pub(crate) fn served<T>(answer: Result<T>) -> Result<Option<T>> {
     }
 }
 
-/// `a, b, c`, or `none` for an empty list.
-fn list_or_none(items: &[String]) -> String {
-    if items.is_empty() {
-        "none".to_string()
-    } else {
-        items.join(", ")
-    }
-}
-
-/// What to try after a profile name matched nothing. At tenant scope the listing advice is a dead
-/// end for a profile of a project. Tenant scope holds only the profiles of the tenant, so the
-/// reader needs a project first.
-fn profile_not_found_hint(name: &str, tenant_scope: bool) -> String {
-    if tenant_scope {
-        format!(
-            "this is tenant scope, which holds only the profiles of the tenant: set {PROJECT_NAME_VAR}, \
-             or give --project-name, and `strata list projects` shows the projects this key can see"
-        )
-    } else {
-        format!(
-            "`strata list` shows the profiles in it, and `strata list --pack {name}` the profiles \
-             with a pack of that name"
-        )
-    }
-}
-
-/// `cluster:<cluster>@pending`: the ref of the update that waits for `cluster`.
-fn pending_ref(cluster: &str) -> String {
-    crate::reference::Ref::Cluster {
-        uid: cluster.to_string(),
-        profile: None,
-        pending: true,
-    }
-    .to_string()
-}
-
-/// ` at version '1.2.3'`, or nothing when the ref and the flags give no version.
-fn at_version(version: &str) -> String {
-    if version.is_empty() {
-        String::new()
-    } else {
-        format!(" at version '{version}'")
-    }
-}
-
-/// ` with tag '2.x'`, or nothing when the ref and the flags give no tag.
-fn with_tag(tag: Option<&str>) -> String {
-    tag.map(|t| format!(" with tag '{t}'")).unwrap_or_default()
-}
-
 /// Why a registry that Palette does not sync has no pack, in the message of an error.
 ///
 /// The message of [`Error::PackNotFound`] and [`Error::PackNameNotFound`] gives it. Palette makes
@@ -766,6 +727,7 @@ impl Error {
             Error::RegistryNotFound { .. } => "registry-not-found",
             Error::RegistryNameAmbiguous { .. } => "registry-name-ambiguous",
             Error::ProjectNotFound { .. } => "project-not-found",
+            Error::ProjectDenied { .. } => "project-denied",
             Error::ClusterNotFound { .. } => "cluster-not-found",
             Error::ClusterNameAmbiguous { .. } => "cluster-name-ambiguous",
             Error::EdgeHostNotFound { .. } => "edge-host-not-found",

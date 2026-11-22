@@ -178,6 +178,17 @@ fn each_kind_of_error() -> Vec<Error> {
             name: "staging".into(),
             available: vec!["lab".into(), "prod".into()],
         },
+        Error::ProjectDenied {
+            project: "prod".into(),
+            source: Box::new(Error::Api {
+                method: Method::Get,
+                path: palette::PROFILE_LISTING.into(),
+                status: 500,
+                body: r#"{"code":"ResourceAccessDenied","message":"Project access denied"}"#.into(),
+                retry_after: None,
+                key_proved: true,
+            }),
+        },
         Error::ClusterNotFound {
             cluster: "nope".into(),
             available: vec![],
@@ -574,6 +585,17 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
     assert_eq!(by_kind("retry-after-too-long")["limit"], 300);
     assert_eq!(by_kind("project-not-found")["name"], "staging");
     assert_eq!(by_kind("project-not-found")["available"][1], "prod");
+    // the answer of Palette keeps its own document
+    let (denied, answer) = each_kind_of_error()
+        .into_iter()
+        .find_map(|e| match &e {
+            Error::ProjectDenied { source, .. } => Some((e.to_json(), source.to_json())),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(denied["project"], "prod");
+    assert_eq!(denied["error"], answer);
+    assert_eq!(denied["error"]["status"], 500);
     assert_eq!(by_kind("cluster-not-found")["cluster"], "nope");
     assert!(
         by_kind("cluster-not-found")["message"]

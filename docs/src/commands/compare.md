@@ -45,6 +45,10 @@ own project:
 `a.projectUid` and `b.projectUid` of the JSON name the same projects. See
 [Environments in the projects of one tenant](../use-cases/projects.md).
 
+A ref can also name its project, as `project:prod/cluster:payments`. The
+project is a uid or a name, and it has priority over each flag. See
+[Refs](../reference/refs.md).
+
 ## Notes in the report
 
 A `note` line follows `root` in these cases:

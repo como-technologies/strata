@@ -7,16 +7,21 @@ use strata::ops;
 use strata::reference::Ref;
 
 use super::args::ConsumersArgs;
-use super::{connect_in, now_utc};
+use super::{connect_for, connect_in, now_utc};
 
 pub(crate) fn cmd_consumers(a: &ConsumersArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
+    let reference = Ref::parse(&a.r#ref);
     let r = ops::consumers_with(
-        &Ref::parse(&a.r#ref),
+        &reference,
         &ops::ConsumersOptions {
             list_only: a.list_only,
         },
-        |scope| connect_in(progress, Some(&a.project), scope),
+        // the scope of the command is the project that the ref names, else the flags
+        |scope| match scope {
+            None => connect_for(progress, reference.project(), Some(&a.project)),
+            Some(_) => connect_in(progress, Some(&a.project), scope),
+        },
         &now_utc(),
         &progress,
     )?;

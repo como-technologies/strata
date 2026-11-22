@@ -36,12 +36,15 @@ mod the_loop;
 ///
 /// [`isolate_git`]: crate::git::isolate_git
 const GIT: &[(&str, &str)] = &[
-    ("PALETTE_PROJECT", "dev"),
+    DEV_ENV[0],
     ("GIT_AUTHOR_DATE", "2026-09-10T10:00:00+00:00"),
     ("GIT_COMMITTER_DATE", "2026-09-10T10:00:00+00:00"),
 ];
 
 const DEV_ENV: &[(&str, &str)] = &[("PALETTE_PROJECT", "dev")];
+
+/// The name of the project of [`DEV_ENV`] in the tenant of a chapter.
+const DEV_PROJECT: &str = DEV_ENV[0].1;
 
 const CANDIDATE_YAML: &str = "\
 name: aws-stack

@@ -23,6 +23,7 @@ A ref names the thing that a command reads.
 | `appprofile:<name>@<version>` | the app profile with this name and version, or `@latest` | `appprofile:shop@1.0.0` |
 | `tag:<key>=<value>` | the clusters with the label, each in its own project; `+` joins labels that must all hold | `tag:env=prod` |
 | `filter:<name>` | the clusters that a saved tag filter selects, by its name or uid | `filter:production` |
+| `project:<project>/<ref>` | the ref, read in the project with this uid or name, and not in the configured project | `project:prod/aws-stack@1.1.1` |
 | a file | a snapshot file from `strata snapshot` | `releases/1.1.1/dev.json` |
 
 `strata list` prints the refs of a scope.
@@ -31,7 +32,7 @@ A ref names the thing that a command reads.
 
 - **Scope.** Strata reads a uid, a name, or a cluster in the configured project.
   See [Configure](../configure.md#the-project). A snapshot file carries its own
-  project.
+  project, and `project:<project>/<ref>` names another project.
 - **`@latest`.** The highest version that is not a pre-release, by Semantic
   Versioning, as Palette orders versions. `22.04` is above `20.04`, and `1.30.6`
   is above `1.29.10`. A pre-release is below its version. A name that has only
@@ -168,6 +169,33 @@ A ref names the thing that a command reads.
   names is `filter-not-found`, which lists the filters. A name that two filters
   have is `filter-name-ambiguous`, which lists their uids. See
   [Find the fleet from Palette](../use-cases/fleet.md).
+- **`project:`.** A ref in the project that it names, and not in the configured
+  project. The project is the text between `project:` and the first `/`, and
+  the rest is the ref. See
+  [Environments in the projects of one tenant](../use-cases/projects.md).
+  - The project is the uid of a project that the key can see, else the name of
+    one, as `--project-name` reads it. Strata reads the project listing at
+    tenant scope, with one request. A text that no project has is the error
+    `project-not-found`, which lists the projects:
+
+    ```text
+    {{#include ../output/projects-ref-missing.txt}}
+    ```
+
+  - A ref with no `project:` reads in the configured project, or in the project
+    of a flag. The project of a ref has priority over each flag.
+  - The record keeps the ref as typed in `source.ref`, and the uid of the
+    project in `source.projectUid`.
+  - A file and a `pack:` ref belong to no project. `tag:` and `filter:` already
+    search each project that the key can read. A ref names one project. Strata
+    refuses each of these with `usage`, before any request:
+
+    ```text
+    {{#include ../output/projects-ref-file.txt}}
+    ```
+
+  - Strata reads each project with one key. When Palette refuses the key in the
+    project of the ref, the error is `project-denied`, which names the project.
 - **`appprofile:`.** An app profile. Its tiers are the packs of the record. A
   name and version that no app profile has is `app-profile-not-found`, which
   lists the app profiles. A name and version that two app profiles have is
@@ -180,8 +208,8 @@ A ref names the thing that a command reads.
     - It holds a `/` or a `\`.
     - It starts with `.`, `..`, or `~`.
     - It ends with `.json`, `.yaml`, or `.yml`.
-  - A `pack:`, `cluster:`, `edgehost:`, `tag:`, or `filter:` ref can hold a
-    `/`, and each one stays what its prefix names.
+  - A `pack:`, `cluster:`, `edgehost:`, `tag:`, `filter:`, or `project:` ref can
+    hold a `/`, and each one stays what its prefix names.
   - A uid, a name, and a `name@version` hold none of these shapes, so they
     reach Palette.
 
@@ -209,15 +237,18 @@ A ref with `@draft` gets each ref with `@draft`, such as
 
 ## Which commands take which refs
 
-| Command | uid, `name@version`, `name@latest`, and each with `@draft` | `pack:` | `cluster:`, `edgehost:`, `clustergroup:`, `appprofile:` | `tag:`, `filter:` | file |
-| --- | --- | --- | --- | --- | --- |
-| `compare` | yes | yes | yes | no | yes |
-| `snapshot` | yes | yes | yes | with `--dir` | no: `--from-raw DIR` or `--from-candidate FILE` |
-| `candidate` | yes | no | no | no | a profile record |
-| `same-release` | yes | yes | yes | no | yes |
-| `verify` | no | no | no | no | yes: a record of each kind |
-| `consumers` | yes | no | no | no | a profile record |
-| `behind` | no | no | no | no | yes: a record of each kind |
+| Command | uid, `name@version`, `name@latest`, and each with `@draft` | `pack:` | `cluster:`, `edgehost:`, `clustergroup:`, `appprofile:` | `tag:`, `filter:` | file | `project:` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `compare` | yes | yes | yes | no | yes | yes |
+| `snapshot` | yes | yes | yes | with `--dir` | no: `--from-raw DIR` or `--from-candidate FILE` | yes |
+| `candidate` | yes | no | no | no | a profile record | no |
+| `same-release` | yes | yes | yes | no | yes | yes |
+| `verify` | no | no | no | no | yes: a record of each kind | no |
+| `consumers` | yes | no | no | no | a profile record | yes |
+| `behind` | no | no | no | no | yes: a record of each kind | no |
+
+Where the column `project:` says yes, the ref after the project is a form of its
+row that reads in a project. A file, `pack:`, `tag:`, and `filter:` do not.
 
 `snapshot --raw-dir` takes a profile or a cluster. A record that strata builds
 again from the directory does not say `@pending`, `@draft`, edge host, cluster

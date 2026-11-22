@@ -3,7 +3,7 @@
 
 use crate::api::{Palette, PaletteApi};
 use crate::error::{Error, Result};
-use crate::ops::scope_of;
+use crate::ops::{in_project, scope_of};
 use crate::reference::Ref;
 use crate::snapshot::Snapshot;
 use crate::term::progress::Progress;
@@ -95,5 +95,13 @@ pub(super) fn target_of(reference: &Ref) -> Result<Target> {
             scope: None,
             uid: None,
         }),
+        // the scope of the command is the project of the ref: the caller connects there
+        Ref::InProject {
+            project,
+            reference: inner,
+        } => {
+            in_project::check(project, inner)?;
+            target_of(inner)
+        }
     }
 }

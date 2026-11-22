@@ -1,0 +1,2 @@
+$ strata same-release project:dev/releases/1.1.0/dev.json project:prod/aws-stack@1.1.0
+strata: error: project:dev/releases/1.1.0/dev.json: a file belongs to no project, because a record names its own project. Give releases/1.1.0/dev.json alone

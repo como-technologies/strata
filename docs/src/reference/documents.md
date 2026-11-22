@@ -55,6 +55,7 @@ profile, or pack version.
   - `ref`: the ref as typed, a name or a uid, without an empty part after a
     separator: `cluster:<uid>/` records `cluster:<uid>`, and
     `cluster:<uid>@pending/` records `cluster:<uid>@pending`.
+    `project:<project>/<ref>` records the ref with its project, as typed.
   - `uid`, `projectUid` (empty for tenant scope), `name`, `version`,
     `cloudType`, `type`, and `tags`. `type` is `cluster`, `infra`, `add-on`, or
     `system` for a cluster profile, as Palette gives it in `v1ProfileType`.
@@ -286,9 +287,10 @@ A comparison of two sides, `a` and `b`.
   `ref` names them, as `cluster:<cluster>/<profile>`: see
   [Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
   - `a.projectUid` and `b.projectUid`: the project of each side. Strata reads
-    a side in the project of `--project-a` or `--project-b`, else of
-    `--project`, else of the configuration. A side from a record file keeps
-    the project of the record. Empty is tenant scope. See
+    a side in the project of its ref `project:<project>/<ref>`, else of
+    `--project-a` or `--project-b`, else of `--project`, else of the
+    configuration. A side from a record file keeps the project of the record.
+    Empty is tenant scope. See
     [Two sides in two projects](../commands/compare.md#two-sides-in-two-projects).
 - `same`: the roots are equal. `rootA` and `rootB` are the roots.
 - `sameContent`: the roots are equal, or differ only by the pack uids of
@@ -538,8 +540,9 @@ of the secret does not show, because the two sides hold the mask: see
 - `records[]`: `label`, `name`, `version`, `uid`, `projectUid`, and `root`.
   `projectUid` is the project of the record, and empty is tenant scope. The
   first ref is side A of `--project-a`, and the second is side B of
-  `--project-b`. The pair `pairs[n]` compares `records[n]` with
-  `records[n+1]`, so these two give the project of each side of the pair. See
+  `--project-b`. A ref `project:<project>/<ref>` gives its own project. The
+  pair `pairs[n]` compares `records[n]` with `records[n+1]`, so these two give
+  the project of each side of the pair. See
   [Two projects in one run](../commands/same-release.md#two-projects-in-one-run).
 - `pairs[]`: `a`, `b`, `status` (`identical`, `same-content`, `registry-move`,
   `renumber`, `different`, or `unknown-upstream`), `rootA`, `rootB`,

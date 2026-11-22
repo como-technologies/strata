@@ -84,9 +84,7 @@ pub fn project_uid_named(config: &Config, name: &str, progress: Progress) -> Res
     if let Some(found) = RESOLVED.get().filter(|r| r.key == key && r.name == name) {
         return Ok(found.uid.clone());
     }
-    let tenant = config.clone().without_project();
-    progress.note(&format!("looking up project {name}"));
-    let uid = connect_with(tenant, progress).project_uid_named(name)?;
+    let uid = lookup_client(config, name, progress).project_uid_named(name)?;
     // the cache holds one name of one key: for another, the next lookup asks again
     let _ = RESOLVED.set(Resolved {
         key,
@@ -94,6 +92,24 @@ pub fn project_uid_named(config: &Config, name: &str, progress: Progress) -> Res
         uid: uid.clone(),
     });
     Ok(uid)
+}
+
+/// The uid of the project that `text` names in a ref `project:<project>/<ref>`: the project with
+/// that uid, else the project with that name. Strata finds it at tenant scope, with one request.
+///
+/// # Errors
+///
+/// [`Error::ProjectNotFound`](crate::Error::ProjectNotFound) when no project that the key can see
+/// has the uid or the name, and each error of the request.
+pub fn project_uid_of(config: &Config, text: &str, progress: Progress) -> Result<String> {
+    lookup_client(config, text, progress).project_uid_of(text)
+}
+
+/// A client of the tenant of `config`, for the lookup of the project `text`. A note says so. The
+/// listing of a project holds that project only, so the lookup names no project.
+fn lookup_client(config: &Config, text: &str, progress: Progress) -> Palette<Retry<HttpApi>> {
+    progress.note(&format!("looking up project {text}"));
+    connect_with(config.clone().without_project(), progress)
 }
 
 /// The uid that [`project_uid_named`] found for a name, and the key that asked.
