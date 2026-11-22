@@ -715,9 +715,9 @@ func TestAVersionThatTheClusterDoesNotRunWithAFindingIsADriftWithNoNewerVersion(
 	}
 }
 
-// Issue #895. A cause of the content cycle names a record of a version that the cluster does not run, as it names a record that the
-// cluster runs. Strata could not read the upstream digest of traefik in wilma-gateway@3.0.4, and it could not read the `verify` row
-// of aws-stack@1.0.0. Each record keeps the status not-on-this-cluster, and each pack that a cause names is not-checked.
+// Issue #895. A cause of the content cycle names a record of a version that the cluster does not run. It names a record that the
+// cluster runs in the same way. Strata could not read the upstream digest of traefik in wilma-gateway@3.0.4, and it could not read the
+// `verify` row of aws-stack@1.0.0. Each record keeps the status not-on-this-cluster, and each pack that a cause names is not-checked.
 // counts.notChecked counts the two rows, and counts.packs and counts.packsInFull count the pack of aws-stack@1.1.0 only. The page reads
 // these rows for the tile, the screen, and the filter Not checked.
 func TestACauseOfTheContentNamesARecordThatTheClusterDoesNotRun(t *testing.T) {

@@ -1178,11 +1178,10 @@ field, a value, an input, or an option is in the sections above.
 
 - **The filter "Not checked" of the observer shows each profile that a cause of "Not checked"
   names.** Before, it showed a profile only when the profile was `not-checked` or `no-record`,
-  or when a pack of it was `not-checked`. So it did not show a record in the fold of the
-  versions that the cluster does not run. It did not show a profile with the status `newer`
-  that a cause `pin-error` names either. The tile and the screen "Not checked" counted these
-  causes, and now the filter counts them too. A check that reads the count of the filter must
-  read the new count. See [Not checked](../development/observer.md#not-checked).
+  or when a pack of it was `not-checked`. It did not show a record that the cluster does not
+  run, or a profile `newer` with a cause `pin-error`. The tile and the screen "Not checked"
+  counted these causes. A check that reads the count of the filter must read the new count.
+  See [Not checked](../development/observer.md#not-checked).
 
 ## Release 0.35.0: changes that need action
 

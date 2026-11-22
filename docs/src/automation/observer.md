@@ -161,11 +161,11 @@ stays. The observer still checks that record against Palette. The page lists the
 in a fold under the table of the profiles, as "Not on this cluster". It names no newer
 version for the record. A record with a finding stays in the table as a drift.
 
-A cause of "Not checked" can name such a record, for example a pack with no upstream
-digest. The tile "Not checked", the screen "Not checked", and the filter "Not checked"
-then count the cause. The filter shows the row of the record in the table, with the
-badge "Not on this cluster". The filter "All" shows the record in the fold only. [A
-version that the cluster no longer
+A cause of "Not checked" can name such a record, for example when a pack has no
+upstream digest. The tile "Not checked", the screen "Not checked", and the filter "Not
+checked" then count the cause. The filter shows the row of the record in the table,
+with the badge "Not on this cluster". The filter "All" shows the record in the fold
+only. [A version that the cluster no longer
 runs](../development/observer.md#a-version-that-the-cluster-no-longer-runs) gives each
 rule.
 

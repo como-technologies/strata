@@ -130,9 +130,9 @@ func TestACauseOfAVersionThatTheClusterNoLongerRunsCountsOnTheTileTheScreenAndTh
 // profileRow finds the hash of each row of the table of the profiles.
 var profileRow = regexp.MustCompile(linkRow(`#p-([^"]*)`))
 
-// Issue #895. In each set with a table of the profiles, the filter Not checked shows each profile that a row of Not checked names, and
-// no other profile. The count of the filter is the number of those profiles. So the filter counts the causes that the tile and the
-// screen count. In the set moved-unchecked, a cause names a record of a version that the cluster no longer runs. In the set
+// Issue #895. In each set with a table of the profiles, the filter Not checked shows each profile that a row of Not checked names. It
+// shows no other profile. The count of the filter is the number of those profiles. So the filter counts the causes that the tile and
+// the screen count. In the set moved-unchecked, a cause names a record of a version that the cluster no longer runs. In the set
 // read-error, a cause pin-error names a profile with the status newer. A page with no record file shows no table.
 func TestTheFilterNotCheckedShowsEachProfileThatACauseNames(t *testing.T) {
 	notChecked := string(model.StatusNotChecked)
