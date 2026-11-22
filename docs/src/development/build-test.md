@@ -12,6 +12,7 @@ just observer-manifests-alerts # examples/observer-alerts, which lists the base 
 just observer-playground # the observer against the stand-in, and its page at http://127.0.0.1:8080
 just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings of the public and of all items, gofmt and go vet of the observer and of the request counter
 just comment-words     # each comment sentence that the change adds has 25 words or fewer
+just copies            # each copy of a closed set, a const, a route, or a helper that the change adds
 just test              # the unit, library, binary, and script tests, the tests of xtask, and the Go tests of the observer
 just library-example   # examples/library and examples/library-preflight, crates that use the libraries
 just examples          # examples/ from the tracked registry data

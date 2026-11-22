@@ -3,6 +3,7 @@
 //! `tests/common/mod.rs` re-exports this file for the tests of strata. The runner of the book in
 //! xtask includes it with `#[path]`. So the tests and the chapters keep one copy of the settings.
 //! The live scripts are bash: `isolate_git` of `examples/live/lib.sh` gives them the same settings.
+//! The tests of strata and of xtask run git with `git`.
 
 use std::ffi::OsString;
 use std::process::Command;
@@ -45,4 +46,23 @@ pub fn isolate_git(command: &mut Command) -> &mut Command {
         command.env_remove(name);
     }
     command.envs(SETTINGS)
+}
+
+/// Run git in `dir` with no setting of the machine: see [`isolate_git`]. A failure of git fails
+/// the test, with the two outputs of git. Only a test runs git with it, so the runner of the book
+/// does not build it.
+#[cfg(test)]
+pub fn git(dir: &std::path::Path, args: &[&str]) -> std::process::Output {
+    use super::process::CommandExt;
+
+    let o = isolate_git(Command::new("git").args(args).current_dir(dir))
+        .output_locked()
+        .unwrap();
+    assert!(
+        o.status.success(),
+        "git {args:?}: {}{}",
+        String::from_utf8_lossy(&o.stderr),
+        String::from_utf8_lossy(&o.stdout)
+    );
+    o
 }
