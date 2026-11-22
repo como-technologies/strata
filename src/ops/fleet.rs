@@ -164,7 +164,7 @@ impl ClusterQuery {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum Resolved {
-    /// The cluster search of Palette, at tenant scope.
+    /// The cluster search of Palette: at tenant scope, or in the project of `--project`.
     Search,
     /// The cluster listing, with the labels matched by strata: Palette has no search, or its
     /// search takes no tags.
@@ -310,25 +310,38 @@ pub fn select<A: PaletteApi>(
     tenant: &Palette<A>,
     progress: &Progress,
 ) -> Result<Selection> {
-    select_in(query, tenant, &mut ProjectListings::default(), progress)
+    select_in(
+        query,
+        tenant,
+        tenant,
+        &mut ProjectListings::default(),
+        progress,
+    )
 }
 
 /// [`select`] with the project listings of the command, so that a later check of the same command
-/// reads them again from memory.
+/// reads them again from memory. `filters` reads the saved filters, at tenant scope. `search`
+/// reads the clusters: at tenant scope, or in one project.
 pub(super) fn select_in<A: PaletteApi>(
     query: &ClusterQuery,
-    tenant: &Palette<A>,
+    filters: &Palette<A>,
+    search: &Palette<A>,
     listings: &mut ProjectListings,
     progress: &Progress,
 ) -> Result<Selection> {
     let filter = match &query.filter {
-        Some(wanted) => Some(find_filter(tenant, wanted)?),
+        Some(wanted) => Some(find_filter(filters, wanted)?),
         None => None,
     };
     let groups = groups(query, filter.as_ref());
-    let properties = tenant.cluster_search_properties()?;
+    let place = if search.project_uid().is_some_and(|p| !p.is_empty()) {
+        "the project"
+    } else {
+        "the tenant"
+    };
+    let properties = search.cluster_search_properties()?;
     let (mut clusters, resolved, includes_virtual) = if properties.contains(SEARCH_TAGS) {
-        progress.note("searching the clusters of the tenant");
+        progress.note(&format!("searching the clusters of {place}"));
         let body = search_filter(
             groups
                 .iter()
@@ -340,8 +353,8 @@ pub(super) fn select_in<A: PaletteApi>(
                 })
                 .collect(),
         );
-        let found = tenant.cluster_search_with_virtual(&properties, &body, || {
-            progress.note("searching the virtual clusters of the tenant")
+        let found = search.cluster_search_with_virtual(&properties, &body, || {
+            progress.note(&format!("searching the virtual clusters of {place}"))
         })?;
         (
             list_clusters(&found.items),
@@ -350,13 +363,13 @@ pub(super) fn select_in<A: PaletteApi>(
         )
     } else {
         progress.note("listing the clusters, and matching their labels");
-        let listing = tenant.cluster_listing()?;
+        let listing = search.cluster_listing()?;
         let mut all = list_clusters(items(&listing));
         all.retain(|c| meets(&groups, &c.labels));
         (all, Resolved::Listing, false)
     };
     // the search gives each project by name too; the listing does not
-    name_cluster_projects(&mut clusters, tenant, listings);
+    name_cluster_projects(&mut clusters, search, listings);
     Ok(Selection {
         clusters,
         resolved,

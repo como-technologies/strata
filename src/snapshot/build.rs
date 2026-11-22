@@ -19,6 +19,7 @@ use crate::content::hash::{content_of, root_of};
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, str_at, strings, text, text_map};
 use crate::model::repave::{PendingRepave, is_pending};
+use crate::model::scope::ProfileScope;
 
 /// The manifests of pack `pk` of one template, each as [`manifest_of`] gives it, from the
 /// answers of the manifests by uid (see [`RawProfile::manifest_entities`]).
@@ -173,6 +174,7 @@ impl Snapshot {
             reference: reference.to_string(),
             uid: text(prof, "/metadata/uid"),
             project_uid: String::new(),
+            scope: ProfileScope::of_document(prof),
             name: text(prof, "/metadata/name"),
             version: text(prof, "/spec/version"),
             cloud_type: text(prof, &format!("{tpl_ptr}/cloudType")),
@@ -320,6 +322,7 @@ impl Snapshot {
                 _ => String::new(),
             },
             project_uid: String::new(),
+            scope: None,
             name: joined(|s| &s.name),
             version: joined(|s| &s.version),
             cloud_type: parts

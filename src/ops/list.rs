@@ -105,7 +105,8 @@ pub struct ListOptions {
     /// `applied`.
     pub cluster: Option<String>,
     /// Keep only the clusters whose labels meet this query: a search of Palette at tenant scope,
-    /// in each project the key can read.
+    /// in each project the key can read. With a project in `project`, the search reads that
+    /// project alone.
     pub query: super::ClusterQuery,
 }
 
@@ -132,6 +133,13 @@ impl ListOptions {
             });
         }
         Ok(())
+    }
+
+    /// True when a query searches one project: `project` names a project, and not the tenant.
+    /// Palette refuses a search at tenant scope to a key with no `project.list` in the tenant,
+    /// such as a key with a role in one project.
+    fn searches_project(&self) -> bool {
+        self.project.as_deref().is_some_and(|p| p != TENANT_SCOPE)
     }
 
     /// True when the clusters are read for the profiles they apply: `applied`, or `--cluster`,
@@ -458,8 +466,8 @@ where
     // the registry listing too: the pack rows and the registries read the same one
     let mut registries = Registries::new(&home);
     // a query of labels searches every project the key can read, so the listing is at tenant
-    // scope, and each cluster names its project
-    let project_uid = if options.query.is_empty() {
+    // scope, and each cluster names its project. A query in one project keeps its scope
+    let project_uid = if options.query.is_empty() || options.searches_project() {
         home.project_uid().unwrap_or("").to_string()
     } else {
         String::new()
@@ -553,8 +561,14 @@ where
         section.includes_virtual = Some(nested.is_some());
         list_clusters(items(&listing).chain(nested.iter().flatten()))
     } else {
+        // the saved filters belong to the tenant, and the search reads the scope of the query
         let tenant = super::tenant_of(connect)?;
-        let selection = super::select_in(&options.query, &tenant, listings, progress)?;
+        let search = if options.searches_project() {
+            home
+        } else {
+            &tenant
+        };
+        let selection = super::select_in(&options.query, &tenant, search, listings, progress)?;
         section.resolved = Some(selection.resolved);
         section.query_filter = selection.filter;
         section.includes_virtual = Some(selection.includes_virtual);

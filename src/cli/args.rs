@@ -546,7 +546,7 @@ pub(crate) struct ListArgs {
     #[arg(long, value_name = "TEXT")]
     pub(crate) pack: Option<String>,
     /// Keep the clusters with this label, KEY=VALUE or KEY; give it again for each label.
-    /// Palette searches every project the key can read
+    /// Palette searches every project the key can read, or the project of --project
     #[arg(long, value_name = "KEY=VALUE")]
     pub(crate) tag: Vec<String>,
     /// Keep the clusters that a saved tag filter selects, by name or uid

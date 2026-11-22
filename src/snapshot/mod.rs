@@ -18,6 +18,7 @@ use crate::error::{Error, Result};
 use crate::json::str_at;
 use crate::model::profile_type::ProfileType;
 pub use crate::model::repave::PendingRepave;
+use crate::model::scope::ProfileScope;
 pub use crate::model::validation::ProfileValidation;
 use crate::reference::name_version;
 use crate::render::count_of;
@@ -182,6 +183,12 @@ pub struct Source {
     /// record in this project unless told otherwise.
     #[serde(default)]
     pub project_uid: String,
+    /// The scope of the profile, from `metadata.annotations.scope` of its document. A profile of
+    /// the tenant that a request of a project records has the uid of that project in
+    /// `project_uid`, and the scope says that each project can use it. It is absent in a record
+    /// of a cluster, of a pack, and of strata 0.35 and before. It is not part of the root.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ProfileScope>,
     /// Profile name.
     pub name: String,
     /// Profile version string.
