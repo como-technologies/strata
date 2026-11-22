@@ -34,21 +34,6 @@ for binary in "$strata" "$observer_bin"; do
   [ -x "$binary" ] || { echo "no binary at $binary. Run: just build observer-build" >&2; exit 2; }
 done
 
-# set_records writes a record of each profile that a cluster of each project runs, by its uid, and a
-# key for each project: api-key for the project of PALETTE_PROJECT_UID, and a file with the uid of each
-# other one. A profile of the tenant that two projects run gets one record.
-set_records() {
-  mkdir -p records keys
-  printf %s "$PALETTE_API_KEY" > keys/api-key
-  while IFS= read -r project; do
-    [ "$project" = "$PALETTE_PROJECT_UID" ] || printf %s "$PALETTE_API_KEY" > "keys/$project"
-    while IFS=$'\t' read -r uid file; do
-      [ -e "records/$file.json" ] || "$strata" snapshot "$uid" --project "$project" -o "records/$file.json" -q
-    done < <("$strata" list clusters --detail --project "$project" --json -q \
-      | jq -r '.clusters[].profiles[]? | [.uid, "\(.name)_\(.version)_\(.uid)"] | @tsv')
-  done < <("$strata" list projects --json -q | jq -r '.projects[].uid')
-}
-
 # The records are the profiles that the clusters run, as the pipeline of a team would write them.
 start "$chapter-1"
 cd "$work"

@@ -476,6 +476,11 @@ live-observer: build
 live-observer-role: build
     examples/live/observer-role.sh
 
+# The observer of a set of clusters (#702), with the key of a user whose one role is Project Viewer: the saved filters and the cluster search at tenant scope, the search of the project, list --tag with --project, and one cycle of the observer with --clusters. Needs live-up and OBSERVER_ROLE_KEY. Adds a label to cluster A and a saved filter, and removes both.
+[group('live checks')]
+live-observer-clusters: build observer-build
+    examples/live/observer-clusters.sh
+
 # The chart of the observer in a registry of Palette with no login (#732). Makes an OCI registry with the auth type noAuth, starts a sync, and reads the packs of the registry for the chart. Needs the key, with a role that adds a registry at tenant scope; needs no cluster. Deletes the registry at the end.
 [group('live checks')]
 live-observer-chart: build

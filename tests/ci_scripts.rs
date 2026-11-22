@@ -512,10 +512,16 @@ const WRAPPERS: [Wrapper; 9] = [
             reach("--revision", "", ""),
             reach("--namespace", "namespace", "STRATA_OBSERVER_NAMESPACE"),
         ],
-        left: &[Left {
-            flags: &["--first-seen"],
-            why: "the seed of the chart writes the first-seen records, and the publish writes the approved ones",
-        }],
+        left: &[
+            Left {
+                flags: &["--first-seen"],
+                why: "the seed of the chart writes the first-seen records, and the publish writes the approved ones",
+            },
+            Left {
+                flags: &["--set"],
+                why: "the job publishes the records of one cluster, and a set of clusters keys its records by uid with the script itself",
+            },
+        ],
     },
     Wrapper {
         workflow: "retire-gate.yml",
