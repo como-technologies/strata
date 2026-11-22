@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/kube"
@@ -51,7 +52,7 @@ const noSuchSide = "a side that does not exist"
 // The paths of the routes, with the profile aws-stack@1.1.0 of testdata/.
 const (
 	// pathProfileByName names the profile with no version.
-	pathProfileByName = patternProfiles + "/aws-stack"
+	pathProfileByName = PatternProfiles + "/aws-stack"
 )
 
 // kubernetesDiff gives the route of the diff of the pack kubernetes of aws-stack@1.1.0 of testdata/ on the side. An
@@ -206,7 +207,7 @@ func newRig(t *testing.T) *rig {
 	r := &rig{t: t, records: d.Records, work: d.Work, state: d.State, log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
 	packs := []map[string]any{testkit.RigPack(testkit.KubernetesKey, "1.35.3", testkit.ImageRef), testkit.RigPack(testkit.CSIKey, "1.63.1", testkit.DigestImage)}
 	testkit.WriteRecord(t, r.records, "aws-stack", "1.1.0", packs, sentinelVariable)
-	testkit.WriteMeta(t, r.records, testkit.ApprovedMeta(testkit.Revision))
+	testkit.WriteIn(t, r.records, baseline.MetaFile, testkit.ApprovedMeta(testkit.Revision))
 	return r
 }
 

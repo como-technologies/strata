@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/kube"
 	"github.com/como-technologies/strata/observer/internal/model"
@@ -458,16 +459,16 @@ func TestAFailedReadOfMetaJSONKeepsEachFirstDigestAndARealNewRevisionResetsThem(
 		t.Fatalf("findings %v", got)
 	}
 	// The file is gone for one cycle, as when the kubelet updates the Secret.
-	if err := os.Remove(filepath.Join(r.records, testkit.MetaFile)); err != nil {
+	if err := os.Remove(filepath.Join(r.records, baseline.MetaFile)); err != nil {
 		t.Fatal(err)
 	}
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
-		t.Errorf(findingsLeft, "a failed read of "+testkit.MetaFile, got)
+		t.Errorf(findingsLeft, "a failed read of "+baseline.MetaFile, got)
 	}
 	st := readState(t, r)
 	if st.Images.Revision != testkit.Revision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest1 {
-		t.Errorf("a failed read of "+testkit.MetaFile+" reset the state: %+v", st.Images)
+		t.Errorf("a failed read of "+baseline.MetaFile+" reset the state: %+v", st.Images)
 	}
 	// The file comes back with the same revision, and the finding holds.
 	r.meta(testkit.ApprovedMeta(testkit.Revision))

@@ -497,12 +497,19 @@ the Rust code, and these rules are for the Go code.
   "Ask Palette", and only `internal/api/api.go` names the method. The one other
   `POST` is the message to a webhook of your team, and only `internal/alert/send.go`
   names the method for it. A test makes sure of each rule.
+- `internal/media` holds `media.JSONType`, the media type of a body of JSON. The
+  answers of the server, the requests of `internal/kube`, and the messages of
+  `internal/alert` use it, and so do the tests. It is a package of its own, because
+  `internal/kube` cannot import `internal/model`, and `internal/alert` imports no
+  package that holds a value. The package imports nothing and declares consts only.
+  A test of `internal/alert` makes sure of it.
 - `internal/alert` sends a message when a finding opens and when it clears. It
   reads the summary tier only: `subject.go` is the one file that reads the types of
   `internal/model`, from `alert.SubjectsOf`. The other files name `internal/model`
   only for the kind of a finding and for `ShortDuration`. The package imports no
-  other package of the observer. So a message holds a profile, its packs, a fixed
-  sentence, and a time, and no value. A test makes sure of the imports.
+  other package of the observer, apart from `internal/media`, which holds no value.
+  So a message holds a profile, its packs, a fixed sentence, and a time, and no
+  value. A test makes sure of the imports.
 - A test plants a marker in a changed value, in a changed path, in a variable, and
   in the audit log. It fails when the marker is in a message, the state, the log,
   or a route.
@@ -606,11 +613,21 @@ the Rust code, and these rules are for the Go code.
   the const has a name with a small letter. The test
   `TestEachCopyInTestkitHoldsTheValueOfItsConst` of that package compares each
   copy with its const. A test that can read the const uses it, and not the copy.
+- `just copies` reads a renamed const as a new const. So when a const that testkit
+  copies gets a capital letter, the check lists it as a copy of testkit. The change
+  that gives it the capital letter also removes the copy, and each test reads the
+  const. For this reason, `baseline.MetaFile` and `media.JSONType` have no copy in
+  testkit. `patternAsks` of `internal/api` keeps its small letter, and
+  `testkit.AsksRoute` stays its copy.
+- A pattern of `internal/api` that the tests of another package call has a capital
+  letter, such as `api.PatternCluster`. A test builds a route of the server from its
+  pattern, and does not write it as text.
 - The server writes the names of its headers as text, with no const. So
   `TestEachAnswerHasTheFourHeaders` finds `testkit.HeaderPolicy` and
   `testkit.HeaderNoSniff`, with their values, in each answer.
 - `testkit.AskPath` and `testkit.DiffPath` build the routes of a pack. A test
-  does not build them by hand.
+  does not build them by hand. A test that finds the diffs in a list of requests
+  reads `testkit.DiffSide`, the end of the route of a diff before its side.
 
 `just lint` runs `gofmt` and `go vet` on `observer/`, and `just test` runs
 `go test` there.

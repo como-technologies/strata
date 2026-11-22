@@ -18,7 +18,7 @@ var aws = testkit.AWSStack(testkit.NoPacks)
 func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 	dir := t.TempDir()
 	testkit.WriteGzip(t, dir, testkit.RecordFile, aws)
-	testkit.WriteMeta(t, dir, testkit.ApprovedMeta(testkit.Revision))
+	testkit.WriteIn(t, dir, MetaFile, testkit.ApprovedMeta(testkit.Revision))
 	set, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 
 func TestTheMetaOfAFirstSeenBaselineNamesTheCluster(t *testing.T) {
 	dir := t.TempDir()
-	testkit.WriteMeta(t, dir, testkit.FirstSeenMeta("64f1"))
+	testkit.WriteIn(t, dir, MetaFile, testkit.FirstSeenMeta("64f1"))
 	set, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestABaselineWithNoMetaOrABadMetaIsUnknown(t *testing.T) {
 	} {
 		dir := t.TempDir()
 		if body != "" {
-			testkit.WriteMeta(t, dir, body)
+			testkit.WriteIn(t, dir, MetaFile, body)
 		}
 		set, err := Load(dir)
 		if err != nil || set.Meta.Baseline != Unknown {

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -306,7 +307,7 @@ func (r *rig) record(name, version string, keys ...string) {
 
 func (r *rig) meta(body string) {
 	r.t.Helper()
-	testkit.WriteMeta(r.t, r.records, body)
+	testkit.WriteIn(r.t, r.records, baseline.MetaFile, body)
 }
 
 // observer makes an observer with the clock at now. A test changes o.now to move the clock.

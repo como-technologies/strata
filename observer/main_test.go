@@ -23,6 +23,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/media"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -415,8 +416,8 @@ func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
 		t.Cleanup(func() { resp.Body.Close() })
 		return resp
 	}
-	if resp := get("GET", "/v1/cluster", ""); resp.StatusCode != 200 || resp.Header.Get("Content-Type") != testkit.JSONType || resp.Header.Get("Cache-Control") != "no-store" {
-		t.Errorf("GET /v1/cluster: %d %v", resp.StatusCode, resp.Header)
+	if resp := get("GET", api.PatternCluster, ""); resp.StatusCode != 200 || resp.Header.Get("Content-Type") != media.JSONType || resp.Header.Get("Cache-Control") != "no-store" {
+		t.Errorf("GET "+api.PatternCluster+": %d %v", resp.StatusCode, resp.Header)
 	}
 	// The route / serves the page, with the headers of the server.
 	if resp := get("GET", "/", ""); resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") || resp.Header.Get(testkit.HeaderPolicy) == "" {
@@ -425,10 +426,10 @@ func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
 	if resp := get("GET", "/app.js", ""); resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
 		t.Errorf("GET /app.js: %d %v", resp.StatusCode, resp.Header)
 	}
-	if resp := get("POST", "/v1/cluster", ""); resp.StatusCode != http.StatusMethodNotAllowed {
+	if resp := get("POST", api.PatternCluster, ""); resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("POST gave %d", resp.StatusCode)
 	}
-	if resp := get("GET", "/v1/cluster", "evil.example"); resp.StatusCode != http.StatusMisdirectedRequest {
+	if resp := get("GET", api.PatternCluster, "evil.example"); resp.StatusCode != http.StatusMisdirectedRequest {
 		t.Errorf("Host: evil.example gave %d", resp.StatusCode)
 	}
 	if code := stop(); code != 0 {
@@ -444,7 +445,7 @@ func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
 	// The state of the page reads the content cycle only, so the wait also reads the versions cycle.
 	testkit.WaitFor(t, testkit.FirstCycles, func() bool {
 		var got api.ClusterView
-		return getJSON(addr, "/v1/cluster", &got) && got.Page == model.PageOK && got.Versions.ReadAt != nil
+		return getJSON(addr, api.PatternCluster, &got) && got.Page == model.PageOK && got.Versions.ReadAt != nil
 	})
 }
 
@@ -504,7 +505,7 @@ func getJSON(addr, path string, v any) bool {
 // newerRows counts the rows of /v1/newer.
 func newerRows(addr string) int {
 	var got api.NewerView
-	if !getJSON(addr, "/v1/newer", &got) {
+	if !getJSON(addr, api.PatternNewer, &got) {
 		return 0
 	}
 	return len(got.Newer)
@@ -532,7 +533,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 	// The detail route finds the pin in the versions cycle and the profile in the content cycle. The
 	// two cycles end in either order, so the wait reads both.
 	testkit.WaitFor(t, "the two cycles after the restart", func() bool {
-		return newerRows(addr) == 1 && getJSON(addr, "/v1/profiles/"+subject, &api.ProfileView{})
+		return newerRows(addr) == 1 && getJSON(addr, api.PatternProfiles+"/"+subject, &api.ProfileView{})
 	})
 	answered := make(chan struct{})
 	go func() {
@@ -616,10 +617,10 @@ func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 	// With --read-pods, the content cycle reads the pods. So the count of the requests waits for its end.
 	testkit.WaitFor(t, "the first content cycle", func() bool {
 		var got api.ClusterView
-		return getJSON(addr, "/v1/cluster", &got) && got.Content.CheckedAt != nil
+		return getJSON(addr, api.PatternCluster, &got) && got.Content.CheckedAt != nil
 	})
 	var doc model.Observed
-	if !getJSON(addr, "/v1/images", &doc) || doc.Pods != model.PodsOff || len(doc.Images) != 0 {
+	if !getJSON(addr, api.PatternImages, &doc) || doc.Pods != model.PodsOff || len(doc.Images) != 0 {
 		t.Errorf("document %+v", doc)
 	}
 	stop()
@@ -649,7 +650,7 @@ func TestServeWithReadPodsServesTheDigestsOfTheImages(t *testing.T) {
 	var doc model.Observed
 	testkit.WaitFor(t, "the first read of the pods", func() bool {
 		doc = model.Observed{}
-		return getJSON(addr, "/v1/images", &doc) && doc.Pods == model.PodsRead
+		return getJSON(addr, api.PatternImages, &doc) && doc.Pods == model.PodsRead
 	})
 	if doc.Counts.Images != 3 || doc.Images[0].Ref == "" {
 		t.Errorf("document %+v", doc)

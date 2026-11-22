@@ -12,6 +12,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/media"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -23,16 +24,16 @@ import (
 // summaryRoutes and detailRoutes are the tables of the test. A new summary route needs a line in
 // summaryRoutes, and TestEachRouteHasALineInTheSentinelTable fails until it has one.
 var summaryRoutes = map[string]string{
-	patternCluster:    patternCluster,
-	patternFindings:   patternFindings,
-	patternProfiles:   patternProfiles,
-	patternProfile:    patternProfiles + "/" + testkit.AWSStackProfile,
-	patternNewer:      patternNewer,
-	patternNotChecked: patternNotChecked,
-	patternEvents:     patternEvents,
-	patternImages:     patternImages,
-	patternImage:      patternImages + "/a%2Fb:1",
-	patternAlerts:     patternAlerts,
+	PatternCluster:    PatternCluster,
+	PatternFindings:   PatternFindings,
+	PatternProfiles:   PatternProfiles,
+	patternProfile:    PatternProfiles + "/" + testkit.AWSStackProfile,
+	PatternNewer:      PatternNewer,
+	PatternNotChecked: PatternNotChecked,
+	PatternEvents:     PatternEvents,
+	PatternImages:     PatternImages,
+	patternImage:      PatternImages + "/a%2Fb:1",
+	PatternAlerts:     PatternAlerts,
 }
 
 var detailRoutes = map[string][]string{
@@ -154,25 +155,25 @@ func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
 func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
-	const jsonType, textType = testkit.JSONType, "text/plain; charset=utf-8"
+	const jsonType, textType = media.JSONType, "text/plain; charset=utf-8"
 	for _, c := range []struct {
 		name, path string
 		status     int
 		contentTyp string
 	}{
 		{"health", patternHealth, 200, textType},
-		{"cluster", summaryRoutes[patternCluster], 200, jsonType},
-		{"findings", summaryRoutes[patternFindings], 200, jsonType},
-		{"profiles", summaryRoutes[patternProfiles], 200, jsonType},
+		{"cluster", summaryRoutes[PatternCluster], 200, jsonType},
+		{"findings", summaryRoutes[PatternFindings], 200, jsonType},
+		{"profiles", summaryRoutes[PatternProfiles], 200, jsonType},
 		{"a profile by name and version", summaryRoutes[patternProfile], 200, jsonType},
 		{"a profile by name", pathProfileByName, 200, jsonType},
-		{"newer", summaryRoutes[patternNewer], 200, jsonType},
-		{"not checked", summaryRoutes[patternNotChecked], 200, jsonType},
-		{"events", summaryRoutes[patternEvents], 200, jsonType},
+		{"newer", summaryRoutes[PatternNewer], 200, jsonType},
+		{"not checked", summaryRoutes[PatternNotChecked], 200, jsonType},
+		{"events", summaryRoutes[PatternEvents], 200, jsonType},
 		{"the diff of the published side", pathPublished, 200, jsonType},
 		{"the diff of the cluster side", pathCluster, 200, jsonType},
 		{"the diff of the newer side", pathNewer, 200, jsonType},
-		{"an unknown profile", patternProfiles + "/nope", 404, jsonType},
+		{"an unknown profile", PatternProfiles + "/nope", 404, jsonType},
 		{"the diff of an unknown profile", testkit.DiffPath("nope", testkit.KubernetesKey, string(model.SideCluster)), 404, jsonType},
 		{"the diff of an unknown pack", testkit.DiffPath(testkit.AWSStackProfile, testkit.NopeKey, string(model.SideCluster)), 404, jsonType},
 		{"the diff of a pack with no change on the side", kubernetesDiff(string(model.SidePublished)), 404, jsonType},
@@ -196,7 +197,7 @@ func TestAnUnknownProfileOrPackGets404AndNamesNoValue(t *testing.T) {
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
 	for _, path := range []string{
-		patternProfiles + "/SENTINEL-PROFILE",
+		PatternProfiles + "/SENTINEL-PROFILE",
 		testkit.DiffPath("SENTINEL-PROFILE", testkit.KubernetesKey, string(model.SideCluster)),
 		testkit.DiffPath(testkit.AWSStackProfile, "SENTINEL-LAYER/SENTINEL-PACK", string(model.SideCluster)),
 		kubernetesDiff("SENTINEL-SIDE"),
@@ -221,7 +222,7 @@ func TestTheRootServesThePageAndEachOtherPathIsNotAnAnswerOfTheAPI(t *testing.T)
 	if rec := get(h, "/"); rec.Code != 200 || !strings.Contains(rec.Body.String(), "page") || rec.Header().Get(testkit.HeaderPolicy) == "" {
 		t.Errorf("status %d, body %q, headers %v", rec.Code, rec.Body.String(), rec.Header())
 	}
-	if rec := get(h, "/v1/nope"); rec.Code != 404 || rec.Header().Get("Content-Type") != testkit.JSONType {
+	if rec := get(h, routePrefix+"/nope"); rec.Code != 404 || rec.Header().Get("Content-Type") != media.JSONType {
 		t.Errorf("status %d, type %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }
@@ -248,7 +249,7 @@ func TestTheClusterRouteGivesEachValueOfThePage(t *testing.T) {
 		t.Run(string(c.page), func(t *testing.T) {
 			sum := model.Build(model.Input{Now: now, ClusterUID: testkit.PaymentsUID, StartedAt: now.Add(-time.Hour), Files: c.files, FilesKnown: true, ContentClock: c.clock})
 			var got ClusterView
-			rec := get(handlerOf(stub{sum}), summaryRoutes[patternCluster])
+			rec := get(handlerOf(stub{sum}), summaryRoutes[PatternCluster])
 			decode(t, rec, &got)
 			if got.Page != c.page {
 				t.Errorf("page %q, want %q", got.Page, c.page)
@@ -261,14 +262,14 @@ func TestClusterGivesTheFieldsUpToTheCounts(t *testing.T) {
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
 	var got ClusterView
-	decode(t, get(h, summaryRoutes[patternCluster]), &got)
+	decode(t, get(h, summaryRoutes[PatternCluster]), &got)
 	if got.Cluster.Name != testkit.PaymentsName || got.Page != model.PageOK || got.StrataVersion != "0.29.0" || got.Records.Count != 1 ||
 		got.Records.Baseline != baseline.Approved || got.Records.Revision != testkit.Revision || got.Content.Every != "15m" || got.Versions.Every != "6h" ||
 		got.Counts.Findings != 2 || got.Counts.Newer != 1 {
 		t.Errorf("%+v", got)
 	}
 	var top map[string]json.RawMessage
-	decode(t, get(h, summaryRoutes[patternCluster]), &top)
+	decode(t, get(h, summaryRoutes[PatternCluster]), &top)
 	for _, key := range []string{"findings", "profiles", "newer", "notChecked", "limits", "events"} {
 		if _, ok := top[key]; ok {
 			t.Errorf("/v1/cluster holds %s", key)
@@ -283,7 +284,7 @@ func TestTheProfileRowsHoldTheirFindingsAndWho(t *testing.T) {
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
 	var all ProfilesView
-	decode(t, get(h, summaryRoutes[patternProfiles]), &all)
+	decode(t, get(h, summaryRoutes[PatternProfiles]), &all)
 	var one ProfileView
 	decode(t, get(h, pathProfileByName), &one)
 	if len(all.Profiles) != 1 || one.Name != "aws-stack" || one.Status != model.StatusDrift || len(one.Findings) != 2 || len(one.Who) != 1 || one.Who[0].Actor != "Betty Rubble" {
@@ -293,7 +294,7 @@ func TestTheProfileRowsHoldTheirFindingsAndWho(t *testing.T) {
 		t.Errorf("the two sides: %+v", one)
 	}
 	var findings FindingsView
-	decode(t, get(h, summaryRoutes[patternFindings]), &findings)
+	decode(t, get(h, summaryRoutes[PatternFindings]), &findings)
 	if len(findings.Findings) != 2 {
 		t.Errorf("findings %+v", findings)
 	}
@@ -303,22 +304,22 @@ func TestNewerNotCheckedAndEventsGiveTheirPartsOfTheSummary(t *testing.T) {
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
 	var newer NewerView
-	decode(t, get(h, summaryRoutes[patternNewer]), &newer)
+	decode(t, get(h, summaryRoutes[PatternNewer]), &newer)
 	if len(newer.Newer) != 1 || newer.Newer[0].Name != "kubernetes" || newer.Newer[0].Newest != "1.36.2" || newer.Newer[0].Impact != "may-repave" || newer.Newer[0].Fold.Settings != 2 || newer.Newer[0].Fold.Repeats != 2 || !newer.Newer[0].New {
 		t.Errorf("newer %+v", newer)
 	}
 	var notChecked NotCheckedView
-	decode(t, get(h, summaryRoutes[patternNotChecked]), &notChecked)
+	decode(t, get(h, summaryRoutes[PatternNotChecked]), &notChecked)
 	if len(notChecked.NotChecked) != 1 || notChecked.NotChecked[0].Cause != model.OlderRegistryCopy || notChecked.Limits.HelmPacks != 0 || notChecked.Limits.ImagesNamedByATag != 1 || notChecked.Limits.MaskedPaths != 1 {
 		t.Errorf("not checked %+v", notChecked)
 	}
 	var events EventsView
-	decode(t, get(h, summaryRoutes[patternEvents]), &events)
+	decode(t, get(h, summaryRoutes[PatternEvents]), &events)
 	reasons := map[string]int{}
 	for _, e := range events.Events {
 		reasons[e.Reason]++
 	}
-	if reasons["DriftFound"] != 1 || reasons["ClusterDiffers"] != 1 || reasons["ProfileUpdated"] != 1 || reasons["NewVersion"] != 1 || reasons["OldCopy"] != 1 || len(events.Events) != 5 {
+	if reasons[model.PublishedChanged.Reason()] != 1 || reasons[model.ClusterDiffers.Reason()] != 1 || reasons[model.ReasonProfileUpdated] != 1 || reasons[model.ReasonNewVersion] != 1 || reasons[model.ReasonOldCopy] != 1 || len(events.Events) != 5 {
 		t.Errorf("events %+v", events)
 	}
 }
@@ -421,7 +422,7 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 	testkit.WriteIn(t, r.fixtures, "verify.json", unread)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var findings FindingsView
-	decode(t, get(h, summaryRoutes[patternFindings]), &findings)
+	decode(t, get(h, summaryRoutes[PatternFindings]), &findings)
 	flagged := 0
 	for _, f := range findings.Findings {
 		if f.Kind == model.PublishedChanged && f.WhoUnread && len(f.Who) == 0 {
@@ -432,17 +433,17 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 		t.Errorf("findings %+v", findings)
 	}
 	var notChecked NotCheckedView
-	decode(t, get(h, summaryRoutes[patternNotChecked]), &notChecked)
+	decode(t, get(h, summaryRoutes[PatternNotChecked]), &notChecked)
 	for _, n := range notChecked.NotChecked {
 		if n.Cause == model.ReadError {
 			t.Errorf("the drift is no read-error: %+v", n)
 		}
 	}
 	var events EventsView
-	decode(t, get(h, summaryRoutes[patternEvents]), &events)
+	decode(t, get(h, summaryRoutes[PatternEvents]), &events)
 	sentences := 0
 	for _, e := range events.Events {
-		if e.Reason == "AuditUnread" && e.Message == testkit.AuditUnread {
+		if e.Reason == model.ReasonAuditUnread && e.Message == testkit.AuditUnread {
 			sentences++
 		}
 	}

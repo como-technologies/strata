@@ -9,6 +9,7 @@ import (
 	"net/url"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/media"
 )
 
 // The Secrets of the records. Only the seed calls these: the job that writes the first-seen records
@@ -81,9 +82,9 @@ func (c *Client) secret(ctx context.Context, method, namespace, name string, bod
 		return &Error{Kind: docs.KindKubeConfig}
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", media.JSONType)
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", media.JSONType)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
