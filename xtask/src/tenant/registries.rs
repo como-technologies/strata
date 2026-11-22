@@ -528,7 +528,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::files::files_under;
+    use crate::files::{Lang, files_under};
 
     /// A listing item of csi-aws-ebs with `values` when `kept`, as the stand-in keeps the content
     /// of a few versions only.
@@ -613,7 +613,7 @@ mod tests {
     #[test]
     fn no_other_file_of_xtask_writes_the_sync_answer_of_a_registry() {
         let sources = crate::repository().join("xtask/src");
-        let copies: Vec<_> = files_under(&sources, "rs")
+        let copies: Vec<_> = files_under(&sources, Lang::Rust.extension())
             .into_iter()
             .filter(|file| !file.ends_with("tenant/registries.rs"))
             .filter(|file| {

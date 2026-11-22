@@ -194,6 +194,14 @@ holds the answer in `source.paletteValidation`:
 The answer does not change the root. A pipeline that publishes from the
 candidate can run this step first, and stop on exit `2`.
 
+`--json` changes only the error. So after an accept, the line stays on standard
+error, after the record. With `--json --quiet` and `-o`, it is the one line of
+output:
+
+```text
+{{#include ../output/candidate-validate-accepts-json.txt}}
+```
+
 `strata snapshot <name>@<version> --validate` asks the same of a version that
 Palette holds, as an update of itself, with
 `POST /v1/clusterprofiles/{uid}/validate/packs`. Palette then also checks the

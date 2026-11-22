@@ -8,12 +8,10 @@
 //! A sentence that the change does not touch is not in the count, also in a block that the change
 //! touches. The lines of a file that git finds as moved are not added lines.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::ops::Range;
+use std::collections::BTreeSet;
 use std::path::Path;
-use std::process::Command;
 
-use crate::process::CommandExt;
+use crate::git_diff::{self, git};
 use crate::sentences::{
     CommentLine, MOST_WORDS, Marks, block_sentences, comment_lines, marks_of, sentences,
     word_faults,
@@ -38,22 +36,8 @@ pub struct Found {
 /// `repo` is the root of the work tree. The error names the git command or the file that failed.
 pub fn check(repo: &Path, base: &str) -> Result<Found, String> {
     let since = git(repo, &["merge-base", base, "HEAD"])?;
-    let diff = git(
-        repo,
-        &[
-            "diff",
-            "--unified=0",
-            "--no-color",
-            "--no-ext-diff",
-            "--find-renames",
-            "--src-prefix=a/",
-            "--dst-prefix=b/",
-            since.trim(),
-            "--",
-        ],
-    )?;
     let mut found = Found::default();
-    for (path, added) in added_lines(&diff) {
+    for (path, added) in git_diff::added(repo, since.trim(), &[])? {
         let Some(marks) = marks_of(&path) else {
             continue;
         };
@@ -70,59 +54,6 @@ pub fn check(repo: &Path, base: &str) -> Result<Found, String> {
         }
     }
     Ok(found)
-}
-
-/// The output of `git -C repo` with `args`. The error names the command and gives its message.
-fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
-    let command = format!("git {}", args.join(" "));
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .output_locked()
-        .map_err(|e| format!("{command}: {e}"))?;
-    if !out.status.success() {
-        let message = String::from_utf8_lossy(&out.stderr);
-        return Err(format!("{command}: {}", message.trim()));
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
-/// The numbers of the lines that `diff` adds, for each file of the new side. `diff` is the output
-/// of `git diff --unified=0`, so a hunk holds only the lines that it adds or removes.
-///
-/// The header of a file starts at `diff --git`, and its first hunk ends it. So an added line that
-/// starts with `++ ` is no header.
-fn added_lines(diff: &str) -> BTreeMap<String, BTreeSet<usize>> {
-    let mut added: BTreeMap<String, BTreeSet<usize>> = BTreeMap::new();
-    let mut file = None;
-    let mut header = false;
-    for line in diff.lines() {
-        if line.starts_with("diff --git ") {
-            header = true;
-            file = None;
-        } else if header && let Some(path) = line.strip_prefix("+++ ") {
-            // a deleted file has `/dev/null` as its new side
-            file = path.strip_prefix("b/").map(str::to_string);
-        } else if let Some(hunk) = line.strip_prefix("@@ ") {
-            header = false;
-            if let (Some(path), Some(lines)) = (&file, new_lines(hunk)) {
-                added.entry(path.clone()).or_default().extend(lines);
-            }
-        }
-    }
-    added
-}
-
-/// The lines of the new side of a hunk, from its header without the first `@@ `. The header
-/// `-3,2 +4,5 @@` gives the lines 4 to 8. A count of 0 gives no line, and no count gives one line.
-fn new_lines(hunk: &str) -> Option<Range<usize>> {
-    let new = hunk.split(' ').find_map(|part| part.strip_prefix('+'))?;
-    let (start, count) = match new.split_once(',') {
-        Some((start, count)) => (start.parse().ok()?, count.parse().ok()?),
-        None => (new.parse().ok()?, 1),
-    };
-    Some(start..start + count)
 }
 
 /// A comment sentence, and the number of its first line in the file.
@@ -247,49 +178,9 @@ fn block_comment_lines(text: &str) -> String {
 mod tests {
     use super::*;
 
-    use crate::git::isolate_git;
-
     /// A sentence of `count` words.
     fn sentence_of(count: usize) -> String {
         format!("{}.", vec!["word"; count].join(" "))
-    }
-
-    /// The numbers of the lines that `lines` names, as a set.
-    fn set(lines: &[usize]) -> BTreeSet<usize> {
-        lines.iter().copied().collect()
-    }
-
-    #[test]
-    fn the_added_lines_of_a_diff_follow_the_new_side_of_each_hunk_and_skip_a_deleted_file() {
-        let diff = "\
-diff --git a/src/a.rs b/src/a.rs
-index 1..2 100644
---- a/src/a.rs
-+++ b/src/a.rs
-@@ -3,2 +3,3 @@ fn main() {
-+// one
-+// two
-+// three
-@@ -10 +11 @@
-+++ an added line that starts with two plus marks
-@@ -20,2 +21,0 @@
-diff --git a/gone.sh b/gone.sh
-deleted file mode 100644
---- a/gone.sh
-+++ /dev/null
-@@ -1,2 +0,0 @@
-diff --git a/old.go b/new.go
-similarity index 90%
-rename from old.go
-rename to new.go
---- a/old.go
-+++ b/new.go
-@@ -4 +4 @@
-";
-        let added = added_lines(diff);
-        assert_eq!(added.keys().collect::<Vec<_>>(), ["new.go", "src/a.rs"]);
-        assert_eq!(added["src/a.rs"], set(&[3, 4, 5, 11]));
-        assert_eq!(added["new.go"], set(&[4]));
     }
 
     /// The criterion of #903: a sentence of more than 25 words fails, in a line comment `//` and
@@ -329,7 +220,7 @@ rename to new.go
             sentence_of(MOST_WORDS + 1)
         );
         let marks = marks_of("a.rs").unwrap();
-        let found = changed_sentences(&marks, &text, &set(&[3]));
+        let found = changed_sentences(&marks, &text, &BTreeSet::from([3]));
         assert_eq!(
             found,
             [Sentence {
@@ -337,8 +228,11 @@ rename to new.go
                 text: " The first half of a sentence and its second half.".to_string(),
             }]
         );
-        assert!(changed_sentences(&marks, &text, &set(&[4])).is_empty());
-        assert_eq!(changed_sentences(&marks, &text, &set(&[1])).len(), 1);
+        assert!(changed_sentences(&marks, &text, &BTreeSet::from([4])).is_empty());
+        assert_eq!(
+            changed_sentences(&marks, &text, &BTreeSet::from([1])).len(),
+            1
+        );
     }
 
     #[test]
@@ -357,10 +251,7 @@ rename to new.go
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path();
         let run = |args: &[&str]| {
-            let out = isolate_git(Command::new("git").arg("-C").arg(repo).args(args))
-                .output_locked()
-                .unwrap();
-            assert!(out.status.success(), "git {args:?}: {out:?}");
+            crate::git::git(repo, args);
         };
         let write = |file: &str, text: &str| std::fs::write(repo.join(file), text).unwrap();
         let over = sentence_of(MOST_WORDS + 1);

@@ -23,6 +23,13 @@ func edited(t *testing.T) (*rig, *world) {
 	return r, w
 }
 
+// The const of testkit that copies a const of check holds the value of that const.
+func TestEachCopyInTestkitHoldsTheValueOfItsConst(t *testing.T) {
+	if testkit.StateFile != stateFile {
+		t.Errorf("testkit holds %q, and check holds %q", testkit.StateFile, stateFile)
+	}
+}
+
 func TestWorkIsEmptyAfterACycleAndAfterAFailedCycle(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -123,7 +130,7 @@ func TestTheStateHoldsTheFirstSightAndNoValue(t *testing.T) {
 	if state := readState(t, r); state.StartedAt != t0 {
 		t.Errorf("state %+v", state)
 	}
-	if entries := entries(t, r.state); len(entries) != 1 || entries[0] != testkit.StateFile {
+	if entries := entries(t, r.state); len(entries) != 1 || entries[0] != stateFile {
 		t.Errorf("the state directory holds %v", entries)
 	}
 }
@@ -177,7 +184,7 @@ func TestAStateThatCannotBeReadIsALogLineAndAnEmptyState(t *testing.T) {
 	if err := os.MkdirAll(r.state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	testkit.WriteIn(t, r.state, testkit.StateFile, "{"+sentinel)
+	testkit.WriteIn(t, r.state, stateFile, "{"+sentinel)
 	o := r.observer(&world{})
 	testkit.HoldsAll(t, "the log", r.log.String(), "the state cannot be read")
 	testkit.HoldsNone(t, "the log", r.log.String(), sentinel)

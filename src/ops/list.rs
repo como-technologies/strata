@@ -14,7 +14,7 @@ use crate::closed_set::{Open, impl_closed_set};
 use crate::error::{Error, ErrorDocument, Result};
 use crate::model::cloud::Cloud;
 use crate::model::profile_type::ProfileType;
-use crate::model::scope::ProfileScope;
+use crate::model::scope::{ProfileScope, project_of_document};
 use crate::reference::Ref;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
@@ -678,11 +678,10 @@ fn listing_or_search(it: &Value, listing: &str, search: &str) -> String {
 ///
 /// The listing gives it in an annotation, and the search in its summary.
 pub(super) fn project_uid_of(it: &Value) -> String {
-    listing_or_search(
-        it,
-        "/metadata/annotations/projectUid",
-        "/specSummary/projectMeta/uid",
-    )
+    first_nonempty(&[
+        project_of_document(it),
+        str_at(it, "/specSummary/projectMeta/uid"),
+    ])
 }
 
 /// The clusters of `rows`, the entries of the listing or the items of a search, by name. A

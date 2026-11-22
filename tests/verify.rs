@@ -30,20 +30,21 @@ use strata::term::progress::Progress;
 use common::CommandExt;
 use common::{
     APP_PROFILE_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID,
-    EACH_SCOPE, EDGE_HOST_SEARCH, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH,
-    PROJECT_LISTING, PackFixture, REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A,
-    UID_ADDONS, UID_B, WITH_IMPACT, access_denied_message, app_profile_route, app_tiers_route,
-    behind_of, candidate_snapshot, cluster_manifests_route, cluster_namespaces_route,
-    cluster_rbacs_route, cluster_ref, cluster_repave_route, cluster_resolved_values_route,
-    cluster_route, cluster_validate_repave_route, cluster_variables_route, clusters_denied,
-    edge_host_route, error_body, fetch_examples, filters_denied, group_resolved_values_route,
-    group_route, listing, manifest_route, manifests_route, no_manifests, no_repave,
-    no_roles_message, no_template, no_variables, operation_forbidden_message, pack_entity_route,
-    pack_listing_route, post, profile_document, profile_route, project_listing, rbacs_answer,
-    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
-    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
-    strata_command, system_rbacs, template, template_validate_repave_route, variables_route,
-    write_record, write_yaml,
+    EACH_SCOPE, EDGE_HOST_SEARCH, IMPORT_ROUTE, OCI_REGISTRY_SUMMARY, PROFILE_LISTING,
+    PROFILE_SEARCH, PROFILE_VALIDATE_PACKS, PROJECT_LISTING, PackFixture, REGISTRY_LISTING,
+    SECRET_VALUE, TAG_FILTER_LISTING, UID_A, UID_ADDONS, UID_B, WITH_IMPACT, access_denied_message,
+    app_profile_route, app_tiers_route, behind_of, candidate_snapshot, cluster_manifests_route,
+    cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
+    cluster_resolved_values_route, cluster_route, cluster_validate_repave_route,
+    cluster_variables_route, clusters_denied, edge_host_route, error_body, fetch_examples,
+    filters_denied, group_resolved_values_route, group_route, listing, manifest_route,
+    manifests_route, no_manifests, no_repave, no_roles_message, no_template, no_variables,
+    operation_forbidden_message, pack_entity_answer, pack_entity_route, pack_listing_route, post,
+    profile_document, profile_route, project_listing, rbacs_answer, read_json,
+    resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing, serve_profile,
+    serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command,
+    system_rbacs, template, template_validate_repave_route, update_validate_packs_route,
+    validate_name_route, variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -6087,19 +6088,18 @@ fn serve_registry_for_b(dir: &Path) -> MemoryApi {
             .iter()
             .find(|m| m["spec"]["name"] == name)
             .unwrap();
+        let uid = pack["packUid"].as_str().unwrap();
         let summary = PackFixture::public(
             name,
             pack["layer"].as_str().unwrap(),
             pack["version"].as_str().unwrap(),
-            pack["packUid"].as_str().unwrap(),
+            uid,
             entry["spec"]["digest"].as_str().unwrap_or_default(),
             "registry: defaults",
         )
         .summary(&[]);
-        let entity = serde_json::json!({"tags": [
-            {"tag": "floating.x", "packUid": pack["packUid"]},
-            {"tag": pack["tag"], "packUid": pack["packUid"]},
-        ]});
+        let entity =
+            pack_entity_answer(&[("floating.x", uid), (pack["tag"].as_str().unwrap(), uid)]);
         api = serve_registry_pack(
             api,
             name,
@@ -6368,10 +6368,10 @@ fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
         "",
     );
     let summary = serde_json::json!([ubuntu.summary(&[])]);
-    let entity = serde_json::json!({"tags": [
-        {"tag": "LTS__24.x", "packUid": "pk-ubuntu-2404"},
-        {"tag": "LTS__24.04", "packUid": "pk-ubuntu-2404"},
-    ]});
+    let entity = pack_entity_answer(&[
+        ("LTS__24.x", "pk-ubuntu-2404"),
+        ("LTS__24.04", "pk-ubuntu-2404"),
+    ]);
     let mut api = serve_registry_pack(MemoryApi::new(), "ubuntu-aws", summary, entity, "reg");
     // Palette refuses a cluster profile with no k8s, cni, or csi layer: serve one of each
     let core = [
@@ -6387,7 +6387,7 @@ fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
             serde_json::json!([
                 PackFixture::new(name, layer, "1.0.0", &uid, "reg", "", "").summary(&[])
             ]),
-            serde_json::json!({"tags": [{"tag": "1.0.0", "packUid": uid}]}),
+            pack_entity_answer(&[("1.0.0", &uid)]),
             "reg",
         );
     }
@@ -17777,21 +17777,7 @@ fn verify_reports_a_renamed_version_as_renamed_and_not_as_overwritten() {
 
 /// The route of the check of the name and the version of `snap`.
 fn name_route(snap: &strata::snapshot::Snapshot) -> String {
-    format!(
-        "/v1/clusterprofiles/validate/name?name={}&version={}",
-        snap.source.name, snap.source.version
-    )
-}
-
-/// The import validate route.
-const IMPORT_ROUTE: &str = "/v1/clusterprofiles/import/validate";
-
-/// The route that asks Palette if it takes the packs of a new profile.
-const PROFILE_VALIDATE_PACKS: &str = "/v1/clusterprofiles/validate/packs";
-
-/// The route that asks Palette if it takes the packs of an update of the profile version `uid`.
-fn update_validate_packs_route(uid: &str) -> String {
-    format!("{}/validate/packs", profile_route(uid))
+    validate_name_route(&snap.source.name, &snap.source.version)
 }
 
 /// The registry listing that `snapshot --validate` reads for the body of the import validate

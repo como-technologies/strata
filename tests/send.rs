@@ -171,7 +171,7 @@ fn with_the_setting_on_the_run_sends_the_report_one_time_at_its_end_and_marks_th
     let requests = endpoint.requests();
     assert_eq!(requests.len(), 1, "{requests:?}");
     assert_eq!(
-        (requests[0].method.as_str(), requests[0].path.as_str()),
+        (requests[0].method.as_str(), requests[0].target.as_str()),
         ("POST", "/")
     );
     assert_eq!(requests[0].json(), one_run_report());
@@ -434,7 +434,7 @@ fn a_run_of_the_tests_sends_nothing_though_the_home_and_a_saved_answer_turn_the_
     let seen = trap.requests();
     assert_eq!(seen.len(), 1, "{seen:?}");
     assert_eq!(
-        (seen[0].method.as_str(), seen[0].path.as_str()),
+        (seen[0].method.as_str(), seen[0].target.as_str()),
         ("CONNECT", "report.example:443")
     );
     // the run as the tests start it has the guard, so the same home sends nothing
