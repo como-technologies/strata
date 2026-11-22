@@ -3152,7 +3152,7 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
         beta.contains("runs `lab-profile@1.2.9`, which uid") && beta.contains("(not read: boom)"),
         "{md}"
     );
-    // a line break in the message of an error does not end the row of the table
+    // a line break in the message of an error is a visible escape, so it does not end the row
     let mut doc = serde_json::to_value(&r).unwrap();
     doc["consumers"][1]["error"] =
         serde_json::json!({"kind": "transport", "message": "first\nsecond | third"});
@@ -3160,7 +3160,7 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
     let md = common::markdown().render_consumers(&broken).unwrap();
     let beta = md.lines().find(|l| l.contains("beta")).unwrap();
     assert!(
-        beta.contains("(not read: first second \\| third)") && beta.ends_with('|'),
+        beta.contains(r"(not read: first\\nsecond \| third)") && beta.ends_with('|'),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -18968,6 +18968,60 @@ fn the_markdown_of_a_note_and_of_a_verdict_keeps_the_bar_of_a_bare_address_of_a_
     for md in markdown_that_quotes(message, message) {
         assert!(!md.contains("https://example.com/a\\|b"), "{md}");
     }
+}
+
+/// The criterion of #942: a note and a verdict write each control character of a message of
+/// Palette as a visible escape. So `--format markdown` on a terminal writes no ESC of the message,
+/// and a line break of the message starts no line of markdown.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_shows_each_control_character_of_a_message_as_an_escape()
+{
+    for md in markdown_that_quotes(common::ANSWER_CONTROLS, r"\\u{1b}\[31mred") {
+        common::assert_answer_controls_as_markdown(&md);
+    }
+}
+
+/// The criterion of #942: the tag and the values of a pack, as the answer gives them, hold control
+/// characters. The row and the fold of the pack, its diff of values, and its diff of `--full` show
+/// each one as a visible escape. Each diff keeps its own line breaks.
+#[test]
+fn the_markdown_of_a_pack_shows_each_control_character_of_the_answer_as_an_escape() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let values = |extra: &str| {
+        let values = &a
+            .packs
+            .iter()
+            .find(|p| p.name == "ubuntu-aws")
+            .unwrap()
+            .values;
+        Value::from(format!("{values}\n{extra}\n"))
+    };
+    // a quoted key of the values holds the control characters, as YAML escapes them
+    let b = with_os_pack(dir.path(), "key-controls", |p| {
+        p["values"] = values(r#""\e[31mred\e[0m over\rback\nnext": 1"#);
+    });
+    let d = ops::compare(&a, &b, "t1");
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
+    let key = strata::text::terminal_text(common::ANSWER_CONTROLS);
+    assert!(md.contains(&format!("```diff\n+ {key}: 1\n```\n")), "{md}");
+    common::assert_answer_controls_as_text(&md);
+
+    // the tag holds them, and so does a line of the text of the values, which does not parse
+    let b = with_os_pack(dir.path(), "tag-controls", |p| {
+        p["tag"] = Value::from(common::ANSWER_CONTROLS);
+        p["values"] = values(&format!("# {}", common::ANSWER_CONTROLS));
+    });
+    let d = ops::compare(&a, &b, "t1");
+    let md = common::markdown().render(&d, &a, &b, true).unwrap();
+    common::assert_answer_controls_as_markdown(&md);
+    let summary = md
+        .lines()
+        .find(|l| l.starts_with("<details><summary><code>ubuntu-aws</code> tag 22.04 -&gt; "))
+        .unwrap_or_else(|| panic!("the fold of the pack in\n{md}"));
+    common::assert_answer_controls_as_text(summary);
+    assert!(md.contains(r"+# \u{1b}[31mred\u{1b}[0m over\r"), "{md}");
 }
 
 /// The criterion of #894: a tag of the answer puts no mention and no link to an issue in the fold

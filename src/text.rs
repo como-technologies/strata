@@ -3,7 +3,8 @@
 //! - A phrase from a list of names, and the name of an object.
 //! - A long text cut to a length.
 //! - A mark for an empty text, a text of HTML, a text on a terminal, a line of markdown, a text in
-//!   a cell of a markdown table, a text in a code span, and a text in a fenced code block.
+//!   a cell of a markdown table, a text in a code span, and a text in a fenced code block. Each
+//!   text of markdown writes a control character as a text on a terminal does.
 //! - A command as a person types it in a shell.
 //! - A JSON Schema as text, with its descriptions in plain words.
 //!
@@ -14,7 +15,8 @@ use serde_json::Value;
 
 mod terminal;
 
-pub use terminal::terminal_text;
+pub(crate) use terminal::terminal_lines;
+pub use terminal::{DIRECTION_MARKS, terminal_text};
 
 /// The name of an object, or its uid when Palette gives no name.
 pub fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
@@ -153,22 +155,24 @@ pub fn markdown_cell(s: &str) -> String {
 
 /// `s` as one line of markdown, such as a heading, a note, or an item of a list.
 ///
-/// A line end starts a new line, so the line writes each `\n` and each `\r` as a space. A bare
-/// address that GitHub surely links stays as it is, so its link goes to its target. Each other
-/// word is [`html_text`], with a `\` before each mark of markdown. It also gets a zero width space
-/// in each mention and each reference to an issue. So a text that strata quotes from an answer,
-/// such as a message of Palette, shows as text. A `@name` in it notifies nobody, and a `#12` in it
-/// links to no issue.
+/// Each control character is the visible escape of [`terminal_text`], so a line end starts no new
+/// line. A bare address that GitHub surely links stays as it is, so its link goes to its target.
+/// Each other word is [`html_text`], with a `\` before each mark of markdown. It also gets a zero
+/// width space in each mention and each reference to an issue. So a text that strata quotes from
+/// an answer, such as a message of Palette, shows as text. A `@name` in it notifies nobody, and a
+/// `#12` in it links to no issue.
 ///
 /// GitHub links an address with a scheme only when no letter comes before the scheme. So a
 /// caller puts no letter right before the line. A `|` outside a table needs no escape, and a `\`
 /// before it stays in the link of an address. So the line keeps each `|` as it is.
 pub fn markdown_line(s: &str) -> String {
-    s.split_inclusive(|c: char| c.is_ascii_whitespace())
+    // each other white space of ASCII is a control character, so the escape leaves only the space
+    terminal_text(s)
+        .split_inclusive(' ')
         .enumerate()
         .map(|(i, piece)| {
-            let word = piece.trim_end_matches(|c: char| c.is_ascii_whitespace());
-            markdown_word(word, i == 0) + &piece[word.len()..].replace(LINE_ENDS, " ")
+            let word = piece.trim_end_matches(' ');
+            markdown_word(word, i == 0) + &piece[word.len()..]
         })
         .collect()
 }
@@ -176,8 +180,8 @@ pub fn markdown_line(s: &str) -> String {
 /// The characters that end a line: a line break and a carriage return.
 ///
 /// Markdown reads a carriage return with no line break after it as a line end too, so it ends a
-/// row of a table. A text on one line, such as a cell or the body of an answer in an error, writes
-/// each one as a space.
+/// row of a table. A text on one line, such as the body of an answer in an error, writes each one
+/// as a space.
 pub const LINE_ENDS: [char; 2] = ['\n', '\r'];
 
 /// `word`, a text with no space of ASCII, as markdown. `first` is true for the first word of the
@@ -210,9 +214,9 @@ fn quoted_text(s: &str) -> String {
 /// GitHub reads no markdown in a block of HTML, so a `\` before a mark shows there. But it reads
 /// a mention and a reference to an issue there too. So a `@name` in the words notifies nobody,
 /// and a `#12` in them links to no issue. A blank line ends the block, so the text writes each
-/// line end as a space.
+/// control character as [`terminal_text`] does.
 pub(crate) fn quoted_html(s: &str) -> String {
-    reference_text(&html_text(s)).replace(LINE_ENDS, " ")
+    reference_text(&html_text(&terminal_text(s)))
 }
 
 /// The schemes of a bare address that GitHub links after each character that is not a letter.
@@ -396,20 +400,22 @@ pub(crate) fn lines_cell<S: AsRef<str>>(lines: impl IntoIterator<Item = S>) -> S
     dash(&cells.join("<br>")).to_string()
 }
 
-/// `s` with each `|` escaped and each [`LINE_ENDS`] character as a space, so that it cannot end a
-/// cell or a row of a markdown table.
+/// `s` with each `|` escaped, so that it cannot end a cell of a markdown table. `s` holds no line
+/// end, because [`markdown_line`] and [`code_span`] escape each one.
 fn table_text(s: &str) -> String {
-    s.replace('|', "\\|").replace(LINE_ENDS, " ")
+    s.replace('|', "\\|")
 }
 
 /// `text` as a code span of markdown. The fence is longer than each run of backticks in the text,
 /// so a value cannot end the span.
 ///
-/// The span writes the text as it is. A title and a sentence need no escape for a `|`. A span in a
-/// table cell needs one: see [`code_cell`]. Each issue and each report that shows a value of an
-/// unknown set writes the value here, so the value has one form in both.
+/// The span writes each control character as [`terminal_text`] does, and each other character as
+/// it is. A title and a sentence need no escape for a `|`. A span in a table cell needs one: see
+/// [`code_cell`]. Each issue and each report that shows a value of an unknown set writes the value
+/// here, so the value has one form in both.
 pub fn code_span(text: &str) -> String {
-    let fence = "`".repeat(longest_backticks(text) + 1);
+    let text = terminal_text(text);
+    let fence = "`".repeat(longest_backticks(&text) + 1);
     let pad = if text.starts_with('`') || text.ends_with('`') {
         " "
     } else {
@@ -423,9 +429,11 @@ pub fn code_span(text: &str) -> String {
 /// The fence has three backticks, or more when the text holds a run of three or more. So a line of
 /// the text cannot end the block. The last line of the text gets a line break when it has none.
 /// Strata and `strata-preflight` write each block of a markdown output here. So a text of an
-/// answer, such as the values of a pack, stays in its block.
+/// answer, such as the values of a pack, stays in its block. The block keeps each line break, and
+/// writes each other control character as [`terminal_text`] does.
 pub fn code_block(info: &str, text: &str) -> String {
-    let fence = "`".repeat((longest_backticks(text) + 1).max(3));
+    let text = terminal_lines(text);
+    let fence = "`".repeat((longest_backticks(&text) + 1).max(3));
     let end = if text.is_empty() || text.ends_with('\n') {
         ""
     } else {
@@ -439,8 +447,8 @@ fn longest_backticks(text: &str) -> usize {
     text.split(|c| c != '`').map(str::len).max().unwrap_or(0)
 }
 
-/// `text` as a code span in one cell of a markdown table: [`code_span`], with each `|` escaped and
-/// each line end as a space. So a value cannot end a cell or a row of the table.
+/// `text` as a code span in one cell of a markdown table: [`code_span`], with each `|` escaped. So
+/// a value cannot end a cell or a row of the table.
 ///
 /// A code span shows an entity as it is, so the span gets no [`html_text`]. It shows a tag as text.
 pub fn code_cell(text: &str) -> String {

@@ -29,15 +29,11 @@ fn vline(l: &Leaf, p: &Paint) -> String {
 /// `~ path: old -> new`, `+ path: new`, or `- path: old`, with the mark and each side colored.
 pub(super) fn op_line(l: &OpLine, p: &Paint) -> String {
     let mark = opmark(l.op, p);
-    let (path, old, new) = (
-        terminal_text(&l.path),
-        terminal_text(&l.old),
-        terminal_text(&l.new),
-    );
+    let OpLine { path, old, new, .. } = l;
     match l.op {
-        Op::Changed => format!("{mark} {path}: {} -> {}", p.red(&old), p.green(&new)),
-        Op::Added => format!("{mark} {path}: {}", p.green(&new)),
-        Op::Removed => format!("{mark} {path}: {}", p.red(&old)),
+        Op::Changed => format!("{mark} {path}: {} -> {}", p.red(old), p.green(new)),
+        Op::Added => format!("{mark} {path}: {}", p.green(new)),
+        Op::Removed => format!("{mark} {path}: {}", p.red(old)),
     }
 }
 

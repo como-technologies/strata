@@ -42,7 +42,9 @@ at the timeout of the client.
 At each reading, `--verbose` prints the three requests of the reading and what
 they gave. It also prints each condition that changed, each new event, and one
 line for each rule. Before the first reading, it prints the program of each
-rule.
+rule. A condition or an event can hold a control character. The line shows it
+as a visible escape: see
+[A control character of a text of Palette](../../reference/formats.md#a-control-character-of-a-text-of-palette).
 
 On a terminal, the lines have the colors of the report. `--no-color`, or
 `NO_COLOR` with a value, removes them, and a stream to a file has none.

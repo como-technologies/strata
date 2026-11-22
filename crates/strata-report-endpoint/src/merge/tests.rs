@@ -271,8 +271,9 @@ fn a_line_break_in_a_field_cannot_end_the_row_of_the_table() {
     for line in text.lines() {
         assert!(!line.starts_with('@'), "{text}");
     }
+    // each line break is a visible escape in the code span
     assert!(
-        text.contains("| Routes | `/v1/x  @someone [a](http://example.invalid)` |"),
+        text.contains(r"| Routes | `/v1/x\n\n@someone [a](http://example.invalid)` |"),
         "{text}"
     );
 }

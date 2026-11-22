@@ -1,7 +1,8 @@
-//! The terminal form of a report.
+//! The terminal form of a report. Each text of Palette in a line is [`terminal_text`], so each
+//! control character of it shows as a visible escape.
 
 use strata::term::color::{LineClass, Paint};
-use strata::text::{cut, plural};
+use strata::text::{cut, plural, terminal_text};
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, FAILED_REQUESTS, FailedRequest, Report, pct};
@@ -14,10 +15,10 @@ pub fn terminal(r: &Report, paint: &Paint) -> String {
     out.push_str(&format!(
         "{}: {} cluster {} ({}), Palette {}, tiers {}\n",
         crate::TOOL_NAME,
-        r.subject.cloud,
-        r.subject.name_or_dash(),
-        r.subject.source,
-        r.subject.release_text(),
+        terminal_text(&r.subject.cloud),
+        terminal_text(r.subject.name_or_dash()),
+        terminal_text(&r.subject.source),
+        terminal_text(&r.subject.release_text()),
         r.options.tiers_text()
     ));
     for sc in &r.sections {
@@ -54,17 +55,31 @@ fn failed_request_lines(failed: &[FailedRequest<'_>], paint: &Paint) -> String {
         out.push_str(&format!(
             "  {}  {}\n",
             paint.red(&format!("{:<12}", Verdict::Error.name())),
-            f.request
+            terminal_text(&f.request)
         ));
         for m in f.messages {
-            out.push_str(&format!("{:<16}{m}\n", ""));
+            out.push_str(&format!("{:<16}{}\n", "", terminal_text(m)));
         }
         out.push_str(&format!("{:<16}{}\n", "", f.stopped_text()));
-        for line in f.reproduce() {
-            out.push_str(&format!("{:<16}{} {line}\n", "", paint.dim("reproduce:")));
-        }
+        out.push_str(&reproduce_lines(f.reproduce(), paint));
     }
     out
+}
+
+/// One `reproduce:` line for each of `lines`, under the column of the messages. A line can quote a
+/// uid or a name of Palette, so it is [`terminal_text`].
+fn reproduce_lines<S: AsRef<str>>(lines: impl IntoIterator<Item = S>, paint: &Paint) -> String {
+    lines
+        .into_iter()
+        .map(|line| {
+            format!(
+                "{:<16}{} {}\n",
+                "",
+                paint.dim("reproduce:"),
+                terminal_text(line.as_ref())
+            )
+        })
+        .collect()
 }
 
 /// The table of the scorecard: one row for each section, then its legend.
@@ -166,18 +181,21 @@ fn result_lines(c: &CheckResult, paint: &Paint) -> String {
         c.elapsed_ms
     ));
     if let Some(stopped) = c.stopped_text() {
-        out.push_str(&format!("{:<16}{stopped}\n", ""));
+        out.push_str(&format!("{:<16}{}\n", "", terminal_text(&stopped)));
     } else if c.verdict != Verdict::Passed {
         for m in &c.messages {
-            out.push_str(&format!("{:<16}{m}\n", ""));
+            out.push_str(&format!("{:<16}{}\n", "", terminal_text(m)));
         }
         for line in c.ran_lines() {
-            out.push_str(&format!("{:<16}{} {line}\n", "", paint.dim("ran:")));
+            out.push_str(&format!(
+                "{:<16}{} {}\n",
+                "",
+                paint.dim("ran:"),
+                terminal_text(&line)
+            ));
         }
     }
-    for line in c.shown_reproduce() {
-        out.push_str(&format!("{:<16}{} {line}\n", "", paint.dim("reproduce:")));
-    }
+    out.push_str(&reproduce_lines(c.shown_reproduce(), paint));
     if let Some(fix) = c.shown_fix() {
         out.push_str(&format!("{:<16}{} {}\n", "", paint.dim("fix:"), fix.line()));
     }

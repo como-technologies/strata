@@ -87,6 +87,12 @@ fix, as `fix: <text> (<owner>)`. A rule that is not checked, or that gave an err
 found no fault, so it shows no fix. The three forms write the confidence of a rule
 in the same words: `catch <rate>, clean <rate>`.
 
+The terminal form, the markdown form, and the lines of `--verbose` write each
+control character of a text of Palette as a visible escape, such as `\u{1b}` for
+an ESC. A name, a state, and the message of an answer are such texts. See
+[A control character of a text of Palette](../../reference/formats.md#a-control-character-of-a-text-of-palette).
+The JSON form keeps each text as Palette gave it.
+
 ## The values in a message
 
 Palette can quote the value of a cluster variable in a refusal. It puts the

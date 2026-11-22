@@ -10,6 +10,7 @@ use crate::diff::{
     ValuesDiff, VariableSummary, VariablesByName,
 };
 use crate::term::color::Paint;
+use crate::text::terminal_text;
 
 /// The mark of an operation, as the text reports print it: `~` for a change, `+` for an addition,
 /// and `-` for a removal.
@@ -101,7 +102,8 @@ pub(crate) fn moved_word(changed: bool, p: &Paint) -> String {
 
 /// One line of a diff of values: a leaf, or a value that a cluster gives a variable.
 ///
-/// It holds the path and the two sides as the reports show them.
+/// It holds the path and the two sides as the reports show them. Each one is [`terminal_text`].
+/// So a line break in a key or a value starts no line on the terminal or in a `diff` block.
 pub(crate) struct OpLine {
     pub(crate) op: Op,
     pub(crate) path: String,
@@ -112,25 +114,30 @@ pub(crate) struct OpLine {
 }
 
 impl OpLine {
+    fn new(op: Op, path: &str, old: &str, new: &str) -> Self {
+        let text = |s: &str| terminal_text(s).into_owned();
+        Self {
+            op,
+            path: text(path),
+            old: text(old),
+            new: text(new),
+        }
+    }
+
     /// The line of a leaf at `path`: the path of the leaf alone, or inside its variable or its
     /// tier.
     pub(crate) fn leaf(path: &str, l: &Leaf) -> Self {
-        Self {
-            op: l.op,
-            path: path.to_string(),
-            old: shown(l.old.as_ref()),
-            new: shown(l.new.as_ref()),
-        }
+        Self::new(l.op, path, &shown(l.old.as_ref()), &shown(l.new.as_ref()))
     }
 
     /// The line of a value that a cluster gives a variable, at `<profile>.<name>`.
     pub(crate) fn cluster_value(c: &ClusterValueChange) -> Self {
-        Self {
-            op: c.op,
-            path: variable_path(&c.profile, &c.name),
-            old: cluster_value(&c.old, c.sensitive),
-            new: cluster_value(&c.new, c.sensitive),
-        }
+        Self::new(
+            c.op,
+            &variable_path(&c.profile, &c.name),
+            &cluster_value(&c.old, c.sensitive),
+            &cluster_value(&c.new, c.sensitive),
+        )
     }
 }
 

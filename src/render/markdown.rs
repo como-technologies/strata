@@ -37,7 +37,7 @@ use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
 use crate::text::{
     code_block, code_cell, code_span, dash, html_text, lines_cell, markdown_cell, markdown_line,
-    quoted_html,
+    quoted_html, terminal_text,
 };
 
 /// Renders markdown for a pull request comment.
@@ -60,8 +60,16 @@ fn op_line(l: &OpLine) -> String {
 
 pub(super) fn variable_line(v: &VarLine<'_>) -> String {
     match v {
-        VarLine::Added(s) => format!("+ variable {}{}\n", s.name, traits_suffix(s)),
-        VarLine::Removed(s) => format!("- variable {}{}\n", s.name, traits_suffix(s)),
+        VarLine::Added(s) => format!(
+            "+ variable {}{}\n",
+            terminal_text(&s.name),
+            traits_suffix(s)
+        ),
+        VarLine::Removed(s) => format!(
+            "- variable {}{}\n",
+            terminal_text(&s.name),
+            traits_suffix(s)
+        ),
         VarLine::Field(name, l) => op_line(&OpLine::leaf(&format!("{name}.{}", l.path), l)),
     }
 }
@@ -251,7 +259,10 @@ fn pack_detail(pd: &PackDiff) -> String {
     }
     let artifacts = artifact_lines(pd);
     if !artifacts.is_empty() {
-        let lines: String = artifacts.iter().map(|line| format!("{line}\n")).collect();
+        let lines: String = artifacts
+            .iter()
+            .map(|line| format!("{}\n", terminal_text(line)))
+            .collect();
         body.push_str(&code_block("diff", &lines));
     }
     for m in &pd.manifests {
@@ -267,7 +278,7 @@ fn pack_detail(pd: &PackDiff) -> String {
     };
     format!(
         "<details><summary><code>{}</code> {}</summary>\n\n{}\n</details>\n\n",
-        html_text(&pd.name),
+        html_text(&terminal_text(&pd.name)),
         quoted_html(&what),
         body
     )

@@ -1196,19 +1196,36 @@ field, a value, an input, or an option is in the sections above.
   - A script that reads such a line as text reads `|` in place of `\|`.
   - `strata-preflight` writes its heading, the line of the checks that did not run, and the line
     of each failed request in the same way.
-- **A carriage return of a text is a space.** Before, a lone carriage return ended the row of a
-  table. The rest of the cell was then a new row. A carriage return before a line break also
-  gives a space now, so a `\r\n` gives two spaces. `strata-preflight` writes its markdown in the
-  same way.
+- **The markdown escapes each control character.** An ESC is `\u{1b}`, a line break is `\n`, and
+  a carriage return is `\r`, as on the terminal. A line and a cell write a `\` before the `\` of
+  the escape, so GitHub shows the escape. Before, a line break was a space, and each other control
+  character stayed as it was. So `--format markdown` on a terminal wrote the ESC itself, and a
+  lone carriage return ended the row of a table. A code span, a fenced block, and the `<summary>`
+  of a fold write the escape too. See
+  [A control character of a text of Palette](./formats.md#a-control-character-of-a-text-of-palette).
+  - A script that reads the markdown as text must read the escape in place of a space or of a
+    control character.
+  - `strata-preflight` writes its markdown in the same way.
+- **Strata escapes each mark of the direction of a text.** It writes a mark such as U+202E as
+  `\u{202e}`. The terminal report, the notes, the warnings, the line `strata: error:`, and the
+  markdown do it. Before, strata wrote the mark as it was, and a terminal could show the text in
+  another order. `--json` and the records keep each mark. A script that reads the text must read
+  the escape.
+- **`strata-preflight` escapes each control character of a text of Palette on the terminal.** Its
+  report and its lines of `--verbose` do it. A name, a state, a condition, an event, and the
+  message of a check are such texts. Before, these lines wrote each text as it was. A line break
+  of an event was a space, and now it is `\n`. The JSON form keeps each text as Palette gave it.
 
 ### For a user of the CI drop-ins
 
 - **`verify-report.sh` and `upstream-report.sh` write a zero width space in each link to an
   issue.** They do it as the markdown form does. So a `#12` in a message of Palette links to no
   issue, and the issue adds no event to another issue.
-- **`verify-report.sh` and `upstream-report.sh` keep each `|` of a line, and write a carriage
-  return as a space.** They do it as the markdown form does. The line of a closed issue, the line
-  of an error, and the line that names a registry are lines. A cell of a table still writes `\|`.
+- **`verify-report.sh` and `upstream-report.sh` keep each `|` of a line, and escape each control
+  character.** They do it as the markdown form does. A line break is `\n`, and a carriage return
+  is `\r`. The line of a closed issue, the line of an error, and the line that names a registry
+  are lines. A cell of a table still writes `\|`. `observer-propose.sh` writes its markdown in the
+  same way.
 
 ### For a user of the library of strata
 
@@ -1219,8 +1236,14 @@ field, a value, an input, or an option is in the sections above.
 - `text::markdown_cell` and `text::markdown_line` write the entity `&#8203;` after the `#` of
   `#12` and after the `-` of `GH-12`. A caller that compares the text with a quoted text must
   read `#&#8203;12` in place of `#12`.
-- `text::markdown_cell` and `text::code_cell` write a carriage return as a space. A caller that
-  compares the cell with a text must read a space in place of each `\r`.
+- `text::markdown_line`, `text::markdown_cell`, `text::code_span`, `text::code_cell`, and
+  `text::code_block` write each control character and each mark of direction as
+  `text::terminal_text` does. A block keeps its line breaks. Before, a line and a cell wrote a
+  line break as a space, and each other control character stayed as it was. A caller that
+  compares the text with a quoted text must read the escapes, such as `\n` and `\r`.
+- `text::terminal_text` writes each mark of the direction of a text as a visible escape. The new
+  `text::DIRECTION_MARKS` holds the marks. A caller that compares the text must compare the
+  escapes.
 
 ## Release 0.35.0: changes that need action
 

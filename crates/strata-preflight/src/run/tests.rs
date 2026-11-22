@@ -923,3 +923,42 @@ fn a_run_of_an_existing_cluster_whose_metadata_is_not_an_object_is_an_input_erro
         "{err}"
     );
 }
+
+/// The criterion of #942: each line of `--verbose` shows each control character of a text of
+/// Palette as a visible escape. The note of a reading does too. The texts are the state and the
+/// health of a reading, a condition, an event, a request, and the first message of a check.
+#[test]
+fn each_line_of_verbose_shows_each_control_character_of_a_text_of_palette_as_an_escape() {
+    use crate::answer_tags::{ANSWER_CONTROLS, assert_answer_controls_as_text};
+    use crate::probe::{Call, Ran};
+    let read = json!({
+        "cluster": {"status": {"state": ANSWER_CONTROLS, "conditions": [{
+            "type": ANSWER_CONTROLS, "status": ANSWER_CONTROLS, "reason": ANSWER_CONTROLS,
+            "message": ANSWER_CONTROLS,
+        }]}},
+        "summary": {"status": {"health": {"state": ANSWER_CONTROLS}}},
+        "events": [{"metadata": {"creationTimestamp": ANSWER_CONTROLS},
+            "reason": ANSWER_CONTROLS, "message": ANSWER_CONTROLS}],
+    });
+    let mut lines = verbose::reading_lines("c1", &read, &mut Default::default(), &Paint::off());
+    assert_eq!(
+        lines.len(),
+        3,
+        "the header, the condition, and the event: {lines:?}"
+    );
+    let c = catalog();
+    let rule = c.rule("gke-pool-multiple-3").unwrap();
+    let outcome = Outcome {
+        verdict: Verdict::Failed,
+        messages: vec![ANSWER_CONTROLS.to_string()],
+        elapsed: Duration::from_millis(3),
+        ran: Ran::Request(Call::get(&format!("/v1/x/{ANSWER_CONTROLS}"), None)),
+    };
+    lines.extend(verbose_lines(rule, &outcome, &Paint::off()));
+    lines.push(verbose::watch_line(rule, &outcome, &Paint::off()));
+    let note = watch::reading_note(ANSWER_CONTROLS, Duration::ZERO, 1, false, &Paint::off());
+    lines.push(note);
+    for line in &lines {
+        assert_answer_controls_as_text(line);
+    }
+}

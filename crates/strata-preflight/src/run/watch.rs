@@ -12,6 +12,7 @@ use strata::render::{count_of, paint_state};
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
+use strata::text::terminal_text;
 
 use super::verbose::{Seen, UNKNOWN, program_lines, reading_lines, watch_line};
 use super::{Selection, confidence_of, holds, subject_of};
@@ -247,7 +248,13 @@ fn read_until_ended<A: PaletteApi>(
             set_at(&mut world, &[k.as_str()], v.clone());
         }
         let failed = judge_rules(rules, &world, jq, elapsed, inputs.selection, &mut last);
-        note_reading(inputs, &state, elapsed, readings, failed);
+        inputs.progress.painted_note(&reading_note(
+            &state,
+            elapsed,
+            readings,
+            failed,
+            &inputs.paint,
+        ));
         if inputs.verbose {
             for rule in rules {
                 if let Some(o) = last.get(&rule.id) {
@@ -302,26 +309,26 @@ fn judge_rules(
     failed
 }
 
-/// Tell the state of the cluster at a reading, and whether a rule failed.
-fn note_reading<A: PaletteApi>(
-    inputs: &WatchInputs<'_, A>,
+/// The note of a reading: the state of the cluster, and whether a rule failed. The state is a text
+/// of Palette, so it is [`terminal_text`].
+pub(super) fn reading_note(
     state: &str,
     elapsed: Duration,
     readings: u32,
     failed: bool,
-) {
-    let paint = &inputs.paint;
-    inputs.progress.painted_note(&format!(
+    paint: &Paint,
+) -> String {
+    format!(
         "{} {} after {}s, reading {readings}{}",
         paint.bold("watch:"),
-        paint_state(paint, state),
+        paint_state(paint, &terminal_text(state)),
         elapsed.as_secs(),
         if failed {
             paint.red(", a rule failed")
         } else {
             String::new()
         }
-    ));
+    )
 }
 
 /// A rule that passed becomes an error when the watch reaches its limit: the cluster did not
