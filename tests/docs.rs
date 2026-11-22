@@ -5102,10 +5102,7 @@ fn each_line_of_a_comment_block_keeps_its_number_in_the_file() {
 fn each_kind_of_file_has_the_marks_of_its_comments() {
     for (path, marks) in [
         ("src/main.rs", Some((Some("//"), true))),
-        (
-            ".github/codeql/rust/CleartextLogging.ql",
-            Some((Some("//"), true)),
-        ),
+        ("codeql/rust/CleartextLogging.ql", Some((Some("//"), true))),
         ("observer/internal/web/assets/app.css", Some((None, true))),
         ("examples/live/lib.sh", Some((Some("#"), false))),
         (".github/workflows/ci.yml", Some((Some("#"), false))),

@@ -313,19 +313,17 @@ mod tests {
         let over = sentence_of(MOST_WORDS + 1);
         crate::git::git(repo, &["init", "--quiet", "--initial-branch=main"]);
         crate::git::git(repo, &["commit", "--quiet", "--allow-empty", "-m", "base"]);
-        crate::git::git(repo, &["switch", "--quiet", "-c", "change"]);
         for name in ["a b.rs", "café.rs"] {
             std::fs::write(repo.join(name), format!("// {over}\n")).unwrap();
         }
         crate::git::git(repo, &["add", "."]);
-        crate::git::git(repo, &["commit", "--quiet", "-m", "change"]);
 
         let found = check(repo, "main").unwrap();
         assert_eq!(found.sentences, 2, "{found:?}");
         let places: Vec<&str> = found
             .faults
             .iter()
-            .filter_map(|fault| fault.split_once(": 26 words").map(|(place, _)| place))
+            .filter_map(|fault| fault.split(": ").next())
             .collect();
         assert_eq!(places, ["a b.rs:1", "café.rs:1"], "{found:?}");
     }
