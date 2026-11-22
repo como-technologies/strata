@@ -410,6 +410,17 @@ fn the_go_tokens_decode_each_text_and_keep_its_lines() {
 }
 
 #[test]
+fn unquote_gives_the_bytes_of_one_whole_text_in_quotes() {
+    assert_eq!(
+        go_lex::unquote("\"caf\\303\\251 \\\"\\t\\351\"").unwrap(),
+        b"caf\xc3\xa9 \"\t\xe9"
+    );
+    for wrong in ["caf.rs", "\"a\" b", "\"open", "\"\\q\""] {
+        assert!(go_lex::unquote(wrong).is_err(), "{wrong}");
+    }
+}
+
+#[test]
 fn a_go_file_gives_its_consts_its_tables_its_structs_its_functions_and_its_aliases() {
     let file = go::read(
         "package model\n\nimport (\n\t\"fmt\"\n\tm \"example.com/m/names\"\n)\n\n\
@@ -804,6 +815,25 @@ fn the_check_lists_each_copy_of_rust_and_each_const_and_helper_that_the_change_a
             "tests/t.rs:5 [json] \"in-place\": in-place is the value of Tier::InPlace (src/lib.rs:5)",
         ]
     );
+}
+
+/// The criterion of #944. git writes the name `src/b é.rs` in quotes and with a tab at its end.
+/// The check reads the file, and names it as the tree names it.
+#[test]
+fn the_check_reads_a_file_with_a_space_and_a_character_that_is_not_ascii_in_its_name() {
+    let repo = Repo::new();
+    rust_package(&repo);
+    repo.commit("base");
+    repo.branch("change");
+    repo.write("src/b é.rs", "pub const AGAIN: &str = \"strata-x/1\";\n");
+    repo.commit("change");
+
+    let (findings, skipped) = repo.copies();
+    assert_eq!(
+        findings,
+        ["src/b é.rs:1 [const] AGAIN = \"strata-x/1\": the value of SCHEMA (src/lib.rs:19)"]
+    );
+    assert!(skipped.is_empty(), "{skipped:?}");
 }
 
 /// A value that the file of a literal cannot name is no copy. The test has an unexported const of

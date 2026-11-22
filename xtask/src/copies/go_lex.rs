@@ -56,16 +56,7 @@ struct Lexer {
 ///
 /// The error names the line of a bracket that does not close, or of a text that does not end.
 pub fn tokens(text: &str) -> Result<Vec<Token>, String> {
-    let mut lexer = Lexer {
-        chars: text.chars().collect(),
-        at: 0,
-        line: 1,
-        open: vec![Open {
-            delim: None,
-            tokens: Vec::new(),
-            line: 1,
-        }],
-    };
+    let mut lexer = Lexer::new(text);
     while let Some(c) = lexer.peek(0) {
         lexer.next_token(c)?;
     }
@@ -77,7 +68,38 @@ pub fn tokens(text: &str) -> Result<Vec<Token>, String> {
     }
 }
 
+/// The bytes of `quoted`, a text in double quotes, with its escapes decoded. A Go text has the
+/// escapes of C, and git writes a file name in quotes with them.
+///
+/// The error names an escape that is not Go. It also names a `quoted` with no quote at its start,
+/// or with more text after its end quote.
+pub fn unquote(quoted: &str) -> Result<Vec<u8>, String> {
+    let mut lexer = Lexer::new(quoted);
+    if lexer.peek(0) != Some('"') {
+        return Err(format!("{quoted} does not start with a quote"));
+    }
+    let bytes = lexer.interpreted_bytes()?;
+    if lexer.peek(0).is_some() {
+        return Err(format!("{quoted} has more text after its end quote"));
+    }
+    Ok(bytes)
+}
+
 impl Lexer {
+    /// The start of the read of `text`, with one open group for the whole file.
+    fn new(text: &str) -> Self {
+        Self {
+            chars: text.chars().collect(),
+            at: 0,
+            line: 1,
+            open: vec![Open {
+                delim: None,
+                tokens: Vec::new(),
+                line: 1,
+            }],
+        }
+    }
+
     fn peek(&self, ahead: usize) -> Option<char> {
         self.chars.get(self.at + ahead).copied()
     }
@@ -164,6 +186,18 @@ impl Lexer {
     /// Read a text in double quotes, and decode its escapes.
     fn interpreted(&mut self) -> Result<(), String> {
         let line = self.line;
+        let bytes = self.interpreted_bytes()?;
+        self.push(Token::Text {
+            value: String::from_utf8_lossy(&bytes).into_owned(),
+            line,
+            last: line,
+        });
+        Ok(())
+    }
+
+    /// Read a text in double quotes, and give its bytes with its escapes decoded.
+    fn interpreted_bytes(&mut self) -> Result<Vec<u8>, String> {
+        let line = self.line;
         self.at += 1;
         let mut bytes = Vec::new();
         loop {
@@ -179,12 +213,7 @@ impl Lexer {
             }
         }
         self.at += 1;
-        self.push(Token::Text {
-            value: String::from_utf8_lossy(&bytes).into_owned(),
-            line,
-            last: line,
-        });
-        Ok(())
+        Ok(bytes)
     }
 
     /// Decode the escape at the read position into `bytes`.
