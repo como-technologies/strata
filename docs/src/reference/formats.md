@@ -159,13 +159,21 @@ gets its own decision. `strata-preflight` takes `--color` with a value: `auto`,
 
 The terminal report, the notes, the warnings, and the line `strata: error:`
 quote the texts of Palette. A name, a state, and the message of an error are
-such texts. Such a text can hold a control character. An ESC can start an escape sequence
-of the terminal, which changes the color or moves the cursor. A carriage return
-moves the cursor to the start of the line, so the next text covers the text
-before it. A line break in a text of one line starts a new line, and that line
-can read as a line of strata.
+such texts. The markdown of `--format markdown` quotes them too, and a person
+can read the markdown on a terminal.
 
-So strata writes each control character of such a text as a visible escape:
+Such a text can hold a control character. An ESC can start an escape sequence of the terminal, which changes the color or
+moves the cursor. A carriage return moves the cursor to the start of the line,
+so the next text covers the text before it. A line break in a text of one line
+starts a new line, and that line can read as a line of strata.
+
+A mark of the direction of a text, such as U+202E, is not a control character.
+But a terminal that reads the mark can show the characters after it from right
+to left. So a name can show as another name. The marks are the characters of
+the property `Bidi_Control` of Unicode.
+
+So strata writes each control character and each mark of direction of such a
+text as a visible escape:
 
 | Character | Escape |
 | --- | --- |
@@ -173,12 +181,28 @@ So strata writes each control character of such a text as a visible escape:
 | carriage return | `\r` |
 | line break | `\n` |
 | tab | `\t` |
+| a mark of direction | its number in hexadecimal, such as `\u{202e}` |
 | each other control character | its number in hexadecimal, such as `\u{7f}` |
 
 The width of a column counts each character of the escape, so the columns stay
 in line. The colors of strata, and the line breaks between the lines of strata,
-do not change. The diffs of `--full` keep the line break at the end of each
-line, and escape each other control character.
+do not change. The diffs of `--full` and each fenced block of the markdown keep
+the line break at the end of each line. They escape each other control
+character.
+
+A line and a cell of the markdown write a `\` before the `\` of an escape, as
+before each `\` of a text. So GitHub shows the escape of the terminal. A code
+span, a fenced block, and the `<summary>` of a fold show the escape as it is:
+see [The markdown comment](#the-markdown-comment).
+
+`strata-preflight` writes its terminal report, its markdown, and its lines of
+`--verbose` in the same way. A watch writes the note of each reading in the same
+way too.
+
+Strata writes each `\` of a text as it is. So a text with the two characters
+`\n` and a text with a line break show the same. A `\` of a value or of a
+command keeps its form, such as the `\d` of a pattern. To tell the two texts
+apart, use `--json`.
 
 `--json`, the records, and the JSON object of an error keep each text as Palette
 gave it. JSON writes a control character with an escape of its own, such as
@@ -249,7 +273,7 @@ The `<summary>` of the fold of a pack is a block of HTML, and GitHub reads no
 markdown in it. But GitHub reads a mention and a link to an issue there too. So
 the words of the `<summary>` get each entity and each zero width space of a
 text, and no `\` before a mark. A blank line ends the block, so each line end
-in the words is a space.
+in the words is its escape.
 
 GitHub makes a link of a bare address from its text as it is. So an escape in
 the address shows in the link, and the link goes to another target. The
@@ -280,8 +304,10 @@ address, and the link goes to another target.
 
 A line end in a text starts a new line of markdown, and it ends the row of a
 table. Markdown reads a carriage return with no line break after it as a line
-end too. So the markdown writes each line break and each carriage return of a
-text as a space, in a line and in a cell.
+end too. So the markdown writes each line break of a text as `\n`, and each
+carriage return as `\r`, in a line and in a cell. Each other control character
+and each mark of direction gets its escape too: see
+[A control character of a text of Palette](#a-control-character-of-a-text-of-palette).
 
 Each fenced block has a fence of three backticks. When its text holds a run of
 three or more backticks, the fence is longer than each run. So a line of the

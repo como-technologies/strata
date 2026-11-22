@@ -3090,3 +3090,43 @@ fn a_name_of_a_listing_shows_each_control_character_as_a_visible_escape() {
         "{listing}"
     );
 }
+
+/// Issue #942. A name of a listing with control characters and a mark of the direction of a
+/// text, U+202E. The terminal report and `--format markdown` show each one as a visible escape.
+/// So the markdown on a terminal writes no ESC of the name, and no mark changes the order of the
+/// text. The JSON document keeps the name as Palette gave it.
+#[test]
+fn a_name_of_a_listing_shows_each_mark_of_direction_and_in_markdown_each_control_as_an_escape() {
+    let mut routes = std::collections::BTreeMap::new();
+    routes.insert(
+        PROFILE_LISTING.to_string(),
+        serde_json::json!({"items": [
+            listed(common::ANSWER_CONTROLS, "u1"),
+            listed(common::ANSWER_DIRECTION, "u2"),
+        ]}),
+    );
+    use strata::closed_set::ClosedSet;
+    use strata::ops::ListKind;
+    use strata::render::Format;
+    let stand = Stand::new(routes, "");
+    let profiles = ListKind::Profiles.as_str();
+    for format in [Format::Terminal, Format::Markdown] {
+        let r = stand.run(&["list", profiles, "--format", format.as_str()]);
+        assert_eq!(r.code, 0, "{:?}", r.err);
+        common::assert_answer_controls_as_text(&r.out);
+        assert!(
+            r.out.contains(common::ANSWER_DIRECTION_AS_TEXT),
+            "{format:?}: {:?}",
+            r.out
+        );
+    }
+
+    let r = stand.run(&["list", profiles, "--json"]);
+    assert_eq!(r.code, 0, "{:?}", r.err);
+    let listing: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(
+        listing["profiles"][1]["name"],
+        common::ANSWER_DIRECTION,
+        "{listing}"
+    );
+}

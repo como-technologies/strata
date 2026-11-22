@@ -1,18 +1,15 @@
 use super::*;
+use crate::answer_tags::{
+    ANSWER_CONTROLS, ANSWER_TAGS, assert_answer_controls_as_text, assert_only_strata_tags,
+};
 use crate::curl::Saves;
 use crate::probe::{Invocation, Ran};
 use crate::rule::EvidenceKind;
-use answer_tags::{ANSWER_TAGS, assert_only_strata_tags};
 use code_block::outside_code_blocks;
 use code_span::without_code;
 use std::time::Duration;
 use strata::api::Method;
 
-// The text of an answer with tags of HTML, and the checks of the tags, in the file that the tests
-// of strata use. A test here uses some of them, so the others are dead code here.
-#[allow(dead_code)]
-#[path = "../../../../tests/common/answer_tags.rs"]
-mod answer_tags;
 // The reads of the code blocks and of the code spans of markdown, in the files of the tests of
 // strata. A test here uses one read of each file, so the other reads are dead code here.
 #[allow(dead_code)]
@@ -1364,6 +1361,39 @@ fn the_heading_of_the_markdown_shows_the_cloud_the_name_and_the_source_as_text()
     let source = format!("source ``cluster:c1 (Running{value} after 3s, 2 readings)``,");
     assert!(md.contains(&source), "{source:?} in\n{md}");
     assert_only_strata_tags(&without_code(&outside_code_blocks(&md)));
+}
+
+/// The criterion of #942: the terminal report shows each control character of a text of Palette
+/// as a visible escape. The texts are the name of the cluster and the state of a watch. They are
+/// also the message of a failed check, and a failed request with its error.
+#[test]
+fn the_terminal_report_shows_each_control_character_of_a_text_of_palette_as_an_escape() {
+    let failed = Outcome {
+        verdict: Verdict::Failed,
+        messages: vec![format!("HTTP 403: {ANSWER_CONTROLS}")],
+        elapsed: Duration::from_millis(3),
+        ran: Ran::Request(Call::get("/v1/edgehosts/h2", Some("HTTP 403"))),
+    };
+    let stopped = Outcome {
+        verdict: Verdict::Error,
+        messages: vec![format!("HTTP 500: {ANSWER_CONTROLS}")],
+        elapsed: Duration::from_millis(3),
+        ran: Ran::Request(Call::get(&format!("/v1/edgehosts/{ANSWER_CONTROLS}"), None)),
+    };
+    let shown = strata::text::terminal_text(ANSWER_CONTROLS);
+    for (outcome, line) in [
+        (failed, format!("\n{:<16}HTTP 403: {shown}\n", "")),
+        (stopped, format!("  GET /v1/edgehosts/{shown}\n")),
+    ] {
+        let mut report = report_of_edge_host_in_use(None, "/v1/edgehosts/h2", outcome);
+        report.subject.name = ANSWER_CONTROLS.into();
+        report.subject.source = format!("cluster:c1 ({ANSWER_CONTROLS} after 3s, 2 readings)");
+        let text = render(&report, Format::Terminal, false, &Paint::off());
+        assert_answer_controls_as_text(&text);
+        assert!(text.contains(&line), "{line:?} in\n{text}");
+        let heading = format!("edge cluster {shown} (cluster:c1 ({shown} after 3s, 2 readings))");
+        assert!(text.contains(&heading), "{heading:?} in\n{text}");
+    }
 }
 
 /// A noun of the summary agrees with its count, also when the count is 1 or 0 (#589): the rules,

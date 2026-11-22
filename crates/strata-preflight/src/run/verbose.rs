@@ -1,4 +1,6 @@
-//! The lines of `--verbose`: what each check ran, and what each reading of a watch showed.
+//! The lines of `--verbose`: what each check ran, and what each reading of a watch showed. Each
+//! text of Palette in a line is [`terminal_text`], so each control character of it shows as a
+//! visible escape.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -9,7 +11,7 @@ use strata::json::{arr, str_at, text_or};
 use strata::render::{count_of, paint_state};
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
-use strata::text::{cut, plural};
+use strata::text::{cut, plural, terminal_text};
 
 use crate::probe::{self, Outcome, Verdict};
 use crate::report::label::LabelKind;
@@ -37,7 +39,13 @@ pub(super) fn verbose_lines(rule: &Rule, o: &Outcome, paint: &Paint) -> Vec<Stri
         .ran
         .requests()
         .iter()
-        .map(|c| format!("{tier}: {}: {}", rule.id, paint.dim(&c.line())))
+        .map(|c| {
+            format!(
+                "{tier}: {}: {}",
+                rule.id,
+                paint.dim(&terminal_text(&c.line()))
+            )
+        })
         .collect();
     lines.push(verbose_line(rule, o, paint));
     lines
@@ -63,7 +71,7 @@ fn verbose_line(rule: &Rule, o: &Outcome, paint: &Paint) -> String {
         rule.id,
         paint.dim(&format!(
             "{} -> {}{} ms,",
-            what_ran(o),
+            terminal_text(&what_ran(o)),
             o.ran.answer().map(|a| format!("{a}, ")).unwrap_or_default(),
             o.elapsed.as_millis()
         )),
@@ -72,7 +80,7 @@ fn verbose_line(rule: &Rule, o: &Outcome, paint: &Paint) -> String {
     if o.verdict != Verdict::Passed
         && let Some(m) = o.messages.first()
     {
-        line.push_str(&format!(": {m}"));
+        line.push_str(&format!(": {}", terminal_text(m)));
     }
     line
 }
@@ -119,8 +127,8 @@ fn reading_header(uid: &str, read: &Value, paint: &Paint) -> String {
             cluster_summary_path(uid),
             cluster_events_path(uid)
         )),
-        paint_state(paint, state),
-        text_or(read, "/summary/status/health/state", UNKNOWN),
+        paint_state(paint, &terminal_text(state)),
+        terminal_text(text_or(read, "/summary/status/health/state", UNKNOWN)),
         count_of(arr(read, "/events").len(), "event")
     )
 }
@@ -144,14 +152,16 @@ fn condition_lines(
         let status_text = match status {
             "True" => paint.green(status),
             "False" => paint.yellow(status),
-            _ => status.to_string(),
+            _ => terminal_text(status).into_owned(),
         };
         out.push(format!(
-            "watch: condition {kind}={status_text} {reason}{}",
+            "watch: condition {}={status_text} {}{}",
+            terminal_text(kind),
+            terminal_text(reason),
             if message == UNKNOWN || message.is_empty() {
                 String::new()
             } else {
-                paint.dim(&format!(": {}", cut(message, 160)))
+                paint.dim(&format!(": {}", terminal_text(&cut(message, 160))))
             }
         ));
     }
@@ -170,13 +180,13 @@ fn event_lines(read: &Value, seen: &mut BTreeSet<String>, paint: &Paint) -> Vec<
             let key = format!("{at} {reason} {message}");
             let line = format!(
                 "watch: event {}{}: {}",
-                paint.cyan(at),
+                paint.cyan(&terminal_text(at)),
                 if reason.is_empty() {
                     String::new()
                 } else {
-                    format!(" {reason}")
+                    format!(" {}", terminal_text(reason))
                 },
-                cut(&probe::one_line(message.to_string()), 200)
+                terminal_text(&cut(message, 200))
             );
             (key, line)
         })
@@ -204,7 +214,7 @@ pub(super) fn watch_line(rule: &Rule, o: &Outcome, paint: &Paint) -> String {
     if o.verdict != Verdict::Passed
         && let Some(m) = o.messages.first()
     {
-        line.push_str(&format!(": {m}"));
+        line.push_str(&format!(": {}", terminal_text(m)));
     }
     line
 }

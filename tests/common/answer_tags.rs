@@ -1,12 +1,13 @@
 //! A text of an answer with tags of HTML, one with the marks of markdown, and one with mentions
-//! of GitHub. Also a text with references to issues of GitHub, one with bare addresses, and one
-//! with control characters. The checks that a markdown output shows each such tag, mark, mention,
-//! and reference as text, and each such address as it is. The check that a terminal output shows
-//! each such control character as a visible escape.
+//! of GitHub. Also a text with references to issues of GitHub, one with bare addresses, one with
+//! control characters, and one with a mark of direction. The checks that a markdown
+//! output shows each such tag, mark, mention, and reference as text, and each such address as it
+//! is. The checks that a terminal output and a markdown output show each such control character as
+//! a visible escape.
 //!
-//! `tests/common/mod.rs` re-exports this file for the tests. The unit tests of `src/text.rs` and
-//! of the report of `strata-preflight` include it with `#[path]`. So one text of each kind and one
-//! list of the tags of strata exist.
+//! `tests/common/mod.rs` re-exports this file for the tests. The unit tests of `src/text.rs`, and
+//! of the report and the run of `strata-preflight`, include it with `#[path]`. So one text of each
+//! kind and one list of the tags of strata exist.
 
 /// The body of an answer with a link and a tag of HTML, as a message of Palette can hold them.
 pub const ANSWER_TAGS: &str = "<a href=\"https://example.com\">x</a> <Code>AccessDenied</Code>";
@@ -118,8 +119,13 @@ pub fn assert_answer_addresses_as_they_are(markdown: &str) {
 /// a new line.
 pub const ANSWER_CONTROLS: &str = "\u{1b}[31mred\u{1b}[0m over\rback\nnext";
 
-/// [`ANSWER_CONTROLS`] as a terminal must get it: each control character as a visible escape.
+/// [`ANSWER_CONTROLS`] as a terminal must get it: each control character as a visible escape. A
+/// code span and a block of HTML of markdown hold the same text.
 const ANSWER_CONTROLS_AS_TEXT: &str = r"\u{1b}[31mred\u{1b}[0m over\rback\nnext";
+
+/// [`ANSWER_CONTROLS_AS_TEXT`] as a line of markdown must get it: a `\` before each `\` and each
+/// `[`. GitHub shows the text of the terminal.
+const ANSWER_CONTROLS_AS_MARKDOWN: &str = r"\\u{1b}\[31mred\\u{1b}\[0m over\\rback\\nnext";
 
 /// Make sure that `terminal`, a text with no color, shows [`ANSWER_CONTROLS`] as text. Its only
 /// control characters are the line breaks between its lines.
@@ -128,8 +134,36 @@ pub fn assert_answer_controls_as_text(terminal: &str) {
         terminal.contains(ANSWER_CONTROLS_AS_TEXT),
         "the control characters of the answer as text in\n{terminal:?}"
     );
-    let control = terminal.chars().find(|c| c.is_control() && *c != '\n');
-    assert_eq!(control, None, "a control character in\n{terminal:?}");
+    assert_only_line_breaks(terminal);
+}
+
+/// Make sure that `markdown` shows [`ANSWER_CONTROLS`] as text in a line or in a cell of a table.
+/// Its only control characters are the line breaks between its lines.
+pub fn assert_answer_controls_as_markdown(markdown: &str) {
+    assert!(
+        markdown.contains(ANSWER_CONTROLS_AS_MARKDOWN),
+        "the control characters of the answer as text in\n{markdown:?}"
+    );
+    assert_only_line_breaks(markdown);
+}
+
+/// The name of an object with a mark of the direction of a text, U+202E. A terminal that reads the
+/// mark shows the characters after it from right to left, so `nimda` reads as `admin`. U+202C
+/// ends the mark.
+pub const ANSWER_DIRECTION: &str = "user\u{202e}nimda\u{202c} ok";
+
+/// [`ANSWER_DIRECTION`] as a terminal must get it: each mark as a visible escape.
+pub const ANSWER_DIRECTION_AS_TEXT: &str = r"user\u{202e}nimda\u{202c} ok";
+
+/// Make sure that the only control characters of `text` are its line breaks, and that it holds no
+/// mark of the direction of a text.
+fn assert_only_line_breaks(text: &str) {
+    let control = text.chars().find(|c| c.is_control() && *c != '\n');
+    assert_eq!(control, None, "a control character in\n{text:?}");
+    let mark = text
+        .chars()
+        .find(|c| strata::text::DIRECTION_MARKS.contains(c));
+    assert_eq!(mark, None, "a mark of direction in\n{text:?}");
 }
 
 /// The tags of HTML that the markdown of strata writes itself.

@@ -55,8 +55,9 @@ quietly() {
 # The jq functions that write a text into markdown, as strata writes it. `html` is
 # `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `line`
 # is `text::markdown_line`, and `quoted` writes each word of it. `cell` is `text::markdown_cell`,
-# a `line` that `table` gives an escape before each `|`. `ends` writes each line break and each
-# carriage return as a space.
+# a `line` that `table` gives an escape before each `|`. `controls` is `text::terminal_text`: each
+# control character and each mark of the direction of a text is a visible escape, such as `\n`.
+# `line` and `span` start with it, so a line end starts no line and ends no row.
 #
 # `marks` puts a `\` before each mark of markdown. A run of `_` with a letter or a digit on each
 # side starts no emphasis, so `marks` keeps it as it is. `references` is `text::reference_text`:
@@ -70,8 +71,11 @@ quietly() {
 # the block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
   def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
-  def ends: split("\n") | join(" ") | split("\r") | join(" ");
-  def table: split("|") | join("\\|") | ends;
+  def hex: if . < 16 then "0123456789abcdef"[.:. + 1] else (. / 16 | floor | hex) + (. % 16 | hex) end;
+  def controls: [explode[] | if . == 9 then "\\t" elif . == 10 then "\\n" elif . == 13 then "\\r"
+      elif . < 32 or (. > 126 and . < 160) or IN(1564, 8206, 8207, 8234, 8235, 8236, 8237, 8238, 8294, 8295, 8296, 8297)
+      then "\\u{\(hex)}" else [.] | implode end] | join("");
+  def table: split("|") | join("\\|");
   def references: gsub("(?<r>(?<![A-Za-z0-9])@(?=[A-Za-z0-9])|#(?=[0-9])|(?<![A-Za-z0-9])[Gg][Hh]-(?=[0-9]))"; "\(.r)&#8203;");
   def quoted: marks | html | references;
   def link_end: . as $t | ([scan("[(]")] | length) as $open
@@ -89,12 +93,12 @@ markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | 
       then null else [.[:$s], $rest[:$e], $rest[$e:]] end;
   def word($first): address($first) as $a
     | if $a then ($a[0] | quoted) + $a[1] + ($a[2] | gsub("[*]"; "&ast;") | gsub("_"; "&lowbar;")) else quoted end;
-  def line: [scan("[^ \t\n\f\r]+|[ \t\n\f\r]+")] | to_entries
-    | map(.key as $k | .value | if test("^[ \t\n\f\r]") then ends else word($k == 0) end) | join("");
+  def line: controls | [scan("[^ ]+| +")] | to_entries
+    | map(.key as $k | .value | if startswith(" ") then . else word($k == 0) end) | join("");
   def cell: line | table;
   def backticks($n): [range($n)] | map("`") | join("");
   def ticks: [scan("`+") | length] | max // 0;
-  def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
+  def span: controls | backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
     | $f + $p + . + $p + $f;
   def code: span | table;
   def fence: backticks([ticks + 1, 3] | max);'

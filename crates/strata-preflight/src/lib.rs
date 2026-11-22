@@ -48,3 +48,10 @@ pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[allow(dead_code)]
 #[path = "../../../tests/common/palette.rs"]
 mod routes;
+
+// The texts of an answer and their checks, in the file that the tests of strata use. The tests of
+// the report and of the run use some of them, so the others are dead code here.
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../../../tests/common/answer_tags.rs"]
+mod answer_tags;

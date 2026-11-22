@@ -3,8 +3,9 @@
 //! markdown.
 
 use super::answer_tags::{
-    ANSWER_ADDRESSES, ANSWER_CONTROLS, ANSWER_ISSUES, ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS,
-    assert_answer_addresses_as_they_are, assert_answer_controls_as_text,
+    ANSWER_ADDRESSES, ANSWER_CONTROLS, ANSWER_DIRECTION, ANSWER_DIRECTION_AS_TEXT, ANSWER_ISSUES,
+    ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS, assert_answer_addresses_as_they_are,
+    assert_answer_controls_as_markdown, assert_answer_controls_as_text,
     assert_answer_issues_as_text, assert_answer_marks_as_text, assert_answer_mentions_as_text,
 };
 use super::*;
@@ -98,7 +99,7 @@ fn an_empty_text_shows_a_dash_and_another_text_shows_as_it_is() {
 #[test]
 fn a_cell_of_a_markdown_table_holds_no_bar_and_no_line_break() {
     assert_eq!(markdown_cell("a|b"), "a\\|b");
-    assert_eq!(markdown_cell("first\nsecond"), "first second");
+    assert_eq!(markdown_cell("first\nsecond"), r"first\\nsecond");
     assert_eq!(markdown_cell("plain"), "plain");
 }
 
@@ -126,10 +127,66 @@ fn a_text_on_a_terminal_shows_each_control_character_as_a_visible_escape() {
 }
 
 #[test]
+fn a_text_on_a_terminal_shows_each_mark_of_the_direction_of_a_text_as_a_visible_escape() {
+    assert_eq!(terminal_text(ANSWER_DIRECTION), ANSWER_DIRECTION_AS_TEXT);
+    let marks: String = DIRECTION_MARKS.iter().collect();
+    assert_eq!(
+        terminal_text(&marks),
+        r"\u{61c}\u{200e}\u{200f}\u{202a}\u{202b}\u{202c}\u{202d}\u{202e}\u{2066}\u{2067}\u{2068}\u{2069}"
+    );
+    // a letter of a script that reads from right to left is text, and it stays as it is
+    assert!(matches!(terminal_text("שלום"), Cow::Borrowed("שלום")));
+}
+
+#[test]
+fn a_text_on_a_terminal_keeps_each_backslash_so_a_backslash_and_n_show_as_a_line_break() {
+    // `--json` keeps the text as Palette gave it, and so tells the two texts apart
+    assert_eq!(terminal_text("a\\nb"), terminal_text("a\nb"));
+    assert!(matches!(terminal_text(r"^\d+$"), Cow::Borrowed(r"^\d+$")));
+}
+
+#[test]
+fn a_block_of_lines_on_a_terminal_keeps_each_line_break_and_escapes_each_other_character() {
+    assert_eq!(
+        terminal_lines(ANSWER_CONTROLS),
+        "\\u{1b}[31mred\\u{1b}[0m over\\rback\nnext"
+    );
+    assert_eq!(terminal_lines("a\r\nb\u{202e}\n"), "a\\r\nb\\u{202e}\n");
+    assert!(matches!(terminal_lines("a\nb\n"), Cow::Borrowed("a\nb\n")));
+}
+
+#[test]
+fn each_text_of_markdown_shows_each_control_character_and_each_mark_of_direction_as_an_escape() {
+    assert_answer_controls_as_markdown(&markdown_line(ANSWER_CONTROLS));
+    assert_answer_controls_as_markdown(&markdown_cell(ANSWER_CONTROLS));
+    assert_answer_controls_as_markdown(&lines_cell([ANSWER_CONTROLS, "next"]));
+    // a code span and a block of HTML show the escapes of the terminal, with no `\` before them
+    assert_answer_controls_as_text(&code_span(ANSWER_CONTROLS));
+    assert_answer_controls_as_text(&code_cell(ANSWER_CONTROLS));
+    assert_answer_controls_as_text(&quoted_html(ANSWER_CONTROLS));
+    // a block keeps its line breaks
+    assert_eq!(
+        code_block("", ANSWER_CONTROLS),
+        "```\n\\u{1b}[31mred\\u{1b}[0m over\\rback\nnext\n```\n"
+    );
+    assert_eq!(
+        markdown_line(ANSWER_DIRECTION),
+        r"user\\u{202e}nimda\\u{202c} ok"
+    );
+    for text in [
+        code_span(ANSWER_DIRECTION),
+        code_block("", ANSWER_DIRECTION),
+        quoted_html(ANSWER_DIRECTION),
+    ] {
+        assert!(text.contains(ANSWER_DIRECTION_AS_TEXT), "{text:?}");
+    }
+}
+
+#[test]
 fn a_cell_of_a_markdown_table_holds_no_tag_of_html_from_a_quoted_text() {
     let cell = markdown_cell(&format!("{ANSWER_TAGS}\n| next"));
     assert!(!cell.contains('<'), "{cell}");
-    assert_eq!(cell, format!("{} \\| next", html_text(ANSWER_TAGS)));
+    assert_eq!(cell, format!(r"{}\\n\| next", html_text(ANSWER_TAGS)));
 }
 
 #[test]
@@ -155,9 +212,10 @@ fn a_cell_of_a_markdown_table_holds_no_mention_of_github_from_a_quoted_text() {
         markdown_cell("ops@example.com k@1.0 a@-b @ @-"),
         "ops@example.com k@1.0 a@-b @ @-"
     );
+    // the `n` of the escape of a line break comes before `@f`, so that `@` starts no mention
     assert_eq!(
         markdown_cell("(@a) @@b é@c _@d *@e\n@f|@g"),
-        format!("(@{z}a) @@{z}b é@{z}c \\_@{z}d \\*@{z}e @{z}f\\|@{z}g")
+        format!(r"(@{z}a) @@{z}b é@{z}c \_@{z}d \*@{z}e\\n@f\|@{z}g")
     );
     // the space is an entity of strata, so its `&` gets no escape, and an `&` of the text does
     assert_eq!(markdown_cell("&@a <@b"), format!("&amp;@{z}a &lt;@{z}b"));
@@ -198,7 +256,7 @@ fn a_text_of_html_that_strata_quotes_holds_no_mention_no_link_to_an_issue_and_no
         format!("&lt;b&gt; *a* `c` @{z}octocat #{z}12 k@1.0")
     );
     // a blank line ends a block of HTML, and the rest of the text is markdown
-    assert_eq!(quoted_html("a\n\n*b*\rc"), "a  *b* c");
+    assert_eq!(quoted_html("a\n\n*b*\rc"), r"a\n\n*b*\rc");
 }
 
 #[test]
@@ -280,7 +338,7 @@ fn a_line_of_markdown_keeps_each_bar_and_a_cell_escapes_each_bar_also_in_an_addr
         "https://example.com/a\\|b a\\|b"
     );
     // a line holds no line end, and its other escapes are those of a cell
-    assert_eq!(markdown_line("*a*\n@b\r#1"), format!("\\*a\\* @{z}b #{z}1"));
+    assert_eq!(markdown_line("*a*\n@b\r#1"), format!(r"\*a\*\\n@b\\r#{z}1"));
     for text in [
         ANSWER_TAGS,
         ANSWER_MARKS,
@@ -294,12 +352,12 @@ fn a_line_of_markdown_keeps_each_bar_and_a_cell_escapes_each_bar_also_in_an_addr
 }
 
 #[test]
-fn a_cell_of_a_markdown_table_writes_a_lone_carriage_return_as_a_space() {
+fn a_cell_of_a_markdown_table_writes_a_lone_carriage_return_as_a_visible_escape() {
     let row = format!("| {} | {} |", markdown_cell("x\ry"), code_cell("x\ry"));
-    assert_eq!(row, "| x y | `x y` |");
+    assert_eq!(row, r"| x\\ry | `x\ry` |");
     // markdown ends a line at a `\r` too, so the row holds no line end
     assert!(!row.contains(LINE_ENDS), "{row:?}");
-    assert_eq!(markdown_cell("x\r\ny"), "x  y");
+    assert_eq!(markdown_cell("x\r\ny"), r"x\\r\\ny");
 }
 
 #[test]
@@ -336,9 +394,9 @@ fn a_code_span_has_a_fence_longer_than_each_run_of_backticks_in_the_text() {
 }
 
 #[test]
-fn a_code_span_writes_the_text_as_it_is_for_a_title_and_a_sentence() {
+fn a_code_span_keeps_a_bar_for_a_title_and_a_sentence_and_escapes_a_line_break() {
     assert_eq!(code_span("a|b"), "`a|b`");
-    assert_eq!(code_span("first\nsecond"), "`first\nsecond`");
+    assert_eq!(code_span("first\nsecond"), r"`first\nsecond`");
 }
 
 #[test]
@@ -380,7 +438,7 @@ fn the_reads_of_the_tests_give_the_text_that_each_code_span_and_each_code_block_
 #[test]
 fn a_code_span_in_a_table_cell_holds_no_bar_and_no_line_break() {
     assert_eq!(code_cell("a|b"), "`a\\|b`");
-    assert_eq!(code_cell("first\nsecond"), "`first second`");
+    assert_eq!(code_cell("first\nsecond"), r"`first\nsecond`");
     assert_eq!(code_cell("late`r|x"), "``late`r\\|x``");
     assert_eq!(code_cell("plain"), code_span("plain"));
 }
