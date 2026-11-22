@@ -13,8 +13,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
-use strata::api::{MASKED, MemoryApi};
 use strata::api::codes::INVALID_VARIABLE_CODE;
+use strata::api::{MASKED, MemoryApi};
 use strata::closed_set::ClosedSet;
 use strata::diff::{ChangeFlag, Status};
 use strata::model::input_type::InputType;
