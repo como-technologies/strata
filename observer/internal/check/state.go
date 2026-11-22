@@ -15,19 +15,19 @@ import (
 // stateFile names the file of the state in the directory of the state.
 const stateFile = "state.json"
 
-// State is what the observer keeps between two runs. It holds the first sight of each finding, the
+// State is what the observer keeps between two runs. It holds each finding with its two sights, the
 // counts of each move, and the failed runs of each timer. It also holds the first digest of each image, and
 // the open alerts with the messages that did not go.
 // It holds no value of a variable, no old value, and no new value, so a copy of the file shows
 // nothing of the cluster.
 type State struct {
-	StartedAt time.Time               `json:"startedAt"`
-	Findings  map[string]FindingState `json:"findings"`
-	Moves     map[string]model.Move   `json:"moves"`
-	Content   ClockState              `json:"content"`
-	Versions  ClockState              `json:"versions"`
-	Images    ImagesState             `json:"images"`
-	Alerts    alert.Store             `json:"alerts"`
+	StartedAt time.Time                    `json:"startedAt"`
+	Findings  map[string]model.KeptFinding `json:"findings"`
+	Moves     map[string]model.Move        `json:"moves"`
+	Content   ClockState                   `json:"content"`
+	Versions  ClockState                   `json:"versions"`
+	Images    ImagesState                  `json:"images"`
+	Alerts    alert.Store                  `json:"alerts"`
 }
 
 // ImagesState is what the observer keeps of the pods. First maps the id of an image, ImageKey, to the
@@ -38,11 +38,6 @@ type ImagesState struct {
 	First    map[string]string `json:"first"`
 }
 
-// FindingState is what the observer keeps of a finding.
-type FindingState struct {
-	FirstSeen time.Time `json:"firstSeen"`
-}
-
 // ClockState is what the observer keeps of a timer.
 type ClockState struct {
 	FailedRuns int             `json:"failedRuns"`
@@ -50,7 +45,7 @@ type ClockState struct {
 }
 
 func emptyState() State {
-	return State{Findings: map[string]FindingState{}, Moves: map[string]model.Move{}, Images: ImagesState{First: map[string]string{}}, Alerts: alert.NewStore()}
+	return State{Findings: map[string]model.KeptFinding{}, Moves: map[string]model.Move{}, Images: ImagesState{First: map[string]string{}}, Alerts: alert.NewStore()}
 }
 
 // loadState reads the state. A file that is absent gives an empty state. A file that cannot be read
@@ -68,7 +63,7 @@ func loadState(dir string) (State, error) {
 		return emptyState(), err
 	}
 	if s.Findings == nil {
-		s.Findings = map[string]FindingState{}
+		s.Findings = map[string]model.KeptFinding{}
 	}
 	if s.Moves == nil {
 		s.Moves = map[string]model.Move{}

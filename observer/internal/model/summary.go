@@ -119,7 +119,8 @@ type Counts struct {
 // Finding is one cause of drift in one profile. Images names the image references of a finding of the
 // pods, image-moved or image-split, and the other kinds have none. WhoUnread says that strata could
 // not read the audit log, so Who is empty and does not name the writer. The summary carries the flag
-// and never the text of the error: the log of the observer holds the text.
+// and never the text of the error: the log of the observer holds the text. Unread says that no content
+// cycle of this process ended well, so the finding comes from the state and no check read it now.
 type Finding struct {
 	ID               string     `json:"id"`
 	Kind             Kind       `json:"kind"`
@@ -133,6 +134,7 @@ type Finding struct {
 	LastSeen         time.Time  `json:"lastSeen"`
 	Who              []docs.Who `json:"who"`
 	WhoUnread        bool       `json:"whoUnread"`
+	Unread           bool       `json:"unread,omitempty"`
 }
 
 // Profile is one profile of the cluster or of the baseline. NewerVersion is the newest published version

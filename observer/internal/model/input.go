@@ -69,7 +69,7 @@ type Clock struct {
 
 // Input is everything that Build reads. Content and Versions are nil until a good cycle ended.
 // Files is the number of record files at the last read of the directory, and FilesKnown is false
-// before the first read.
+// before the first read. Kept holds what the state keeps of each finding, by id.
 type Input struct {
 	Now           time.Time
 	ClusterUID    string
@@ -80,7 +80,7 @@ type Input struct {
 	ContentClock  Clock
 	Versions      *Versions
 	VersionsClock Clock
-	FirstSeen     map[string]time.Time
+	Kept          map[string]KeptFinding
 	// ReadPods says that the observer reads pods. FirstDigests holds the first digest of each image,
 	// by ImageKey.
 	ReadPods     bool

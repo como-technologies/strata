@@ -46,7 +46,7 @@ lists the routes.
 | Exit | Meaning |
 | --- | --- |
 | `0` | No finding exists, and the two cycles ended well. |
-| `1` | A finding exists, as with `strata verify`. The exit is 1 also when the other cycle failed: `failedRuns` says so. |
+| `1` | A finding exists, as with `strata verify`. The exit is 1 also when the other cycle failed: `failedRuns` says so. A finding that the state keeps counts too, also when no content cycle ended well: see [The state](#the-state). |
 | `2` | No finding exists and a cycle failed, or a flag is wrong. |
 
 ### Options
@@ -57,7 +57,7 @@ lists the routes.
 | `--cluster-uid` | required | Names the cluster. The name comes from the read of the cluster. |
 | `--records` | required | The directory of `*.json.gz` records and `meta.json`. |
 | `--work` | required | A volume in memory for the files of a cycle. |
-| `--state` | required | A directory for `state.json`. It holds times and counts, and no value. |
+| `--state` | required | A directory for `state.json`. It holds names, times, and counts, and no value. |
 | `--content-every` | `15m` | The period of the content cycle. |
 | `--versions-every` | `6h` | The period of the versions cycle. |
 | `--read-pods` | off | Reads the pods of the cluster at the start of each content cycle. With no flag, the observer makes no Kubernetes call. The process exits 2 when the environment has no `KUBERNETES_SERVICE_HOST` or no `KUBERNETES_SERVICE_PORT`. |
@@ -215,8 +215,8 @@ One failed read of one part of one record is not a failed cycle. It is a
 - The record has the cause `read-error` in [Not checked](#not-checked), also
   when it holds the last good answer.
 - Only a read that works clears a finding.
-- A new process has no last answer in memory. The state still keeps the first
-  sight of each finding of that part. A later read that shows the drift keeps
+- A new process has no last answer in memory. The state still keeps each finding
+  of that part, with its first sight. A later read that shows the drift keeps
   the date.
 - A record that changed since the last good answer gets no old answer.
 
@@ -451,6 +451,12 @@ gives it. The observer never lowers a drift.
   sets `alsoOnCluster` to true.
 - `firstSeen` comes from the state. `lastSeen` is the end of the last good
   content cycle.
+- Before the first good content cycle of a process, the findings come from the
+  state. A restart in an outage of Palette gives this case. Each such finding has
+  `unread` true, because no check of the process read it. It has its `kind`, its
+  `profile`, its `packs`, and its two times. Its `impact` and its `who` are empty,
+  `alsoOnCluster` and `reBaselineNeeded` are false, and it has no `images`. The
+  first good content cycle reads each finding again, and then `unread` is absent.
 - `updatesPending` and `repavePending` of the cluster are in the summary only
   when a finding exists. Palette shows these two flags on its own pages, so the
   observer does not repeat them.
@@ -716,7 +722,7 @@ of a variable, no text of a diff, and no answer of Palette.
 | `records` | `count`, `baseline`, `revision`, `firstSeenFrom`, and `startedAt`. |
 | `content`, `versions` | `checkedAt` or `readAt`, `every`, `failedRuns`, and `lastError`: the kind and the status, or `null`. While a cycle runs, `running`: `startedAt`, `done`, and `total`. |
 | `counts` | The numbers at the top of the page. |
-| `findings` | The findings of the table above. |
+| `findings` | The findings of the table above. Before the first good content cycle, the findings that the state keeps, with `unread` true. |
 | `profiles` | Each profile: `status`, `published`, `clusterCopy`, `newerVersion`, and its packs. |
 | `newer` | One row for each pin that is behind. |
 | `notChecked` | One row for each cause. |
@@ -895,9 +901,13 @@ message the queue dropped queues it again at the next step.
 `--state/state.json` holds these facts, and no value:
 
 - `startedAt`: the first start with this directory.
-- `findings`: `firstSeen` of each finding, by `id`. A finding that a read
+- `findings`: each finding, by `id`, with `firstSeen`, `lastSeen`, `kind`,
+  `profile`, and `packs`. These are names and times, as the summary gives them, and
+  no value. A finding of the pods keeps no image reference. A finding that a read
   cleared leaves the file. A finding stays when the observer could not read its
-  part: see [A failed read](#a-failed-read).
+  part: see [A failed read](#a-failed-read). An observer of 0.35.0 and before
+  writes `firstSeen` only, so the summary gives such a finding after a good content
+  cycle only.
 - `moves`: the counts of each move.
 - `content` and `versions`: `failedRuns` and `lastError`.
 - `images`: the `revision` of the records, and `first`, which maps the id of an image
@@ -919,10 +929,14 @@ cannot read is a log line and an empty state. So two runs of `once` with one
 state directory reach `lost` when the cluster does not answer. The file holds no
 text of a diff and no answer of Palette. A restart drops both.
 
-The manifests make `state` an `emptyDir`. A new pod of the observer then starts with
-an empty state. It loses the first sight of each finding. It takes the first digests
-again from the pods that it sees, so a tag that moved before that start reads
-`steady`.
+A restart in an outage keeps each finding on the page. The new process has no good
+content cycle, so the summary gives the findings of the state, with `unread` true:
+see [The findings](#the-findings). No finding clears until a check proves it.
+
+The manifests make `state` an `emptyDir`. The state lasts through a restart of the
+container, and not through a new pod. A new pod of the observer starts with an empty
+state. It loses each finding and its first sight. It takes the first digests again
+from the pods that it sees, so a tag that moved before that start reads `steady`.
 
 ### The log
 

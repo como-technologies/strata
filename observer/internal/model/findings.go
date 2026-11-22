@@ -39,12 +39,55 @@ func FindingsOf(c Content, first map[string]string) []Finding {
 	}
 	// A finding of the pods says nothing about a record, so a new version of strata does not move it.
 	out = append(out, imageFindings(c, first)...)
+	sortFindings(out)
+	return out
+}
+
+// sortFindings puts the findings in the order of the profile and the kind.
+func sortFindings(out []Finding) {
 	slices.SortStableFunc(out, func(a, b Finding) int {
 		if c := strings.Compare(a.Profile, b.Profile); c != 0 {
 			return c
 		}
 		return strings.Compare(string(a.Kind), string(b.Kind))
 	})
+}
+
+// KeptFinding is what the state keeps of a finding between two runs: its first and last sight, its kind,
+// its profile, and its packs. These are the names that the summary shows, and no value. A finding of the
+// pods keeps no image reference. An observer of 0.35.0 and before writes the first sight only.
+type KeptFinding struct {
+	FirstSeen time.Time `json:"firstSeen"`
+	LastSeen  time.Time `json:"lastSeen"`
+	Kind      Kind      `json:"kind,omitempty"`
+	Profile   string    `json:"profile,omitempty"`
+	Packs     []string  `json:"packs,omitempty"`
+}
+
+// Keep gives what the state keeps of a finding of the content of at. first is the first sight that the
+// state holds, or the zero time for a new finding.
+func Keep(f Finding, first, at time.Time) KeptFinding {
+	at = utc(at)
+	if first.IsZero() {
+		first = at
+	}
+	return KeptFinding{FirstSeen: first, LastSeen: at, Kind: f.Kind, Profile: f.Profile, Packs: slices.Clone(f.Packs)}
+}
+
+// keptFindings gives the findings that the state keeps, for a process that has no good content cycle yet.
+// No check of this process read them, so each one is unread, and none clears until a check proves it. A
+// finding with no kind, from an older state, is not here.
+func keptFindings(kept map[string]KeptFinding) []Finding {
+	out := []Finding{}
+	for _, k := range kept {
+		if k.Kind == "" {
+			continue
+		}
+		f := newFinding(k.Kind, k.Profile, slices.Clone(k.Packs), "")
+		f.FirstSeen, f.LastSeen, f.Unread = utc(k.FirstSeen), utc(k.LastSeen), true
+		out = append(out, f)
+	}
+	sortFindings(out)
 	return out
 }
 
@@ -163,12 +206,12 @@ func majorMinor(version string) (int, int, bool) {
 }
 
 // stamp gives each finding its times. A finding that the state does not know starts at seen.
-func stamp(findings []Finding, firstSeen map[string]time.Time, seen time.Time) {
+func stamp(findings []Finding, kept map[string]KeptFinding, seen time.Time) {
 	for i := range findings {
 		findings[i].LastSeen = seen
 		findings[i].FirstSeen = seen
-		if t, ok := firstSeen[findings[i].ID]; ok {
-			findings[i].FirstSeen = t
+		if k, ok := kept[findings[i].ID]; ok {
+			findings[i].FirstSeen = k.FirstSeen
 		}
 	}
 }

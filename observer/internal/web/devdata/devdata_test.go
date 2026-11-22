@@ -162,7 +162,7 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 	pages := map[State]model.Page{StateOK: model.PageOK, StateQuiet: model.PageOK, StateFirstLoad: model.PageFirstLoad,
 		StateNoRecords: model.PageNoRecords, StateStale: model.PageStale, StateLost: model.PageLost, StateFirstSeen: model.PageOK,
-		StateStaleUnchecked: model.PageStale, StateLostUnchecked: model.PageLost, StateReadError: model.PageOK,
+		StateStaleUnchecked: model.PageStale, StateLostUnchecked: model.PageLost, StateLostHeld: model.PageLost, StateReadError: model.PageOK,
 		StateImages: model.PageOK, StateImagesSplit: model.PageOK, StateImagesOff: model.PageOK, StateImagesUnread: model.PageOK,
 		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK, StateAlerts: model.PageOK, StateAlertsUnset: model.PageOK,
 		StateMovedDrift: model.PageOK, StateMovedUnchecked: model.PageOK, StateUpdateChecks: model.PageOK, StateProfileChecks: model.PageOK}

@@ -707,6 +707,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateLost, []string{lostContact, keyRefused, noClear}},
 		{devdata.StateFirstSeen, []string{firstSeenPill, firstSeenWords}},
 		{devdata.StateLostUnchecked, []string{lostTitle, lostFact, keySecret}},
+		{devdata.StateLostHeld, []string{lostContact, noClear, needsAttention, publishedChanged}},
 		{devdata.StateStaleUnchecked, []string{stoppedTitle, noGoodCheck, kubeLogs}},
 		{devdata.StateReadError, []string{needsAttention, "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
 		{devdata.StateImages, []string{needsAttention, testkit.ImageMoved, tagMoved, movedOrSplit, imageChanges}},
@@ -742,7 +743,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 // stale, with checkedAt null, and each count is 0 because nothing was read.
 func TestAnOutageBeforeTheFirstGoodCheckClaimsNothing(t *testing.T) {
 	banned := []string{calmChanged, "All 0 packs", "0 of 0 packs", "0 packs on this cluster", calmNothing, "needs a record", "Nothing. All"}
-	for _, state := range []devdata.State{devdata.StateLostUnchecked, devdata.StateStaleUnchecked} {
+	for _, state := range []devdata.State{devdata.StateLostUnchecked, devdata.StateStaleUnchecked, devdata.StateLostHeld} {
 		t.Run(string(state), func(t *testing.T) {
 			screens := render(t, state, false)
 			if len(screens) < 5 {
@@ -758,6 +759,23 @@ func TestAnOutageBeforeTheFirstGoodCheckClaimsNothing(t *testing.T) {
 			}
 		})
 	}
+}
+
+// After a restart in an outage, the state holds the finding of the set ok, and no check read it now. The overview and the
+// screen Findings name the finding under the red bar, with the badge "Not read now", and with no splash. The nav counts the
+// finding. The screen Profiles names no finding, so it shows the splash of the state, with no bar.
+func TestARestartInAnOutageNamesTheFindingOfTheStateAsNotReadNow(t *testing.T) {
+	screens := render(t, devdata.StateLostHeld, false)
+	lostBar := alertBar + `r">` + lostContact + ". <span>The last 2 checks failed: " + keyRefused + ". " + noGoodCheck + ", and " + noClear + ".</span>"
+	for _, hash := range []string{"#overview", "#findings"} {
+		html := pageOf(t, screens, hash, "")
+		mustHold(t, hash, html, lostBar, needsAttention, publishedChanged, badge("y", "Not read now"),
+			`<i>profile=</i>"`+testkit.DexProfile+`"`, `<i>pack=</i>"dex"`, `<span>Findings</span><span class="cnt r">1</span>`)
+		mustNotHold(t, hash, html, lostTitle)
+	}
+	profiles := pageOf(t, screens, "#profiles", "")
+	mustHold(t, "#profiles", profiles, lostTitle)
+	mustNotHold(t, "#profiles", profiles, lostContact)
 }
 
 // A published side that strata could not read has no answer. The page says that it was not read, and it sends no

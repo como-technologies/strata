@@ -314,6 +314,11 @@ const ago = iso => {
 // outage. The counts of the page are then 0 because nothing was read, and not because nothing is wrong.
 const neverChecked = () => !D.cluster.content.checkedAt;
 const hasChecks = () => D.cluster.page !== PAGE.FIRST_LOAD && D.cluster.page !== PAGE.NO_RECORDS && !neverChecked();
+// heldOnly says that the page is lost or stale with no good check since the start, and that the state holds findings. A restart in
+// an outage gives this. No check read the findings now, and no finding clears until a check proves it, so the page names them.
+const heldOnly = () => neverChecked() && [PAGE.LOST, PAGE.STALE].includes(D.cluster.page) && D.findings.length > 0;
+// NOT_READ_NOW is the badge of a finding that the state holds and that no check read now.
+const NOT_READ_NOW = "Not read now";
 const num = n => hasChecks() ? n : "-";
 const known = n => neverChecked() ? "-" : n;
 // podsRead says that the observer holds a read of the pods. A count of images is "-" before that, as num() is for a check.
@@ -622,8 +627,10 @@ function stateSplash() {
 }
 
 // withChecks gives the view of a screen that reads the checks. A page with nothing read shows the splash of its state, else the body.
-function withChecks(nav, crumb, build) {
-  return {nav, crumbs: crumb, body: h`${alertBars()}${stateSplash() || build()}`};
+// A screen that names the findings gives held: a page with nothing read but the findings of the state shows them under its bar.
+function withChecks(nav, crumb, build, held) {
+  const kept = !!held && heldOnly();
+  return {nav, crumbs: crumb, body: h`${alertBars(kept)}${kept ? held() : stateSplash() || build()}`};
 }
 
 // noFindings is the splash of an empty list of findings. It reads calm only when the check allows it.

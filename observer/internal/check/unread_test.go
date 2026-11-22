@@ -1,6 +1,7 @@
 package check
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -175,6 +176,72 @@ func TestAFailedReadAfterARestartKeepsTheFirstSightInTheState(t *testing.T) {
 	keepsFirstSight(t, r, id)
 	w.rows[0] = drift(t)
 	driftAgain(t, at(t, o, t0.Add(2*time.Hour)))
+}
+
+// restartWithAKeyThatFails runs a good cycle of the world edited at t0, and gives its summary. Then it restarts the
+// observer with a key that Palette refuses with HTTP 401, and runs two content cycles. So the new process has no
+// good content cycle, and its memory holds no answer.
+func restartWithAKeyThatFails(t *testing.T) (*rig, *world, *Observer, model.Summary) {
+	t.Helper()
+	r, w := edited(t)
+	before := at(t, r.observer(w), t0)
+	if len(before.Findings) != 1 || before.Findings[0].Unread {
+		t.Fatalf("before the restart: findings %+v", before.Findings)
+	}
+	w.verifyErr = &runner.RunError{Kind: docs.KindAPI, Status: 401}
+	o := r.restart(w)
+	for i := 1; i <= 2; i++ {
+		o.now = func() time.Time { return t0.Add(time.Duration(i) * testkit.ContentEvery) }
+		if err := o.RunContent(context.Background()); err == nil {
+			t.Fatal("a content cycle with a key that fails ended well")
+		}
+	}
+	return r, w, o, before
+}
+
+func TestARestartWithAKeyThatFailsKeepsTheFindingAndSaysThatItWasNotReadNow(t *testing.T) {
+	r, w, o, before := restartWithAKeyThatFails(t)
+	s := o.Summary()
+	if s.Page != model.PageLost || s.Content.CheckedAt != nil || len(s.Profiles) != 0 {
+		t.Fatalf(pageAndContent, s.Page, s.Content)
+	}
+	was := before.Findings[0]
+	if len(s.Findings) != 1 || s.Counts.Findings != 1 {
+		t.Fatalf("after the restart: "+testkit.FindingsCounts, s.Findings, s.Counts)
+	}
+	f := s.Findings[0]
+	if f.ID != was.ID || f.Kind != was.Kind || f.Profile != was.Profile || !slices.Equal(f.Packs, was.Packs) || !f.FirstSeen.Equal(t0) || !f.LastSeen.Equal(t0) || !f.Unread {
+		t.Errorf("after the restart the summary gives %+v, and before it %+v", f, was)
+	}
+	keepsFirstSight(t, r, was.ID)
+	// A good read reads the finding again. It keeps its first sight, and it is not unread.
+	w.verifyErr = nil
+	if s := at(t, o, t0.Add(time.Hour)); len(s.Findings) != 1 || s.Findings[0].Unread || !s.Findings[0].FirstSeen.Equal(t0) {
+		t.Errorf("after a good read: findings %+v", s.Findings)
+	}
+}
+
+// The set lost-held of the test data for the page holds the output that a restart with a key that fails gives. The page
+// shows the set, so the set must hold the fields of that output. The finding of each names its own profile, packs, and
+// times, so the test drops them.
+func TestARestartWithAKeyThatFailsGivesTheFieldsOfTheSetLostHeld(t *testing.T) {
+	_, _, o, _ := restartWithAKeyThatFails(t)
+	s := o.Summary()
+	set, err := devdata.Load(os.DirFS(filepath.FromSlash("../web/testdata/api")), devdata.StateLostHeld, devdata.Reference)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := set.Cluster; s.Page != c.Page || !reflect.DeepEqual(s.Content, c.Content) || s.Counts != c.Counts {
+		t.Errorf("the observer gives %q, %+v, %+v, and the set holds %q, %+v, %+v", s.Page, s.Content, s.Counts, c.Page, c.Content, c.Counts)
+	}
+	if len(s.Findings) != 1 || len(set.Findings.Findings) != 1 {
+		t.Fatalf("the observer gives %+v, and the set holds %+v", s.Findings, set.Findings.Findings)
+	}
+	got, want := s.Findings[0], set.Findings.Findings[0]
+	got.ID, got.Profile, got.Packs, got.FirstSeen, got.LastSeen = want.ID, want.Profile, want.Packs, want.FirstSeen, want.LastSeen
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("the observer gives the finding\n%+v\nthe set holds\n%+v", got, want)
+	}
 }
 
 func TestAFailedReadKeepsTheFirstSightOfThePartThatFailedOnly(t *testing.T) {

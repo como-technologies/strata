@@ -178,6 +178,26 @@ func TestARestartSendsNothingAgainAndANewPodWithAnEmptyStateSendsTheOpenFindingO
 	}
 }
 
+// After a restart with a key that fails, the summary names the finding of the state again. The finding sends no second
+// message and no clear, and the loss of contact sends one message.
+func TestARestartWithAKeyThatFailsSendsOnlyTheLossOfContact(t *testing.T) {
+	r, w := edited(t)
+	sender := &capture{}
+	at(t, alerting(t, r, w, sender), t0)
+	w.verifyErr = &runner.RunError{Kind: docs.KindAPI, Status: 401}
+	o := alerting(t, r, w, sender)
+	for i := 1; i <= 3; i++ {
+		o.now = func() time.Time { return t0.Add(time.Duration(i) * testkit.ContentEvery) }
+		_ = o.RunContent(context.Background())
+	}
+	if s := o.Summary(); len(s.Findings) != 1 || !s.Findings[0].Unread {
+		t.Fatalf("findings %+v", s.Findings)
+	}
+	if len(sender.texts) != 2 || !strings.Contains(sender.texts[1], "Lost contact\n"+testkit.NoReachAfter(2)) {
+		t.Errorf("messages %q", sender.texts)
+	}
+}
+
 func TestAnObserverWithoutAlertsSendsNothingAndItsViewIsUnset(t *testing.T) {
 	r, w := edited(t)
 	o := r.observer(w)

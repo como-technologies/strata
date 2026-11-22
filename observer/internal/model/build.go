@@ -32,6 +32,7 @@ func Build(in Input) Summary {
 	c.fromContent(in.Content)
 	c.fromVersions(in.Versions)
 	v := newView(in, c)
+	s.Findings = v.findings
 	if in.Content != nil {
 		s.fromContent(in, v)
 	}
@@ -154,19 +155,22 @@ func newView(in Input, c *causes) *view {
 	}
 	if in.Content != nil {
 		v.findings = FindingsOf(*in.Content, in.FirstDigests)
-		stamp(v.findings, in.FirstSeen, utc(in.Content.At))
-		for _, f := range v.findings {
-			// A finding of the pods is not a drift of the content: it changes no status of a profile or a pack.
-			if f.Kind.IsImage() {
-				continue
-			}
-			v.findingProfiles[f.Profile] = true
-			if len(f.Packs) == 0 {
-				v.packlessProfiles[f.Profile] = true
-			}
-			for _, key := range f.Packs {
-				v.findingPacks[packID(f.Profile, key)] = true
-			}
+		stamp(v.findings, in.Kept, utc(in.Content.At))
+	} else {
+		// Before the first good content cycle of this process, the findings come from the state.
+		v.findings = keptFindings(in.Kept)
+	}
+	for _, f := range v.findings {
+		// A finding of the pods is not a drift of the content: it changes no status of a profile or a pack.
+		if f.Kind.IsImage() {
+			continue
+		}
+		v.findingProfiles[f.Profile] = true
+		if len(f.Packs) == 0 {
+			v.packlessProfiles[f.Profile] = true
+		}
+		for _, key := range f.Packs {
+			v.findingPacks[packID(f.Profile, key)] = true
 		}
 	}
 	return v
@@ -225,7 +229,6 @@ func (s *Summary) fromContent(in Input, v *view) {
 	s.Records.Baseline = c.Meta.Baseline
 	s.Records.Revision = c.Meta.Revision
 	s.Records.FirstSeenFrom = c.Meta.FirstSeenFrom
-	s.Findings = v.findings
 	if len(v.findings) > 0 {
 		updates, repave := cluster.UpdatesPending, cluster.RepavePending
 		s.Cluster.UpdatesPending, s.Cluster.RepavePending = &updates, &repave

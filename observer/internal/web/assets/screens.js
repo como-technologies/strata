@@ -3,7 +3,7 @@
 
 /* ---- The screens ---- */
 function viewOverview() {
-  return withChecks("overview", crumbs("Overview"), () => h`${tiles()}<div class="grid2"><div class="stack">${findingsCard()}${eventsCard()}</div>${coverageCard()}</div>${profilesCard()}`);
+  return withChecks("overview", crumbs("Overview"), () => h`${tiles()}<div class="grid2"><div class="stack">${findingsCard()}${eventsCard()}</div>${coverageCard()}</div>${profilesCard()}`, findingsCard);
 }
 
 function viewProfiles() {
@@ -21,7 +21,7 @@ function viewFindings() {
     })}</tbody></table></div>`;
   };
   return withChecks("findings", crumbs("Findings"), () => h`${findingsCard()}
-    <section class="card"><div class="chead"><h2>Newer versions <span class="sub">${rows.length}. A choice, not a fault, so they stay out of Needs attention.</span></h2><a class="small" href="#newer">Open the table</a></div>${card()}</section>`);
+    <section class="card"><div class="chead"><h2>Newer versions <span class="sub">${rows.length}. A choice, not a fault, so they stay out of Needs attention.</span></h2><a class="small" href="#newer">Open the table</a></div>${card()}</section>`, findingsCard);
 }
 
 function viewNewer() {
