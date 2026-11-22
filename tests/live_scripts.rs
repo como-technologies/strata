@@ -13,9 +13,11 @@ use strata::api::codes::{
     UPGRADE_NOT_SUPPORTED_CODE,
 };
 use strata::api::{MASKED, PROJECT_UID_HEADER};
+use strata::model::pack_state::PackState;
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
 use strata::model::validation::{PaletteRefusal, answer_lines};
+use strata::reference::CLUSTER_PREFIX;
 use strata::render::palette_line;
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -3920,6 +3922,14 @@ fn passed(steps: &str, ids: &[&str]) {
 fn failed(steps: &str, ids: &[&str]) {
     for id in ids {
         assert!(has_verdict(steps, "FAIL", id), "{id} failed:\n{steps}");
+    }
+}
+
+/// Each check of `ids` ran and judged nothing: its verdict is the last word of [`VERDICTS`].
+fn seen(steps: &str, ids: &[&str]) {
+    let [.., verdict] = VERDICTS;
+    for id in ids {
+        assert!(has_verdict(steps, verdict, id), "{id} seen:\n{steps}");
     }
 }
 
@@ -15930,7 +15940,7 @@ fn platform_stage() -> Stage {
 
 /// A version of the answer of `strata packs`: the version, whether strata marks it latest, and the
 /// state that Spectro Cloud gives it.
-type ListedVersion<'a> = (&'a str, bool, Option<&'a str>);
+type ListedVersion<'a> = (&'a str, bool, Option<PackState>);
 
 /// The answer of `strata packs NAME --json` in the registries `registries`. Each registry is a
 /// name and its versions, newest first, as `(version, latest, state)`.
@@ -15960,21 +15970,26 @@ fn packs_answer(name: &str, registries: &[(&str, &[ListedVersion])]) -> String {
 /// does not hold the pack stops the run, names the registries that do, and leaves no file.
 #[test]
 fn platform_sh_pins_takes_the_newest_version_or_the_version_before_it_in_the_order_of_strata() {
+    let [behind, _] = PLATFORM_BEHIND;
+    let [bitnami, _] = PLATFORM_BITNAMI;
+    let width = behind.len();
     let mut stage = Stage::new(serde_json::json!({}));
     let live = stage.copy_live();
     let dir = live.join("terraform-platform");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("terraform.tfvars.example"),
-        "# the pins\npacks = {\n  cert-manager = { registry = \"Public Repo\", version = \"\", type = \"\" } # behind\n  \
-         keycloak     = { registry = \"Bitnami\", version = \"\", type = \"\" }\n}\n",
+        format!(
+            "# the pins\npacks = {{\n  {behind} = {{ registry = \"Public Repo\", version = \"\", type = \"\" }} # behind\n  \
+             {bitnami:<width$} = {{ registry = \"Bitnami\", version = \"\", type = \"\" }}\n}}\n"
+        ),
     )
     .unwrap();
     stage.strata(
-        "packs cert-manager *",
+        &format!("packs {behind} *"),
         0,
         &packs_answer(
-            "cert-manager",
+            behind,
             &[
                 ("Bitnami", &[("9.0.0", true, None)]),
                 (
@@ -15982,7 +15997,7 @@ fn platform_sh_pins_takes_the_newest_version_or_the_version_before_it_in_the_ord
                     &[
                         ("1.22.0-rc.1", false, None),
                         ("1.21.1", true, None),
-                        ("1.21.0", false, Some("deprecated")),
+                        ("1.21.0", false, Some(PackState::Deprecated)),
                         ("1.20.3", false, None),
                     ],
                 ),
@@ -15990,10 +16005,10 @@ fn platform_sh_pins_takes_the_newest_version_or_the_version_before_it_in_the_ord
         ),
     );
     stage.strata(
-        "packs keycloak *",
+        &format!("packs {bitnami} *"),
         0,
         &packs_answer(
-            "keycloak",
+            bitnami,
             &[(
                 "Bitnami",
                 &[("25.1.0", true, None), ("25.0.0", false, None)],
@@ -16004,15 +16019,15 @@ fn platform_sh_pins_takes_the_newest_version_or_the_version_before_it_in_the_ord
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     let pins = std::fs::read_to_string(dir.join("terraform.tfvars")).unwrap();
     assert!(
-        pins.contains(
-            "  cert-manager = { registry = \"Public Repo\", version = \"1.20.3\", type = \"spectro\" } # behind\n"
-        ),
+        pins.contains(&format!(
+            "  {behind} = {{ registry = \"Public Repo\", version = \"1.20.3\", type = \"spectro\" }} # behind\n"
+        )),
         "{pins}"
     );
     assert!(
-        pins.contains(
-            "  keycloak = { registry = \"Bitnami\", version = \"25.1.0\", type = \"spectro\" }\n"
-        ),
+        pins.contains(&format!(
+            "  {bitnami} = {{ registry = \"Bitnami\", version = \"25.1.0\", type = \"spectro\" }}\n"
+        )),
         "{pins}"
     );
     assert!(pins.starts_with('#') && pins.ends_with("}\n"), "{pins}");
@@ -16026,13 +16041,15 @@ fn platform_sh_pins_takes_the_newest_version_or_the_version_before_it_in_the_ord
     std::fs::remove_file(dir.join("terraform.tfvars")).unwrap();
     std::fs::write(
         dir.join("terraform.tfvars.example"),
-        "packs = {\n  keycloak = { registry = \"Public Repo\", version = \"\", type = \"\" }\n}\n",
+        format!(
+            "packs = {{\n  {bitnami} = {{ registry = \"Public Repo\", version = \"\", type = \"\" }}\n}}\n"
+        ),
     )
     .unwrap();
     let (o, _) = stage.run("platform.sh", &["pins"]);
     assert_eq!(o.status.code(), Some(2));
     assert!(
-        text(&o.stderr).contains("the registries of keycloak: Bitnami"),
+        text(&o.stderr).contains(&format!("the registries of {bitnami}: Bitnami")),
         "{}",
         text(&o.stderr)
     );
@@ -16077,7 +16094,7 @@ fn platform_sh_case_1_finds_the_edit_in_the_record_of_the_security_profile_alone
             "verify-after",
         ],
     );
-    assert!(has_verdict(&steps, "SEEN", "verify-cluster"), "{steps}");
+    seen(&steps, &["verify-cluster"]);
     assert!(!steps.contains("== stage 2"), "case 1 runs alone:\n{steps}");
     let puts = stage.sent("PUT", &profile_route("t-security"));
     assert_eq!(puts.len(), 2, "the edit and its undo");
@@ -16090,7 +16107,7 @@ fn platform_sh_case_1_finds_the_edit_in_the_record_of_the_security_profile_alone
         r#"[{"name":"cert-manager","tag":"1.21.1","type":"spectro","values":"pack:\n  releaseNameOverride: \"cert-manager\"\n"}]"#,
         "{}",
     );
-    stage.strata("verify records/network.json", 1, "DRIFT wilma-network");
+    stage.strata("verify records/network.json", 1, "");
     stage.wrap_strata(PLATFORM_STRATA_EDIT);
     let (o, steps) = stage.run("platform.sh", &["1"]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
@@ -16125,11 +16142,12 @@ fn platform_move_routes(stage: &Stage, status: u16, body: &str) {
 /// and the move fails both checks.
 #[test]
 fn platform_sh_case_2_expects_each_refusal_of_palette_for_one_pack_in_two_profiles() {
-    let message = "Duplicate packs 'cert-manager' in multiple profiles are forbidden";
+    let [cert_manager, _] = PLATFORM_BEHIND;
+    let message = format!("Duplicate packs '{cert_manager}' in multiple profiles are forbidden");
     let refusal =
         serde_json::json!({"code": DUPLICATE_CLUSTER_PACKS_CODE, "message": message}).to_string();
     let listing = packs_answer(
-        "cert-manager",
+        cert_manager,
         &[(
             "Public Repo",
             &[("1.21.1", true, None), ("1.0.0", false, None)],
@@ -16137,9 +16155,9 @@ fn platform_sh_case_2_expects_each_refusal_of_palette_for_one_pack_in_two_profil
     );
     let mut stage = platform_stage();
     platform_move_routes(&stage, 500, &refusal);
-    stage.strata("packs cert-manager *", 0, &listing);
+    stage.strata(&format!("packs {cert_manager} *"), 0, &listing);
     stage.strata(
-        "compare cluster:w-1 nn-1 --validate",
+        &format!("compare {CLUSTER_PREFIX}w-1 nn-1 --validate"),
         1,
         &format!("palette    refuses  {DUPLICATE_CLUSTER_PACKS_CODE}: {message}\n"),
     );
@@ -16157,9 +16175,7 @@ fn platform_sh_case_2_expects_each_refusal_of_palette_for_one_pack_in_two_profil
             "network-next-gone",
         ],
     );
-    for id in ["validate-move", "behind-network"] {
-        assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
-    }
+    seen(&steps, &["validate-move", "behind-network"]);
     let applies: Vec<String> = stage
         .tofu_calls()
         .lines()
@@ -16189,7 +16205,7 @@ fn platform_sh_case_2_expects_each_refusal_of_palette_for_one_pack_in_two_profil
     // a Palette that takes the edit in place and the move
     let mut stage = platform_stage();
     platform_move_routes(&stage, 200, "{}");
-    stage.strata("packs cert-manager *", 0, &listing);
+    stage.strata(&format!("packs {cert_manager} *"), 0, &listing);
     stage.env("FAKE_IN_PLACE_TAKEN", "1");
     let (o, steps) = stage.run("platform.sh", &["2"]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
@@ -16216,15 +16232,16 @@ fn platform_sh_case_3_moves_fluentbit_and_gives_the_root_of_each_record() {
     let (o, steps) = stage.run("platform.sh", &["3"]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
     passed(&steps, &["move-fluentbit", "record-moved", "move-back"]);
-    for id in [
-        "move-ready",
-        "move-roots",
-        "move-same-release",
-        "move-compare-cluster",
-        "move-compare-records",
-    ] {
-        assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
-    }
+    seen(
+        &steps,
+        &[
+            "move-ready",
+            "move-roots",
+            "move-same-release",
+            "move-compare-cluster",
+            "move-compare-records",
+        ],
+    );
     let roots = std::fs::read_to_string(stage.path("out/move-roots.out")).unwrap();
     assert!(
         roots.contains("records/logging.json: root aa11\n  addon/fluentbit 1.0.0 node ff22\n"),
@@ -16275,7 +16292,7 @@ fn platform_sh_case_4_gives_the_variable_domain_a_value_in_the_four_profiles() {
             "domain-observer-off",
         ],
     );
-    assert!(has_verdict(&steps, "SEEN", "domain-observer"), "{steps}");
+    seen(&steps, &["domain-observer"]);
     let tofu = stage.tofu_calls();
     assert!(
         tofu.contains(&format!("-var cluster_domain={value}")),
@@ -16312,6 +16329,7 @@ exec "$@"
 /// that the pins mark `# behind` must have a newer version. A marked pin with none fails.
 #[test]
 fn platform_sh_case_5_counts_the_requests_of_behind_and_finds_each_pin_behind() {
+    let [cert_manager, argo_cd] = PLATFORM_BEHIND;
     let behind = |pins: &[(&str, bool)]| {
         let pins: Vec<serde_json::Value> = pins
             .iter()
@@ -16332,12 +16350,12 @@ fn platform_sh_case_5_counts_the_requests_of_behind_and_finds_each_pin_behind() 
     stage.strata(
         "behind *",
         1,
-        &behind(&[("cert-manager", true), ("argo-cd", true), ("vault", false)]),
+        &behind(&[(cert_manager, true), (argo_cd, true), ("vault", false)]),
     );
     let (o, steps) = stage.run("platform.sh", &["5"]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
     passed(&steps, &["behind-rows"]);
-    assert!(has_verdict(&steps, "SEEN", "behind-scale"), "{steps}");
+    seen(&steps, &["behind-scale"]);
     let out = std::fs::read_to_string(stage.path("out/behind-scale.out")).unwrap();
     assert!(out.contains("with 2 requests"), "{out}");
     assert!(out.contains("3 pins, 2 behind"), "{out}");
@@ -16359,12 +16377,15 @@ fn platform_sh_case_5_counts_the_requests_of_behind_and_finds_each_pin_behind() 
     stage.strata(
         "behind *",
         1,
-        &behind(&[("cert-manager", true), ("argo-cd", false)]),
+        &behind(&[(cert_manager, true), (argo_cd, false)]),
     );
     let (_, steps) = stage.run("platform.sh", &["5"]);
     failed(&steps, &["behind-rows"]);
     let out = std::fs::read_to_string(stage.path("out/behind-rows.out")).unwrap();
-    assert!(out.contains("argo-cd: no newer version"), "{out}");
+    assert!(
+        out.contains(&format!("{argo_cd}: no newer version")),
+        "{out}"
+    );
 }
 
 /// #700: case 6 removes the data profile from wilma, and then gives it back. The record of the
@@ -16384,9 +16405,7 @@ fn platform_sh_case_6_removes_the_data_profile_and_reads_the_identity_profile() 
             "data-back",
         ],
     );
-    for id in ["data-crd", "data-compare", "data-pack-status"] {
-        assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
-    }
+    seen(&steps, &["data-crd", "data-compare", "data-pack-status"]);
     let status = std::fs::read_to_string(stage.path("out/data-pack-status.out")).unwrap();
     assert!(status.contains(r#""name":"keycloak""#), "{status}");
     assert!(
@@ -16463,14 +16482,15 @@ fn platform_sh_case_7_reads_the_observer_on_wilma_at_scale() {
             "observer-off",
         ],
     );
-    for id in [
-        "observer-requests",
-        "observer-images",
-        "text-limit",
-        "observer-memory",
-    ] {
-        assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
-    }
+    seen(
+        &steps,
+        &[
+            "observer-requests",
+            "observer-images",
+            "text-limit",
+            "observer-memory",
+        ],
+    );
     let images = std::fs::read_to_string(stage.path("out/observer-images.out")).unwrap();
     for line in [
         "docker.io: 2 images, 0 with no pack",
@@ -16525,7 +16545,7 @@ fn platform_sh_case_8_names_the_image_of_each_bitnami_chart_and_what_its_pods_ru
     .unwrap();
     let (o, steps) = stage.run("platform.sh", &["8"]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
-    assert!(has_verdict(&steps, "SEEN", "bitnami-images"), "{steps}");
+    seen(&steps, &["bitnami-images"]);
     let out = std::fs::read_to_string(stage.path("out/bitnami-images.out")).unwrap();
     for line in [
         "== keycloak, in wilma-identity",
@@ -16542,13 +16562,15 @@ fn platform_sh_case_8_names_the_image_of_each_bitnami_chart_and_what_its_pods_ru
 /// why. With no file of pins, `up` stops before it applies.
 #[test]
 fn platform_sh_up_waits_until_each_pack_is_ready_and_names_each_pack_that_is_not() {
+    let [cert_manager, _] = PLATFORM_BEHIND;
+    let [keycloak, _] = PLATFORM_BITNAMI;
     let stage = platform_stage();
     let (o, steps) = stage.run("platform.sh", &["up"]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
     passed(&steps, &["packs-ready"]);
     let ready = std::fs::read_to_string(stage.path("out/packs-ready.out")).unwrap();
     assert!(
-        ready.contains("ready cert-manager: WorkloadsReady"),
+        ready.contains(&format!("ready {cert_manager}: WorkloadsReady")),
         "{ready}"
     );
     assert!(
@@ -16560,10 +16582,13 @@ fn platform_sh_up_waits_until_each_pack_is_ready_and_names_each_pack_that_is_not
     let mut stage = platform_stage();
     stage.route(
         &cluster_route("w-1"),
-        &wilma_document(|name| match name {
-            "keycloak" => serde_json::json!({"type": "Healthy", "status": "False",
-                "reason": "InstallingWorkloads", "message": "Back-off pulling image docker.io/bitnami/keycloak"}),
-            _ => pack_ready(name),
+        &wilma_document(|name| {
+            if name == keycloak {
+                serde_json::json!({"type": "Healthy", "status": "False",
+                    "reason": "InstallingWorkloads", "message": "Back-off pulling image docker.io/bitnami/keycloak"})
+            } else {
+                pack_ready(name)
+            }
         }),
     );
     stage.env("READY_TRIES", "2");
@@ -16572,9 +16597,9 @@ fn platform_sh_up_waits_until_each_pack_is_ready_and_names_each_pack_that_is_not
     failed(&steps, &["packs-ready"]);
     let ready = std::fs::read_to_string(stage.path("out/packs-ready.out")).unwrap();
     assert!(
-        ready.contains(
-            "waiting keycloak: InstallingWorkloads Back-off pulling image docker.io/bitnami/keycloak"
-        ),
+        ready.contains(&format!(
+            "waiting {keycloak}: InstallingWorkloads Back-off pulling image docker.io/bitnami/keycloak"
+        )),
         "{ready}"
     );
 
