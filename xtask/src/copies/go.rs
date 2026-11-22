@@ -1,9 +1,9 @@
 //! What a Go file declares, for the scan: its package, its imports, its consts, its functions, and
 //! the fields of its structs.
 
+use super::Func;
 use super::go_lex::{self, MAP, STRUCT};
 use super::token::{Delim, Token, leaves, split, text_of};
-use super::{Func, Scope};
 
 /// The read of one kind of declaration of the top level. It takes the file, the line of the
 /// keyword, and the tokens after the keyword.
@@ -203,11 +203,6 @@ fn func(line: usize, rest: &[Token]) -> Option<Func> {
         None => (false, rest),
     };
     let name = rest.first()?.word()?.to_string();
-    let scope = if exported(&name) {
-        Scope::Package
-    } else {
-        Scope::Module
-    };
     let params = rest
         .iter()
         .skip(1)
@@ -229,7 +224,6 @@ fn func(line: usize, rest: &[Token]) -> Option<Func> {
         size: leaves(body),
         params,
         method,
-        scope,
         line,
         last: *last,
     })

@@ -54,7 +54,7 @@ type RoutePlace<'a> = (&'a str, usize, bool);
 /// True when the literal at `line` of `file` is a route string of its tree. A route string is in
 /// the code, or in the test code that the tests of other files share.
 fn route_string(file: &Source, line: usize) -> bool {
-    file.shared || !file.in_test(line)
+    file.shared || !file.tests.holds(line)
 }
 
 /// The routes of the added lines that another line of the same tree holds. A route of a test is

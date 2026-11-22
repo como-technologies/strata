@@ -9,7 +9,7 @@ use syn::visit::{self, Visit};
 use syn::{Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature};
 use syn::{TraitItemFn, parse_file};
 
-use crate::files::{files_under, is_test_code};
+use crate::files::{files_under, is_go_test, is_test_code};
 
 /// The most lines that a module file has.
 const MODULE_LINES: usize = 800;
@@ -124,11 +124,10 @@ fn observer_sources(dir: &Path) -> Vec<(String, String)> {
     read_under(dir, paths)
 }
 
-/// True when the file `path` of the observer at `dir` holds only tests: its name ends in
-/// `_test.go`, or a directory `testdata` holds it.
+/// True when the file `path` of the observer at `dir` holds only tests: it is a Go file of tests,
+/// or a directory `testdata` holds it.
 fn holds_only_tests(dir: &Path, path: &Path) -> bool {
-    path.file_name()
-        .is_some_and(|name| name.to_string_lossy().ends_with("_test.go"))
+    is_go_test(&path.to_string_lossy())
         || path
             .strip_prefix(dir)
             .unwrap_or(path)

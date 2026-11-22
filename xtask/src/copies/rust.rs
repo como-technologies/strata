@@ -13,14 +13,14 @@ use proc_macro2::{Delimiter, Spacing, TokenStream, TokenTree};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{
-    Attribute, Block, Expr, ImplItemConst, ImplItemFn, ItemConst, ItemEnum, ItemFn, ItemImpl,
-    ItemMacro, Lit, Pat, ReturnType, Signature, Type, Visibility,
+    Block, Expr, ImplItemConst, ImplItemFn, ItemConst, ItemEnum, ItemFn, ItemImpl, ItemMacro, Lit,
+    Pat, ReturnType, Signature, Type, Visibility,
 };
 
 use super::rust_sets::{macro_table, match_table, serde_names};
 use super::token::{Delim, Token, leaves, text_of};
 use super::{Func, Scope};
-use crate::files::is_test_code;
+use crate::files::TestLines;
 
 /// The operators of Rust with more than one character. A read joins the marks of an operator.
 const OPERATORS: [&str; 24] = [
@@ -42,8 +42,6 @@ pub struct RustValue {
     /// True for a text of a closed set, false for a const.
     pub closed: bool,
     pub scope: Scope,
-    /// True when test code declares it.
-    pub test: bool,
 }
 
 /// What a Rust file declares.
@@ -51,8 +49,8 @@ pub struct RustValue {
 pub struct RustFile {
     pub values: Vec<RustValue>,
     pub funcs: Vec<Func>,
-    /// The first and the last line of each item of test code.
-    pub tests: Vec<(usize, usize)>,
+    /// The lines of each item of test code.
+    pub tests: TestLines,
 }
 
 /// The tokens of the Rust source `text`, in a tree of brackets. An attribute, also a doc
@@ -150,8 +148,10 @@ pub fn read(text: &str) -> Result<RustFile, String> {
     let file = syn::parse_file(text).map_err(|e| e.to_string())?;
     let mut reader = Reader {
         text,
-        file: RustFile::default(),
-        test: 0,
+        file: RustFile {
+            tests: TestLines::of(&file),
+            ..RustFile::default()
+        },
         trait_impl: false,
         self_type: None,
     };
@@ -163,8 +163,6 @@ pub fn read(text: &str) -> Result<RustFile, String> {
 struct Reader<'a> {
     text: &'a str,
     file: RustFile,
-    /// The depth of the items of test code around the item that the walk reads.
-    test: usize,
     /// True inside an `impl Trait for Type`.
     trait_impl: bool,
     /// The name of the type of the `impl` around the item, for `Self`.
@@ -186,22 +184,7 @@ impl Reader<'_> {
             line,
             closed,
             scope,
-            test: self.test > 0,
         });
-    }
-
-    /// Walk an item, and note its lines when it is test code.
-    fn item<T: Spanned>(&mut self, attrs: &[Attribute], item: &T, walk: impl FnOnce(&mut Self)) {
-        let test = is_test_code(attrs);
-        if test {
-            let span = item.span();
-            self.file.tests.push((span.start().line, span.end().line));
-            self.test += 1;
-        }
-        walk(self);
-        if test {
-            self.test -= 1;
-        }
     }
 
     /// Note a function with its body, and the texts of a closed set when its body matches each
@@ -236,7 +219,6 @@ impl Reader<'_> {
             size: leaves(&body),
             params,
             method: self.trait_impl,
-            scope: scope_of(vis),
             line: sig.fn_token.span.start().line,
             last: block.brace_token.span.close().end().line,
         });
@@ -249,39 +231,27 @@ impl Reader<'_> {
 
 impl<'ast> Visit<'ast> for Reader<'_> {
     fn visit_item_fn(&mut self, item: &'ast ItemFn) {
-        self.item(&item.attrs, item, |r| {
-            r.func(&item.sig, &item.vis, &item.block);
-            visit::visit_item_fn(r, item);
-        });
+        self.func(&item.sig, &item.vis, &item.block);
+        visit::visit_item_fn(self, item);
     }
 
     fn visit_impl_item_fn(&mut self, item: &'ast ImplItemFn) {
-        self.item(&item.attrs, item, |r| {
-            r.func(&item.sig, &item.vis, &item.block);
-            visit::visit_impl_item_fn(r, item);
-        });
+        self.func(&item.sig, &item.vis, &item.block);
+        visit::visit_impl_item_fn(self, item);
     }
 
     fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
-        self.item(&item.attrs, item, |r| {
-            let (trait_impl, self_type) = (r.trait_impl, r.self_type.take());
-            r.trait_impl = item.trait_.is_some();
-            r.self_type = type_name(&item.self_ty);
-            visit::visit_item_impl(r, item);
-            (r.trait_impl, r.self_type) = (trait_impl, self_type);
-        });
-    }
-
-    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
-        self.item(&item.attrs, item, |r| visit::visit_item_mod(r, item));
+        let (trait_impl, self_type) = (self.trait_impl, self.self_type.take());
+        self.trait_impl = item.trait_.is_some();
+        self.self_type = type_name(&item.self_ty);
+        visit::visit_item_impl(self, item);
+        (self.trait_impl, self.self_type) = (trait_impl, self_type);
     }
 
     fn visit_item_enum(&mut self, item: &'ast ItemEnum) {
-        self.item(&item.attrs, item, |r| {
-            for (name, text, line) in serde_names(item) {
-                r.value(name, text, line, true, &item.vis);
-            }
-        });
+        for (name, text, line) in serde_names(item) {
+            self.value(name, text, line, true, &item.vis);
+        }
     }
 
     fn visit_item_macro(&mut self, item: &'ast ItemMacro) {
@@ -296,33 +266,28 @@ impl<'ast> Visit<'ast> for Reader<'_> {
                     line,
                     closed: true,
                     scope,
-                    test: self.test > 0,
                 });
             }
         }
     }
 
     fn visit_item_const(&mut self, item: &'ast ItemConst) {
-        self.item(&item.attrs, item, |r| {
-            let (texts, list) = const_texts(&item.expr);
-            for (text, line) in texts {
-                r.value(item.ident.to_string(), text, line, list, &item.vis);
-            }
-            visit::visit_item_const(r, item);
-        });
+        let (texts, list) = const_texts(&item.expr);
+        for (text, line) in texts {
+            self.value(item.ident.to_string(), text, line, list, &item.vis);
+        }
+        visit::visit_item_const(self, item);
     }
 
     fn visit_impl_item_const(&mut self, item: &'ast ImplItemConst) {
-        self.item(&item.attrs, item, |r| {
-            let name = match &r.self_type {
-                Some(owner) => format!("{owner}::{}", item.ident),
-                None => item.ident.to_string(),
-            };
-            let (texts, list) = const_texts(&item.expr);
-            for (text, line) in texts {
-                r.value(name.clone(), text, line, list, &item.vis);
-            }
-        });
+        let name = match &self.self_type {
+            Some(owner) => format!("{owner}::{}", item.ident),
+            None => item.ident.to_string(),
+        };
+        let (texts, list) = const_texts(&item.expr);
+        for (text, line) in texts {
+            self.value(name.clone(), text, line, list, &item.vis);
+        }
     }
 }
 

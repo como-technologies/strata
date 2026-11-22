@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::place::word_char;
 use super::source::{Source, Tree};
 use super::{ByValue, Hit, Holder, Place, shown};
 
@@ -33,11 +34,6 @@ pub fn counts(value: &str) -> bool {
     } else {
         value.chars().count() >= SHORTEST && value.chars().any(char::is_alphanumeric)
     }
-}
-
-/// True for a letter, a digit, `_`, or `-`: a character of a word such as `read-error`.
-fn word_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '_' || c == '-'
 }
 
 /// True when `value` stands in `text` as a whole: no character of a word touches an end of
@@ -139,7 +135,7 @@ pub fn literal_hits(tree: &Tree, added: &Added) -> (Vec<Hit>, Vec<Hit>, Reported
             {
                 continue;
             }
-            let values = if file.in_test(literal.line) {
+            let values = if file.tests.holds(literal.line) {
                 &in_tests
             } else {
                 &in_code

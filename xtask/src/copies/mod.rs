@@ -45,9 +45,6 @@ use reach::Reach;
 const LANGS: [(Lang, &str, &str); 2] =
     [(Lang::Rust, "rs", "Cargo.toml"), (Lang::Go, "go", "go.mod")];
 
-/// The end of the name of a Go file of tests.
-const GO_TEST: &str = "_test.go";
-
 /// The most characters of a literal that a line of the report shows.
 const SHOWN: usize = 60;
 
@@ -77,18 +74,6 @@ impl Lang {
     }
 }
 
-/// True when a range of `ranges`, a first and a last line, holds the line `line`.
-pub fn holds_line(ranges: &[(usize, usize)], line: usize) -> bool {
-    ranges
-        .iter()
-        .any(|(first, last)| (*first..=*last).contains(&line))
-}
-
-/// True for a Go file of tests.
-pub fn is_go_test(path: &str) -> bool {
-    path.ends_with(GO_TEST)
-}
-
 /// The part of its package that a declaration reaches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
@@ -113,8 +98,6 @@ pub struct Func {
     pub size: usize,
     /// True for a method of Go, or a function of an `impl Trait for Type` of Rust.
     pub method: bool,
-    /// The part of its package that can call it.
-    pub scope: Scope,
     /// The line of the keyword `fn` or `func`, and the last line of the body.
     pub line: usize,
     pub last: usize,

@@ -96,11 +96,6 @@ fn new_lines(hunk: &str) -> Option<Range<usize>> {
 mod tests {
     use super::*;
 
-    /// The numbers of the lines that `lines` names, as a set.
-    fn set(lines: &[usize]) -> BTreeSet<usize> {
-        lines.iter().copied().collect()
-    }
-
     #[test]
     fn the_added_lines_of_a_diff_follow_the_new_side_of_each_hunk_and_skip_a_deleted_file() {
         let diff = "\
@@ -130,7 +125,7 @@ rename to new.go
 ";
         let added = added_lines(diff);
         assert_eq!(added.keys().collect::<Vec<_>>(), ["new.go", "src/a.rs"]);
-        assert_eq!(added["src/a.rs"], set(&[3, 4, 5, 11]));
-        assert_eq!(added["new.go"], set(&[4]));
+        assert_eq!(added["src/a.rs"], BTreeSet::from([3, 4, 5, 11]));
+        assert_eq!(added["new.go"], BTreeSet::from([4]));
     }
 }

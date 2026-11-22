@@ -1,17 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use std::process::Command;
 
 use super::place::{Class, Context, Literal, literals};
 use super::rust_sets::rename;
 use super::token::Token;
 use super::*;
-use crate::git::isolate_git;
-use crate::process::CommandExt;
+use crate::files::TestLines;
+use crate::git::git;
 use crate::variants::one_of_each;
-
-/// The lines of a file that is test code from its first line to its last.
-const ALL_TEST: [(usize, usize); 1] = [(1, usize::MAX)];
 
 /// The tokens of a source of `lang`.
 fn tokens_of(lang: Lang, code: &str) -> Vec<Token> {
@@ -33,11 +29,16 @@ fn classes_of(
         Lang::Go => go::read(code).unwrap().structs.into_iter().collect(),
         Lang::Rust => BTreeMap::new(),
     };
+    let tests = if test {
+        TestLines::whole()
+    } else {
+        TestLines::default()
+    };
     let context = Context {
         lang,
         labels,
         structs: &structs,
-        tests: if test { &ALL_TEST } else { &[] },
+        tests: &tests,
     };
     literals(&tokens_of(lang, code), &context)
 }
@@ -544,7 +545,10 @@ mod tests {
     let values: Vec<(&str, &str, bool, Scope, bool)> = file
         .values
         .iter()
-        .map(|v| (v.name.as_str(), v.value.as_str(), v.closed, v.scope, v.test))
+        .map(|v| {
+            let test = file.tests.holds(v.line);
+            (v.name.as_str(), v.value.as_str(), v.closed, v.scope, test)
+        })
         .collect();
     assert_eq!(
         values,
@@ -566,7 +570,6 @@ mod tests {
             ("IN_TEST", "in-test", false, Scope::Module, true),
         ]
     );
-    assert_eq!(file.tests.len(), 1);
     let texts: Vec<String> = rust::tokens(code)
         .unwrap()
         .iter()
@@ -632,19 +635,12 @@ impl Repo {
         let repo = Repo {
             dir: tempfile::tempdir().unwrap(),
         };
-        repo.git(&["init", "--quiet", "--initial-branch=main"]);
+        git(repo.path(), &["init", "--quiet", "--initial-branch=main"]);
         repo
     }
 
     fn path(&self) -> &Path {
         self.dir.path()
-    }
-
-    fn git(&self, args: &[&str]) {
-        let out = isolate_git(Command::new("git").arg("-C").arg(self.path()).args(args))
-            .output_locked()
-            .unwrap();
-        assert!(out.status.success(), "git {args:?}: {out:?}");
     }
 
     fn write(&self, path: &str, text: &str) {
@@ -655,17 +651,17 @@ impl Repo {
 
     /// Make the branch `name` at the commit of the work tree, and go to it.
     fn branch(&self, name: &str) {
-        self.git(&["checkout", "--quiet", "-b", name]);
+        git(self.path(), &["checkout", "--quiet", "-b", name]);
     }
 
     /// Go to the branch `name`.
     fn to(&self, name: &str) {
-        self.git(&["checkout", "--quiet", name]);
+        git(self.path(), &["checkout", "--quiet", name]);
     }
 
     fn commit(&self, message: &str) {
-        self.git(&["add", "."]);
-        self.git(&["commit", "--quiet", "-m", message]);
+        git(self.path(), &["add", "."]);
+        git(self.path(), &["commit", "--quiet", "-m", message]);
     }
 
     /// The findings and the places that are no copy of the change from `main` to `HEAD`, each one
@@ -895,6 +891,45 @@ fn a_new_go_const_and_helper_with_a_copy_are_findings_and_an_alias_keeps_the_lab
         skipped,
         [
             "use/new_test.go:12 [label] \"--pin\": --pin is the value of names.FlagPin (names/names.go:14), use.pinFlag (use/new_test.go:3)",
+        ]
+    );
+}
+
+/// A new const and a new function are copies of a private item of another module, also when
+/// neither of the two can name the other. The test has them in Rust and in Go.
+#[test]
+fn a_new_const_and_helper_copy_a_private_item_of_another_module() {
+    let repo = Repo::new();
+    go_module(&repo);
+    repo.write(
+        "low/join.go",
+        "package low\n\nfunc join(x, y string) string {\n\treturn strings.Join([]string{x, y}, \" \")\n}\n",
+    );
+    repo.write(Lang::Rust.root_file(), "[package]\nname = \"p\"\n");
+    repo.write(
+        "src/old.rs",
+        "const MARK: &str = \"strata-y/2\";\n\nfn twice(text: &str) -> String {\n    let mut out = String::from(text);\n    out.push_str(text);\n    out\n}\n\n\
+         fn mark() -> &'static str {\n    \"strata-y/2\"\n}\n",
+    );
+    repo.commit("base");
+    repo.branch("change");
+    repo.write(
+        "use/more.go",
+        "package use\n\nconst heading = \"Lost contact\"\n\nfunc joined(a, b string) string {\n\treturn strings.Join([]string{a, b}, \" \")\n}\n",
+    );
+    repo.write(
+        "src/new.rs",
+        "const AGAIN: &str = \"strata-y/2\";\n\nfn double(word: &str) -> String {\n    let mut out = String::from(word);\n    out.push_str(word);\n    out\n}\n",
+    );
+    repo.commit("change");
+    let (findings, _) = repo.copies();
+    assert_eq!(
+        findings,
+        [
+            "src/new.rs:1 [const] AGAIN = \"strata-y/2\": the value of MARK (src/old.rs:1); the literal at src/old.rs:10 [return]",
+            "src/new.rs:3 [helper] double: the body of twice (src/old.rs:3)",
+            "use/more.go:3 [const] use.heading = \"Lost contact\": the value of names.title (names/names.go:15)",
+            "use/more.go:5 [helper] joined: the body of join (low/join.go:3)",
         ]
     );
 }

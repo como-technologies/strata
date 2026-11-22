@@ -3,10 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use super::Lang;
 use super::go::struct_fields;
 use super::go_lex::STRUCT;
 use super::token::{Delim, Token, split};
-use super::{Lang, holds_line};
+use crate::files::TestLines;
 
 /// The names of a field or of a parameter that holds the name of a case of a test.
 const CASE_NAMES: [&str; 4] = ["name", "case", "desc", "title"];
@@ -153,8 +154,8 @@ pub struct Context<'a> {
     pub labels: &'a BTreeMap<String, BTreeSet<usize>>,
     /// The fields of each struct type of the package of the file, by name. Go only.
     pub structs: &'a BTreeMap<String, Vec<String>>,
-    /// The first and the last line of each part of the file that is test code.
-    pub tests: &'a [(usize, usize)],
+    /// The lines of each part of the file that is test code.
+    pub tests: &'a TestLines,
 }
 
 /// A string literal of a file, and the class of its place.
@@ -213,7 +214,7 @@ fn walk<'a>(frames: &mut Vec<Frame<'a>>, context: &Context, out: &mut Vec<Litera
 }
 
 fn classify(frames: &[Frame], at: usize, context: &Context, value: &str, line: usize) -> Class {
-    let test = holds_line(context.tests, line);
+    let test = context.tests.holds(line);
     if test && is_json(value) {
         return Class::Json;
     }
@@ -256,12 +257,15 @@ fn is_rules(value: &str) -> bool {
             let line = line.trim_start().trim_start_matches("- ");
             line.split_once(':').is_some_and(|(key, rest)| {
                 !key.is_empty()
-                    && key
-                        .chars()
-                        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+                    && key.chars().all(word_char)
                     && (rest.is_empty() || rest.starts_with(' '))
             })
         })
+}
+
+/// True for a letter, a digit, `_`, or `-`: a character of a word such as `read-error`.
+pub fn word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_' || c == '-'
 }
 
 /// True for a part of a shell script. A script starts with `#!`, or holds the `then` of an `if`,

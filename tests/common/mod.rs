@@ -60,7 +60,7 @@ pub use closed_set::schema_values;
 pub use code_block::*;
 pub use code_span::*;
 pub use download::*;
-pub use git::isolate_git;
+pub use git::{git, isolate_git};
 pub use palette::*;
 pub use process::*;
 pub use sentences::*;
@@ -814,20 +814,6 @@ pub const MACHINE_GIT_USER: [&[(&str, &str)]; 2] = [
     ],
     &[("GIT_CONFIG_PARAMETERS", "'user.name'='other'")],
 ];
-
-/// Run git in `dir` with no setting of the machine: see [`isolate_git`].
-pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
-    let mut c = Command::new("git");
-    c.args(args).current_dir(dir);
-    let o = isolate_git(&mut c).output_locked().unwrap();
-    assert!(
-        o.status.success(),
-        "git {args:?}: {}{}",
-        text(&o.stderr),
-        text(&o.stdout)
-    );
-    o
-}
 
 // ---- the workflow helpers ----------------------------------------------------------------------
 

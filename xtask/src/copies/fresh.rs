@@ -1,14 +1,13 @@
 //! The consts and the functions that a change adds with a value or a body that another line of
 //! the same tree holds.
 //!
-//! A copy is a copy only where the code can name the other declaration. So one of the two must
-//! reach the file of the other.
+//! A new declaration is a copy at each place of its tree, also when neither of the two can name
+//! the other. Then the fix moves the value or the body to one place that both can name.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::hits::{Added, Reported, counts, places};
 use super::place::Class;
-use super::reach::Reach;
 use super::source::{Source, Tree};
 use super::{Func, Hit, Holder, Kind, Lang, Place, shown};
 
@@ -54,11 +53,6 @@ fn copies<'a>(
     out
 }
 
-/// True when one of two declarations reaches the file of the other.
-fn either_reaches(a: &Reach, a_at: (&Source, usize), b: &Reach, b_at: (&Source, usize)) -> bool {
-    a.holds(&b_at.0.path, b_at.0.in_test(b_at.1)) || b.holds(&a_at.0.path, a_at.0.in_test(a_at.1))
-}
-
 /// The consts that the change adds with a value that another declaration or another literal of
 /// the same tree holds. A text of a closed set that is no const is out. Two values of two closed
 /// sets can have one text, such as two sets that both hold `newer`.
@@ -76,7 +70,6 @@ pub fn new_consts(tree: &Tree, added: &Added, reported: &Reported) -> Vec<Hit> {
         {
             continue;
         }
-        let at = (file, holder.line);
         let same: Vec<&Holder> = tree
             .holders
             .iter()
@@ -88,14 +81,12 @@ pub fn new_consts(tree: &Tree, added: &Added, reported: &Reported) -> Vec<Hit> {
                     && (other_file.lang, other_file.root.as_str()) == (file.lang, file.root.as_str())
                     && (other.path != holder.path || other.line != holder.line)
                     && !matches!((other.kind.set(), holder.kind.set()), (Some(a), Some(b)) if a != b)
-                    && either_reaches(&holder.reach, at, &other.reach, (other_file, other.line))
             })
             .collect();
         let lines: Vec<String> = copies
             .get(&(file.lang, file.root.as_str(), holder.value.as_str()))
             .into_iter()
             .flatten()
-            .filter(|(other, line, _)| holder.reach.holds(&other.path, other.in_test(*line)))
             .map(|(other, line, class)| format!("{}:{line} [{class}]", other.path))
             .collect();
         let mut found = Vec::new();
@@ -118,12 +109,11 @@ pub fn new_consts(tree: &Tree, added: &Added, reported: &Reported) -> Vec<Hit> {
     out
 }
 
-/// A function of the tree that the rule of the helpers reads: its file, the function, and the
-/// files that can call it.
-type Helper<'a> = (&'a Source, &'a Func, &'a Reach);
+/// A function of the tree that the rule of the helpers reads, and its file.
+type Helper<'a> = (&'a Source, &'a Func);
 
 /// The key of the body of a helper: two helpers with one key do the same job.
-fn body_key<'a>((file, f, _): &Helper<'a>) -> (Lang, &'a str, &'a str, usize) {
+fn body_key<'a>((file, f): &Helper<'a>) -> (Lang, &'a str, &'a str, usize) {
     (file.lang, &file.root, &f.body, f.params.len())
 }
 
@@ -136,8 +126,8 @@ pub fn new_helpers(tree: &Tree, added: &Added) -> Vec<Hit> {
         .flat_map(|file| {
             file.funcs
                 .iter()
-                .filter(|(f, _)| !f.method && f.size >= SMALLEST_BODY)
-                .map(move |(f, reach)| (file, f, reach))
+                .filter(|f| !f.method && f.size >= SMALLEST_BODY)
+                .map(move |f| (file, f))
         })
         .collect();
     let mut bodies: BTreeMap<_, Vec<Helper>> = BTreeMap::new();
@@ -147,16 +137,13 @@ pub fn new_helpers(tree: &Tree, added: &Added) -> Vec<Hit> {
     let mut out = Vec::new();
     for helper in helpers
         .iter()
-        .filter(|(file, f, _)| added(&file.path).contains(&f.line))
+        .filter(|(file, f)| added(&file.path).contains(&f.line))
     {
-        let (file, func, reach) = *helper;
+        let (file, func) = *helper;
         let others: Vec<String> = bodies[&body_key(helper)]
             .iter()
-            .filter(|(other, f, other_reach)| {
-                (other.path != file.path || f.line != func.line)
-                    && either_reaches(reach, (file, func.line), other_reach, (other, f.line))
-            })
-            .map(|(other, f, _)| format!("{} ({}:{})", f.name, other.path, f.line))
+            .filter(|(other, f)| other.path != file.path || f.line != func.line)
+            .map(|(other, f)| format!("{} ({}:{})", f.name, other.path, f.line))
             .collect();
         if !others.is_empty() {
             out.push(Hit {

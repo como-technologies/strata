@@ -178,19 +178,9 @@ fn block_comment_lines(text: &str) -> String {
 mod tests {
     use super::*;
 
-    use std::process::Command;
-
-    use crate::git::isolate_git;
-    use crate::process::CommandExt;
-
     /// A sentence of `count` words.
     fn sentence_of(count: usize) -> String {
         format!("{}.", vec!["word"; count].join(" "))
-    }
-
-    /// The numbers of the lines that `lines` names, as a set.
-    fn set(lines: &[usize]) -> BTreeSet<usize> {
-        lines.iter().copied().collect()
     }
 
     /// The criterion of #903: a sentence of more than 25 words fails, in a line comment `//` and
@@ -230,7 +220,7 @@ mod tests {
             sentence_of(MOST_WORDS + 1)
         );
         let marks = marks_of("a.rs").unwrap();
-        let found = changed_sentences(&marks, &text, &set(&[3]));
+        let found = changed_sentences(&marks, &text, &BTreeSet::from([3]));
         assert_eq!(
             found,
             [Sentence {
@@ -238,8 +228,11 @@ mod tests {
                 text: " The first half of a sentence and its second half.".to_string(),
             }]
         );
-        assert!(changed_sentences(&marks, &text, &set(&[4])).is_empty());
-        assert_eq!(changed_sentences(&marks, &text, &set(&[1])).len(), 1);
+        assert!(changed_sentences(&marks, &text, &BTreeSet::from([4])).is_empty());
+        assert_eq!(
+            changed_sentences(&marks, &text, &BTreeSet::from([1])).len(),
+            1
+        );
     }
 
     #[test]
@@ -258,10 +251,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path();
         let run = |args: &[&str]| {
-            let out = isolate_git(Command::new("git").arg("-C").arg(repo).args(args))
-                .output_locked()
-                .unwrap();
-            assert!(out.status.success(), "git {args:?}: {out:?}");
+            crate::git::git(repo, args);
         };
         let write = |file: &str, text: &str| std::fs::write(repo.join(file), text).unwrap();
         let over = sentence_of(MOST_WORDS + 1);

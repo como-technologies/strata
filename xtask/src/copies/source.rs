@@ -10,7 +10,8 @@ use super::place::{Context, LABEL_NAMES, Literal, literals};
 use super::reach::{Reach, rust_reach};
 use super::rust::RustFile;
 use super::token::Token;
-use super::{Func, Holder, Kind, LANGS, Lang, Scope, go, holds_line, is_go_test, rust};
+use super::{Func, Holder, Kind, LANGS, Lang, go, rust};
+use crate::files::{TestLines, is_go_test};
 use crate::git_diff::{git, git_bytes};
 
 /// The directory of the integration tests of a Rust package, and the name of the file of the
@@ -25,9 +26,6 @@ fn under(path: &str, dir: &str) -> bool {
     path.starts_with(&format!("{dir}/")) || path.contains(&format!("/{dir}/"))
 }
 
-/// The lines of a file that is test code from its first line to its last.
-const WHOLE: (usize, usize) = (1, usize::MAX);
-
 /// A Rust or Go file of the tree, as the check reads it.
 #[derive(Debug)]
 pub struct Source {
@@ -36,20 +34,13 @@ pub struct Source {
     /// The root of its package tree: the directory of its `Cargo.toml` or of its `go.mod`. The
     /// directory has a `/` at its end, or is empty for the root of the repository.
     pub root: String,
-    /// The first and the last line of each part that is test code.
-    pub tests: Vec<(usize, usize)>,
+    /// The lines of each part that is test code.
+    pub tests: TestLines,
     /// True for test code that the tests of other files share: a Go package that only tests
     /// import, or a file of `tests/common/`.
     pub shared: bool,
     pub literals: Vec<Literal>,
-    /// Each function, and the files that can call it.
-    pub funcs: Vec<(Func, Reach)>,
-}
-
-impl Source {
-    pub fn in_test(&self, line: usize) -> bool {
-        holds_line(&self.tests, line)
-    }
+    pub funcs: Vec<Func>,
 }
 
 /// The files of the tree of a commit, and each value that a declaration of the tree holds.
@@ -269,10 +260,10 @@ fn labels_of(funcs: &[&Func], aliases: &[(String, String)]) -> Labels {
 
 /// The parts of a Rust file that are test code. A file of a `tests` directory and a file
 /// `tests.rs` are test code from start to end. Another file has its items for the tests.
-fn rust_tests(path: &str, file: &RustFile) -> Vec<(usize, usize)> {
+fn rust_tests(path: &str, file: &RustFile) -> TestLines {
     let whole = under(path, TESTS) || path.ends_with(&format!("/{TESTS}.rs"));
     if whole {
-        vec![WHOLE]
+        TestLines::whole()
     } else {
         file.tests.clone()
     }
@@ -303,21 +294,10 @@ fn build(
         .collect();
     for ((path, root, file), (tests, literals)) in parsed.into_iter().zip(walked) {
         let (lang, funcs, shared) = match file {
-            Parsed::Rust(file, _) => {
-                let reach = |f: &Func| {
-                    let test = holds_line(&tests, f.line);
-                    rust_reach(&path, &root, rust_roots, f.scope, test)
-                };
-                (
-                    Lang::Rust,
-                    with_reach(file.funcs, reach),
-                    under(&path, SHARED_TESTS),
-                )
-            }
+            Parsed::Rust(file, _) => (Lang::Rust, file.funcs, under(&path, SHARED_TESTS)),
             Parsed::Go(file) => {
-                let reach = |f: &Func| go_reach(&path, &root, f.scope == Scope::Package, &packages);
                 let shared = packages.test_only.contains(dir_of(&path));
-                (Lang::Go, with_reach(file.funcs, reach), shared)
+                (Lang::Go, file.funcs, shared)
             }
         };
         tree.files.push(Source {
@@ -331,17 +311,6 @@ fn build(
         });
     }
     tree
-}
-
-/// Each function of `funcs`, with the files that `reach` gives it.
-fn with_reach(funcs: Vec<Func>, reach: impl Fn(&Func) -> Reach) -> Vec<(Func, Reach)> {
-    funcs
-        .into_iter()
-        .map(|func| {
-            let reach = reach(&func);
-            (func, reach)
-        })
-        .collect()
 }
 
 /// The labels of each package tree, by the language and the root of the tree. A label is the
@@ -385,7 +354,7 @@ fn walk(
     file: &Parsed,
     packages: &GoPackages,
     labels: &BTreeMap<(Lang, &str), Labels>,
-) -> (Vec<(usize, usize)>, Vec<Literal>) {
+) -> (TestLines, Vec<Literal>) {
     let (lang, tests, tokens) = match file {
         Parsed::Rust(file, tokens) => (Lang::Rust, rust_tests(path, file), tokens),
         Parsed::Go(file) => (Lang::Go, go_tests(path, packages), &file.code),
@@ -403,7 +372,7 @@ fn walk(
 
 /// The holders of the values of a Rust file, with the reach of each one.
 fn rust_holders(path: &str, root: &str, roots: &[String], file: &RustFile) -> Vec<Holder> {
-    let whole = rust_tests(path, file) == [WHOLE];
+    let tests = rust_tests(path, file);
     file.values
         .iter()
         .map(|value| Holder {
@@ -419,18 +388,18 @@ fn rust_holders(path: &str, root: &str, roots: &[String], file: &RustFile) -> Ve
                 Kind::Const
             },
             lang: Lang::Rust,
-            reach: rust_reach(path, root, roots, value.scope, value.test || whole),
+            reach: rust_reach(path, root, roots, value.scope, tests.holds(value.line)),
         })
         .collect()
 }
 
 /// The test code of a Go file: a file `_test.go`, or each file of a package that only tests
 /// import.
-fn go_tests(path: &str, packages: &GoPackages) -> Vec<(usize, usize)> {
+fn go_tests(path: &str, packages: &GoPackages) -> TestLines {
     if is_go_test(path) || packages.test_only.contains(dir_of(path)) {
-        vec![WHOLE]
+        TestLines::whole()
     } else {
-        Vec::new()
+        TestLines::default()
     }
 }
 
