@@ -1,5 +1,5 @@
-//! The texts of the closed sets of a Rust file: the serde names of an enum, the table of a macro
-//! of closed sets, and a function that matches each variant to a text.
+//! The texts of the closed sets of a Rust file. They come from the serde names of an enum, the
+//! table of a macro of closed sets, and a function that matches each variant to a text.
 
 use syn::meta::ParseNestedMeta;
 use syn::{Attribute, Block, Expr, ItemEnum, Lit, LitStr, Pat, Stmt};
@@ -169,7 +169,7 @@ pub fn macro_table(tokens: &[Token]) -> (Vec<SetText>, Scope) {
 }
 
 /// The texts of a function whose body is one `match` that gives a text for a variant in two arms
-/// or more, such as `Error::kind` or the `fmt` of `Display`. An arm gives the text that it returns
+/// or more. `Error::kind` and the `fmt` of a `Display` are such functions. An arm gives the text that it returns
 /// when `returns_str` is true, or the text that it writes with `write_str`. `owner` is the type of
 /// the `impl`, for `Self`. Another body gives none.
 pub fn match_table(block: &Block, owner: Option<&str>, returns_str: bool) -> Vec<SetText> {

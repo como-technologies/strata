@@ -19,8 +19,8 @@ pub enum Reach {
         apart: Vec<String>,
         tests: bool,
     },
-    /// Each file under `dir`, apart from the files directly in each directory of `apart`: a Go
-    /// module without the packages that the package of the const imports.
+    /// Each file under `dir`, apart from the files directly in each directory of `apart`. It is a Go
+    /// module, without the packages that the package of the const imports.
     Module {
         dir: String,
         apart: BTreeSet<String>,

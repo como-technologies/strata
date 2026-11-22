@@ -1,8 +1,11 @@
 //! What a Rust file declares, for the scan, and the tokens of the file.
 //!
-//! The texts of a closed set come from four places: the serde names of an enum, the table of
-//! `impl_closed_set!` or `impl_texts!`, a function whose body matches each variant to a text, and
-//! the strings of a const array. `Error::kind` and the `fmt` of a `Display` are such functions.
+//! The texts of a closed set come from four places:
+//!
+//! - the serde names of an enum;
+//! - the table of `impl_closed_set!` or of `impl_texts!`;
+//! - a function whose body matches each variant to a text, such as `Error::kind`;
+//! - the strings of a const array.
 
 use std::str::FromStr;
 
@@ -354,8 +357,8 @@ fn returns_str(output: &ReturnType) -> bool {
 }
 
 /// The literals of a const: one string, or each string of an array or of a slice, also in a tuple
-/// of the array. The flag is true for an array or a slice: its strings are a closed set, such as a
-/// list of names or a table of texts.
+/// of the array. The flag is true for an array or a slice. Its strings are a closed set, such as
+/// a list of names or a table of texts.
 fn const_texts(expr: &Expr) -> (Vec<(String, usize)>, bool) {
     match expr {
         Expr::Lit(lit) => match &lit.lit {

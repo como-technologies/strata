@@ -51,8 +51,8 @@ type RouteKey<'a> = (Lang, &'a str, String);
 /// A line that holds a route: its path, its line, and whether it is a route string.
 type RoutePlace<'a> = (&'a str, usize, bool);
 
-/// True when the literal at `line` of `file` is a route string of its tree: a route of the code,
-/// or of the test code that the tests of other files share.
+/// True when the literal at `line` of `file` is a route string of its tree. A route string is in
+/// the code, or in the test code that the tests of other files share.
 fn route_string(file: &Source, line: usize) -> bool {
     file.shared || !file.in_test(line)
 }

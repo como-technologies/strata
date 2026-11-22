@@ -1,5 +1,5 @@
-//! The rule of the literals: the values of a closed set or of a const that the literals of the
-//! added lines hold, by the rules of a word.
+//! The rule of the literals. It finds the values of a closed set or of a const that the literals of
+//! the added lines hold, by the rules of a word.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -25,8 +25,8 @@ fn is_plain(value: &str) -> bool {
     value.chars().all(|c| c.is_ascii_lowercase() || c == ' ')
 }
 
-/// True for a value that the check reads: a plain value of [`SHORTEST_WORD`] letters or more, or
-/// another value of [`SHORTEST`] characters or more with a letter or a digit.
+/// True for a value that the check reads. A plain value needs [`SHORTEST_WORD`] letters or more.
+/// Another value needs [`SHORTEST`] characters or more, with a letter or a digit.
 pub fn counts(value: &str) -> bool {
     if is_plain(value) {
         value.len() >= SHORTEST_WORD
@@ -95,8 +95,8 @@ fn reached<'a>(tree: &'a Tree, file: &Source, test: bool) -> ByValue<'a> {
     out
 }
 
-/// The names and the places of `holders`. A name that two lines of one file declare, such as the
-/// serde name of a variant and the text of its table, shows its first line.
+/// The names and the places of `holders`. Two lines of one file can declare one name, such as the
+/// serde name of a variant and the text of its table. Then the name shows its first line.
 pub fn places(holders: &[&Holder]) -> String {
     let mut first: BTreeMap<(&str, &str), usize> = BTreeMap::new();
     for holder in holders {

@@ -13,8 +13,8 @@
 //! 2. A const, a function, or a route that the diff adds has its value or its body in another line
 //!    of its tree.
 //!
-//! The class of a place says what a literal does there. A JSON input of a test, a YAML file of
-//! rules, the name of a case, the label of a failure, and the tag of a field are no findings. The
+//! The class of a place says what a literal does there. Some classes are no findings: a JSON input
+//! of a test, a YAML file of rules, the name of a case, the label of a failure, and a tag. The
 //! check lists them apart, with their class.
 
 mod fresh;
@@ -127,8 +127,8 @@ pub enum Kind {
     Const,
     /// A Go const of a named type, by the name of the type: a value of the closed set of the type.
     Typed(String),
-    /// A text of the closed set that it names, and no const: the serde name of a variant, the text
-    /// of a variant in a table or in a `match`, or a text of a row of a Go table.
+    /// A text of the closed set that it names, and no const. It is the serde name of a variant, the
+    /// text of a variant in a table or in a `match`, or a text of a row of a Go table.
     Text(String),
 }
 

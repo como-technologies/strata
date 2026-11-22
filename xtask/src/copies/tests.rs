@@ -677,8 +677,8 @@ impl Repo {
     }
 }
 
-/// The Go module of the tests of the check: a package `names` of closed sets, a package `use`
-/// that imports it, and a package `low` that `names` imports.
+/// The Go module of the tests of the check. It has a package `names` of closed sets, a package
+/// `use` that imports it, and a package `low` that `names` imports.
 fn go_module(repo: &Repo) {
     repo.write(Lang::Go.root_file(), "module example.com/m\n\ngo 1.22\n");
     repo.write(
@@ -761,8 +761,8 @@ fn rust_package(repo: &Repo) {
     );
 }
 
-/// The criterion of #929: each kind of finding of Rust, the consts and the helpers that a change
-/// adds, and each place that is no finding.
+/// The criterion of #929: each kind of finding of Rust, and each place that is no finding. The
+/// change also adds a const and a helper that are copies.
 #[test]
 fn the_check_lists_each_copy_of_rust_and_each_const_and_helper_that_the_change_adds_again() {
     let repo = Repo::new();
@@ -804,9 +804,9 @@ fn the_check_lists_each_copy_of_rust_and_each_const_and_helper_that_the_change_a
     );
 }
 
-/// A value that the file of a literal cannot name is no copy: an unexported const of another
-/// package, a const of a package that imports the package of the literal, and a const of a test
-/// for code that is no test.
+/// A value that the file of a literal cannot name is no copy. The test has an unexported const of
+/// another package, and a const of a package that imports the package of the literal. It also has
+/// a const of a test, for code that is no test.
 #[test]
 fn a_value_that_the_file_of_the_literal_cannot_name_is_no_copy() {
     let repo = Repo::new();
@@ -834,7 +834,7 @@ fn a_value_that_the_file_of_the_literal_cannot_name_is_no_copy() {
 }
 
 /// The check reads the diff from the merge base, so a commit of the base after the branch adds
-/// no line, and a line that the change does not add is no finding.
+/// no line. A line that the change does not add is no finding.
 #[test]
 fn the_check_reads_only_the_lines_that_the_change_adds_after_the_merge_base() {
     let repo = Repo::new();
@@ -866,8 +866,8 @@ fn the_check_reads_only_the_lines_that_the_change_adds_after_the_merge_base() {
     assert!(check(repo.path(), "no-such-ref", "HEAD").is_err());
 }
 
-/// A new Go const and a new Go function with a copy in another line, and the helper of a
-/// variable that names a function: its parameter `where` is a label.
+/// A new Go const and a new Go function with a copy in another line are findings. A variable
+/// that names a function takes its labels: the argument for its parameter `where` is a label.
 #[test]
 fn a_new_go_const_and_helper_with_a_copy_are_findings_and_an_alias_keeps_the_labels() {
     let repo = Repo::new();

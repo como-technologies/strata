@@ -1,5 +1,5 @@
-//! The read of the tree of a commit: each Rust and Go file with its literals and its functions,
-//! and each value that a declaration holds.
+//! The read of the tree of a commit. It reads each Rust and Go file with its literals and its
+//! functions, and each value that a declaration holds.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
@@ -33,8 +33,8 @@ const WHOLE: (usize, usize) = (1, usize::MAX);
 pub struct Source {
     pub path: String,
     pub lang: Lang,
-    /// The root of its package tree: the directory of its `Cargo.toml` or of its `go.mod`, with a
-    /// `/` at its end, or empty for the root of the repository.
+    /// The root of its package tree: the directory of its `Cargo.toml` or of its `go.mod`. The
+    /// directory has a `/` at its end, or is empty for the root of the repository.
     pub root: String,
     /// The first and the last line of each part that is test code.
     pub tests: Vec<(usize, usize)>,
@@ -187,8 +187,9 @@ struct GoPackages {
     structs: BTreeMap<String, BTreeMap<String, Vec<String>>>,
 }
 
-/// Read the Go packages of `parsed`: what each one imports, the packages that only tests import,
-/// the packages `main`, and the fields of each struct type. `modules` gives the path of each module.
+/// Read the Go packages of `parsed`: what each one imports, and the packages that only tests
+/// import. It also reads the packages `main` and the fields of each struct type. `modules` gives
+/// the path of each module.
 fn go_packages(
     parsed: &[(String, String, Parsed)],
     modules: &BTreeMap<String, String>,
@@ -266,8 +267,8 @@ fn labels_of(funcs: &[&Func], aliases: &[(String, String)]) -> Labels {
     out
 }
 
-/// The parts of a Rust file that are test code: the whole of a file of a `tests` directory or a
-/// file `tests.rs`, or else its items for the tests.
+/// The parts of a Rust file that are test code. A file of a `tests` directory and a file
+/// `tests.rs` are test code from start to end. Another file has its items for the tests.
 fn rust_tests(path: &str, file: &RustFile) -> Vec<(usize, usize)> {
     let whole = under(path, TESTS) || path.ends_with(&format!("/{TESTS}.rs"));
     if whole {
@@ -343,8 +344,8 @@ fn with_reach(funcs: Vec<Func>, reach: impl Fn(&Func) -> Reach) -> Vec<(Func, Re
         .collect()
 }
 
-/// The labels of each package tree: the positions of the parameters of each function that hold
-/// a label, by the language and the root of the tree.
+/// The labels of each package tree, by the language and the root of the tree. A label is the
+/// position of a parameter of a function that holds the label of a failure.
 fn tree_labels(parsed: &[(String, String, Parsed)]) -> BTreeMap<(Lang, &str), Labels> {
     let mut funcs: BTreeMap<(Lang, &str), Vec<&Func>> = BTreeMap::new();
     let mut aliases: BTreeMap<&str, Vec<(String, String)>> = BTreeMap::new();

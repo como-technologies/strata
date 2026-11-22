@@ -264,8 +264,8 @@ fn is_rules(value: &str) -> bool {
         })
 }
 
-/// True for a part of a shell script: a first line `#!`, the `then` of an `if`, or the end of an
-/// `if` or of a `case`.
+/// True for a part of a shell script. A script starts with `#!`, or holds the `then` of an `if`,
+/// or the end of an `if` or of a `case`.
 fn is_script(value: &str) -> bool {
     value.starts_with("#!")
         || ["; then", "\nfi", "esac"]
@@ -476,8 +476,8 @@ fn row_field(frames: &[Frame], at: usize, context: &Context) -> Option<String> {
     }
 }
 
-/// The fields of the Go composite literal of the innermost group: of its type, such as `row{...}`,
-/// or of the element type of the table around it, such as `[]struct{...}{ {...} }`.
+/// The fields of the Go composite literal of the innermost group. They are the fields of its type,
+/// such as `row{...}`, or of the element type of the table around it.
 fn go_fields(frames: &[Frame], context: &Context) -> Option<Vec<String>> {
     let n = frames.len();
     let (frame, parent) = (frames.get(n - 1)?, frames.get(n.checked_sub(2)?)?);
@@ -513,8 +513,8 @@ fn fields_of_type(before: &[Token], context: &Context) -> Option<Vec<String>> {
     }
 }
 
-/// The name that the pattern of a Rust `for` gives the element at `index` of a row: `for (name,
-/// want) in [("a", 1)]`, or `for name in ["a"]`.
+/// The name that the pattern of a Rust `for` gives the element at `index` of a row. The pattern
+/// can be a tuple, as in `for (name, want) in [("a", 1)]`, or one name.
 fn rust_names(frames: &[Frame], index: usize) -> Option<String> {
     let n = frames.len();
     let frame = frames.get(n - 1)?;

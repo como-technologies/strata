@@ -163,7 +163,7 @@ comment-words base="origin/main":
 # The fix session and the verify of a pull request run this recipe, so they find the same copies.
 # See "Functions and repetition" in docs/src/development/code.md.
 
-# List each copy of a closed set, a const, a route, or a helper that the lines of BASE...HEAD add, and fail when there is one
+# List each copy of a closed set, a const, a route, or a helper that BASE...HEAD adds, and fail on one
 [group('check')]
 copies base="origin/main" head="HEAD":
     cargo run --quiet -p xtask -- copies "{{base}}" "{{head}}"

@@ -5,7 +5,7 @@ use super::go_lex::{self, MAP, STRUCT};
 use super::token::{Delim, Token, leaves, split, text_of};
 use super::{Func, Scope};
 
-/// The read of one kind of declaration of the top level: it takes the file, the line of the
+/// The read of one kind of declaration of the top level. It takes the file, the line of the
 /// keyword, and the tokens after the keyword.
 type ReadDeclaration = fn(&mut GoFile, usize, &[Token]);
 
