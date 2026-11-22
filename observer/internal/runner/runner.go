@@ -76,8 +76,8 @@ func WithKey(ctx context.Context, k Key) context.Context {
 	return context.WithValue(ctx, keyCtx{}, k)
 }
 
-// keyOf gives the key of the runs of ctx, when WithKey set one.
-func keyOf(ctx context.Context) (Key, bool) {
+// KeyOf gives the key of the runs of ctx, when WithKey set one.
+func KeyOf(ctx context.Context) (Key, bool) {
 	k, ok := ctx.Value(keyCtx{}).(Key)
 	return k, ok
 }
@@ -118,7 +118,7 @@ func (r Runner) Run(ctx context.Context, args ...string) (Result, error) {
 	if err := check(args); err != nil {
 		return Result{}, err
 	}
-	key, keyed := keyOf(ctx)
+	key, keyed := KeyOf(ctx)
 	ctx, cancel := context.WithTimeout(ctx, r.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, r.Binary, args...)

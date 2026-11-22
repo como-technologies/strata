@@ -16,9 +16,10 @@ func (s *Set) alertsOfSet(ctx context.Context, good bool, c setCycle) {
 		return
 	}
 	subjects, held := s.subjectsOfSet(c)
+	label := s.label()
 	s.mu.Lock()
 	known := alert.Known{Content: good, Image: good && s.pods != nil, Newer: s.versionsAt != nil}
-	s.alerts.Plan(&s.state.Alerts, subjects, known, held, s.label(), s.now())
+	s.alerts.Plan(&s.state.Alerts, subjects, known, held, label, s.now())
 	queue := slices.Clone(s.state.Alerts.Outbox)
 	s.save()
 	s.mu.Unlock()

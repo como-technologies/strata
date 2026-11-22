@@ -673,3 +673,82 @@ func TestSeedNeedsTheClusterAndThePod(t *testing.T) {
 	t.Setenv(testkit.KubeHost, "")
 	exitsTwoSaying(t, []string{"seed", "--cluster-uid", testkit.PaymentsUID, "--namespace", "strata-observer", "--strata", "/no/strata"}, docs.KindKubeConfig)
 }
+
+// The project of the key api-key and the keys of a run of `once` with --clusters.
+const (
+	setHome    = "p-home"
+	setHomeKey = "key-of-home"
+	setProd    = "tag:env=prod"
+)
+
+// setStrata writes a fake of strata for a set of one cluster, payments, in the project setHome. It runs the
+// profile aws-stack@1.1.0, by the uid of its record. Each run writes its command, its key, and its project to the
+// file keys of the directory of the script.
+func setStrata(t *testing.T) (bin, keys string) {
+	t.Helper()
+	cluster := testkit.ClusterHead + testkit.PaymentsUID + `","name":"` + testkit.PaymentsName + `","profiles":[{"uid":"u-aws-stack","name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}`
+	bin = testkit.Strata(t, `echo "$cmd $PALETTE_API_KEY $PALETTE_PROJECT_UID" >> "$(dirname "$0")/keys"
+case $cmd in
+list) echo '{"schema":"`+docs.ListSchema+`","clusters":[{"uid":"`+testkit.PaymentsUID+`","name":"`+testkit.PaymentsName+`","projectUid":"`+setHome+`"}]}' ;;
+verify) echo '`+testkit.VerifyUnchanged+`' ;;
+snapshot) case $ref in */*) echo '{}' > "$out" ;; *) echo '`+cluster+`' > "$out" ;; esac ;;
+compare) echo '`+testkit.CompareSame+`' ;;
+behind) echo '{"schema":"`+docs.BehindSchema+`","tool":{"version":"0.29.0"},"pins":[]}' ;;
+esac`)
+	return bin, filepath.Join(filepath.Dir(bin), "keys")
+}
+
+// setArgs makes the directories of a run of `once` with --clusters, with one record and the key api-key.
+func setArgs(t *testing.T, bin string) []string {
+	t.Helper()
+	args := onceArgs(t, bin)
+	keys := t.TempDir()
+	testkit.WriteIn(t, keys, "api-key", setHomeKey)
+	i := slices.Index(args, "--cluster-uid")
+	return append(slices.Delete(args, i, i+2), "--clusters", setProd, "--keys", keys)
+}
+
+func TestOnceWithClustersPrintsTheSummaryOfTheSetAndEachRunHasTheKeyOfItsProject(t *testing.T) {
+	t.Setenv(envHome, setHome)
+	t.Setenv("PALETTE_API_KEY", "SENTINEL-KEY-OF-THE-ENVIRONMENT")
+	bin, keys := setStrata(t)
+	var out, errs bytes.Buffer
+	code := run(setArgs(t, bin), &out, &errs)
+	var s model.SetSummary
+	testkit.Decode(t, "the summary of the set", out.Bytes(), &s)
+	if code != 0 || s.Page != model.PageOK || len(s.Clusters) != 1 || s.Clusters[0].Name != testkit.PaymentsName || s.Clusters[0].Status != model.RowOK {
+		t.Fatalf("exit %d, summary %+v, stderr %s", code, s, errs.String())
+	}
+	runs := strings.Split(strings.TrimSpace(string(testkit.ReadFile(t, keys))), "\n")
+	for _, line := range runs {
+		if _, rest, _ := strings.Cut(line, " "); rest != setHomeKey+" "+setHome {
+			t.Errorf("a run got %q", line)
+		}
+	}
+	if !slices.ContainsFunc(runs, func(l string) bool { return strings.HasPrefix(l, "list ") }) {
+		t.Errorf("no search ran: %q", runs)
+	}
+}
+
+func TestTheFlagsOfASetRefuseWhatTheyCannotUse(t *testing.T) {
+	t.Setenv(envHome, setHome)
+	good := setArgs(t, "strata")
+	keys := good[slices.Index(good, "--keys")+1]
+	rules := testkit.WriteIn(t, t.TempDir(), "alerts.json", testkit.OncallRules("f", `{"level": "cluster", "match": "payments", "news": "drift", "send": "now", "to": "oncall"}`))
+	for _, c := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"a set with no keys", slices.Delete(slices.Clone(good), len(good)-2, len(good)), "--clusters needs --keys"},
+		{"a selector that strata cannot read", append(slices.Clone(good), "--clusters", "env=prod"), "is not tag:KEY=VALUE"},
+		{"a selector with an empty part", append(slices.Clone(good), "--clusters", "tag:env=prod+"), "an empty part"},
+		{"the read of the pods with no cluster uid", append(slices.Clone(good), "--read-pods"), "--read-pods needs --cluster-uid"},
+		{"keys with no set", append(onceArgs(t, "strata"), "--keys", keys), "--keys is for a set of clusters"},
+		{"a cluster rule with a match and no set", append(onceArgs(t, "strata"), "--alerts", rules), "only with --clusters"},
+	} {
+		t.Run(c.name, func(t *testing.T) { exitsTwoSaying(t, c.args, c.want) })
+	}
+	t.Setenv(envHome, "")
+	exitsTwoSaying(t, good, "needs "+envHome)
+}
