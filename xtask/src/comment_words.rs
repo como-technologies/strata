@@ -179,6 +179,7 @@ fn block_comment_lines(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_repo::Repo;
 
     /// A sentence of `count` words.
     fn sentence_of(count: usize) -> String {
@@ -267,56 +268,44 @@ mod tests {
     /// no line. A file that git does not track is not in the diff.
     #[test]
     fn the_check_reads_the_diff_from_the_merge_base_and_names_the_file_and_the_line() {
-        let dir = tempfile::tempdir().unwrap();
-        let repo = dir.path();
-        let run = |args: &[&str]| {
-            crate::git::git(repo, args);
-        };
-        let write = |file: &str, text: &str| std::fs::write(repo.join(file), text).unwrap();
+        let repo = Repo::new();
         let over = sentence_of(MOST_WORDS + 1);
-
-        run(&["init", "--quiet", "--initial-branch=main"]);
-        write("lib.rs", &format!("// {over}\nfn a() {{}}\n"));
-        run(&["add", "."]);
-        run(&["commit", "--quiet", "-m", "base"]);
-        run(&["switch", "--quiet", "-c", "change"]);
-        write(
+        repo.write("lib.rs", &format!("// {over}\nfn a() {{}}\n"));
+        repo.commit("base");
+        repo.branch("change");
+        repo.write(
             "lib.rs",
             &format!("// {over}\nfn a() {{}}\n// A short one.\n"),
         );
-        write("run.sh", &format!("#!/bin/sh\n# {over}\n"));
-        run(&["add", "run.sh"]);
-        write("notes.sh", &format!("# {over}\n"));
-        run(&["commit", "--quiet", "-m", "change"]);
-        run(&["switch", "--quiet", "main"]);
-        write("main.rs", &format!("// {over}\n"));
-        run(&["add", "main.rs"]);
-        run(&["commit", "--quiet", "-m", "later on main"]);
-        run(&["switch", "--quiet", "change"]);
+        repo.write("run.sh", &format!("#!/bin/sh\n# {over}\n"));
+        repo.commit("change");
+        repo.to("main");
+        repo.write("main.rs", &format!("// {over}\n"));
+        repo.commit("later on main");
+        repo.to("change");
+        repo.write("notes.sh", &format!("# {over}\n"));
 
-        let found = check(repo, "main").unwrap();
+        let found = check(repo.path(), "main").unwrap();
         assert_eq!(found.sentences, 2, "{found:?}");
         assert_eq!(found.faults.len(), 1, "{found:?}");
         assert!(
             found.faults[0].starts_with("run.sh:2: 26 words in a sentence of 25 at most: "),
             "{found:?}"
         );
-        assert!(check(repo, "no-such-ref").is_err());
+        assert!(check(repo.path(), "no-such-ref").is_err());
     }
 
     /// The result of the check of a git repository that stages each file of `names` with a comment
     /// sentence of 26 words. The base `main` is an empty commit.
     fn check_of_staged(names: &[&str]) -> Result<Found, String> {
-        let dir = tempfile::tempdir().unwrap();
-        let repo = dir.path();
+        let repo = Repo::new();
         let over = sentence_of(MOST_WORDS + 1);
-        crate::git::git(repo, &["init", "--quiet", "--initial-branch=main"]);
-        crate::git::git(repo, &["commit", "--quiet", "--allow-empty", "-m", "base"]);
+        repo.commit("base");
         for name in names {
-            std::fs::write(repo.join(name), format!("// {over}\n")).unwrap();
+            repo.write(name, &format!("// {over}\n"));
         }
-        crate::git::git(repo, &["add", "."]);
-        check(repo, "main")
+        repo.stage();
+        check(repo.path(), "main")
     }
 
     /// The criterion of #944. git writes a tab after a name with a space, and a name that is not

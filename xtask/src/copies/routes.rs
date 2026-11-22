@@ -2,28 +2,29 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use strata::api::ROUTE_PREFIX;
+
 use super::hits::{Added, Reported, touches};
 use super::source::{Source, Tree};
 use super::{Hit, Place, shown};
 use crate::files::Lang;
 
-/// The start of a route of the API of Palette and of the observer.
-const ROUTE_START: &str = "/v1/";
-
-/// The methods that can come before a route, as in `GET /v1/...`.
-const METHODS: [&str; 5] = ["GET ", "POST ", "PUT ", "PATCH ", "DELETE "];
-
 /// The marks of Go formats that a route can hold in place of a segment.
 const FORMATS: [&str; 4] = ["%s", "%d", "%v", "%q"];
 
 /// The route that a literal holds, with `{}` in place of each segment that a format fills: the
-/// route of `GET /v1/packs/{uid}` is `/v1/packs/{}`.
+/// route of `GET /v1/packs/{uid}` is `/v1/packs/{}`. A route of Palette and of the observer starts
+/// with [`ROUTE_PREFIX`].
+///
+/// A method can come before the route, with a space. The method is a word of capital letters, so
+/// the check reads each method with no list of them. `strata::api::Method` holds only the methods
+/// that strata sends, and a script also sends `PUT`, `PATCH`, and `DELETE`.
 pub fn route(value: &str) -> Option<String> {
-    let path = METHODS
-        .iter()
-        .find_map(|method| value.strip_prefix(method))
-        .unwrap_or(value);
-    if !path.starts_with(ROUTE_START) {
+    let path = value
+        .split_once(' ')
+        .filter(|(method, _)| !method.is_empty() && method.chars().all(|c| c.is_ascii_uppercase()))
+        .map_or(value, |(_, path)| path);
+    if !path.starts_with(ROUTE_PREFIX) {
         return None;
     }
     let mut out = String::new();

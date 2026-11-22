@@ -8,8 +8,8 @@ use std::ops::Range;
 use std::path::Path;
 use std::process::Command;
 
-use crate::copies::go_lex;
 use crate::process::CommandExt;
+use crate::quoted;
 
 /// The output of `git -C repo` with `args`. The error names the command and gives its message.
 pub fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
@@ -90,7 +90,7 @@ fn added_lines(diff: &str) -> Result<BTreeMap<String, BTreeSet<usize>>, String> 
 fn new_path(name: &str) -> Result<Option<String>, String> {
     let name = name.strip_suffix('\t').unwrap_or(name);
     let path = if name.starts_with('"') {
-        let bytes = go_lex::unquote(name).map_err(|e| format!("git diff: {e}"))?;
+        let bytes = quoted::unquote(name).map_err(|e| format!("git diff: {e}"))?;
         String::from_utf8(bytes)
             .map_err(|_| format!("git diff: the file name {name} is not UTF-8"))?
     } else {

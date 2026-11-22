@@ -13,6 +13,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::TOOL_VERSION;
+use crate::api::ROUTE_PREFIX;
 use crate::reference::version;
 use crate::text::cut_with;
 
@@ -28,9 +29,6 @@ const LONGEST_ROUTE: usize = 200;
 
 /// The mark at the end of a value that [`shown`] cut.
 const CUT_MARK: &str = "...";
-
-/// The start of each route that strata reads.
-const ROUTE_PREFIX: &str = "/v1/";
 
 /// The fewest characters of a uid. A uid of Palette has 24 hexadecimal digits, and a UUID has more.
 const UID_LENGTH: usize = 24;

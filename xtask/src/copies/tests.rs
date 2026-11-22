@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
 
 use super::keyword::Keyword;
 use super::place::{Class, Context, Literal, literals};
@@ -7,7 +6,7 @@ use super::rust_sets::rename;
 use super::token::Token;
 use super::*;
 use crate::files::TestLines;
-use crate::git::git;
+use crate::test_repo::Repo;
 use crate::variants::one_of_each;
 
 /// The tokens of a source of `lang`.
@@ -270,8 +269,10 @@ fn a_row_takes_the_name_of_its_field_and_a_field_name_is_a_case() {
     }
 }
 
+/// The criterion of #960. The index of a value in a test reads a key of a document. So does the
+/// key of a map literal. A list of a test and an index of other code stay rows.
 #[test]
-fn the_key_of_a_map_of_a_test_is_json_and_a_rust_json_macro_is_json() {
+fn the_key_of_a_map_and_the_index_of_a_value_of_a_test_are_json_and_a_rust_json_macro_is_json() {
     for (lang, code) in [
         (
             Lang::Go,
@@ -281,8 +282,42 @@ fn the_key_of_a_map_of_a_test_is_json_and_a_rust_json_macro_is_json() {
             Lang::Rust,
             "fn t() {\n    let doc = json!({\"kind\": [\"mark\"]});\n}\n",
         ),
+        (
+            Lang::Rust,
+            "fn t() {\n    let x = manifests[\"mark\"][0];\n}\n",
+        ),
+        (Lang::Rust, "fn t() {\n    let x = doc[0][\"mark\"];\n}\n"),
+        (Lang::Go, "package p\nfunc f() {\n\tx := doc[\"mark\"]\n}\n"),
     ] {
         assert_eq!(class_of_mark(lang, code, true), Class::Json, "{code}");
+    }
+    for (code, test) in [
+        ("fn t() {\n    f(&[\"mark\"]);\n}\n", true),
+        ("fn t() {\n    let x = vec![\"mark\"];\n}\n", true),
+        ("fn f() {\n    let x = doc[\"mark\"];\n}\n", false),
+    ] {
+        assert_eq!(
+            class_of_mark(Lang::Rust, code, test),
+            Class::Row(None),
+            "{code}"
+        );
+    }
+}
+
+/// The values of `pairs` that the literal of each case holds, each value with one holder, as the
+/// rule of the literals reads them. A case is a literal and the values that it holds.
+fn assert_held(pairs: &[&'static str], cases: &[(&str, &[&str])]) {
+    let holders = values_of(pairs);
+    let mut values: ByValue = BTreeMap::new();
+    for holder in &holders {
+        values
+            .entry(holder.value.as_str())
+            .or_default()
+            .push(holder);
+    }
+    for (text, want) in cases {
+        let found: Vec<&str> = hits::held(text, &values).into_iter().collect();
+        assert_eq!(found, *want, "{text:?}");
     }
 }
 
@@ -307,38 +342,68 @@ fn values_of(pairs: &[&'static str]) -> Vec<Holder> {
 
 #[test]
 fn a_plain_word_counts_alone_or_beside_a_value_that_is_no_plain_word() {
-    let holders = values_of(&[
-        "drift",
-        "newer",
-        "version",
-        "DriftFound",
-        "read-error",
-        "--pin",
-        "no answer",
-    ]);
-    let mut values: ByValue = BTreeMap::new();
-    for holder in &holders {
-        values
-            .entry(holder.value.as_str())
-            .or_default()
-            .push(holder);
-    }
-    for (text, want) in [
-        ("drift", vec!["drift"]),
-        ("newer ", vec!["newer"]),
-        ("drift DriftFound ", vec!["DriftFound", "drift"]),
-        ("newer version", vec![]),
-        ("the drift of a pack", vec![]),
-        ("the cause read-error names %v", vec!["read-error"]),
-        ("read-errors", vec![]),
-        ("behind record-0.json --pin ", vec!["--pin"]),
-        ("--pinned", vec![]),
-        (" no answer ", vec!["no answer"]),
-        ("reason=no answer", vec![]),
-    ] {
-        let found: Vec<&str> = hits::held(text, &values).into_iter().collect();
-        assert_eq!(found, want, "{text:?}");
-    }
+    assert_held(
+        &[
+            "drift",
+            "newer",
+            "version",
+            "DriftFound",
+            "read-error",
+            "--pin",
+            "no answer",
+        ],
+        &[
+            ("drift", &["drift"]),
+            ("newer ", &["newer"]),
+            ("drift DriftFound ", &["DriftFound", "drift"]),
+            ("newer version", &[]),
+            ("the drift of a pack", &[]),
+            ("the cause read-error names %v", &["read-error"]),
+            ("read-errors", &[]),
+            ("behind record-0.json --pin ", &["--pin"]),
+            ("--pinned", &[]),
+            (" no answer ", &["no answer"]),
+            ("reason=no answer", &[]),
+        ],
+    );
+}
+
+/// The criterion of #960. A dot between two characters of a word joins them, as in a host name.
+/// A scheme of a URL counts only as the whole literal.
+#[test]
+fn a_part_of_a_host_name_and_the_scheme_of_a_url_are_no_copy() {
+    assert_held(
+        &["k8s", "www.", "https://", "profile.json", "1.1.0"],
+        &[
+            ("registry.k8s.io/pause:3.10", &[]),
+            ("Values=sigs.k8s.io/cluster-api", &[]),
+            ("os and k8s.", &["k8s"]),
+            ("www.example.com/@b", &[]),
+            ("a www. b", &["www."]),
+            ("https://example.com/#12", &[]),
+            ("https://", &["https://"]),
+            ("dir/profile.json", &["profile.json"]),
+            ("raw.profile.json", &[]),
+            ("pack@1.1.0", &["1.1.0"]),
+            ("1.1.0.1", &[]),
+        ],
+    );
+}
+
+/// The criterion of #960. A route is a copy only of the same route. So the route of a pack diff
+/// of the observer is no copy of the route of the packs of Palette.
+#[test]
+fn a_route_is_a_copy_only_of_the_same_route() {
+    assert_held(
+        &["/v1/packs", "/v1/"],
+        &[
+            ("/v1/packs", &["/v1/packs"]),
+            ("GET /v1/packs", &["/v1/packs"]),
+            ("/v1/packs/wilma@1.0.0/addon/prometheus-operator/diff", &[]),
+            ("the route /v1/packs answers", &[]),
+            ("/v1/", &["/v1/"]),
+        ],
+    );
 }
 
 #[test]
@@ -356,6 +421,8 @@ fn a_value_counts_from_three_characters_and_a_plain_word_from_two_letters() {
     }
 }
 
+/// The criterion of #960 for a method. A word of capital letters and a space can come before a
+/// route, so the check needs no list of the methods.
 #[test]
 fn a_route_drops_its_method_and_the_names_of_its_segments() {
     for (value, want) in [
@@ -364,7 +431,11 @@ fn a_route_drops_its_method_and_the_names_of_its_segments() {
             "GET /v1/things/{name}/parts/{uid}",
             Some("/v1/things/{}/parts/{}"),
         ),
+        ("DELETE /v1/things/{uid}", Some("/v1/things/{}")),
+        ("HEAD /v1/things", Some("/v1/things")),
         ("/v1/clusters/%s/x", Some("/v1/clusters/{}/x")),
+        ("get /v1/things", None),
+        ("the /v1/things", None),
         ("/healthz", None),
         ("v1/packs", None),
     ] {
@@ -407,17 +478,6 @@ fn the_go_tokens_decode_each_text_and_keep_its_lines() {
     );
     assert!(go_lex::tokens("a := \"open\n").is_err());
     assert!(go_lex::tokens("f(]").is_err());
-}
-
-#[test]
-fn unquote_gives_the_bytes_of_one_whole_text_in_quotes() {
-    assert_eq!(
-        go_lex::unquote("\"caf\\303\\251 \\\"\\t\\351\"").unwrap(),
-        b"caf\xc3\xa9 \"\t\xe9"
-    );
-    for wrong in ["caf.rs", "\"a\" b", "\"open", "\"\\q\""] {
-        assert!(go_lex::unquote(wrong).is_err(), "{wrong}");
-    }
 }
 
 #[test]
@@ -575,9 +635,9 @@ mod tests {
             ("Tier::NewNode", "node", true, Scope::Package, false),
             ("Format::Json", "json-lines", true, Scope::Parent, false),
             ("Format::Text", "text", true, Scope::Parent, false),
-            ("Fault::Missing", "not-found", true, Scope::Package, false),
-            ("Fault::Bad", "bad-input", true, Scope::Package, false),
-            ("Fault::Worse", "bad-input", true, Scope::Package, false),
+            ("Fault::Missing", "not-found", true, Scope::Crate, false),
+            ("Fault::Bad", "bad-input", true, Scope::Crate, false),
+            ("Fault::Worse", "bad-input", true, Scope::Crate, false),
             ("SCHEMA", "strata-x/1", false, Scope::Module, false),
             ("NAMES", "a-1", false, Scope::Package, false),
             ("NAMES", "b-2", false, Scope::Package, false),
@@ -597,6 +657,19 @@ mod tests {
             .iter()
             .any(|t| t.contains("in quotes") || t == "kebab-case"),
         "{texts:?}"
+    );
+}
+
+/// The criterion of #960. The compiler refuses a table whose visibility does not parse, so the read
+/// gives the error of the parse, with its line.
+#[test]
+fn a_table_whose_visibility_does_not_parse_is_an_error_of_the_read() {
+    let error =
+        rust::read("fn a() {}\nimpl_texts!(pub(in 3) Format { Json => \"json-lines\" });\n")
+            .unwrap_err();
+    assert!(error.starts_with("line 2: impl_texts!: "), "{error}");
+    assert!(
+        rust::read("impl_texts!(pub(in crate::a) Format { Json => \"json-lines\" });\n").is_ok()
     );
 }
 
@@ -629,6 +702,23 @@ fn a_rust_declaration_reaches_its_module_its_parent_or_its_package() {
             false,
             false,
         ),
+        // the integration tests are a crate of their own
+        ("src/a.rs", Scope::Crate, "src/b/c.rs", true, true),
+        ("src/a.rs", Scope::Crate, "tests/cli.rs", true, false),
+        (
+            "tests/common/mod.rs",
+            Scope::Crate,
+            "tests/cli.rs",
+            true,
+            true,
+        ),
+        (
+            "tests/common/mod.rs",
+            Scope::Package,
+            "src/a.rs",
+            true,
+            false,
+        ),
     ] {
         assert_eq!(
             reach(from, scope, false).holds(path, test),
@@ -640,54 +730,18 @@ fn a_rust_declaration_reaches_its_module_its_parent_or_its_package() {
     let in_test = reach("tests/common/mod.rs", Scope::Package, true);
     assert!(in_test.holds("tests/cli.rs", true));
     assert!(!in_test.holds("src/a.rs", false));
+    // the integration tests of a package in a directory of the repository
+    let nested = reach::rust_reach("xtask/src/a.rs", "xtask/", &roots, Scope::Crate, false);
+    assert!(!nested.holds("xtask/tests/t.rs", true));
+    assert!(nested.holds("xtask/src/b.rs", false));
 }
 
-/// A git repository in a temporary directory. It goes when the test ends.
-struct Repo {
-    dir: tempfile::TempDir,
-}
-
-impl Repo {
-    fn new() -> Repo {
-        let repo = Repo {
-            dir: tempfile::tempdir().unwrap(),
-        };
-        git(repo.path(), &["init", "--quiet", "--initial-branch=main"]);
-        repo
-    }
-
-    fn path(&self) -> &Path {
-        self.dir.path()
-    }
-
-    fn write(&self, path: &str, text: &str) {
-        let file = self.path().join(path);
-        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        std::fs::write(file, text).unwrap();
-    }
-
-    /// Make the branch `name` at the commit of the work tree, and go to it.
-    fn branch(&self, name: &str) {
-        git(self.path(), &["checkout", "--quiet", "-b", name]);
-    }
-
-    /// Go to the branch `name`.
-    fn to(&self, name: &str) {
-        git(self.path(), &["checkout", "--quiet", name]);
-    }
-
-    fn commit(&self, message: &str) {
-        git(self.path(), &["add", "."]);
-        git(self.path(), &["commit", "--quiet", "-m", message]);
-    }
-
-    /// The findings and the places that are no copy of the change from `main` to `HEAD`, each one
-    /// as the report prints it.
-    fn copies(&self) -> (Vec<String>, Vec<String>) {
-        let found = check(self.path(), "main", "HEAD").unwrap();
-        let lines = |hits: &[Hit]| hits.iter().map(Hit::to_string).collect::<Vec<_>>();
-        (lines(&found.findings), lines(&found.skipped))
-    }
+/// The findings and the places that are no copy of the change from `main` to `HEAD` in `repo`, each
+/// one as the report prints it.
+fn copies(repo: &Repo) -> (Vec<String>, Vec<String>) {
+    let found = check(repo.path(), "main", "HEAD").unwrap();
+    let lines = |hits: &[Hit]| hits.iter().map(Hit::to_string).collect::<Vec<_>>();
+    (lines(&found.findings), lines(&found.skipped))
 }
 
 /// The Go module of the tests of the check. It has a package `names` of closed sets, a package
@@ -737,7 +791,7 @@ fn the_check_lists_each_value_of_go_that_an_added_line_copies_with_the_class_of_
     repo.write("low/low_test.go", "package low\n\nvar pin = \"--pin\"\n");
     repo.commit("change");
 
-    let (findings, skipped) = repo.copies();
+    let (findings, skipped) = copies(&repo);
     assert_eq!(
         findings,
         [
@@ -795,7 +849,7 @@ fn the_check_lists_each_copy_of_rust_and_each_const_and_helper_that_the_change_a
     );
     repo.commit("change");
 
-    let (findings, skipped) = repo.copies();
+    let (findings, skipped) = copies(&repo);
     assert_eq!(
         findings,
         [
@@ -828,7 +882,7 @@ fn the_check_reads_a_file_with_a_space_and_a_character_that_is_not_ascii_in_its_
     repo.write("src/b é.rs", "pub const AGAIN: &str = \"strata-x/1\";\n");
     repo.commit("change");
 
-    let (findings, skipped) = repo.copies();
+    let (findings, skipped) = copies(&repo);
     assert_eq!(
         findings,
         ["src/b é.rs:1 [const] AGAIN = \"strata-x/1\": the value of SCHEMA (src/lib.rs:19)"]
@@ -915,7 +969,7 @@ fn a_new_go_const_and_helper_with_a_copy_are_findings_and_an_alias_keeps_the_lab
         "package use\n\nconst pinFlag = \"--pin\"\n\nfunc has(t *testing.T, label, page string) {\n\tif !strings.Contains(page, label) {\n\t\tt.Fatal(label)\n\t}\n}\n\nfunc TestX(t *testing.T) {\n\tmustHold(t, \"--pin\", \"x\")\n}\n",
     );
     repo.commit("change");
-    let (findings, skipped) = repo.copies();
+    let (findings, skipped) = copies(&repo);
     assert_eq!(
         findings,
         [
@@ -958,7 +1012,7 @@ fn a_new_const_and_helper_copy_a_private_item_of_another_module() {
         "const AGAIN: &str = \"strata-y/2\";\n\nfn double(word: &str) -> String {\n    let mut out = String::from(word);\n    out.push_str(word);\n    out\n}\n",
     );
     repo.commit("change");
-    let (findings, _) = repo.copies();
+    let (findings, _) = copies(&repo);
     assert_eq!(
         findings,
         [
@@ -989,12 +1043,154 @@ fn a_table_with_no_visibility_reaches_its_module_and_a_table_of_a_trait_reaches_
          fn three() -> &'static str {\n    \"pack-three-x\"\n}\n\nfn four() -> &'static str {\n    \"pack-four-x\"\n}\n",
     );
     repo.commit("change");
-    let (findings, _) = repo.copies();
+    let (findings, _) = copies(&repo);
     assert_eq!(
         findings,
         [
             "src/b.rs:14 [return] \"pack-four-x\": pack-four-x is the value of Kind::Four (src/a.rs:7)"
         ]
+    );
+}
+
+/// The criterion of #960. The table of `impl_closed_set!` and the texts of a `Display` reach where
+/// their type reaches. The enum `Hidden` is private, so a child module can name its texts, and a
+/// sibling module cannot. The enum `Shown` is `pub`. The file does not declare `Elsewhere`, so its
+/// texts reach the package.
+#[test]
+fn the_texts_of_a_trait_reach_where_their_type_reaches() {
+    let repo = Repo::new();
+    repo.write(Lang::Rust.root_file(), "[package]\nname = \"p\"\n");
+    repo.write(
+        "src/a.rs",
+        "enum Hidden {\n    One,\n    Two,\n}\n\n\
+         impl_closed_set!(Hidden { One => \"hidden-one-x\", Two => \"hidden-two-x\" });\n\n\
+         impl fmt::Display for Hidden {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        match self {\n\
+         \x20           Hidden::One => f.write_str(\"Hidden-One\"),\n            Hidden::Two => f.write_str(\"Hidden-Two\"),\n\
+         \x20       }\n    }\n}\n\n\
+         pub enum Shown {\n    Three,\n}\n\nimpl_closed_set!(Shown { Three => \"shown-three-x\" });\n\n\
+         impl_closed_set!(Elsewhere { Four => \"elsewhere-four-x\" });\n",
+    );
+    repo.commit("base");
+    repo.branch("change");
+    let row = "[\"hidden-one-x\", \"Hidden-Two\", \"shown-three-x\", \"elsewhere-four-x\"]";
+    repo.write(
+        "src/a/c.rs",
+        &format!("pub fn texts() -> [&'static str; 4] {{\n    {row}\n}}\n"),
+    );
+    repo.write(
+        "src/b.rs",
+        &format!("pub fn words() -> Vec<&'static str> {{\n    {row}.to_vec()\n}}\n"),
+    );
+    repo.commit("change");
+    let (findings, _) = copies(&repo);
+    let places: Vec<&str> = findings
+        .iter()
+        .filter_map(|finding| finding.split(": ").next())
+        .collect();
+    assert_eq!(
+        places,
+        [
+            "src/a/c.rs:2 [row] \"Hidden-Two\"",
+            "src/a/c.rs:2 [row] \"elsewhere-four-x\"",
+            "src/a/c.rs:2 [row] \"hidden-one-x\"",
+            "src/a/c.rs:2 [row] \"shown-three-x\"",
+            "src/b.rs:2 [row] \"elsewhere-four-x\"",
+            "src/b.rs:2 [row] \"shown-three-x\"",
+        ],
+        "{findings:#?}"
+    );
+}
+
+/// The criterion of #960. The integration tests in `tests/` are a crate of their own. So they
+/// cannot name a `pub(crate)` item of the library, and they can name a `pub` item. A unit test of
+/// the library cannot name a `pub(crate)` item of the integration tests.
+#[test]
+fn a_pub_crate_item_of_the_library_does_not_reach_the_integration_tests() {
+    let repo = Repo::new();
+    repo.write(Lang::Rust.root_file(), "[package]\nname = \"p\"\n");
+    repo.write(
+        "src/lib.rs",
+        "pub(crate) const INNER: &str = \"inner-value-x\";\n\npub const OUTER: &str = \"outer-value-x\";\n\n\
+         pub(crate) fn word(status: Status) -> &'static str {\n    match status {\n\
+         \x20       Status::Done => \"word-done-x\",\n        Status::Open => \"word-open-x\",\n    }\n}\n",
+    );
+    repo.write(
+        "tests/common/mod.rs",
+        "pub(crate) const SHARED: &str = \"shared-value-x\";\n",
+    );
+    repo.commit("base");
+    repo.branch("change");
+    let texts = "[\"inner-value-x\", \"outer-value-x\", \"word-done-x\", \"shared-value-x\"]";
+    repo.write(
+        "tests/t.rs",
+        &format!("#[test]\nfn t() {{\n    let texts = {texts};\n}}\n"),
+    );
+    repo.write(
+        "src/more.rs",
+        &format!(
+            "#[cfg(test)]\nmod tests {{\n    fn t() {{\n        let words = {texts};\n    }}\n}}\n"
+        ),
+    );
+    repo.commit("change");
+    let (findings, _) = copies(&repo);
+    let places: Vec<&str> = findings
+        .iter()
+        .filter_map(|finding| finding.split(": ").next())
+        .collect();
+    assert_eq!(
+        places,
+        [
+            "src/more.rs:4 [row] \"inner-value-x\"",
+            "src/more.rs:4 [row] \"outer-value-x\"",
+            "src/more.rs:4 [row] \"word-done-x\"",
+            "tests/t.rs:3 [row] \"outer-value-x\"",
+            "tests/t.rs:3 [row] \"shared-value-x\"",
+        ],
+        "{findings:#?}"
+    );
+}
+
+/// The criterion of #960. git can hold a file name that is not UTF-8. The check gives an error
+/// that names such a file when it reads the file, as `just comment-words` does. It reads no other
+/// file, so another such name is out.
+#[test]
+fn a_file_name_that_is_not_utf_8_is_an_error_when_the_check_reads_the_file() {
+    let listing = b"src/a.rs\0docs/caf\xe9.md\0go.mod\0";
+    assert_eq!(
+        source::tree_paths(listing).unwrap(),
+        ["src/a.rs", Lang::Go.root_file()]
+    );
+    for name in [&b"src/caf\xe9.rs"[..], b"x\xe9/Cargo.toml", b"caf\xe9.go"] {
+        let listing = [&b"src/a.rs\0"[..], name, b"\0"].concat();
+        let error = source::tree_paths(&listing).unwrap_err();
+        assert_eq!(
+            error,
+            format!(
+                "git ls-tree: the file name {} is not UTF-8",
+                name.escape_ascii()
+            )
+        );
+    }
+}
+
+/// The criterion of #960 in a repository: the base holds a Rust file whose name is not UTF-8, and
+/// the change adds another file. The diff does not name the file, and the tree does.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_check_names_a_rust_file_of_the_tree_whose_name_is_not_utf_8() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let repo = Repo::new();
+    rust_package(&repo);
+    let name = std::ffi::OsStr::from_bytes(b"src/caf\xe9.rs");
+    std::fs::write(repo.path().join(name), "pub const X: &str = \"x\";\n").unwrap();
+    repo.commit("base");
+    repo.branch("change");
+    repo.write("src/more.rs", "pub const AGAIN: &str = \"strata-x/1\";\n");
+    repo.commit("change");
+    assert_eq!(
+        check(repo.path(), "main", "HEAD").unwrap_err(),
+        "git ls-tree: the file name src/caf\\xe9.rs is not UTF-8"
     );
 }
 
@@ -1018,7 +1214,7 @@ fn each_string_of_a_const_array_is_a_const_that_the_check_reads() {
          const NO_SEMICOLON_AFTER: [&str; 2] = [\"func-kw\", \"struct-kw\"];\n",
     );
     repo.commit("change");
-    let (findings, _) = repo.copies();
+    let (findings, _) = copies(&repo);
     assert_eq!(
         findings,
         [

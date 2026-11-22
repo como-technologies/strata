@@ -224,7 +224,7 @@ fn classify(frames: &[Frame], at: usize, context: &Context, value: &str, line: u
     if test && is_script(value) {
         return Class::Script;
     }
-    if test && is_key(frames, at) {
+    if test && (is_key(frames, at) || is_index(frames)) {
         return Class::Json;
     }
     if context.lang == Lang::Go && is_tag(frames) {
@@ -285,6 +285,26 @@ fn is_key(frames: &[Frame], at: usize) -> bool {
     };
     let starts = at == 0 || frame.tokens[at - 1].is_mark(",") || frame.tokens[at - 1].is_mark(";");
     starts && frame.tokens.get(at + 1).is_some_and(|t| t.is_mark(":"))
+}
+
+/// True when the literal is the whole index of a value, such as `"profiles"` of
+/// `manifests["profiles"]`. Such an index reads a key of a document, as the key of a map literal
+/// does. A name or a group comes before the brackets, so a list such as `["a"]` is no index.
+fn is_index(frames: &[Frame]) -> bool {
+    let [.., parent, inner] = frames else {
+        return false;
+    };
+    inner.delim == Some(Delim::Bracket)
+        && inner.tokens.len() == 1
+        && inner
+            .at
+            .checked_sub(1)
+            .and_then(|before| parent.tokens.get(before))
+            .is_some_and(|token| match token {
+                Token::Word { text, .. } => !is_keyword(text),
+                Token::Group { .. } => true,
+                _ => false,
+            })
 }
 
 /// True when the innermost group is the body of a Go struct type: a literal there is a tag.

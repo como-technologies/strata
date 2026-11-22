@@ -2,6 +2,7 @@
 
 use super::keyword::Keyword;
 use super::token::{Delim, Token};
+use crate::quoted;
 
 /// The keywords of Go after which the end of a line gives no `;`. `break`, `continue`,
 /// `fallthrough`, and `return` give one, as an identifier does.
@@ -66,23 +67,6 @@ pub fn tokens(text: &str) -> Result<Vec<Token>, String> {
         Some(group) => Err(format!("line {}: a bracket does not close", group.line)),
         None => Err("no tokens".to_string()),
     }
-}
-
-/// The bytes of `quoted`, a text in double quotes, with its escapes decoded. A Go text has the
-/// escapes of C, and git writes a file name in quotes with them.
-///
-/// The error names an escape that is not Go. It also names a `quoted` with no quote at its start,
-/// or with more text after its end quote.
-pub fn unquote(quoted: &str) -> Result<Vec<u8>, String> {
-    let mut lexer = Lexer::new(quoted);
-    if lexer.peek(0) != Some('"') {
-        return Err(format!("{quoted} does not start with a quote"));
-    }
-    let bytes = lexer.interpreted_bytes()?;
-    if lexer.peek(0).is_some() {
-        return Err(format!("{quoted} has more text after its end quote"));
-    }
-    Ok(bytes)
 }
 
 impl Lexer {
@@ -186,80 +170,14 @@ impl Lexer {
     /// Read a text in double quotes, and decode its escapes.
     fn interpreted(&mut self) -> Result<(), String> {
         let line = self.line;
-        let bytes = self.interpreted_bytes()?;
+        self.at += 1;
+        let (bytes, length) = quoted::read(&self.chars[self.at..], line)?;
+        self.at += length;
         self.push(Token::Text {
             value: String::from_utf8_lossy(&bytes).into_owned(),
             line,
             last: line,
         });
-        Ok(())
-    }
-
-    /// Read a text in double quotes, and give its bytes with its escapes decoded.
-    fn interpreted_bytes(&mut self) -> Result<Vec<u8>, String> {
-        let line = self.line;
-        self.at += 1;
-        let mut bytes = Vec::new();
-        loop {
-            match self.peek(0) {
-                Some('"') => break,
-                Some('\\') => self.escape(&mut bytes)?,
-                Some('\n') | None => return Err(format!("line {line}: a text does not end")),
-                Some(c) => {
-                    let mut buffer = [0; 4];
-                    bytes.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
-                    self.at += 1;
-                }
-            }
-        }
-        self.at += 1;
-        Ok(bytes)
-    }
-
-    /// Decode the escape at the read position into `bytes`.
-    fn escape(&mut self, bytes: &mut Vec<u8>) -> Result<(), String> {
-        let line = self.line;
-        let Some(kind) = self.peek(1) else {
-            return Err(format!("line {line}: a text does not end"));
-        };
-        self.at += 2;
-        let simple = match kind {
-            'a' => Some(0x07),
-            'b' => Some(0x08),
-            'f' => Some(0x0c),
-            'n' => Some(b'\n'),
-            'r' => Some(b'\r'),
-            't' => Some(b'\t'),
-            'v' => Some(0x0b),
-            '\\' | '\'' | '"' => Some(kind as u8),
-            _ => None,
-        };
-        if let Some(byte) = simple {
-            bytes.push(byte);
-            return Ok(());
-        }
-        let (count, radix) = match kind {
-            'x' => (2, 16),
-            'u' => (4, 16),
-            'U' => (8, 16),
-            '0'..='7' => {
-                // an octal escape has three digits, and the first one is `kind`
-                self.at -= 1;
-                (3, 8)
-            }
-            _ => return Err(format!("line {line}: the escape \\{kind} is not Go")),
-        };
-        let digits: String = (0..count).filter_map(|i| self.peek(i)).collect();
-        self.at += count;
-        let number = u32::from_str_radix(&digits, radix)
-            .map_err(|e| format!("line {line}: the escape {digits}: {e}"))?;
-        if matches!(kind, 'u' | 'U') {
-            let c = char::from_u32(number).unwrap_or(char::REPLACEMENT_CHARACTER);
-            let mut buffer = [0; 4];
-            bytes.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
-        } else {
-            bytes.push(u8::try_from(number).map_err(|e| format!("line {line}: {e}"))?);
-        }
         Ok(())
     }
 
