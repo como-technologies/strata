@@ -75,10 +75,9 @@ fields.
 
 ## Progress messages
 
-Strata writes progress messages to standard error. Each one starts with
-`strata:`, a warning with `strata: warning:`, and an error with `strata: error:`:
-see [The look of each line](../reference/formats.md#the-look-of-each-line).
-`--quiet` stops the messages and the warnings.
+Strata writes progress messages, warnings, and errors to standard error.
+[The look of each line](../reference/formats.md#the-look-of-each-line) shows
+the start of each one. `--quiet` stops the messages and the warnings.
 [Settings](../reference/settings.md) names the variable that does the same.
 
 ## Send the report of a new value
