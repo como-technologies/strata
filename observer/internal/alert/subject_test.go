@@ -143,3 +143,10 @@ func TestAPackRuleThatNamesTheKeyCoversTheNewerVersionOfThatPack(t *testing.T) {
 		t.Errorf("packs %v", got)
 	}
 }
+
+// The const of testkit that copies a const of alert holds the value of that const.
+func TestEachCopyInTestkitHoldsTheValueOfItsConst(t *testing.T) {
+	if testkit.ImageMoved != titleMoved {
+		t.Errorf("testkit holds %q, and alert holds %q", testkit.ImageMoved, titleMoved)
+	}
+}

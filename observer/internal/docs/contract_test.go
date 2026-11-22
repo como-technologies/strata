@@ -2,6 +2,7 @@ package docs
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"reflect"
@@ -152,6 +153,45 @@ func TestTheKindOfAFailedCheckIsInTheRow(t *testing.T) {
 	}
 }
 
+// skipFault gives the fault of the answer to the question about a move that skips a minor version, or "" when it has
+// none. The answer has one pin with a bump, and the bump holds the check of the skip with the next step.
+func skipFault(skip Behind) string {
+	if len(skip.Pins) != 1 || skip.Pins[0].Bump == nil || skip.Pins[0].Bump.UpdateChecks == nil {
+		return fmt.Sprintf("the question about the skip gives %d pins, and the first has no bump with checks: %+v", len(skip.Pins), skip.Pins)
+	}
+	pin := skip.Pins[0]
+	if s := pin.Bump.UpdateChecks.SkippedMinor; s == nil || s.From != pin.Version || s.To != pin.Bump.To || s.NextMinor == "" || s.NextStep == "" {
+		return fmt.Sprintf("the bump of the skip holds the check %+v", s)
+	}
+	return ""
+}
+
+// The check of the skip gives a fault, and no panic, for each part of the answer that is missing. It gives none for a
+// full answer.
+func TestTheCheckOfTheSkipGivesAFaultForEachPartThatIsMissing(t *testing.T) {
+	full := MinorSkip{From: "1.33.1", To: "1.35.0", NextMinor: "1.34", NextStep: "1.34.2"}
+	// pinWith gives an answer with one pin of the version full.From, with the bump.
+	pinWith := func(bump *Bump) Behind { return Behind{Pins: []Pin{{Version: full.From, Bump: bump}}} }
+	for _, c := range []struct {
+		name  string
+		skip  Behind
+		fault bool
+	}{
+		{"no pin", Behind{}, true},
+		{"no bump", pinWith(nil), true},
+		{"a bump with no checks", pinWith(&Bump{To: full.To}), true},
+		{"checks with no skip", pinWith(&Bump{To: full.To, UpdateChecks: &UpdateChecks{}}), true},
+		{"a skip with no next step", pinWith(&Bump{To: full.To, UpdateChecks: &UpdateChecks{SkippedMinor: &MinorSkip{From: full.From, To: full.To, NextMinor: full.NextMinor}}}), true},
+		{"a full skip", pinWith(&Bump{To: full.To, UpdateChecks: &UpdateChecks{SkippedMinor: &full}}), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if fault := skipFault(c.skip); (fault != "") != c.fault {
+				t.Errorf("the fault %q, want one %v", fault, c.fault)
+			}
+		})
+	}
+}
+
 func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	dir := contractDir(t)
 	var drift VerifySummary
@@ -191,11 +231,8 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	// the next step (#867).
 	var skip Behind
 	decodeFile(t, dir, "ask-skip.json", &skip)
-	if len(skip.Pins) != 1 || skip.Pins[0].Bump == nil {
-		t.Fatalf("the question about the skip gives %d pins: %+v", len(skip.Pins), skip.Pins)
-	}
-	if s := skip.Pins[0].Bump.UpdateChecks.SkippedMinor; s == nil || s.From != skip.Pins[0].Version || s.To != skip.Pins[0].Bump.To || s.NextMinor == "" || s.NextStep == "" {
-		t.Errorf("the bump of the skip holds the check %+v", s)
+	if fault := skipFault(skip); fault != "" {
+		t.Error(fault)
 	}
 	// The compare of a record with the newest version of its profile, as the versions cycle runs it (#897). The move adds
 	// a required variable, and the compare holds the check of strata.

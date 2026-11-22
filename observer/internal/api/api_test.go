@@ -22,16 +22,16 @@ import (
 // summaryRoutes and detailRoutes are the tables of the test. A new summary route needs a line in
 // summaryRoutes, and TestEachRouteHasALineInTheSentinelTable fails until it has one.
 var summaryRoutes = map[string]string{
-	patternCluster:    "/v1/cluster",
-	patternFindings:   "/v1/findings",
-	patternProfiles:   "/v1/profiles",
+	patternCluster:    patternCluster,
+	patternFindings:   patternFindings,
+	patternProfiles:   patternProfiles,
 	patternProfile:    patternProfiles + "/" + testkit.AWSStackProfile,
-	patternNewer:      "/v1/newer",
-	patternNotChecked: "/v1/notchecked",
-	patternEvents:     "/v1/events",
-	patternImages:     "/v1/images",
-	patternImage:      "/v1/images/a%2Fb:1",
-	patternAlerts:     "/v1/alerts",
+	patternNewer:      patternNewer,
+	patternNotChecked: patternNotChecked,
+	patternEvents:     patternEvents,
+	patternImages:     patternImages,
+	patternImage:      patternImages + "/a%2Fb:1",
+	patternAlerts:     patternAlerts,
 }
 
 var detailRoutes = map[string][]string{
@@ -40,7 +40,7 @@ var detailRoutes = map[string][]string{
 
 // askRoutes are the routes of the click "Ask Palette". ask_test.go holds the tests of their answers.
 var askRoutes = map[string]string{
-	patternAsks: testkit.AsksRoute,
+	patternAsks: patternAsks,
 	patternAsk:  pathAsk,
 }
 
@@ -72,6 +72,19 @@ func TestEachRouteHasALineInTheSentinelTable(t *testing.T) {
 	for pattern := range summaryRoutes {
 		if !hasRoute(pattern, TierSummary) {
 			t.Errorf("the table lists %s, and the server has no such summary route", pattern)
+		}
+	}
+}
+
+// Each const of testkit that copies a const of api holds the value of that const.
+func TestEachCopyInTestkitHoldsTheValueOfItsConst(t *testing.T) {
+	for _, c := range []struct{ got, want string }{
+		{testkit.AsksRoute, patternAsks},
+		{testkit.FetchSite, headerFetchSite},
+		{testkit.SameOrigin, sameOrigin},
+	} {
+		if c.got != c.want {
+			t.Errorf("testkit holds %q, and api holds %q", c.got, c.want)
 		}
 	}
 }
@@ -123,7 +136,7 @@ func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
 	h := handlerOf(o)
 	noSummaryRouteHolds(t, h, key, sentinelVariable)
 	unknown := []string{"/debug", "/debug/vars", "/env", "/v1/env", "/v1/records", "/v1/raw"}
-	paths := append([]string{pathHealth, "/"}, unknown...)
+	paths := append([]string{patternHealth, "/"}, unknown...)
 	for _, ps := range detailRoutes {
 		paths = append(paths, ps...)
 	}
@@ -146,7 +159,7 @@ func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 		status     int
 		contentTyp string
 	}{
-		{"health", pathHealth, 200, textType},
+		{"health", patternHealth, 200, textType},
 		{"cluster", summaryRoutes[patternCluster], 200, jsonType},
 		{"findings", summaryRoutes[patternFindings], 200, jsonType},
 		{"profiles", summaryRoutes[patternProfiles], 200, jsonType},
@@ -158,14 +171,14 @@ func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 		{"the diff of the published side", pathPublished, 200, jsonType},
 		{"the diff of the cluster side", pathCluster, 200, jsonType},
 		{"the diff of the newer side", pathNewer, 200, jsonType},
-		{"an unknown profile", "/v1/profiles/nope", 404, jsonType},
-		{"the diff of an unknown profile", "/v1/packs/nope" + testkit.KubernetesDiff + "?side=" + string(model.SideCluster), 404, jsonType},
-		{"the diff of an unknown pack", awsPacks + "/" + testkit.NopeKey + "/diff?side=" + string(model.SideCluster), 404, jsonType},
-		{"the diff of a pack with no change on the side", kubernetesDiff + "?side=" + string(model.SidePublished), 404, jsonType},
-		{"the diff of a pack that no pin names", awsPacks + "/" + testkit.CSIKey + "/diff?side=" + string(model.SideNewer), 404, jsonType},
-		{"the diff of " + testkit.NoNewerProfile, kubernetesDiff + "?side=" + string(model.SideNewest), 404, jsonType},
-		{"a diff with no side", kubernetesDiff, 400, jsonType},
-		{"a diff with " + noSuchSide, kubernetesDiff + "?side=nope", 400, jsonType},
+		{"an unknown profile", patternProfiles + "/nope", 404, jsonType},
+		{"the diff of an unknown profile", testkit.DiffPath("nope", testkit.KubernetesKey, string(model.SideCluster)), 404, jsonType},
+		{"the diff of an unknown pack", testkit.DiffPath(testkit.AWSStackProfile, testkit.NopeKey, string(model.SideCluster)), 404, jsonType},
+		{"the diff of a pack with no change on the side", kubernetesDiff(string(model.SidePublished)), 404, jsonType},
+		{"the diff of a pack that no pin names", testkit.DiffPath(testkit.AWSStackProfile, testkit.CSIKey, string(model.SideNewer)), 404, jsonType},
+		{"the diff of " + testkit.NoNewerProfile, kubernetesDiff(string(model.SideNewest)), 404, jsonType},
+		{"a diff with no side", kubernetesDiff(""), 400, jsonType},
+		{"a diff with " + noSuchSide, kubernetesDiff("nope"), 400, jsonType},
 		{"an unknown route", "/v1/nope", 404, jsonType},
 		{"the root with no page", "/", 404, jsonType},
 	} {
@@ -182,10 +195,10 @@ func TestAnUnknownProfileOrPackGets404AndNamesNoValue(t *testing.T) {
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
 	for _, path := range []string{
-		"/v1/profiles/SENTINEL-PROFILE",
-		"/v1/packs/SENTINEL-PROFILE" + testkit.KubernetesDiff + "?side=" + string(model.SideCluster),
-		awsPacks + "/SENTINEL-LAYER/SENTINEL-PACK/diff?side=" + string(model.SideCluster),
-		kubernetesDiff + "?side=SENTINEL-SIDE",
+		patternProfiles + "/SENTINEL-PROFILE",
+		testkit.DiffPath("SENTINEL-PROFILE", testkit.KubernetesKey, string(model.SideCluster)),
+		testkit.DiffPath(testkit.AWSStackProfile, "SENTINEL-LAYER/SENTINEL-PACK", string(model.SideCluster)),
+		kubernetesDiff("SENTINEL-SIDE"),
 		"/SENTINEL-PATH",
 	} {
 		rec := get(h, path)

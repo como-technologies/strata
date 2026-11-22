@@ -151,7 +151,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t 
 	if got := reasons(s.Events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
 	}
-	if got := s.Events[0].Message; got != testkit.AuditUnread {
+	if got := s.Events[0].Message; got != whoUnreadMessage {
 		t.Errorf("message %q", got)
 	}
 	// the summary carries the flag, and never the text of the error
@@ -172,4 +172,13 @@ func TestAFindingWithItsWritesSaysNothingOfAnUnreadAuditLog(t *testing.T) {
 			t.Errorf("event %+v", e)
 		}
 	}
+}
+
+// Each const of testkit that copies a value of model holds that value. The values are the message of an event, and
+// the verdict no-error in the JSON of an answer.
+func TestEachCopyInTestkitHoldsTheValueOfItsConst(t *testing.T) {
+	if testkit.AuditUnread != whoUnreadMessage {
+		t.Errorf("testkit holds %q, and model holds %q", testkit.AuditUnread, whoUnreadMessage)
+	}
+	testkit.HoldsAll(t, "the answer", string(testkit.MustJSON(t, Answer{Verdict: VerdictNoError})), testkit.NoErrorVerdict)
 }

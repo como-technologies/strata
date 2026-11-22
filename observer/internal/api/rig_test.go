@@ -48,17 +48,23 @@ const (
 // noSuchSide names a side of a diff that does not exist, in the names of the cases.
 const noSuchSide = "a side that does not exist"
 
-// The paths of the routes, with the profile aws-stack@1.1.0 of testdata/. awsPacks starts the route of a pack of the
-// profile, and kubernetesDiff is the route of the diff of its pack kubernetes, with no side.
+// The paths of the routes, with the profile aws-stack@1.1.0 of testdata/.
 const (
-	awsPacks       = "/v1/packs/" + testkit.AWSStackProfile
-	kubernetesDiff = awsPacks + testkit.KubernetesDiff
-	pathHealth     = "/healthz"
-	pathPublished  = awsPacks + "/" + testkit.CSIKey + "/diff?side=" + string(model.SidePublished)
-	pathCluster    = kubernetesDiff + "?side=" + string(model.SideCluster)
-	pathNewer      = kubernetesDiff + "?side=" + string(model.SideNewer)
 	// pathProfileByName names the profile with no version.
-	pathProfileByName = "/v1/profiles/aws-stack"
+	pathProfileByName = patternProfiles + "/aws-stack"
+)
+
+// kubernetesDiff gives the route of the diff of the pack kubernetes of aws-stack@1.1.0 of testdata/ on the side. An
+// empty side gives the route with no side.
+func kubernetesDiff(side string) string {
+	return testkit.DiffPath(testkit.AWSStackProfile, testkit.KubernetesKey, side)
+}
+
+// The routes of the diffs of the packs of aws-stack@1.1.0 of testdata/.
+var (
+	pathPublished = testkit.DiffPath(testkit.AWSStackProfile, testkit.CSIKey, string(model.SidePublished))
+	pathCluster   = kubernetesDiff(string(model.SideCluster))
+	pathNewer     = kubernetesDiff(string(model.SideNewer))
 )
 
 // pathAsk is the route of the question to Palette for the move of the pack kubernetes of aws-stack@1.1.0.
