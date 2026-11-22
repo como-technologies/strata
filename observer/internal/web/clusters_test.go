@@ -1,12 +1,17 @@
 package web
 
 import (
+	"maps"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
@@ -82,6 +87,45 @@ func TestAScreenOfAClusterOfASetNamesTheSetAndItsImagesSayThatTheObserverReadsIt
 func TestTheScreenOfTheSharedVersionsCountsTheClustersAndLinksEachCopyThatDiffers(t *testing.T) {
 	html := screenOf(t, crawl(t, devdata.StateFleet), "#shared")
 	mustHold(t, "the shared versions", html, "2 clusters in 1 project", "1 of 2 same", `href="`+ledgerHash+`/p-`+wilmaShared+`"`, "No record", "1 not read")
+}
+
+// checkSet names a directory with the answers of /v1/clusters, /v1/shared, and /v1/alerts of a real server, and an empty
+// folder members. scripts/observer-contract.sh serves the set of the chapter observer-clusters, and sets it. Without it, the
+// test skips.
+const checkSet = "STRATA_CHECK_SET"
+
+// The set of the chapter observer-clusters holds platform-addons@1.0.0 in dev and in prod, by two uids. The test draws the
+// screen of the shared versions from the answers of a real server.
+func TestEachRowOfProjectScopeOfTheSharedVersionsOfTheStandInNamesItsProject(t *testing.T) {
+	dir := os.Getenv(checkSet)
+	if dir == "" {
+		t.Skip(checkSet + " is not set: " + testkit.RunContract)
+	}
+	sets, state := filepath.Dir(dir), devdata.State(filepath.Base(dir))
+	set, err := devdata.LoadSet(os.DirFS(sets), state, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]string{}
+	for _, p := range set.Summary.Projects {
+		names[p.UID] = p.Name
+	}
+	html := showIn(t, sets, state, "#shared")[0]
+	uids := map[string]int{}
+	for _, s := range set.SharedList.Shared {
+		if s.Scope != model.ScopeProject {
+			continue
+		}
+		var projects []string
+		for _, uid := range s.Projects {
+			projects = append(projects, names[uid])
+		}
+		mustHold(t, "the shared versions", html, ref(s.Name, s.Version)+"</td>"+narrowCell+s.Scope+" · "+strings.Join(projects, ", ")+"</td>")
+		uids[model.Subject(s.Name, s.Version)]++
+	}
+	if !slices.ContainsFunc(slices.Collect(maps.Values(uids)), func(n int) bool { return n > 1 }) {
+		t.Errorf("no profile version of project scope has two uids: %v", uids)
+	}
 }
 
 func TestTheChoiceOfAProjectFiltersTheClustersAndTheSharedVersions(t *testing.T) {
