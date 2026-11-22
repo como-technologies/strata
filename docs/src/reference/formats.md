@@ -4,8 +4,7 @@
 comment or an issue. `--format json`, or `--json`, is for a script or a language
 model.
 
-Every report goes to standard output. Progress notes go to standard error: see
-[Settings](./settings.md).
+[The look of each line](#the-look-of-each-line) gives the stream of each line.
 
 ## The terminal report
 
@@ -75,9 +74,12 @@ Strata decides the color in this order:
 - Then a terminal gets it.
 
 Standard output and standard error each get their own decision in this order.
-The report goes to standard output. The notes, the warnings, and the errors go
-to standard error. A command with no `--color`, such as `snapshot`, starts at
-`NO_COLOR`.
+The table of [The look of each line](#the-look-of-each-line) gives the stream
+of each class of line. A command with no `--color`, such as `snapshot`, starts at `NO_COLOR`.
+
+`strata-preflight` writes each class of line to the same stream, and uses the
+same order for each stream. It takes `--color` with a value: `auto`, `always`,
+or `never`.
 
 The diffs of `--full` use the same colors.
 
@@ -87,13 +89,13 @@ Each line that strata writes is of one class, and each class has one look. The
 text of the line keeps the class with no color, so a pipe and a CI log show it
 too.
 
-| Class | Look on a terminal | With no color |
-| --- | --- | --- |
-| A note of the progress, on standard error | dim | It starts with `strata:`. |
-| The report, on standard output | plain | the same text |
-| The answer of a check | bold, and the last line | the same text, last |
-| A warning, on standard error | yellow | It starts with `strata: warning:`. |
-| An error, on standard error | red | It starts with `strata: error:`. |
+| Class | Stream | Look on a terminal | With no color |
+| --- | --- | --- | --- |
+| A note of the progress | standard error | dim | It starts with `strata:`. |
+| The report | standard output | plain | the same text |
+| The answer of a check | standard output, or standard error for `snapshot --validate` | bold, and the last line | the same text, last |
+| A warning | standard error | yellow | It starts with `strata: warning:`. |
+| An error | standard error | red | It starts with `strata: error:`. |
 
 `--json` does not change: the document has no color. For the error of `--json`,
 see [Errors](./errors.md).
@@ -114,8 +116,9 @@ The answer of each check is the last line of the check:
   report.
 - `behind`: the answer of Palette about the bump of a pin, as the last line of
   the lines of that pin.
-- `snapshot --validate`: the line `palette    accepts`, after the record. A
-  refusal gives each `palette    refuses:` line, and then its error.
+- `snapshot --validate`: the line `palette    accepts`, after the record and
+  its notes. A refusal gives each `palette    refuses:` line, and then its
+  error.
 - `strata-preflight`: the verdict, `OK:`, `FAIL:`, `NOT READY:`, or
   `NOT COUNTED:`, after the scorecard.
 
@@ -149,11 +152,6 @@ ref names its registry by its uid when the name of the registry holds a `/`, as
 | `consumers` | Each row starts with the ref of the consumer: `cluster:<uid>` or `edgehost:<uid>`. A cluster template and an app deployment have no ref, so the row starts with the uid and ends with the kind. |
 | `compare`, `verify` | A pack side of the heading is its ref. The heading `<n> packs:` comes before the rows of the packs. |
 | `snapshot` of a set | Each line names the cluster by its ref, and then by its name. |
-
-`strata-preflight` uses the same order for each stream. The report goes to
-standard output, and the progress lines go to standard error, so each stream
-gets its own decision. `strata-preflight` takes `--color` with a value: `auto`,
-`always`, or `never`.
 
 ### A control character of a text of Palette
 

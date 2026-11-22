@@ -2,7 +2,9 @@
 
 use super::*;
 use crate::api::routes as palette;
+use crate::closed_set::ClosedSet;
 use crate::error::{Error, FailureClass};
+use crate::model::cloud::Cloud;
 use serde_json::json;
 
 /// Each rule of the create.
@@ -202,49 +204,31 @@ fn a_route_reads_a_refusal_from_the_body_of_a_palette_error() {
 #[test]
 fn a_request_goes_to_the_validate_route_that_its_method_and_its_path_name() {
     let post = Method::Post;
+    let cluster_packs = palette::cluster_validate_packs_route("u1");
+    let update_packs = palette::update_validate_packs_route("u1");
+    let name = palette::validate_name_route("a", "1");
+    let aws = palette::create_validate_route(Cloud::Aws.as_str());
+    let edge = palette::create_validate_route(Cloud::EdgeNative.as_str());
+    let repave = palette::cluster_validate_repave_route("u1");
     for (method, path, route) in [
+        (post, cluster_packs.as_str(), ValidateRoute::ClusterPacks),
         (
             post,
-            "/v1/spectroclusters/u1/validate/packs",
-            ValidateRoute::ClusterPacks,
-        ),
-        (
-            post,
-            "/v1/clusterprofiles/validate/packs",
+            palette::PROFILE_VALIDATE_PACKS,
             ValidateRoute::ProfilePacks,
         ),
-        (
-            post,
-            "/v1/clusterprofiles/u1/validate/packs",
-            ValidateRoute::ProfilePacks,
-        ),
-        (
-            Method::Get,
-            "/v1/clusterprofiles/validate/name?name=a&version=1",
-            ValidateRoute::ProfileName,
-        ),
-        (
-            post,
-            "/v1/clusterprofiles/import/validate",
-            ValidateRoute::ProfileImport,
-        ),
-        (
-            post,
-            "/v1/spectroclusters/aws/validate",
-            ValidateRoute::ClusterCreate,
-        ),
-        (
-            post,
-            "/v1/spectroclusters/edge-native/validate",
-            ValidateRoute::ClusterCreate,
-        ),
+        (post, update_packs.as_str(), ValidateRoute::ProfilePacks),
+        (Method::Get, name.as_str(), ValidateRoute::ProfileName),
+        (post, palette::IMPORT_ROUTE, ValidateRoute::ProfileImport),
+        (post, aws.as_str(), ValidateRoute::ClusterCreate),
+        (post, edge.as_str(), ValidateRoute::ClusterCreate),
     ] {
         assert_eq!(ValidateRoute::of(method, path), Some(route), "{path}");
     }
     for (method, path) in [
-        (Method::Get, "/v1/spectroclusters/aws/validate"),
+        (Method::Get, aws.as_str()),
         (post, "/v1/spectroclusters/aws"),
-        (post, "/v1/spectroclusters/u1/validate/repave"),
+        (post, repave.as_str()),
         (post, "/v1/clouds/aws/account/validate"),
         (post, "/v1/spectroclusters/validate"),
         (post, ""),
@@ -257,16 +241,12 @@ fn a_request_goes_to_the_validate_route_that_its_method_and_its_path_name() {
 fn only_a_request_to_the_cluster_validate_route_reads_its_refusal() {
     let error = json!({"code": "ClusterProfilesNotSupported"});
     let post = Method::Post;
-    assert!(ValidateRoute::refuses_request(
-        post,
-        "/v1/spectroclusters/aws/validate",
-        500,
-        &error
-    ));
+    let aws = palette::create_validate_route(Cloud::Aws.as_str());
+    assert!(ValidateRoute::refuses_request(post, &aws, 500, &error));
     // the same body from another route is no refusal of the route that the code belongs to
     assert!(!ValidateRoute::refuses_request(
         post,
-        "/v1/clusterprofiles/validate/packs",
+        palette::PROFILE_VALIDATE_PACKS,
         500,
         &error
     ));
@@ -278,16 +258,11 @@ fn only_a_request_to_the_cluster_validate_route_reads_its_refusal() {
     ));
     assert!(!ValidateRoute::refuses_request(
         Method::Get,
-        "/v1/spectroclusters/aws/validate",
+        &aws,
         500,
         &error
     ));
-    assert!(!ValidateRoute::refuses_request(
-        post,
-        "/v1/spectroclusters/aws/validate",
-        502,
-        &error
-    ));
+    assert!(!ValidateRoute::refuses_request(post, &aws, 502, &error));
 }
 
 #[test]
@@ -295,7 +270,7 @@ fn a_retry_does_not_send_again_the_refusal_of_the_cluster_validate_route() {
     for code in ValidateRoute::ClusterCreate.refusal_codes() {
         let error = Error::Api {
             method: crate::api::Method::Post,
-            path: "/v1/spectroclusters/aws/validate".into(),
+            path: palette::create_validate_route(Cloud::Aws.as_str()),
             status: 500,
             body: palette::error_body(code, "refused"),
             retry_after: None,

@@ -183,9 +183,11 @@ refusal of the whole request, for example values that are not YAML, names no
 pack. The API schema refuses two equal layers with HTTP 422, and the code is
 the number `610`. Fix the candidate, and ask again.
 
-When Palette takes the packs, strata writes the record. Then the line
-`palette    accepts` says what Palette accepts, as the last line. The record
-holds the answer in `source.paletteValidation`:
+When Palette takes the packs, strata writes the record and the line
+`palette    accepts`, which says what Palette accepts.
+[The look of each line](../reference/formats.md#the-look-of-each-line) gives
+the stream and the place of the line. The record holds the answer in
+`source.paletteValidation`:
 
 ```text
 {{#include ../output/candidate-validate-accepts.txt}}
@@ -194,9 +196,8 @@ holds the answer in `source.paletteValidation`:
 The answer does not change the root. A pipeline that publishes from the
 candidate can run this step first, and stop on exit `2`.
 
-`--json` changes only the error. So after an accept, the line stays on standard
-error, after the record. With `--json --quiet` and `-o`, it is the one line of
-output:
+`--json` changes only the error, so an accept writes the same line. With
+`--json --quiet` and `-o`, it is the one line of output:
 
 ```text
 {{#include ../output/candidate-validate-accepts-json.txt}}
@@ -211,8 +212,9 @@ packs against the clusters that run the version:
 {{#include ../output/snapshot-validate-version.txt}}
 ```
 
-Without `-o`, the record goes to standard output, and the sentence comes after
-it. So on a terminal, the record does not hide the answer:
+Without `-o`, the record goes to standard output. On a terminal, the record
+does not hide the answer: see
+[The look of each line](../reference/formats.md#the-look-of-each-line).
 
 ```text
 {{#include ../output/snapshot-validate-stdout-lines.txt}}

@@ -555,10 +555,11 @@ fn candidate_validate_snapshot(r: &mut Runner) {
         true,
         "strata snapshot aws-stack@1.1.1 --validate",
     );
+    // the excerpt keeps the notes, the two ends of the record, and the answer after the record
     r.excerpt(
         "snapshot-validate-stdout-lines",
         "snapshot-validate-stdout",
-        r"^(strata|\{|\})",
+        r"^(strata|\{|\}|palette)",
     );
     r.step(
         "snapshot-validate-usage",
