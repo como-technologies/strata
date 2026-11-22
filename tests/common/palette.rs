@@ -352,8 +352,8 @@ pub fn pack_entity_route(name: &str, registry: &str) -> String {
     format!("/v1/packs/{name}/registries/{registry}")
 }
 
-/// One row of the list `tags` of the answer of [`pack_entity_route`]: the tag `tag`, and the uid
-/// `pack` of the pack that the tag points at.
+/// One row of the list `tags` of the answer of [`pack_entity_route`]. It holds the tag `tag` and
+/// the uid `pack` of the pack that the tag points at.
 pub fn tag_row(tag: &str, pack: &str) -> Value {
     json!({"tag": tag, "packUid": pack})
 }
@@ -374,7 +374,7 @@ pub fn layer_entity_answer(layer: strata::model::layer::Layer, tags: &[(&str, &s
 }
 
 /// `answer`, an answer of [`pack_entity_route`], where the row of each tag of `parents` names the
-/// tags above it in its list `parentTags`. Palette names there each floating tag above the tag.
+/// tags above it in its list `parentTags`.
 pub fn with_parent_tags(mut answer: Value, parents: &[(&str, &[&str])]) -> Value {
     let rows = answer.get_mut("tags").and_then(Value::as_array_mut);
     for row in rows.into_iter().flatten() {
