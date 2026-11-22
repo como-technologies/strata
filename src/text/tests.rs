@@ -3,8 +3,9 @@
 //! markdown.
 
 use super::answer_tags::{
-    ANSWER_ADDRESSES, ANSWER_CONTROLS, ANSWER_DIRECTION, ANSWER_DIRECTION_AS_TEXT, ANSWER_ISSUES,
-    ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS, assert_answer_addresses_as_they_are,
+    ANSWER_ADDRESS_LINES, ANSWER_ADDRESSES, ANSWER_CONTROLS, ANSWER_DIRECTION,
+    ANSWER_DIRECTION_AS_TEXT, ANSWER_ISSUES, ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS,
+    assert_answer_address_lines_as_markdown, assert_answer_addresses_as_they_are,
     assert_answer_controls_as_markdown, assert_answer_controls_as_text,
     assert_answer_issues_as_text, assert_answer_marks_as_text, assert_answer_mentions_as_text,
 };
@@ -136,6 +137,15 @@ fn a_text_on_a_terminal_shows_each_mark_of_the_direction_of_a_text_as_a_visible_
     );
     // a letter of a script that reads from right to left is text, and it stays as it is
     assert!(matches!(terminal_text("שלום"), Cow::Borrowed("שלום")));
+}
+
+#[test]
+fn a_text_with_each_mark_of_direction_as_an_escape_keeps_each_control_character() {
+    assert_eq!(direction_text(ANSWER_DIRECTION), ANSWER_DIRECTION_AS_TEXT);
+    assert!(matches!(
+        direction_text(ANSWER_CONTROLS),
+        Cow::Borrowed(ANSWER_CONTROLS)
+    ));
 }
 
 #[test]
@@ -322,6 +332,37 @@ fn a_cell_of_a_markdown_table_keeps_each_bare_address_that_github_links_as_it_is
     assert_eq!(
         markdown_cell("https://example.com/a|b"),
         "https://example.com/a\\|b"
+    );
+}
+
+#[test]
+fn a_bare_address_ends_its_link_before_the_escape_of_a_character_in_a_line_and_a_cell_of_markdown()
+{
+    let (end, z) = (ADDRESS_END, ZERO_WIDTH_SPACE);
+    assert_answer_address_lines_as_markdown(&markdown_line(ANSWER_ADDRESS_LINES));
+    assert_answer_address_lines_as_markdown(&markdown_cell(ANSWER_ADDRESS_LINES));
+    assert_answer_address_lines_as_markdown(&lines_cell([ANSWER_ADDRESS_LINES]));
+    // the tag comes after the marks that GitHub cuts from the link, also before a mark of direction
+    assert_eq!(
+        markdown_line("https://example.com/a_*.\r(www.example.com/b)\u{202e} c"),
+        format!(
+            r"https://example.com/a&lowbar;&ast;.{end}\\r(www.example.com/b){end}\\u{{202e}} c"
+        )
+    );
+    // GitHub links a scheme after the escape `\u{1b}`, and none after the `n` of the escape `\n`
+    assert_eq!(
+        markdown_line("\u{1b}https://example.com/*a* \nhttps://example.com/*b*"),
+        r"\\u{1b}https://example.com/*a&ast; \\nhttps://example.com/\*b\*"
+    );
+    // GitHub links `www.` after no escape
+    assert_eq!(
+        markdown_line("a\u{1b}www.example.com/@b"),
+        format!(r"a\\u{{1b}}www.example.com/@{z}b")
+    );
+    // a word that is no address gets no tag before its escape
+    assert_eq!(
+        markdown_line("https://localhost/a\nb"),
+        r"https://localhost/a\\nb"
     );
 }
 

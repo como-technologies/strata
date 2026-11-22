@@ -18964,6 +18964,41 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_each_control_character_of_a_mes
     }
 }
 
+/// The criterion of #983: a message of Palette has a bare address at the end of a line. In a note
+/// and in a verdict, the link of the address ends before the escape of the line break.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_ends_the_link_of_an_address_before_the_escape_of_a_line_break()
+ {
+    for md in markdown_that_quotes(common::ANSWER_ADDRESS_LINES, "see https://example.com/a") {
+        common::assert_answer_address_lines_as_markdown(&md);
+    }
+}
+
+/// The criterion of #983: a line of the values of a pack ends with a lone carriage return. The diff
+/// library ends a line of the diff there. On the terminal and in the markdown, `--full` shows each
+/// line of the diff on its own line. The line ends with `\r`.
+#[test]
+fn the_diff_of_full_shows_each_line_of_the_diff_on_its_own_line_after_a_lone_carriage_return() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let values = &a
+        .packs
+        .iter()
+        .find(|p| p.name == "ubuntu-aws")
+        .unwrap()
+        .values;
+    let b = with_os_pack(dir.path(), "values-return", |p| {
+        p["values"] = Value::from(format!("{values}\n# {}\n", common::ANSWER_CONTROLS));
+    });
+    let d = ops::compare(&a, &b, "t1");
+    let lines = concat!(r"+# \u{1b}[31mred\u{1b}[0m over\r", "\n+back\n+next\n");
+    for renderer in [common::terminal(), common::markdown()] {
+        let text = renderer.render(&d, &a, &b, true).unwrap();
+        assert!(text.contains(lines), "{lines:?} in\n{text}");
+    }
+}
+
 /// The criterion of #942: the tag and the values of a pack, as the answer gives them, hold control
 /// characters. The row and the fold of the pack, its diff of values, and its diff of `--full` show
 /// each one as a visible escape. Each diff keeps its own line breaks.

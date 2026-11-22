@@ -31,6 +31,24 @@ fn colorize(text: &str, p: &Paint) -> String {
         .collect()
 }
 
+/// `text`, a unified diff, with a line break after each carriage return that has no line break
+/// after it.
+///
+/// The diff library ends a line at such a carriage return too, so the next line of the diff comes
+/// right after it. With the line break, the terminal and the markdown show each line of the diff
+/// on its own line. [`terminal_lines`] writes the carriage return as `\r` at the end of the line.
+fn break_lone_returns(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        out.push(c);
+        if c == '\r' && chars.peek() != Some(&'\n') {
+            out.push('\n');
+        }
+    }
+    out
+}
+
 /// Unified diffs for every changed pack: raw values when they changed, and each changed manifest.
 /// In markdown mode each diff is in a `diff` code block, with a fence that no line of the diff
 /// ends. Otherwise `p` colors it.
@@ -43,6 +61,7 @@ pub(crate) fn full_diffs(
 ) -> String {
     let mut o = String::new();
     let mut emit = |text: String| {
+        let text = break_lone_returns(&text);
         if markdown {
             o.push_str(&code_block("diff", &text));
             o.push('\n');

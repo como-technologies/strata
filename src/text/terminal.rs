@@ -25,21 +25,30 @@ pub const DIRECTION_MARKS: [char; 12] = [
 /// A `\` stays as it is. So a text with the two characters `\n` and a text with a line break show
 /// the same. A `\` of a value or of a command keeps its form, such as the `\d` of a pattern.
 pub fn terminal_text(s: &str) -> Cow<'_, str> {
-    escaped(s, false)
+    escaped(s, shows_no_text)
 }
 
 /// `s` as [`terminal_text`] writes it, with each line break kept: a block of lines keeps its lines.
 ///
 /// A unified diff of `--full` and a fenced code block of markdown write their text here.
 pub(crate) fn terminal_lines(s: &str) -> Cow<'_, str> {
-    escaped(s, true)
+    escaped(s, |c| shows_no_text(c) && c != '\n')
 }
 
-/// `s` with each character that [`shows_no_text`] finds as its visible escape. With
-/// `keep_line_breaks`, each line break stays as it is.
-fn escaped(s: &str, keep_line_breaks: bool) -> Cow<'_, str> {
-    let escape = |c: char| shows_no_text(c) && !(keep_line_breaks && c == '\n');
-    if !s.chars().any(escape) {
+/// `s` with each of the [`DIRECTION_MARKS`] as the visible escape of [`terminal_text`], and each
+/// other character as it is.
+///
+/// The HTML report of `strata-preflight` writes each text here before [`html_text`]. A browser
+/// reads a mark of direction as a terminal reads it, so a name can show as another name.
+///
+/// [`html_text`]: super::html_text
+pub fn direction_text(s: &str) -> Cow<'_, str> {
+    escaped(s, |c| DIRECTION_MARKS.contains(&c))
+}
+
+/// `s` with each character that `escape` finds as its visible escape.
+fn escaped(s: &str, escape: impl Fn(char) -> bool) -> Cow<'_, str> {
+    if !s.chars().any(&escape) {
         return Cow::Borrowed(s);
     }
     let mut out = String::with_capacity(s.len());
@@ -55,6 +64,6 @@ fn escaped(s: &str, keep_line_breaks: bool) -> Cow<'_, str> {
 
 /// True for a character that a terminal reads as an instruction and not as text: a control
 /// character, or one of the [`DIRECTION_MARKS`].
-fn shows_no_text(c: char) -> bool {
+pub(super) fn shows_no_text(c: char) -> bool {
     c.is_control() || DIRECTION_MARKS.contains(&c)
 }
