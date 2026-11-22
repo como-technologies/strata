@@ -1,6 +1,7 @@
 //! The page of the book about the endpoint states what the code does: the settings that the
 //! service reads, and the limits that it keeps.
 
+use strata_report_endpoint::merge::DONE_WHEN;
 use strata_report_endpoint::server::{
     MOST_AT_ONCE, NEW_ISSUES_PER_HOUR, REQUESTS_PER_HOUR, WRITES_PER_HOUR,
 };
@@ -126,4 +127,14 @@ fn the_page_names_the_label_of_the_service_and_says_that_a_closed_issue_counts_t
     );
     // a closed issue does not lower the count, so the page must not say that it does
     assert!(!page.contains("Close the issues of values"), "{page}");
+}
+
+#[test]
+fn the_section_of_the_issue_of_a_value_names_the_line_that_starts_the_criteria_of_the_code() {
+    let page = page();
+    let issue = section(&page, "The issue of a value");
+    assert!(
+        issue.contains(&format!("the line `{DONE_WHEN}`")),
+        "{issue}"
+    );
 }

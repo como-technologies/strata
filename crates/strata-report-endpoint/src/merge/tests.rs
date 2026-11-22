@@ -191,7 +191,7 @@ fn an_issue_of_another_marker_or_with_no_marker_is_left_alone() {
 #[test]
 fn a_state_that_does_not_read_starts_the_count_again() {
     let mut tracker = Memory::default();
-    let mut edited = body("ProfileType", "later", &State::default());
+    let mut edited = body("ProfileType", "later", &State::default(), &criteria(None));
     edited = edited.replace(STATE, &format!("{STATE}zz"));
     tracker.issues.push(("t".into(), edited, true));
     merge(
@@ -383,4 +383,95 @@ fn the_endpoint_writes_a_value_in_a_code_span_as_the_library_does() {
     assert_eq!(span, "``late`r``");
     assert!(title.contains(&span), "{title}");
     assert!(text.contains(&span), "{text}");
+}
+
+/// How many lines of `text` are the line [`DONE_WHEN`].
+fn count_done_when(text: &str) -> usize {
+    text.lines().filter(|line| *line == DONE_WHEN).count()
+}
+
+#[test]
+fn the_line_that_starts_the_criteria_is_the_line_that_a_wave_reads() {
+    // pinned on purpose: the tools of a wave read this text, so a change of the const must fail
+    assert_eq!(DONE_WHEN, "Done when:");
+}
+
+#[test]
+fn a_new_issue_ends_with_the_line_done_when_and_an_item_for_each_step_of_a_new_value() {
+    let mut tracker = Memory::default();
+    merge(
+        &mut tracker,
+        &report(&[entry("ProfileType", "later", "0.26.0", 1)]),
+    )
+    .unwrap();
+    let text = &tracker.issues[0].1;
+    assert!(
+        text.ends_with(&format!("\n\n{DONE_WHEN}\n\n{ITEMS}")),
+        "{text}"
+    );
+    assert_eq!(count_done_when(text), 1, "{text}");
+    let items: Vec<&str> = ITEMS.lines().collect();
+    assert_eq!(items.len(), 3, "{ITEMS}");
+    assert!(
+        items.iter().all(|item| item.starts_with("- [ ] ")),
+        "{ITEMS}"
+    );
+}
+
+#[test]
+fn a_report_keeps_the_criteria_that_a_person_ticked_or_wrote_and_writes_the_table_again() {
+    let mut tracker = Memory::default();
+    merge(
+        &mut tracker,
+        &report(&[entry("ProfileType", "later", "0.26.0", 1)]),
+    )
+    .unwrap();
+    // a person ticks the first item and writes one more, in the editor of GitHub, which sends CRLF
+    let text = tracker.issues[0].1.clone();
+    let at = text.find(&format!("\n{DONE_WHEN}\n")).unwrap();
+    let tail = text[at..].replacen("- [ ] ", "- [x] ", 1) + "- [ ] Mine.\n";
+    assert!(tail.contains("\n- [x] "), "{tail}");
+    tracker.issues[0].1 = format!("{}{tail}", &text[..at]).replace('\n', "\r\n");
+    merge(
+        &mut tracker,
+        &report(&[entry("ProfileType", "later", "0.27.0", 2)]),
+    )
+    .unwrap();
+    let text = &tracker.issues[0].1;
+    assert!(text.contains("| Lines | 3 |"), "{text}");
+    assert!(
+        text.contains("| Releases of strata | `0.26.0`, `0.27.0` |"),
+        "{text}"
+    );
+    assert!(text.ends_with(&tail), "{text}");
+    assert!(!text.contains('\r'), "one kind of line break: {text:?}");
+    assert_eq!(count_done_when(text), 1, "{text}");
+}
+
+#[test]
+fn an_issue_of_an_older_service_with_no_line_done_when_gets_the_criteria_of_a_new_issue() {
+    let mut tracker = Memory::default();
+    let state = State {
+        lines: 4,
+        reports: 2,
+        ..State::default()
+    };
+    let older = format!(
+        "{MARKER}ProfileType later -->\n{STATE}{} -->\nThe table.\n\
+         \n\
+         The endpoint writes the table above again with each report. Write your notes in a comment.\n",
+        hex::encode(serde_json::to_vec(&state).unwrap())
+    );
+    tracker.issues.push(("t".into(), older, true));
+    merge(
+        &mut tracker,
+        &report(&[entry("ProfileType", "later", "0.26.0", 1)]),
+    )
+    .unwrap();
+    let text = &tracker.issues[0].1;
+    assert!(text.contains("| Lines | 5 |"), "the count goes on: {text}");
+    assert!(
+        text.ends_with(&format!("\n\n{DONE_WHEN}\n\n{ITEMS}")),
+        "{text}"
+    );
 }

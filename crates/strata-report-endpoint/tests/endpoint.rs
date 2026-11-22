@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use strata::closed_set::unknown::log::SCHEMA as LOG_SCHEMA;
 use strata::closed_set::unknown::report::{Report, SCHEMA as REPORT_SCHEMA};
 use strata::closed_set::unknown::send::post;
+use strata_report_endpoint::merge::DONE_WHEN;
 use strata_report_endpoint::server::{Limits, MOST_AT_ONCE, Service, serve};
 use strata_report_endpoint::settings::{DEFAULT_LABEL, DEFAULT_MILESTONE};
 use strata_report_endpoint::tracker::GitHub;
@@ -308,6 +309,32 @@ fn two_sends_of_strata_for_one_value_are_one_issue_with_a_count_of_both() {
             ("PATCH", "/repos/o/r/issues/1"),
         ]
     );
+}
+
+#[test]
+fn the_issue_that_the_service_opens_has_the_line_done_when_and_a_second_send_keeps_a_tick() {
+    let (github, state) = stand_in_github();
+    let running = start_service(&github);
+    post(&running.address, &report(&[entry("later", 1)]), 0).unwrap();
+    running.settle();
+    let ticked = {
+        let mut state = state.lock().unwrap();
+        let body = state.issues[0].body.clone();
+        let at = body
+            .find(&format!("\n{DONE_WHEN}\n\n- [ ] "))
+            .unwrap_or_else(|| panic!("no line {DONE_WHEN:?} with an item: {body}"));
+        // a person ticks the first item in the editor of GitHub, which sends CRLF
+        let ticked = body[at..].replacen("- [ ] ", "- [x] ", 1);
+        state.issues[0].body = format!("{}{ticked}", &body[..at]).replace('\n', "\r\n");
+        ticked
+    };
+    post(&running.address, &report(&[entry("later", 1)]), 1).unwrap();
+    running.settle();
+    let state = state.lock().unwrap();
+    assert_eq!(state.issues.len(), 1);
+    let body = &state.issues[0].body;
+    assert!(body.contains("| Lines | 2 |"), "{body}");
+    assert!(body.ends_with(&ticked), "the tick stays: {body}");
 }
 
 #[test]

@@ -9,6 +9,10 @@
 //! A report that names a value again changes the body of its issue. It opens no issue and writes no
 //! comment. An issue that a maintainer closed gets the new count too, and stays closed: users of an
 //! older release send the value until they update.
+//!
+//! The body ends with the criteria of the issue, from the line [`DONE_WHEN`] to the end. A report
+//! writes the body again up to that line, and keeps the rest. So a tick or an item of a person
+//! stays.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,6 +34,20 @@ const MARKER: &str = "<!-- strata-report: values ";
 
 /// The start of the second line of an issue of the endpoint.
 const STATE: &str = "<!-- strata-report-state: ";
+
+/// The line that starts the criteria of an issue. Each issue of strata has this line, and a wave
+/// takes no issue without it.
+pub const DONE_WHEN: &str = "Done when:";
+
+/// The criteria of a new issue, after the line [`DONE_WHEN`]. They are the steps of the page "What
+/// to do with a new value", each with the comment, the file, or the command that shows it.
+const ITEMS: &str = "\
+- [ ] A comment states where the value comes from: the answer of the lab that holds the value, or \
+why no answer holds it.\n\
+- [ ] `reads.values` of the fact of each route names the value, and `cargo xtask facts --check` \
+passes.\n\
+- [ ] The closed set of strata names the value, and `tests/closed_set.rs` holds its text. Or the \
+page of the fact says why the set stays as it is. `just docs-check` passes.\n";
 
 /// What a merge did.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -155,8 +173,27 @@ fn title(set: &str, value: &str) -> String {
     )
 }
 
-/// The body of the issue for the set `set` and the value `value`, with the state `state`.
-fn body(set: &str, value: &str, state: &State) -> String {
+/// The criteria of the issue whose body was `old`: the text of `old` from the line [`DONE_WHEN`] to
+/// the end, with a line break after each line.
+///
+/// A new issue has no `old`. It gets the line and [`ITEMS`], and so does a body with no such line.
+fn criteria(old: Option<&str>) -> String {
+    let kept: String = old
+        .into_iter()
+        .flat_map(str::lines)
+        .skip_while(|line| line.trim_end() != DONE_WHEN)
+        .map(|line| format!("{line}\n"))
+        .collect();
+    if kept.is_empty() {
+        format!("{DONE_WHEN}\n\n{ITEMS}")
+    } else {
+        kept
+    }
+}
+
+/// The body of the issue for the set `set` and the value `value`, with the state `state`. The body
+/// ends with `criteria`, the text that [`criteria`] gives.
+fn body(set: &str, value: &str, state: &State, criteria: &str) -> String {
     // the state is plain data, so it always serializes; an empty text only drops the state
     let json = serde_json::to_vec(state).unwrap_or_default();
     let page = format!("{BOOK_URL}development/facts.html#what-to-do-with-a-new-value");
@@ -178,7 +215,11 @@ fn body(set: &str, value: &str, state: &State) -> String {
          Prove the value in the lab. Then add the value to the closed set of strata, or write why not. \
          [What to do with a new value]({page}) says how.\n\
          \n\
-         The endpoint writes the table above again with each report. Write your notes in a comment.\n",
+         The endpoint writes the text above again with each report. \
+         It keeps the text from the line `{DONE_WHEN}` to the end, \
+         so you can change the items and tick them. Write your notes in a comment.\n\
+         \n\
+         {criteria}",
         marker = marker(set, value),
         state_hex = hex::encode(json),
         reports = if state.reports == 1 {
@@ -295,11 +336,17 @@ pub fn apply(tracker: &mut impl Tracker, plan: Plan) -> Result<Outcome, TrackerE
             Some(issue) => {
                 let mut state = read_state(&issue.body);
                 state.add(&group.state);
-                tracker.update(issue.number, &body(&group.set, &group.value, &state))?;
+                let text = body(
+                    &group.set,
+                    &group.value,
+                    &state,
+                    &criteria(Some(&issue.body)),
+                );
+                tracker.update(issue.number, &text)?;
                 outcome.updated += 1;
             }
             None => {
-                let text = body(&group.set, &group.value, &group.state);
+                let text = body(&group.set, &group.value, &group.state, &criteria(None));
                 tracker.open(&title(&group.set, &group.value), &text)?;
                 outcome.opened += 1;
             }
