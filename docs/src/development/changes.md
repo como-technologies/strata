@@ -72,18 +72,72 @@ A ruleset on `main` applies these rules to each change:
 | Rule | What it needs |
 | --- | --- |
 | Pull request | Each change to `main` comes from a pull request, and merges with a squash. |
+| Merge queue | Each pull request merges through the merge queue of `main`. |
 | Checks | `checks / lint and test`, `checks / the lowest Rust version`, `checks / docs`, and `checks / build x86_64-unknown-linux-musl` pass. |
-| Verify | The verify status of the head commit is success. |
+| Verify | The status `riff/verify` is success, on the head commit and on the merge group commit. |
 | History | No force push to `main`, and no delete of it. |
 
-With auto-merge on, GitHub merges the pull request when the checks pass and the
-verify status is success, and deletes the branch. A verify that fails stops the
-merge: the author fixes the change, pushes, and asks for a new verify.
+With auto-merge on, GitHub adds the pull request to the merge queue when the
+checks pass and `riff/verify` of the head commit is success. The queue makes a
+merge group commit of `main`, each pull request before it in the queue, and the
+change. The `ci` workflow runs on the event `merge_group`, and each check of the
+ruleset runs again on that commit. When they pass, GitHub moves `main` to the
+merge group commit, and deletes the branch. When one fails, the queue removes
+the pull request, and `main` does not change.
+
+A verify that fails stops the merge: the author fixes the change, pushes, and
+asks for a new verify.
 
 An admin of the repository can bypass each rule of the ruleset. For example, an
 admin pushes the commit of a release to `main` with no pull request (see
 [Release](./release.md)). The rules do not stop an admin, so an admin follows
 the steps of this page for each other change.
+
+### Why a merge queue
+
+Two pull requests can each pass against a `main` that does not have the other.
+When both merge, `main` can fail. The merge queue tests each pull request with
+the pull requests that merge before it. So a fault that two changes make
+together fails in the queue, not on `main`.
+
+The ruleset does not use the rule "Require branches to be up to date before
+merging". With that rule, a pull request that is behind `main` cannot merge. So
+each merge stops each other pull request until its author merges `main` into it.
+The new head commit then needs a new verify. The merge queue tests the merge
+result, and keeps the verify of the head commit.
+
+### The verify of a merge group
+
+The verify is a status of the head commit of a pull request, so a merge group
+commit has none. The queue waits for `riff/verify` on that commit, so the job
+`verify of the merge group` of `ci` sets it. The job runs only on the event
+`merge_group`, and starts no verify:
+
+1. `scripts/dev/merge-group-verify.sh` reads the number of the pull request from
+   the branch of the merge group.
+2. It reads `riff/verify` of the head commit of that pull request.
+3. When that status is success, it sets `riff/verify` to success on the merge
+   group commit, with the link of the verify.
+4. If not, it sets failure, and the queue removes the pull request.
+
+The rule of the checks names no app for `riff/verify`, because two sources set
+it. The verify sets it on the head commit, and GitHub Actions sets it on the
+merge group commit. If the rule names the app of the verify, the status of the
+merge group does not count, and no pull request merges.
+
+### What runs on a merge group
+
+| Job | On a merge group |
+| --- | --- |
+| `checks`: `lint and test`, `the lowest Rust version`, `docs`, and `build x86_64-unknown-linux-musl` | Runs. These are the checks of the ruleset. |
+| `checks`: `benchmarks` | Skips. No rule needs it, and the push to `main` after the merge runs it. |
+| `deny list` and `Gate` | Run, as on each event. No rule reads them on the merge group commit. |
+| `verify of the merge group` | Runs only on a merge group. |
+| `publish the book` | Skips, because it runs only on `main`. The push to `main` after the merge runs it. |
+
+The workflows `codeql`, `Session image`, and `Observer image` have no event
+`merge_group`, because no rule needs them. `codeql` runs again on the push to
+`main`.
 
 ## The evidence
 

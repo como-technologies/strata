@@ -1,9 +1,9 @@
 name: checks
 
-# Every check this repository has, as one reusable workflow. The ci workflow runs it on a push and
-# a pull request, and the release workflow runs it before it builds anything, so a tag cannot ship
-# what the checks refuse. It deploys nothing, so it needs no more than `contents: read`, and a
-# caller that grants no more can still call it.
+# Every check this repository has, as one reusable workflow. The ci workflow runs it on a push, a
+# pull request, and a merge group. The release workflow runs it before it builds anything, so a tag
+# cannot ship what the checks refuse. It deploys nothing, so it needs no more than `contents: read`,
+# and a caller that grants no more can still call it.
 on:
   workflow_call:
 
@@ -32,7 +32,8 @@ jobs:
       # CI runs the same recipes a developer runs locally
       - run: just lint
       # Each comment sentence that the change adds has 25 words or fewer. On a pull request, the first
-      # parent is the base branch. On a push, it is the commit before.
+      # parent is the base branch. On a push, it is the commit before. On a merge group, it is the
+      # commit before the pull request in the queue.
       - run: just comment-words HEAD^1
       - run: just test
       # a separate crate that depends on strata as a library
@@ -70,8 +71,11 @@ jobs:
       # question only, which is whether the oldest compiler the crate claims still compiles it.
       - run: cargo check --workspace --all-targets
 
+  # No rule of main needs the benchmarks, and the merge queue waits only for a required check. So a
+  # merge group skips them, and the push to main after the merge runs them.
   bench:
     name: benchmarks
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

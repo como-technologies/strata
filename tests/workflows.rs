@@ -7,9 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
 use crate::common::{
-    CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, MACHINE_GIT_USER, executable, git, isolate_git,
-    just_dry_run, on_path, one_line, recipe, repo_file, runs_of, script, steps, strings, text,
-    toml_value, walk, workflow, workflow_files, workflow_text,
+    CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, MACHINE_GIT_USER, code_spans, executable, git,
+    isolate_git, just_dry_run, on_path, one_line, recipe, repo_file, runs_of, script, steps,
+    strings, table_rows, text, toml_value, walk, workflow, workflow_files, workflow_text,
 };
 
 #[test]
@@ -225,6 +225,138 @@ fn the_deny_list_job_scans_with_the_secret_on_each_event_and_the_gate_and_the_bo
     for trace in ["set -x", "bash -x", "xtrace"] {
         assert!(!job_text.contains(trace), "the job turns on a trace");
     }
+}
+
+// ---- the merge queue -----------------------------------------------------------------------------
+
+/// The checks that the ruleset of `main` needs: the code spans of the row `Checks` of the table of
+/// rules in "How a change lands".
+fn checks_of_the_ruleset() -> Vec<String> {
+    let page = repo_file("docs/src/development/changes.md");
+    let row = table_rows(&page, "| Rule |")
+        .into_iter()
+        .find(|row| row[0] == "Checks")
+        .expect("the table of rules in changes.md has a row Checks");
+    code_spans(&row[1])
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+}
+
+/// The merge queue merges only when each check of the ruleset passed on the merge group commit.
+/// `ci.yml` runs on the event `merge_group`. Each check of the ruleset is a job of `checks.yml`
+/// that the job `checks` of `ci.yml` calls, and neither job has a condition.
+#[test]
+fn ci_runs_on_a_merge_group_and_each_check_of_the_ruleset_runs_there_with_no_condition() {
+    let ci = workflow("ci.yml");
+    let events = ci["on"].as_mapping().expect("ci.yml has a map of events");
+    assert!(
+        events.contains_key("merge_group"),
+        "ci.yml does not run on a merge group"
+    );
+    let caller = ci["jobs"]
+        .as_mapping()
+        .expect("ci.yml has jobs")
+        .values()
+        .find(|job| job["uses"].as_str() == Some("./.github/workflows/checks.yml"))
+        .expect("a job of ci.yml calls checks.yml");
+    assert!(
+        caller.get("if").is_none(),
+        "the call of checks.yml has a condition"
+    );
+    let prefix = format!(
+        "{} / ",
+        caller["name"].as_str().expect("the call has a name")
+    );
+
+    let checks = workflow("checks.yml");
+    let jobs = checks["jobs"].as_mapping().expect("checks.yml has jobs");
+    let required = checks_of_the_ruleset();
+    assert_eq!(required.len(), 4, "{required:?}");
+    for check in &required {
+        let name = check
+            .strip_prefix(&prefix)
+            .unwrap_or_else(|| panic!("{check} is no job of the call of checks.yml"));
+        let job = jobs
+            .values()
+            .find(|job| job["name"].as_str() == Some(name))
+            .unwrap_or_else(|| panic!("checks.yml has no job named {name}"));
+        assert!(
+            job.get("if").is_none(),
+            "the job {name} of checks.yml has a condition, and the ruleset needs it"
+        );
+    }
+}
+
+/// A merge group skips the benchmarks, because no rule needs them. The publish of the book runs
+/// only on `main`, and a merge group runs on a branch of the queue.
+#[test]
+fn a_merge_group_skips_the_benchmarks_and_the_publish_of_the_book() {
+    let checks = workflow("checks.yml");
+    assert_eq!(
+        checks["jobs"]["bench"]["if"].as_str(),
+        Some("github.event_name != 'merge_group'")
+    );
+    let ci = workflow("ci.yml");
+    assert_eq!(
+        ci["jobs"]["publish-docs"]["if"].as_str(),
+        Some("github.ref == 'refs/heads/main'")
+    );
+}
+
+/// The verify is a status of the head commit of a pull request, so a merge group commit has none.
+/// The job `verify of the merge group` runs only on a merge group, and can write a status. It gives
+/// the script the branch and the commit of the merge group.
+#[test]
+fn the_verify_of_the_merge_group_runs_only_on_a_merge_group_and_gives_the_script_the_group() {
+    let ci = workflow("ci.yml");
+    let job = &ci["jobs"]["merge-verify"];
+    assert_eq!(job["name"].as_str(), Some("verify of the merge group"));
+    assert_eq!(
+        job["if"].as_str(),
+        Some("github.event_name == 'merge_group'")
+    );
+    assert_eq!(job["permissions"]["contents"].as_str(), Some("read"));
+    assert_eq!(job["permissions"]["statuses"].as_str(), Some("write"));
+    for (key, value) in [
+        ("GH_TOKEN", "${{ github.token }}"),
+        ("GH_REPO", "${{ github.repository }}"),
+        ("HEAD_REF", "${{ github.event.merge_group.head_ref }}"),
+        ("HEAD_SHA", "${{ github.event.merge_group.head_sha }}"),
+    ] {
+        assert_eq!(job["env"][key].as_str(), Some(value), "{key}");
+    }
+    assert_eq!(
+        runs_of("ci.yml", "merge-verify"),
+        ["scripts/dev/merge-group-verify.sh \"$HEAD_REF\" \"$HEAD_SHA\""]
+    );
+}
+
+/// The ruleset of `main` reads `riff/verify` as a status of a commit. So only the job that sets it
+/// on a merge group asks to write a status. Each workflow sets its own permissions, so no job takes
+/// the default of the repository.
+#[test]
+fn only_the_verify_of_the_merge_group_asks_to_write_a_status() {
+    let mut writers = Vec::new();
+    for file in workflow_files() {
+        let doc = workflow(&file);
+        assert!(
+            doc.get("permissions").is_some(),
+            "{file} sets no permissions"
+        );
+        let jobs = doc["jobs"].as_mapping().expect("a workflow has jobs");
+        let scopes = std::iter::once(("the workflow", &doc["permissions"])).chain(
+            jobs.iter()
+                .map(|(key, job)| (key.as_str().unwrap(), &job["permissions"])),
+        );
+        for (scope, permissions) in scopes {
+            let all = permissions.as_str() == Some("write-all");
+            if all || permissions["statuses"].as_str() == Some("write") {
+                writers.push(format!("{file} {scope}"));
+            }
+        }
+    }
+    assert_eq!(writers, ["ci.yml merge-verify"]);
 }
 
 /// The tests of `xtask` hold the routes of the stand-in of Palette, and `cargo test` of the root

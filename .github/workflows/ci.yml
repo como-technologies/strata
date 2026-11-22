@@ -1,10 +1,13 @@
 name: ci
 
-# The checks on every push and pull request, and the one deployment that follows them.
+# The checks on every push, pull request, and merge group, and the one deployment that follows them.
 on:
   push:
     branches: [main]
   pull_request:
+  # The merge queue of main. GitHub makes a merge group commit of main and the pull request, and the
+  # required checks run again on it. See "The merge" in docs/src/development/changes.md.
+  merge_group:
 
 permissions:
   contents: read
@@ -40,7 +43,28 @@ jobs:
     steps:
       - run: echo "each check passed"
 
-  # the book goes out only after every check passed, and only from main
+  # The verify is a status of the head commit of a pull request, so a merge group commit has none.
+  # The queue waits for it. This job sets riff/verify on the merge group commit from the status of
+  # the head commit, and starts no verify. A pull request with no passed verify gets failure, and
+  # the queue removes it.
+  merge-verify:
+    name: verify of the merge group
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      HEAD_REF: ${{ github.event.merge_group.head_ref }}
+      HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/dev/merge-group-verify.sh "$HEAD_REF" "$HEAD_SHA"
+
+  # The book goes out only after every check passed, and only from main. A merge group runs on a
+  # branch of the queue, so it skips this job: the push to main after the merge publishes the book.
   publish-docs:
     name: publish the book
     needs: [checks, deny-list]

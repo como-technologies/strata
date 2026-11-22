@@ -207,7 +207,7 @@ do not name.
 | Who runs it | Directory | Examples |
 | --- | --- | --- |
 | A user, in a pipeline | `scripts/ci/` | `install-strata.sh`, `merge-gate.sh`, `verify-report.sh` |
-| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `deny-list.sh`, `fuzz.sh`, `set-version.sh`, `tag-release.sh` |
+| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `deny-list.sh`, `fuzz.sh`, `merge-group-verify.sh`, `set-version.sh`, `tag-release.sh` |
 | A maintainer, for one crate or one example | beside that crate or example | `examples/live/`, `crates/strata-knurl/scripts/` |
 
 A script in `scripts/ci/` is a product: a page under Automation documents it, and
@@ -671,7 +671,8 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 ## Continuous integration
 
 `.github/workflows/checks.yml` holds every check. The `ci` workflow runs it on each push to
-`main` and on each pull request. The release workflow runs it before it builds a binary:
+`main`, on each pull request, and on each merge group of the merge queue. The release workflow runs
+it before it builds a binary:
 
 | Job | Runs |
 | --- | --- |
@@ -681,7 +682,7 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 | benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
-`ci` adds three jobs of its own. `deny list` scans each tracked file and its
+`ci` adds four jobs of its own. `deny list` scans each tracked file and its
 path for the names that the public tree must not hold: see
 [The deny list](#the-deny-list). `Gate` needs the checks and `deny list`, and
 does no other work. It is the one check run that the verify reads: see
@@ -689,6 +690,12 @@ does no other work. It is the one check run that the verify reads: see
 same two jobs and runs only on `main`, so the site is a build that every check
 passed. The `docs` job builds the book once and passes it to the publish job, so
 no job builds it twice.
+
+`verify of the merge group` runs only on a merge group. It sets `riff/verify` on
+the merge group commit from the status of the head commit: see
+[The verify of a merge group](./changes.md#the-verify-of-a-merge-group).
+[What runs on a merge group](./changes.md#what-runs-on-a-merge-group) names each
+job that a merge group runs or skips.
 
 No job that `Gate` needs runs `just adapter-test`, and no recipe of such a job
 runs it. `tests/workflows.rs` reads the `just` steps of each such job, of each
@@ -909,8 +916,9 @@ only its patch releases.
 The security updates of Dependabot are on in the settings of the repository, so
 an alert can also open a pull request. Each pull request of Dependabot goes to
 the milestone Backlog, so no wave counts it. riff does not take it, so it gets
-no `riff/verify`, which the ruleset of `main` needs. A maintainer merges it when
-its checks pass.
+no `riff/verify`, which the ruleset of `main` needs. So the verify of its merge
+group is failure, and the merge queue removes it. An admin merges it past the
+queue, with the bypass of the ruleset, when its checks pass.
 
 ## A change to how strata reads Palette
 

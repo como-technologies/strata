@@ -122,12 +122,17 @@ fn set_version(dir: &Path, new: &str, env: &[(&str, &str)]) -> (Output, Vec<Stri
         .env("FAKE_LOG", &log)
         .envs(env.iter().copied());
     let o = isolate_git(&mut c).output_locked().unwrap();
-    let calls = std::fs::read_to_string(&log)
+    (o, calls_in(&log))
+}
+
+/// The lines of the log `log` of a stand-in, one for each call. A run that calls no stand-in
+/// writes no log, and gives no line.
+fn calls_in(log: &Path) -> Vec<String> {
+    std::fs::read_to_string(log)
         .unwrap_or_default()
         .lines()
         .map(String::from)
-        .collect();
-    (o, calls)
+        .collect()
 }
 
 /// The text of `file` in the last commit of `dir`.
@@ -1137,5 +1142,119 @@ fn the_check_of_the_rule_passes_only_the_rule_of_strata_with_an_alert_on_each_ma
         vec!["run"],
     ] {
         assert_eq!(codeql_rule(&args).status.code(), Some(2), "{args:?}");
+    }
+}
+
+// ---- the verify of a merge group -----------------------------------------------------------
+
+/// A `gh` for `merge-group-verify.sh` in the repository `o/r`. It logs each call to `FAKE_LOG`. The
+/// head commit of pull request 12 is `abc1234def`. The filter of its status prints `FAKE_STATUS`: a
+/// state and a link, with a tab between them. It refuses each other call.
+const FAKE_STATUS_GH: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_LOG"
+case "$*" in
+  "api repos/o/r/pulls/12 --jq .head.sha") echo abc1234def ;;
+  "api repos/o/r/commits/abc1234def/status --jq "*) printf '%s\n' "$FAKE_STATUS" ;;
+  "api -X POST repos/o/r/statuses/9999aaa "*) ;;
+  *) echo "unexpected gh call: $*" >&2; exit 3 ;;
+esac
+"#;
+
+/// The branch of the merge group of pull request 12 in the queue of `main`.
+const GROUP_BRANCH: &str = "refs/heads/gh-readonly-queue/main/pr-12-5e6f7a8";
+
+/// Run `merge-group-verify.sh` with `args`, the stand-in `gh`, and `status` as the status of the
+/// head commit. `repo` is `GH_REPO`, or no such variable. Gives the output and the calls of `gh`.
+fn merge_group_verify(args: &[&str], status: &str, repo: Option<&str>) -> (Output, Vec<String>) {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = fake_bin(dir.path(), &[("gh", FAKE_STATUS_GH)]);
+    let log = dir.path().join("calls.log");
+    let mut c = Command::new("bash");
+    c.arg(script("dev/merge-group-verify.sh"))
+        .args(args)
+        .env("PATH", path_with(&bin))
+        .env("FAKE_LOG", &log)
+        .env("FAKE_STATUS", status)
+        .env_remove("GH_REPO");
+    if let Some(repo) = repo {
+        c.env("GH_REPO", repo);
+    }
+    let o = c.output_locked().unwrap();
+    (o, calls_in(&log))
+}
+
+#[test]
+fn merge_group_verify_sets_success_with_the_link_when_the_head_of_the_pull_request_passed() {
+    let link = "https://github.com/o/r/pull/12#issuecomment-1";
+    let other_base = "refs/heads/gh-readonly-queue/release/1.0/pr-12-5e6f7a8";
+    for branch in [GROUP_BRANCH, other_base] {
+        let (o, calls) = merge_group_verify(
+            &[branch, "9999aaa"],
+            &format!("success\t{link}"),
+            Some("o/r"),
+        );
+        assert!(o.status.success(), "{branch}: {}", text(&o.stderr));
+        assert_eq!(calls.len(), 3, "{calls:?}");
+        assert_eq!(calls[0], "api repos/o/r/pulls/12 --jq .head.sha");
+        assert!(
+            calls[1].contains("select(.context == \"riff/verify\")"),
+            "{calls:?}"
+        );
+        assert_eq!(
+            calls[2],
+            format!(
+                "api -X POST repos/o/r/statuses/9999aaa -f state=success -f context=riff/verify \
+                 -f description=The verify of pull request #12 passed at abc1234 -f target_url={link}"
+            )
+        );
+    }
+}
+
+#[test]
+fn merge_group_verify_sets_failure_and_exits_1_when_the_head_has_no_passed_verify() {
+    for status in ["\t", "failure\thttps://c", "pending\t", "error\t"] {
+        let (o, calls) = merge_group_verify(&[GROUP_BRANCH, "9999aaa"], status, Some("o/r"));
+        assert_eq!(o.status.code(), Some(1), "{status:?}: {}", text(&o.stderr));
+        assert_eq!(calls.len(), 3, "{status:?}: {calls:?}");
+        assert_eq!(
+            calls[2],
+            "api -X POST repos/o/r/statuses/9999aaa -f state=failure -f context=riff/verify \
+             -f description=Pull request #12 has no passed verify at abc1234",
+            "{status:?}"
+        );
+        assert!(
+            text(&o.stderr).contains("pull request #12 has no passed riff/verify at abc1234def"),
+            "{status:?}: {}",
+            text(&o.stderr)
+        );
+    }
+}
+
+#[test]
+fn merge_group_verify_sets_no_status_and_exits_2_without_a_merge_group_or_a_repository() {
+    let cases: [(&[&str], Option<&str>); 5] = [
+        (&["refs/heads/main", "9999aaa"], Some("o/r")),
+        (
+            &["refs/heads/gh-readonly-queue/main/pr-x-5e6f7a8", "9999aaa"],
+            Some("o/r"),
+        ),
+        (&[GROUP_BRANCH, ""], Some("o/r")),
+        (&[], Some("o/r")),
+        (&[GROUP_BRANCH, "9999aaa"], None),
+    ];
+    for (args, repo) in cases {
+        let (o, calls) = merge_group_verify(args, "success\t", repo);
+        assert_eq!(
+            o.status.code(),
+            Some(2),
+            "{args:?} {repo:?}: {}",
+            text(&o.stderr)
+        );
+        assert!(calls.is_empty(), "{args:?} {repo:?}: {calls:?}");
+        assert!(
+            text(&o.stderr).starts_with("merge-group-verify: "),
+            "{}",
+            text(&o.stderr)
+        );
     }
 }
