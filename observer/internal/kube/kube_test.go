@@ -11,6 +11,7 @@ import (
 	"errors"
 	"math/big"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -174,7 +175,7 @@ func anotherCA(t *testing.T) []byte {
 
 func TestAServerThatTheCADoesNotSignIsATransportFailure(t *testing.T) {
 	a := testkit.PodsAPI(t)
-	other := testkit.WriteIn(t, t.TempDir(), "ca.crt", string(anotherCA(t)))
+	other := testkit.WriteIn(t, t.TempDir(), caFile, string(anotherCA(t)))
 	cfg := cfgOf(a)
 	cfg.CAFile = other
 	if _, err := New(cfg).Pods(context.Background()); kindOf(err) != docs.KindKubeTransport {
@@ -234,6 +235,22 @@ func TestInClusterReadsTheVariablesOfTheKubelet(t *testing.T) {
 		delete(short, drop)
 		if _, err := InCluster(func(k string) string { return short[k] }, "/volume"); kindOf(err) != docs.KindKubeConfig {
 			t.Errorf("without %s: %v", drop, err)
+		}
+	}
+}
+
+// Each value of testkit that copies a const of kube holds the value of that const. The values are the variables of the
+// address of the API server, and the names of the files of the token and the CA.
+func TestEachCopyInTestkitHoldsTheValueOfItsConst(t *testing.T) {
+	a := testkit.PodsAPI(t)
+	for _, c := range []struct{ got, want string }{
+		{testkit.KubeHost, hostEnv},
+		{testkit.KubePort, portEnv},
+		{filepath.Base(a.TokenFile), tokenFile},
+		{filepath.Base(a.CAFile), caFile},
+	} {
+		if c.got != c.want {
+			t.Errorf("testkit holds %q, and kube holds %q", c.got, c.want)
 		}
 	}
 }

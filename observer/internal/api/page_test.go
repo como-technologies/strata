@@ -10,7 +10,7 @@ import (
 
 func TestPageServesEachFileWithTheTypeOfItsKind(t *testing.T) {
 	h := (&Server{Source: stub{}, Page: Page(fstest.MapFS{
-		"index.html":        {Data: []byte("<title>page</title>")},
+		pageIndex:           {Data: []byte("<title>page</title>")},
 		"app.js":            {Data: []byte("1")},
 		"app.css":           {Data: []byte("a{}")},
 		"fonts/a.woff2":     {Data: []byte("font")},

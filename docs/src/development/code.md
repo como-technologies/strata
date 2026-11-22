@@ -535,6 +535,17 @@ the Rust code, and these rules are for the Go code.
   test files import it. A helper or a value that one package uses stays in that
   package. The tests of `internal/docs` keep their own copy, because testkit
   imports `internal/docs`.
+- A value of `internal/testkit` can hold the value of a const of another package
+  only when testkit cannot read that const. That is so when the tests of that
+  package import testkit, because the import is then a cycle. It is also so when
+  the const has a name with a small letter. The test
+  `TestEachCopyInTestkitHoldsTheValueOfItsConst` of that package compares each
+  copy with its const. A test that can read the const uses it, and not the copy.
+- The server writes the names of its headers as text, with no const. So
+  `TestEachAnswerHasTheFourHeaders` finds `testkit.HeaderPolicy` and
+  `testkit.HeaderNoSniff`, with their values, in each answer.
+- `testkit.AskPath` and `testkit.DiffPath` build the routes of a pack. A test
+  does not build them by hand.
 
 `just lint` runs `gofmt` and `go vet` on `observer/`, and `just test` runs
 `go test` there.

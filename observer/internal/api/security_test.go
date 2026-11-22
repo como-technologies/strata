@@ -45,11 +45,11 @@ func TestEachAnswerHasTheFourHeaders(t *testing.T) {
 		name, method, path, host string
 		status                   int
 	}{
-		{"health", "GET", pathHealth, testkit.LoopbackHost, 200},
+		{"health", "GET", patternHealth, testkit.LoopbackHost, 200},
 		{"a summary route", "GET", summaryRoutes[patternCluster], testkit.LoopbackHost, 200},
 		{"the detail route", "GET", pathPublished, "localhost:1", 200},
-		{"a profile that does not exist", "GET", "/v1/profiles/nope", testkit.LoopbackHost, 404},
-		{noSuchSide, "GET", "/v1/packs/aws-stack" + testkit.KubernetesDiff + "?side=x", testkit.LoopbackHost, 400},
+		{"a profile that does not exist", "GET", patternProfiles + "/nope", testkit.LoopbackHost, 404},
+		{noSuchSide, "GET", kubernetesDiff("x"), testkit.LoopbackHost, 400},
 		{"the page", "GET", "/", testkit.LoopbackHost, 404},
 		{"a post", "POST", summaryRoutes[patternCluster], testkit.LoopbackHost, 405},
 		{"a host that is not loopback", "GET", summaryRoutes[patternCluster], "evil.example", 421},
@@ -108,7 +108,7 @@ func TestOnlyGetIsServed(t *testing.T) {
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
 	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT"} {
-		for _, path := range []string{summaryRoutes[patternCluster], pathHealth, pathPublished, "/nowhere"} {
+		for _, path := range []string{summaryRoutes[patternCluster], patternHealth, pathPublished, "/nowhere"} {
 			rec := testkit.Serve(h, method, path, testkit.LoopbackHost, "")
 			refusedWithAllow(t, rec, method+" "+path, http.MethodGet)
 		}
@@ -120,7 +120,7 @@ func TestListenTakesOnlyALoopbackAddress(t *testing.T) {
 		addr string
 		ok   bool
 	}{
-		{testkit.LoopbackHost, true},
+		{DefaultListen, true},
 		{"127.0.0.1:0", true},
 		{"127.1.2.3:8080", true},
 		{"[::1]:8080", true},

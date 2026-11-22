@@ -341,8 +341,11 @@ func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.
 	if behind != 1 {
 		t.Errorf("the versions cycle ran %d behind", behind)
 	}
-	if rec := click(handlerOf(o), pathAsk); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), testkit.RefusesVerdict) {
-		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	var refused model.Answer
+	rec := click(handlerOf(o), pathAsk)
+	decode(t, rec, &refused)
+	if rec.Code != http.StatusOK || refused.Verdict != model.VerdictRefuses {
+		t.Fatalf(statusAndAnswer, rec.Code, refused)
 	}
 	after := lines()[len(cycles):]
 	if len(after) != 1 || after[0] != runner.CmdBehind+" record-0.json "+runner.FlagPin+" "+testkit.KubernetesKey+" --json --compact -q" {
