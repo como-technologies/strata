@@ -1,7 +1,8 @@
 //! A text of an answer with tags of HTML, one with the marks of markdown, and one with mentions
-//! of GitHub. Also a text with bare addresses, and one with control characters. The checks that a
-//! markdown output shows each such tag, mark, and mention as text, and each such address as it
-//! is. The check that a terminal output shows each such control character as a visible escape.
+//! of GitHub. Also a text with references to issues of GitHub, one with bare addresses, and one
+//! with control characters. The checks that a markdown output shows each such tag, mark, mention,
+//! and reference as text, and each such address as it is. The check that a terminal output shows
+//! each such control character as a visible escape.
 //!
 //! `tests/common/mod.rs` re-exports this file for the tests. The unit tests of `src/text.rs` and
 //! of the report of `strata-preflight` include it with `#[path]`. So one text of each kind and one
@@ -57,6 +58,43 @@ pub fn assert_answer_mentions_as_text(markdown: &str) {
             && !word(i.checked_sub(1))
     });
     assert_eq!(mention, None, "a mention of GitHub in\n{markdown}");
+}
+
+/// The body of an answer with three references to issues of GitHub. One names an issue of the
+/// same repository, one an issue of another repository, and one has the form `GH-`.
+pub const ANSWER_ISSUES: &str = "see #12, octo-org/octo-repo#34 and GH-56";
+
+/// [`ANSWER_ISSUES`] as GitHub must get it to link to no issue. The entity of a zero width space
+/// comes after the `#` and after the `GH-` of each reference.
+const ANSWER_ISSUES_AS_TEXT: &str = "see #&#8203;12, octo-org/octo-repo#&#8203;34 and GH-&#8203;56";
+
+/// Make sure that `markdown` shows [`ANSWER_ISSUES`] as text, and holds no reference to an issue
+/// of GitHub.
+///
+/// GitHub reads a reference at a `#` with a digit of ASCII after it. It also reads one at a `GH-`
+/// in each case, with a digit after it and no letter or digit of ASCII before it. The `#` of an
+/// entity, such as `&#8203;`, starts no reference.
+pub fn assert_answer_issues_as_text(markdown: &str) {
+    assert!(
+        markdown.contains(ANSWER_ISSUES_AS_TEXT),
+        "the references of the answer as text in\n{markdown}"
+    );
+    let lower = markdown.to_ascii_lowercase();
+    let digit_after = |i: usize| lower.as_bytes().get(i + 1).is_some_and(u8::is_ascii_digit);
+    let reference = lower.char_indices().find(|&(i, c)| match c {
+        '#' => digit_after(i) && !lower[..i].ends_with('&'),
+        '-' => {
+            digit_after(i)
+                && lower[..i].strip_suffix("gh").is_some_and(|before| {
+                    !before
+                        .chars()
+                        .next_back()
+                        .is_some_and(|c| c.is_ascii_alphanumeric())
+                })
+        }
+        _ => false,
+    });
+    assert_eq!(reference, None, "a reference to an issue in\n{markdown}");
 }
 
 /// The body of an answer with three bare addresses that GitHub links. One has a query of two

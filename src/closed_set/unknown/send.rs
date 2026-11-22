@@ -28,7 +28,7 @@ use crate::content::canon::sha256_hex;
 use crate::error::{Error, Result};
 use crate::file::{read_file, write_file};
 use crate::json::arr;
-use crate::text::cut;
+use crate::text::{LINE_ENDS, cut};
 
 #[cfg(test)]
 mod tests;
@@ -251,7 +251,7 @@ pub fn post(endpoint: &str, report: &Report, position: usize) -> Result<Vec<usiz
     // the first part of the answer tells why the endpoint refused; a body that strata cannot read
     // adds nothing to the status
     let body = answer.body_mut().read_to_string().unwrap_or_default();
-    let body = cut(&body.replace(['\n', '\r'], " "), LONGEST_ANSWER);
+    let body = cut(&body.replace(LINE_ENDS, " "), LONGEST_ANSWER);
     Err(failed(format!(
         "the endpoint answered HTTP {status}: {body}"
     )))

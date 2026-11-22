@@ -34,7 +34,7 @@ export STRATA_QUIET=1
 
 summary() {
   write_summary "audit log test" ", add-on" \
-    "\`$addon@1.0.0\` (\`${AD:-}\`), cluster \`${C:-none}\`."
+    "$(md span "$addon@1.0.0") ($(md span "${AD:-}")), cluster $(md span "${C:-none}")."
 }
 trap summary EXIT
 

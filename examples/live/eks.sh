@@ -36,7 +36,7 @@ R=$(out release_profile_uid)
 NAME=$(out profile_name)
 
 summary() {
-  write_summary "managed engine test: EKS" ", cluster \`$C\`, release \`$R\`."
+  write_summary "managed engine test: EKS" ", cluster $(md span "$C"), release $(md span "$R")."
 }
 trap summary EXIT
 

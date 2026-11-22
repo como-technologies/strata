@@ -34,8 +34,8 @@ for v in C AD AN PALETTE_PROJECT_UID; do
   [ -n "${!v}" ] || die "the tofu output behind $v is empty; run just live-up"
 done
 summary() {
-  write_summary "cluster test" ", cluster \`$C\`," \
-    "add-on profile \`$AN\` \`$AD\`."
+  write_summary "cluster test" ", cluster $(md span "$C")," \
+    "add-on profile $(md span "$AN") $(md span "$AD")."
 }
 trap summary EXIT
 

@@ -49,7 +49,7 @@ run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/validate-route}
 mkdir -p "$run" && cd "$run" || exit 2
 
 summary() {
-  write_summary "cluster validate route test" ": bodies from \`$bodies\`."
+  write_summary "cluster validate route test" ": bodies from $(md span "$bodies")."
 }
 trap summary EXIT
 

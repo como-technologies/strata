@@ -39,8 +39,8 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "pending update test" ", cluster \`${C:-}\`," \
-    "release \`${R:-}\`, add-on \`${AD:-}\`."
+  write_summary "pending update test" ", cluster $(md span "${C:-}")," \
+    "release $(md span "${R:-}"), add-on $(md span "${AD:-}")."
 }
 trap summary EXIT
 

@@ -49,7 +49,7 @@ for v in P AD N PALETTE_PROJECT_UID; do
 done
 
 summary() {
-  write_summary "cluster template test" ", release \`$N\` 1.0.0 (\`$P\`)."
+  write_summary "cluster template test" ", release $(md span "$N") 1.0.0 ($(md span "$P"))."
 }
 trap summary EXIT
 

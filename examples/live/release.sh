@@ -19,7 +19,7 @@ run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/release}
 mkdir -p "$run" && cd "$run" || exit 2
 
 summary() {
-  write_summary "release test" ": the route \`GET /v1/mgmt/app/version\`."
+  write_summary "release test" ": the route $(md span "GET /v1/mgmt/app/version")."
 }
 trap summary EXIT
 

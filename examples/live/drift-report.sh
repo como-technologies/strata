@@ -62,8 +62,8 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "drift report test, flag $mode" ". Cluster A \`${C:-}\`, add-on \`${AD1:-}\`," \
-    "issues in \`$repo\` labeled \`$label\`."
+  write_summary "drift report test, flag $mode" ". Cluster A $(md span "${C:-}"), add-on $(md span "${AD1:-}")," \
+    "issues in $(md span "$repo") labeled $(md span "$label")."
 }
 trap summary EXIT
 

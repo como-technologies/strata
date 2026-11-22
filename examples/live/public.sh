@@ -28,7 +28,7 @@ run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/public}
 mkdir -p "$run" && cd "$run" || exit 2
 
 summary() {
-  write_summary "public repository" ": what a reader with no login gets from \`$repo\`."
+  write_summary "public repository" ": what a reader with no login gets from $(md span "$repo")."
 }
 trap summary EXIT
 

@@ -1177,6 +1177,29 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the command line or of a document
 
+- **A link to an issue in a text gets a zero width space.** It goes after the `#` of `#12`, and
+  after the `-` of `GH-12`. So `owner/repo#12` reads `owner/repo#&#8203;12`. GitHub shows the
+  same text, and the text links to no issue. Before, a `#12` in a message of Palette linked to an
+  issue. A link to an issue of another repository also added an event to that issue. See
+  [The markdown comment](./formats.md#the-markdown-comment).
+  - A script that reads the markdown as text reads `#&#8203;12` in place of `#12`. A `GH-`
+    after a letter or a digit of ASCII does not change, as in `high-12`.
+  - `strata-preflight` writes its markdown in the same way.
+- **The fold of a pack writes a zero width space in each mention and each link to an issue.**
+  Its `<summary>` reads `@&#8203;name` and `#&#8203;12`. Before, a `@name` in a tag of a pack
+  notified the person. The words get no `\` before a mark, as before, because GitHub reads no
+  markdown in the `<summary>`.
+- **A line of the markdown form keeps each `|` as it is.** Before, the line wrote `\|`. Such a
+  line is a heading, a `Consumers:`, `Note:`, `Palette:`, or `Cluster tiers:` line, a verdict, or
+  an item of the list `who`. GitHub shows the same text, and the link of a bare address with a
+  `|` now keeps its target. A cell of a table still writes `\|`.
+  - A script that reads such a line as text reads `|` in place of `\|`.
+  - `strata-preflight` writes its heading, the line of the checks that did not run, and the line
+    of each failed request in the same way.
+- **A carriage return of a text is a space.** Before, a lone carriage return ended the row of a
+  table. The rest of the cell was then a new row. A carriage return before a line break also
+  gives a space now, so a `\r\n` gives two spaces. `strata-preflight` writes its markdown in the
+  same way.
 - **A ref that starts with `project:` and holds a `/` names its project.**
   `project:<project>/<ref>` reads the ref in that project. Before, strata read
   such a text as the path of a record file, and gave the error `io` when no file
@@ -1184,8 +1207,26 @@ field, a value, an input, or an option is in the sections above.
   project is the new kind `project-denied`, which names the project. See
   [Refs](./refs.md) and [Errors](./errors.md).
 
+### For a user of the CI drop-ins
+
+- **`verify-report.sh` and `upstream-report.sh` write a zero width space in each link to an
+  issue.** They do it as the markdown form does. So a `#12` in a message of Palette links to no
+  issue, and the issue adds no event to another issue.
+- **`verify-report.sh` and `upstream-report.sh` keep each `|` of a line, and write a carriage
+  return as a space.** They do it as the markdown form does. The line of a closed issue, the line
+  of an error, and the line that names a registry are lines. A cell of a table still writes `\|`.
+
 ### For a user of the library of strata
 
+- The new `text::markdown_line` writes a text as one line of markdown. `text::markdown_cell` is
+  `markdown_line` with each `|` escaped. A program that writes a line of markdown, and not a cell
+  of a table, must call `markdown_line`. Then the link of a bare address with a `|` keeps its
+  target. The new `text::LINE_ENDS` holds the two characters that end a line.
+- `text::markdown_cell` and `text::markdown_line` write the entity `&#8203;` after the `#` of
+  `#12` and after the `-` of `GH-12`. A caller that compares the text with a quoted text must
+  read `#&#8203;12` in place of `#12`.
+- `text::markdown_cell` and `text::code_cell` write a carriage return as a space. A caller that
+  compares the cell with a text must read a space in place of each `\r`.
 - `reference::Ref` has the new variant `InProject`, for
   `project:<project>/<ref>`. `Ref` has no `#[non_exhaustive]`, so a `match` on
   `Ref` with no wildcard arm must name it. `Ref::project` gives the project, and

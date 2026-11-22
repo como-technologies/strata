@@ -8,14 +8,14 @@ use crate::render::consumers::{
     searched_rows,
 };
 use crate::render::{capitalized, entry_error};
-use crate::text::{code_cell, dash, markdown_cell};
+use crate::text::{code_cell, dash, markdown_cell, markdown_line};
 
 /// The report of `consumers` as markdown. The table of the consumers is not there when strata
 /// found none.
 pub(super) fn markdown_consumers(r: &ConsumersReport) -> String {
     let mut o = format!(
         "### consumers: {}\n\n",
-        markdown_cell(&consumers_heading(r))
+        markdown_line(&consumers_heading(r))
     );
     if !r.consumers.is_empty() {
         o.push_str(&consumers_table(r));
@@ -30,10 +30,10 @@ pub(super) fn markdown_consumers(r: &ConsumersReport) -> String {
         ));
     }
     if let Some(scope) = scope_line(r) {
-        o.push_str(&format!("\n{}.\n", capitalized(&markdown_cell(&scope))));
+        o.push_str(&format!("\n{}.\n", capitalized(&markdown_line(&scope))));
     }
     if let Some(unread) = not_checked_line(r) {
-        o.push_str(&format!("\n**{}.**\n", markdown_cell(&unread)));
+        o.push_str(&format!("\n**{}.**\n", markdown_line(&unread)));
     }
     o
 }

@@ -34,7 +34,7 @@ export PALETTE_PROJECT_UID=$(out project_uid)
 FILTER=strata-live-prod
 
 summary() {
-  write_summary "fleet test" ", cluster \`$C\`, filter \`$FILTER\`."
+  write_summary "fleet test" ", cluster $(md span "$C"), filter $(md span "$FILTER")."
 }
 trap summary EXIT
 

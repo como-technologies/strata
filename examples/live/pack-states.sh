@@ -37,8 +37,8 @@ community_uid=$(registry_uid "$community")
 [ -n "$disabled_uid" ] && [ -n "$community_uid" ] || die "the key cannot see $disabled_reg and $community"
 
 summary() {
-  write_summary "pack state test" ": \`$disabled@$disabled_version\` and" \
-    "\`$deleted@$deleted_version\` in \`$disabled_reg\`, \`$deprecated@$deprecated_version\` in \`$community\`."
+  write_summary "pack state test" ": $(md span "$disabled@$disabled_version") and" \
+    "$(md span "$deleted@$deleted_version") in $(md span "$disabled_reg"), $(md span "$deprecated@$deprecated_version") in $(md span "$community")."
 }
 trap summary EXIT
 

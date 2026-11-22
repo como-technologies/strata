@@ -54,6 +54,7 @@ show.
 | `eks.sh` | On an EKS cluster: the release and its packs, the shape tier of a managed node group, the repave answer of Palette for each layer and for a Kubernetes bump, and a change of the node group (#89). It needs `cloud = "eks"` and cluster A. |
 | `gke.sh` | On a GKE cluster: the release and its packs, the shape tier of a node pool, the repave answer of Palette for a Kubernetes bump, and, with `GKE_POOL_CHANGE=1`, a change of the node pool (#90). It needs `cloud = "gke"` and cluster A. |
 | `version-states.sh` | One state per version with no feature preview flag, a destroy that a cluster in use refuses, a version that is gone, and the version strings that Palette stores (#81). It builds its own profile in `terraform-version/`, and needs cluster A. |
+| `platform.sh` | The platform cluster `wilma` (#700): seven add-on profiles with 14 community packs, and drift and diff where the profiles cross. Its eight cases: an edit in one profile, one pack in two profiles, a pack that moves to another profile, a variable of four profiles, `behind` at scale, glue that breaks, the observer at scale, and the Bitnami images. It needs `just live-platform-up`: see [The platform cluster](#the-platform-cluster). |
 
 The example runs on AWS or GCP instances, or on EKS or GKE: the variable `cloud` in
 `terraform.tfvars` selects one. Strata makes no rule about which cloud runs the
@@ -117,7 +118,7 @@ its end.
 | `common.sh` | The functions `die` and `usage`. `lib.sh`, `contract.sh`, `contract-profiles.sh`, `api.sh`, `tenant.sh`, and `tofu-install.sh` source it. So do `timer.sh` and `deploy.sh` of `deploy/`. It runs nothing and checks nothing, so a script that does not run strata can source it alone. |
 | `palette-curl.sh` | The function `palette_curl`, which runs `curl` with the header `ApiKey` from `KEY`. The header goes to `curl` as a config on standard input (`--config -`). So the key reaches no argument, and `/proc/<pid>/cmdline` does not show it. It also holds `registry_base`, which gives the path of a registry for each kind of registry. `api.sh`, `tenant.sh`, and `examples/fetch-examples.sh` source it. A test makes sure that no other script names the header or builds the path of a registry. |
 | `github.sh` | What the scripts read about GitHub. `remote_repo` gives the project of the `origin` remote of a checkout. The jq function `first_line` gives the first line of the body of an issue, which holds its marker. `contract-report.sh`, `upstream.sh`, `drift-report.sh`, and `report-send.sh` source it. The scripts in `scripts/ci/` stand alone, so they do not. |
-| `lib.sh` | What the scripts share: the heading of a stage, the checks and their summary, and the edits of the lab. It also holds the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. For the observer, it holds kubectl in cluster A or in the kubeconfig that `KUBE_FILE` names, the waits, the port-forward, and the page. It also holds the image, the overlay, the key, the ConfigMap, and the checks of the pull Secret and of a pod that cannot connect. It stops on a binary of strata or of strata-preflight that is older than the sources. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on a failed command fails. |
+| `lib.sh` | What the scripts share: the heading of a stage, the checks and their summary, the edits of the lab, and the cycles of the observer. It also holds the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. For the observer, it holds kubectl in cluster A or in the kubeconfig that `KUBE_FILE` names, the waits, the port-forward, and the page. It also holds the image, the overlay, the key, the ConfigMap, and the checks of the pull Secret and of a pod that cannot connect. It stops on a binary of strata or of strata-preflight that is older than the sources. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on a failed command fails. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
 | `tenant.sh` | Lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, the cluster listing itself, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. Each lookup reads. But at the repave check, Palette can save the address that the console of a pack of virtual machines forwards to: see [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves). |
 | `diagnose.sh` | Saves diagnostics for each cluster in the state. The scripts and `just live-up` and `just live-down` run it when an apply fails or a wait stops. |
@@ -143,6 +144,8 @@ its end.
 | `zarf/` | The Zarf package that `registry-kinds.sh` publishes. |
 | `terraform/registry-kinds.tf`, `terraform/registry-host.sh.tftpl` | The registry host of `registry-kinds.sh`: one EC2 instance that serves a Helm repository, one with credentials, an OCI registry with basic auth, and a Spectro pack registry, behind Caddy with a certificate for each `<service>.<IP>.sslip.io`; and a Palette registry over each. Off unless `registry_kinds` is set. |
 | `terraform-version/` | One version of an add-on profile in a state of its own, with no feature preview flag: `version-states.sh` applies it once for each version, each time in its own workspace. |
+| `terraform-platform/` | The platform cluster `wilma` (#700) in a state of its own: the seven profiles of the teams in `main.tf`, the glue of each team in `glue.tf`, the private zone, and the policy of the nodes. `terraform.tfvars.example` names the registry of each pack. |
+| `platform.sh` | The platform cluster test (#700): `pins`, `up`, the eight cases, `down`, and `inventory`. See [The platform cluster](#the-platform-cluster). |
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, a cluster in the template with the two repave routes (#276), and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. Stage 4 (#844): an add and an upgrade on cluster A, with cluster B as the control. |
@@ -159,8 +162,8 @@ its end.
 | `app-profile.sh` | The app profile test (#78). |
 | `fleet.sh` | The fleet test (#80). |
 | `upstream.sh` | The upstream test (#79). It opens and closes issues of this repository with the label `strata-live-behind`. |
-| `inventory.sh` | What clusters A and B still have in the cloud that `terraform.tfvars` names, to confirm a teardown. `just live-inventory` runs it. It reads the variables and not the outputs, so it works after `live-down`. |
-| `aws-inventory.sh` | What one cluster still has in AWS. `inventory.sh` runs it on AWS. |
+| `inventory.sh` | What clusters A and B still have in the cloud that `terraform.tfvars` names, to confirm a teardown. `just live-inventory` runs it. It reads the variables and not the outputs, so it works after `live-down`. With `--platform` it reads `wilma` in their place: `platform.sh inventory` runs it so. |
+| `aws-inventory.sh` | What one cluster still has in AWS. `inventory.sh` runs it on AWS. Its options count what a cluster with workloads leaves: the objects with the tag `kubernetes.io/cluster/<name>`, the volumes of the CSI driver, a hosted zone, and an inline policy of a role. |
 | `gcp-inventory.sh` | What one cluster still has in a GCP project. `inventory.sh` runs it on GCP. |
 
 ## Design
@@ -234,6 +237,7 @@ gone, and stages 1 to 3 of `order.sh` leave two versions edited: run
 | `app-profile.sh` | an app profile, a plain update of it, and its delete; two app profiles with install orders, and their delete | the baseline |
 | `fleet.sh` | a label of cluster A and a saved tag filter, through the API, each put back | the profiles, cluster A, the baseline |
 | `upstream.sh` | three versions of the example's own pack, pushed and then removed; issues of this repository | the profiles, the baseline |
+| `platform.sh` | on `wilma` alone: in each case, one variable of `terraform-platform/` or one edit in place through the API, and its undo; the observer in cases 4 and 7 | the profiles of the lab, clusters A and B, the baseline of `wilma` |
 
 **One definition for each kind.** Clusters A and B come from one resource, and
 differ only in their names. Each profile has the same lifecycle:
@@ -407,6 +411,80 @@ the cluster:
 For the questions of `gke.sh`, set `gke_k8s_bump` to a Kubernetes version of the
 GKE pack, such as `1.35`: the example then also makes the profile version 1.0.9,
 the release with that version alone.
+
+## The platform cluster
+
+Clusters A and B run the release profile and one or two small add-ons. A real
+cluster runs many community packs that work together. `wilma` is such a cluster
+(#700). `platform.sh` runs its cases, and [platform.sh](./live-runs.md#platformsh)
+lists each check.
+
+`terraform-platform/` builds `wilma` in a state of its own. So `just live-up`
+and `just live-down` never touch it, and a normal live window costs the same.
+`wilma` runs the release profile 1.0.0 of the lab, so `just live-profiles` or
+`just live-up` comes first. `just live-down` comes after `just
+live-platform-down`.
+
+| Resource | What it is |
+| --- | --- |
+| profile `wilma-security` 1.0.0 | cert-manager, vault, external-secrets-operator, and kyverno. The glue: a CA of cert-manager and its `ClusterIssuer`, a `ClusterSecretStore` that reads Vault, and a Kyverno policy in `Audit` mode. Vault runs in dev mode, so its pod is ready. |
+| profile `wilma-network` 1.0.0 | envoy-gateway and external-dns. The glue: a `GatewayClass` whose Service has the type `ClusterIP`, a wildcard certificate, and the `Gateway`. external-dns writes the records of the routes to the private zone. |
+| profile `wilma-data` 1.0.0 | cloudnative-pg. |
+| profile `wilma-identity` 1.0.0 | keycloak. The glue: the certificate of Keycloak, its route, and a `Cluster` of cloudnative-pg, the database of Keycloak. Keycloak installs after the glue. |
+| profile `wilma-gitops` 1.0.0 | argo-cd, with the SSO through Keycloak, and its route. |
+| profile `wilma-observability` 1.0.0 | prometheus-operator, grafana, loki, and fluentbit. Grafana has the SSO through Keycloak, and a route. |
+| profile `wilma-control` 1.0.0 | crossplane, and a `CompositeResourceDefinition` of a database. |
+| cluster `wilma` | One control plane node and three workers, `t3.xlarge`, in the zone of the lab. |
+| private hosted zone | The zone of `domain`, in the VPC of `wilma`. |
+| inline policy | `strata-live-wilma-external-dns` on the role of the nodes. It lets external-dns write the records of that zone. |
+
+Each profile also has a manifest layer with the glue of its team, and a
+`ServiceMonitor` for each of its packs. The glue crosses the profiles. A layer
+of glue has the install priority `10`, so it installs after the CRDs of each
+pack. Keycloak has the priority `20`, so its database is there first: see [The
+install order of the packs of two add-on
+profiles](../internals/palette/limits.md#what-no-run-covers). Four profiles
+declare the profile variable `domain`: `wilma-network`, `wilma-identity`,
+`wilma-gitops`, and `wilma-observability`.
+
+`terraform-platform/terraform.tfvars` holds the pin of each pack: its registry,
+its version, and its type. The file is not tracked. `just live-platform-pins`
+writes it from the tenant, with `strata packs`. It reads the registry of each
+pack from `terraform.tfvars.example`.
+
+The recipe pins the version that strata marks latest. A line with the mark
+`# behind` gets the version before it, so `strata behind` has rows. When a
+registry does not hold a pack, the recipe names the registries that do. Change
+the line, and run the recipe again.
+
+```bash
+just live-profiles                  # or just live-up: the release profile of the lab
+just live-platform-pins             # once: terraform-platform/terraform.tfvars
+just live-platform-up               # billable until live-platform-down
+just live-platform                  # each case; just live-platform 4 runs case 4 alone
+just live-platform-down             # then the inventory
+just live-down
+```
+
+`just live-platform-up` waits until each pack of each add-on profile has a
+condition with the status `True`. Each line names a pack with its reason, or the
+reason that it waits.
+
+The teardown of `just live-platform-down` has three steps. First, the add-on
+profiles leave `wilma`, so their workloads free the claims of their volumes.
+Then the recipe deletes each claim while the CSI driver runs, so that the driver
+deletes each volume. Then it destroys the state, and deletes each version of
+each profile name.
+
+`just live-platform-inventory` reads the inventory again. A volume that the
+driver made has no tag of its cluster, so the inventory counts each such volume
+in the region. It also counts each object with the tag
+`kubernetes.io/cluster/wilma`, the zone, and the policy.
+
+The AWS profile of `aws_profile` makes the zone, and adds the policy to the role
+of the nodes. It needs the permissions of Route 53 for a private hosted zone,
+`ec2:DescribeVpcs`, and `iam:PutRolePolicy` and `iam:DeleteRolePolicy` on that
+role.
 
 ## The preflight checks
 
@@ -615,6 +693,7 @@ just live-observer-role                                                         
 just live-observer-chart                                                        # #732, needs the key and no cluster; makes one registry of the tenant, and deletes it
 just live-version-states                                                       # #81, needs just live-up
 just live-eks                                                                  # #89, needs cloud = "eks" and just live-up
+just live-platform                                                             # #700, needs just live-platform-up; each case gives wilma its baseline again
 ```
 
 `just live-session` runs `verify.sh`, `in-place.sh off`, `in-place.sh on`, and
@@ -733,7 +812,9 @@ the kubeconfig in `~/.kube/`.
 - `summary.md` has the table of results and the digest table. Each text in a
   cell, such as the name of a pack, shows a `|`, a tag, and a mark of markdown as
   text, as [the markdown comment](../reference/formats.md#the-markdown-comment)
-  does.
+  does. The run id, the version, and each value of the note of the line `Run`,
+  such as a uid, are in code spans. The fence of each span is longer than each
+  run of backticks in its value.
 - `<check>.out` and `<check>.err` hold the output of each command. A failed
   comparison names the layer and the value in its `.out`.
 - `raw/cluster`, `raw/addon`, `raw/release`, `raw/next`, and `raw/registries`

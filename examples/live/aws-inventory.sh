@@ -2,7 +2,7 @@
 # What a live example cluster still has in AWS, read-only. Exit 0 when nothing is left, 1 while
 # anything is, 2 when AWS cannot be asked.
 #
-#   AWS_PROFILE=<profile> examples/live/aws-inventory.sh [CLUSTER_NAME] [REGION]
+#   AWS_PROFILE=<profile> examples/live/aws-inventory.sh [CLUSTER_NAME] [REGION] [OPTION...]
 #
 # Defaults: fred, cluster A, in us-east-2. An EKS cluster of the name counts as well. Instances,
 # NAT gateways, elastic IPs, volumes, security groups, subnets, route tables, internet gateways,
@@ -13,9 +13,28 @@
 # minutes after the instances and the NAT gateway, so only 0 on every line means AWS is empty. Run
 # it after `just live-down`, and before any force delete: a force delete drops only Palette's
 # records.
+#
+# The options count what a cluster with workloads adds, such as wilma of platform.sh:
+#
+#   --kubernetes-tags     each object with the tag kubernetes.io/cluster/<name>, such as a load balancer
+#                         of a Service
+#   --csi-volumes         each volume that the EBS CSI driver made in the region, for any cluster
+#   --zone NAME           each hosted zone of the name NAME
+#   --role-policy R:P     the inline policy P of the IAM role R
 set -uo pipefail
 name=${1:-fred}
 region=${2:-us-east-2}
+shift $(($# < 2 ? $# : 2))
+k8s_tags= csi_volumes= zone= role_policy=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --kubernetes-tags) k8s_tags=1; shift ;;
+    --csi-volumes) csi_volumes=1; shift ;;
+    --zone) [ $# -ge 2 ] || { echo "aws-inventory: --zone needs a name" >&2; exit 2; }; zone=${2%.}; shift 2 ;;
+    --role-policy) [ $# -ge 2 ] || { echo "aws-inventory: --role-policy needs ROLE:POLICY" >&2; exit 2; }; role_policy=$2; shift 2 ;;
+    *) echo "aws-inventory: unknown argument $1" >&2; exit 2 ;;
+  esac
+done
 tag="sigs.k8s.io/cluster-api-provider-aws/cluster/$name"
 total=0
 
@@ -56,5 +75,13 @@ printf '%-22s %s\n' vpcs "$n"
 total=$((total + n))
 # an EKS cluster of the name (cloud = "eks"); 0 for a cluster on instances
 count "eks clusters" aws eks list-clusters --query "clusters[?@ == '$name']"
+[ -z "$k8s_tags" ] || count "kubernetes tags" aws resourcegroupstaggingapi get-resources \
+  --tag-filters "Key=kubernetes.io/cluster/$name" --query 'ResourceTagMappingList[].ResourceARN'
+[ -z "$csi_volumes" ] || count "csi volumes" aws ec2 describe-volumes \
+  --filters "Name=tag-key,Values=ebs.csi.aws.com/cluster" --query 'Volumes[].VolumeId'
+[ -z "$zone" ] || count "hosted zones" aws route53 list-hosted-zones-by-name --dns-name "$zone" \
+  --query "HostedZones[?Name == '$zone.'].Id"
+[ -z "$role_policy" ] || count "role policies" aws iam list-role-policies --role-name "${role_policy%%:*}" \
+  --query "PolicyNames[?@ == '${role_policy#*:}']"
 
 [ "$total" -eq 0 ]

@@ -35,7 +35,10 @@ use crate::ops::{
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
-use crate::text::{code_block, code_cell, code_span, dash, html_text, lines_cell, markdown_cell};
+use crate::text::{
+    code_block, code_cell, code_span, dash, html_text, lines_cell, markdown_cell, markdown_line,
+    quoted_html,
+};
 
 /// Renders markdown for a pull request comment.
 pub struct MarkdownRenderer;
@@ -69,8 +72,8 @@ fn heading_table(d: &Diff) -> String {
     let mut o = String::new();
     o.push_str(&format!(
         "### {} → {}\n\n",
-        markdown_cell(&d.a.title()),
-        markdown_cell(&d.b.title())
+        markdown_line(&d.a.title()),
+        markdown_line(&d.b.title())
     ));
     o.push_str("| | A | B |\n|---|---|---|\n");
     o.push_str(&format!(
@@ -123,15 +126,15 @@ fn result_section(d: &Diff) -> String {
         variables
     ));
     if let Some(sentence) = consumers_sentence(d) {
-        o.push_str(&format!("**Consumers:** {}\n\n", markdown_cell(&sentence)));
+        o.push_str(&format!("**Consumers:** {}\n\n", markdown_line(&sentence)));
     }
     for note in diff_notes(d) {
         o.push_str(&match note {
             DiffNote::Warn(text) | DiffNote::Good(text) => {
-                format!("**Note:** {}\n\n", markdown_cell(&text))
+                format!("**Note:** {}\n\n", markdown_line(&text))
             }
             DiffNote::Palette(lines) => {
-                format!("**Palette:** {}\n\n", markdown_cell(&lines.join("; ")))
+                format!("**Palette:** {}\n\n", markdown_line(&lines.join("; ")))
             }
         });
     }
@@ -205,7 +208,7 @@ fn tiers_section(d: &Diff) -> String {
             let lines: String = tier_op_lines(d).iter().map(op_line).collect();
             format!(
                 "**Cluster tiers:** {}\n\n<details><summary>cluster tiers that differ</summary>\n\n{}</details>\n\n",
-                markdown_cell(&words.join(", ")),
+                markdown_line(&words.join(", ")),
                 code_block("diff", &lines)
             )
         }
@@ -230,6 +233,9 @@ fn cluster_values_section(d: &Diff) -> String {
 }
 
 /// The fold with the detail of a changed pack. It is empty when the pack has no detail to show.
+///
+/// The `<summary>` is a block of HTML, so its words are [`quoted_html`]. GitHub reads no mark of
+/// markdown there, but it reads a mention and a reference to an issue.
 fn pack_detail(pd: &PackDiff) -> String {
     let mut body = String::new();
     if let Some(line) = upstream_line(pd, &Paint::off(), code_span) {
@@ -262,7 +268,7 @@ fn pack_detail(pd: &PackDiff) -> String {
     format!(
         "<details><summary><code>{}</code> {}</summary>\n\n{}\n</details>\n\n",
         html_text(&pd.name),
-        html_text(&what),
+        quoted_html(&what),
         body
     )
 }
@@ -296,17 +302,17 @@ impl Renderer for MarkdownRenderer {
         let mut line = format!(
             "\n**{}**: {}",
             parts.word(),
-            markdown_cell(&parts.line(&d.a))
+            markdown_line(&parts.line(&d.a))
         );
         for sentence in invalid_pack_sentences(&v.invalid_packs) {
-            line.push_str(&format!("\n\n**INVALID**: {}", markdown_cell(&sentence)));
+            line.push_str(&format!("\n\n**INVALID**: {}", markdown_line(&sentence)));
         }
         if let Some(heading) = who_heading(v) {
             line.push_str("\n\n");
-            line.push_str(&markdown_cell(&heading));
+            line.push_str(&markdown_line(&heading));
             line.push('\n');
             for e in v.who.iter().flatten() {
-                line.push_str(&format!("\n- {}", markdown_cell(&who_entry(e, &v.uid))));
+                line.push_str(&format!("\n- {}", markdown_line(&who_entry(e, &v.uid))));
             }
         }
         Some(line)
@@ -354,7 +360,7 @@ impl Renderer for MarkdownRenderer {
     fn render_set(&self, r: &crate::ops::SetReport) -> Result<String> {
         let mut o = format!(
             "### snapshot: {}\n\n",
-            markdown_cell(&super::set_counts_line(r))
+            markdown_line(&super::set_counts_line(r))
         );
         if !r.records.is_empty() {
             o.push_str("| cluster | uid | file | root |\n|---|---|---|---|\n");
@@ -396,12 +402,12 @@ impl Renderer for MarkdownRenderer {
     fn render_packs(&self, l: &PackListing) -> Result<String> {
         let mut out = String::new();
         if let Some(sentence) = no_version_sentence(l) {
-            return Ok(format!("{}.\n", capitalized(&markdown_cell(&sentence))));
+            return Ok(format!("{}.\n", capitalized(&markdown_line(&sentence))));
         }
         for r in &l.registries {
             out.push_str(&format!(
                 "### {}\n\n",
-                markdown_cell(&registry_heading(
+                markdown_line(&registry_heading(
                     l,
                     r,
                     |_, name| name.to_string(),
@@ -441,7 +447,7 @@ impl Renderer for MarkdownRenderer {
     }
 
     fn render_list(&self, l: &Listing) -> Result<String> {
-        let mut o = format!("### list: {}\n\n", markdown_cell(&list_scope(l)));
+        let mut o = format!("### list: {}\n\n", markdown_line(&list_scope(l)));
         if let Some(profiles) = &l.profiles {
             list_profiles(&mut o, l, profiles);
         }
@@ -458,7 +464,7 @@ impl Renderer for MarkdownRenderer {
             list_registries(&mut o, registries);
         }
         for line in super::list::unread_lines(l) {
-            o.push_str(&format!("{}\n\n", markdown_cell(&capitalized(&line))));
+            o.push_str(&format!("{}\n\n", markdown_line(&capitalized(&line))));
         }
         Ok(o)
     }
@@ -467,7 +473,7 @@ impl Renderer for MarkdownRenderer {
 /// The table of the profile versions of a listing, with its count.
 fn list_profiles(o: &mut String, l: &Listing, profiles: &[ListedProfile]) {
     let count = list_count(profiles.len(), "profile", l.pack.as_deref());
-    o.push_str(&format!("**{}**\n\n", markdown_cell(&count)));
+    o.push_str(&format!("**{}**\n\n", markdown_line(&count)));
     let with_packs = profiles
         .iter()
         .any(|p| p.packs.is_some() || p.error.is_some());
@@ -559,7 +565,7 @@ impl ClusterColumns {
 fn list_clusters(o: &mut String, l: &Listing, clusters: &[ListedCluster]) {
     o.push_str(&format!(
         "**{}**\n\n",
-        markdown_cell(&cluster_count(clusters.len(), l.cluster.as_deref()))
+        markdown_line(&cluster_count(clusters.len(), l.cluster.as_deref()))
     ));
     for line in super::list::query_line(l)
         .into_iter()
@@ -567,7 +573,7 @@ fn list_clusters(o: &mut String, l: &Listing, clusters: &[ListedCluster]) {
     {
         o.push_str(&format!(
             "{}.\n\n",
-            markdown_cell(&super::capitalized(&line))
+            markdown_line(&super::capitalized(&line))
         ));
     }
     let columns = ClusterColumns::of(l, clusters);

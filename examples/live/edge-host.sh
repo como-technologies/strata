@@ -31,8 +31,8 @@ export STRATA_QUIET=1
 E=strata-edge-78 E2=strata-edge-78-release
 
 summary() {
-  write_summary "edge host test" ", edge host \`$E\`," \
-    "add-on \`${AD:-}\`."
+  write_summary "edge host test" ", edge host $(md span "$E")," \
+    "add-on $(md span "${AD:-}")."
 }
 trap summary EXIT
 

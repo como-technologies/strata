@@ -248,14 +248,17 @@ summary_table() {
 # run id is $run_id, or the name of the directory above $run. The line omits the version when no
 # strata binary exists. A script calls this function in the `summary` that its EXIT trap runs, so
 # NOTE holds the values that the run found.
+#
+# The line writes the run id and the version with `md span`. Each script writes each value of NOTE,
+# such as a uid, in the same way. So a backtick in a value cannot end its code span.
 write_summary() {
   local title=$1 with=""
   shift
-  [ ! -x "$strata" ] || with=" with \`$("$strata" --version)\`"
+  [ ! -x "$strata" ] || with=" with $(md span "$("$strata" --version)")"
   {
     echo "# $title"
     echo
-    echo "Run \`${run_id:-$(basename "$(dirname "$run")")}\`$with$*"
+    echo "Run $(md span "${run_id:-$(basename "$(dirname "$run")")}")$with$*"
     echo
     summary_table
   } > summary.md
@@ -264,21 +267,27 @@ write_summary() {
 # ---- markdown ----------------------------------------------------------------------------------------
 
 # The jq functions that write a text into markdown, as strata writes it. `html` is
-# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
-# `text::markdown_cell`, and `quoted` writes each word of it. `marks` puts a `\` before each mark
-# of markdown, and `mentions` puts a zero width space after each `@` that can start a mention of
-# GitHub. So a link, an emphasis, a code span, or a `@name` of the text shows as text. A run of `_`
-# with a letter or a digit on each side starts no emphasis, so `marks` keeps it as it is.
+# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `line`
+# is `text::markdown_line`, and `quoted` writes each word of it. `cell` is `text::markdown_cell`,
+# a `line` that `table` gives an escape before each `|`. `ends` writes each line break and each
+# carriage return as a space.
+#
+# `marks` puts a `\` before each mark of markdown. A run of `_` with a letter or a digit on each
+# side starts no emphasis, so `marks` keeps it as it is. `references` is `text::reference_text`:
+# it puts a zero width space in each mention and in each reference to an issue of GitHub. So a
+# link, an emphasis, a code span, a `@name`, or a `#12` of the text shows as text.
+#
 # `address` is `text::bare_address`: a bare address that GitHub surely links stays as it is.
-# `link_end` is `text::link_end`, where GitHub ends the link. `table` escapes each `|` and writes
-# a line break as a space. `span` is `text::code_span`: its fence is longer than each run of
-# backticks in the text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is
-# the fence of `text::code_block`, so that no line of the text ends the block.
+# `link_end` is `text::link_end`, where GitHub ends the link. `span` is `text::code_span`: its
+# fence is longer than each run of backticks in the text. `code` is `text::code_cell`, a `span` in
+# a cell of a table. `fence` is the fence of `text::code_block`, so that no line of the text ends
+# the block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
   def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
-  def table: split("|") | join("\\|") | split("\n") | join(" ");
-  def mentions: gsub("(?<![A-Za-z0-9])@(?=[A-Za-z0-9])"; "@&#8203;");
-  def quoted: marks | html | mentions;
+  def ends: split("\n") | join(" ") | split("\r") | join(" ");
+  def table: split("|") | join("\\|") | ends;
+  def references: gsub("(?<r>(?<![A-Za-z0-9])@(?=[A-Za-z0-9])|#(?=[0-9])|(?<![A-Za-z0-9])[Gg][Hh]-(?=[0-9]))"; "\(.r)&#8203;");
+  def quoted: marks | html | references;
   def link_end: . as $t | ([scan("[(]")] | length) as $open
     | def cut($end; $close): $t[$end - 1:$end] as $c
         | if $c == ")" and $close > $open then cut($end - 1; $close - 1)
@@ -294,8 +303,9 @@ markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | 
       then null else [.[:$s], $rest[:$e], $rest[$e:]] end;
   def word($first): address($first) as $a
     | if $a then ($a[0] | quoted) + $a[1] + ($a[2] | gsub("[*]"; "&ast;") | gsub("_"; "&lowbar;")) else quoted end;
-  def cell: [scan("[^ \t\n\f\r]+|[ \t\n\f\r]+")] | to_entries
-    | map(.key as $k | .value | if test("^[ \t\n\f\r]") then . else word($k == 0) end) | join("") | table;
+  def line: [scan("[^ \t\n\f\r]+|[ \t\n\f\r]+")] | to_entries
+    | map(.key as $k | .value | if test("^[ \t\n\f\r]") then ends else word($k == 0) end) | join("");
+  def cell: line | table;
   def backticks($n): [range($n)] | map("`") | join("");
   def ticks: [scan("`+") | length] | max // 0;
   def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
@@ -577,6 +587,9 @@ pf_start() {
 }
 # page PATH: the answer of the observer through the port-forward
 page() { curl -fsS --max-time 20 "http://127.0.0.1:$port$1"; }
+# detail_page PATH: the answer of a route of the detail tier, through the port-forward. A request of that tier can
+# wait for a cycle and then run one compare, so the limit is 60 seconds.
+detail_page() { curl -fsS --max-time 60 "http://127.0.0.1:$port$1"; }
 # images_read: /v1/images says that the observer read the pods and found images. images.json keeps the answer.
 images_read() {
   page /v1/images > images.json 2> /dev/null \
@@ -610,11 +623,13 @@ observer_image() {
 # as --server-side. The namespace has the label of the restricted standard. The ConfigMap and the
 # Secret of the key go into it.
 observer_namespace() { kc apply "$@" -f "$root/deploy/observer/namespace.yaml"; }
+# observer_pod: the pod of the observer in the namespace $ns, as JSON
+observer_pod() { kj -n "$ns" get pod -l app.kubernetes.io/name=strata-observer -o json; }
 # no_pull_secret: the pod of the observer runs the image of the run, and it names no pull Secret. So a
 # node pulled the image from the public package with no login. pull.json keeps the pod, and the output
 # shows the image, the image id, and the pull Secrets.
 no_pull_secret() {
-  kj -n "$ns" get pod -l app.kubernetes.io/name=strata-observer -o json > pull.json || return 1
+  observer_pod > pull.json || return 1
   jq '.items[0] | {image: .spec.containers[0].image, imageID: .status.containerStatuses[0].imageID,
     imagePullSecrets: (.spec.imagePullSecrets // [])}' pull.json
   jq -e --arg i "$image" '.items[0] | (.spec.imagePullSecrets // [] | length == 0)
@@ -652,3 +667,71 @@ observer_overlay_pods() {
 observer_render() { kubectl kustomize . > observer.yaml && [ -s observer.yaml ]; }
 # observer_ready: the Deployment of the observer is Available in 3 minutes
 observer_ready() { KUBE_TIMEOUT=200 kc -n "$ns" rollout status deploy/strata-observer --timeout=180s; }
+
+# ---- the cycles of the observer ----------------------------------------------------------------------
+
+# The commands of the two cycles of the observer, run on the machine of the script, and the count of
+# their requests. observer.sh and platform.sh use them. A script sets $C to the cluster and exports
+# strata and C, because the counter runs each cycle in `bash -c`. The records of the cluster are the
+# files record-*.json of the current folder. palette_settings and palette_target come first.
+
+# palette_target: set $target to the address of Palette with its scheme and with no / at the end. The
+# counter sends each request on to it.
+palette_target() {
+  target=$API
+  case "$target" in http://*|https://*) ;; *) target="https://$target" ;; esac
+  target=${target%/}
+}
+# content_cycle: the strata commands of one content cycle of the observer. The counter runs it in a
+# directory of its own, which holds the raw answers with the values of the variables, and removes it.
+content_cycle() {
+  local dir rec n=0
+  dir=$(mktemp -d) || return 1
+  trap 'rm -rf "$dir"' RETURN
+  cp record-*.json "$dir" && cd "$dir" || return 1
+  "$strata" verify record-*.json --summary --who --json --compact -q > /dev/null
+  [ $? -le 2 ] || return 1
+  "$strata" snapshot "cluster:$C" --raw-dir raw -o cluster.json -q || return 1
+  for rec in record-*.json; do
+    n=$((n + 1))
+    "$strata" snapshot "cluster:$C/$(jq -r .source.name "$rec")" --from-raw raw -o "side-$n.json" -q || return 1
+    "$strata" compare "$rec" "side-$n.json" --json --compact -q > /dev/null
+    [ $? -le 1 ] || return 1
+  done
+}
+# versions_behind: the first command of a versions cycle. behind.json keeps its answer.
+versions_behind() {
+  "$strata" behind record-*.json --no-impact --json --compact -q > behind.json
+  [ $? -le 2 ]
+}
+# versions_moves: the second command of a versions cycle, for each pin that is behind. The first cycle
+# of a pod runs it for each such pin, and a later cycle runs it for a new move only.
+versions_moves() {
+  local a b
+  while read -r a b; do
+    "$strata" compare "$a" "$b" --json --compact -q > /dev/null
+    [ $? -le 1 ] || return 1
+  done < <(jq -r '.pins[] | select(.behind and .error == null and (.newer | length) > 0)
+    | "pack:\(.registryUid)/\(.name)@\(.version) pack:\(.registryUid)/\(.name)@\(.newer[0].version)"' behind.json)
+}
+export -f content_cycle versions_behind versions_moves
+# requests_of NAME FUNCTION: run FUNCTION behind the counter. NAME.log holds one line for each request
+# that Palette got, with the method and the path, and no query and no key.
+requests_of() { ./count-requests -target "$target" -log "$1.log" -- bash -c "$2" > "$1.run" 2>&1; }
+# counter_built: the counter, built once in the directory of the run
+counter_built() { [ -x ./count-requests ] || go -C "$live/count-requests" build -o "$PWD/count-requests" .; }
+# count_requests: the requests of a content cycle, of the first command of a versions cycle, and of
+# its moves. The routes that took most follow the count of each.
+count_requests() {
+  local name
+  counter_built || return 1
+  requests_of content content_cycle && requests_of behind versions_behind && requests_of moves versions_moves \
+    || return 1
+  for name in content behind moves; do
+    printf '%s: %s requests\n' "$name" "$(wc -l < "$name.log" | tr -d ' ')"
+  done
+  for name in content behind moves; do
+    echo "-- the routes of $name"
+    sed -E 's#/[0-9a-f]{24}#/{uid}#g' "$name.log" | sort | uniq -c | sort -rn | head -n 12
+  done
+}
