@@ -85,7 +85,9 @@ where each module goes. The Go code of the observer follows
   `first_nonempty`, `flag`, `opt_flag`, `opt_set`, `object_at`, `value_at`,
   `value_or_null`, and `value_or_empty_object`. The file also has `set_at`, for
   a write, and `is_zero`, for `skip_serializing_if` on a count. A test makes
-  sure that this rule names each function of the file.
+  sure that this rule names each function of the file. It reads each head,
+  such as `pub(super) fn` or `const fn`, and fails on a line with `fn` that it
+  cannot read.
 - Do not write a pointer read of text, of an array, of an object, of a flag, or
   of a value in a module. The rule holds for `crates/strata-preflight/` and `crates/strata-knurl/` too.
   `text`, `str_at`, `text_or`, `opt_text`, `opt_str`, `arr`, `strings`,
@@ -342,6 +344,9 @@ ASD-STE100.
 - Put a helper that two test files use in `tests/common/mod.rs`. Compare
   against the `const` of the crate, not against a copy of its text. A test that
   pins the text of a schema id on purpose can stay, with a comment that says so.
+- A const of `tests/docs.rs` names a page of the book from `docs/src/`, such as
+  `CODE_PAGE`. A list of the files of the repository names the page from the root
+  of the repository, with `book_file`. Do not write the page again in that form.
 - A test of another package uses a helper of `tests/common/` with `#[path]`. It does not copy the
   helper. Put such a helper in a file of its own, not in `mod.rs`, which only the root package
   uses. `answer.rs`, `answer_tags.rs`, `closed_set.rs`, `code_block.rs`, `code_span.rs`,

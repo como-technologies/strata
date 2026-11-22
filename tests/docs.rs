@@ -30,6 +30,17 @@ fn docs() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src")
 }
 
+/// The path from the root of the repository of `page`, a page that a const names from
+/// [`docs`], such as [`CODE_PAGE`]. A list of the files of the repository holds this form.
+fn book_file(page: &str) -> String {
+    let file = docs().join(page);
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let path = file
+        .strip_prefix(root)
+        .expect("the book is in the repository");
+    path.display().to_string()
+}
+
 fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
@@ -2001,18 +2012,79 @@ fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
 fn functions_of_src_json() -> BTreeSet<String> {
     let source = repo_file("src/json.rs");
     let code = source.split("#[cfg(test)]").next().unwrap_or(&source);
+    functions_at_top_level(code)
+        .unwrap_or_else(|line| panic!("src/json.rs: the scan cannot read the line {line:?}"))
+}
+
+/// The names of the functions at the top level of the Rust code `code`. The error is the first
+/// line with the word `fn` that the scan cannot read.
+///
+/// The scan reads each line that has no indent and is no comment. A head of a function can start
+/// with a visibility, such as `pub(super)`, and the qualifiers `const`, `async`, `unsafe`, and
+/// `extern` with its ABI.
+fn functions_at_top_level(code: &str) -> Result<BTreeSet<String>, &str> {
     code.lines()
-        .filter_map(|line| {
-            let head = ["pub ", "pub(crate) "]
-                .iter()
-                .find_map(|vis| line.strip_prefix(vis))
-                .unwrap_or(line);
-            let rest = head.strip_prefix("fn ")?;
-            rest.split(|c: char| !(c.is_alphanumeric() || c == '_'))
-                .next()
-                .map(String::from)
-        })
+        .filter(|line| !line.starts_with(char::is_whitespace) && !line.starts_with("//"))
+        .filter(|line| line.split(|c| !name_char(c)).any(|word| word == "fn"))
+        .map(|line| function_name(line).map(String::from).ok_or(line))
         .collect()
+}
+
+/// The name of the function whose head is `line`, or `None` when `line` is no such head.
+fn function_name(line: &str) -> Option<&str> {
+    let mut words = line.split_whitespace().skip_while(|word| before_fn(word));
+    if words.next()? != "fn" {
+        return None;
+    }
+    let name = words.next()?.split(|c| !name_char(c)).next()?;
+    (!name.is_empty()).then_some(name)
+}
+
+/// True for a word before `fn` in the head of a function: a visibility, a qualifier, or the ABI
+/// of `extern`, such as `"C"`.
+fn before_fn(word: &str) -> bool {
+    word == "pub"
+        || (word.starts_with("pub(") && word.ends_with(')'))
+        || ["const", "async", "unsafe", "extern"].contains(&word)
+        || (word.len() > 1 && word.starts_with('"') && word.ends_with('"'))
+}
+
+/// True for a character of a name of Rust, such as `take_array`.
+fn name_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// The scan of the functions of `src/json.rs` finds a head with each visibility and with each
+/// qualifier. It skips a comment and a method.
+#[test]
+fn the_scan_of_the_functions_of_src_json_finds_a_head_with_each_visibility_and_qualifier() {
+    let code = "\
+pub fn a() {}
+pub(crate) fn b<'a>(v: &'a str) {}
+pub(super) fn c() {}
+const fn d() {}
+pub(crate) const unsafe fn e() {}
+async fn f() {}
+pub extern \"C\" fn g() {}
+fn h() {}
+/// The comment of fn i.
+impl X {
+    fn method() {}
+}
+";
+    let found = functions_at_top_level(code).expect("the scan reads each head");
+    let names: Vec<&str> = found.iter().map(String::as_str).collect();
+    assert_eq!(names, ["a", "b", "c", "d", "e", "f", "g", "h"]);
+}
+
+/// The scan of the functions of `src/json.rs` gives the first line with the word `fn` that it
+/// cannot read. Two such lines are a head after an attribute and a const of a function type.
+#[test]
+fn the_scan_of_the_functions_of_src_json_gives_the_first_line_with_fn_that_it_cannot_read() {
+    for line in ["#[inline] pub fn a() {}", "pub const A: fn() = a;"] {
+        let code = format!("pub fn b() {{}}\n{line}\nfn c() {{}}\n");
+        assert_eq!(functions_at_top_level(&code), Err(line));
+    }
 }
 
 /// The rule of "Types and data" in `code.md` names each function of `src/json.rs`. Each name of
@@ -3496,7 +3568,7 @@ fn only_the_compatibility_page_names_the_old_names_packs_and_applied_of_list() {
     let names_old = |text: &str| text.contains("--packs") || text.contains("--applied");
     let named =
         tracked_files_whose_text(root, &["src", "examples", "scripts", "docs/src"], names_old);
-    assert_eq!(named, ["docs/src/reference/compatibility.md"]);
+    assert_eq!(named, [book_file(COMPATIBILITY_PAGE)]);
 
     let page = read(&docs().join(COMPATIBILITY_PAGE));
     let mut rest = one_line(&page);
@@ -4150,9 +4222,10 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_wo
 /// each one.
 #[test]
 fn the_four_lines_with_would_that_the_review_of_553_named_are_gone() {
+    let compatibility = book_file(COMPATIBILITY_PAGE);
     for (file, anchor) in [
         (
-            "docs/src/reference/compatibility.md",
+            compatibility.as_str(),
             "The loader refuses a code in `refusal_codes`",
         ),
         (
@@ -4557,6 +4630,8 @@ fn the_section_of_release_0_28_0_names_each_non_exhaustive_type_of_the_send() {
 /// the legend of a status. Each row has the words that went, and the words that came.
 #[test]
 fn the_passive_sentences_and_the_ing_forms_that_the_review_at_the_end_of_wave_12_named_are_gone() {
+    let code = book_file(CODE_PAGE);
+    let compatibility = book_file(COMPATIBILITY_PAGE);
     let sentences = [
         (
             "docs/src/automation/merge-gate.md",
@@ -4569,7 +4644,7 @@ fn the_passive_sentences_and_the_ing_forms_that_the_review_at_the_end_of_wave_12
             "since strata took the record",
         ),
         (
-            "docs/src/development/code.md",
+            code.as_str(),
             "A record file is read first",
             "Strata reads a record file first",
         ),
@@ -4604,12 +4679,12 @@ fn the_passive_sentences_and_the_ing_forms_that_the_review_at_the_end_of_wave_12
             "Palette accepts a `PUT` of a published version",
         ),
         (
-            "docs/src/reference/compatibility.md",
+            compatibility.as_str(),
             "A field that is false, empty, or zero is omitted",
             "Strata omits a field that is false, empty, or zero",
         ),
         (
-            "docs/src/reference/compatibility.md",
+            compatibility.as_str(),
             "A 5xx that is not a refusal is not kept",
             "The backend keeps no 5xx that is not a refusal",
         ),
@@ -7877,10 +7952,7 @@ fn the_comment_on_common_palette_names_each_item_of_it_that_xtask_uses() {
             let rest = &text[at + path_start.len()..];
             let names = match rest.strip_prefix('{') {
                 Some(list) => &list[..list.find('}').expect("a list of a use ends")],
-                None => rest
-                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-                    .next()
-                    .unwrap_or_default(),
+                None => rest.split(|c| !name_char(c)).next().unwrap_or_default(),
             };
             used.extend(
                 names
