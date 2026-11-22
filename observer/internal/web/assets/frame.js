@@ -391,26 +391,31 @@ const PROFILE_KEYS = {status: [x => SEVERITY.indexOf(x.status), "num"], profile:
 // folded says that the row of the profile x is in the fold under the table: its status is not-on-this-cluster. A finding wins, so a
 // record with a finding stays in the table with the status drift, also when the cluster does not run it.
 const folded = x => x.status === STATUS.NOT_ON_CLUSTER;
-// awayFold lists under the table the rows that folded gives: records of profile versions that the cluster does not run. No filter
-// counts them, and the fold shows with the filter All only.
+// awayFold lists under the table the rows that folded gives: records of profile versions that the cluster does not run. The fold shows
+// with the filter All only. Only the filter Not checked counts such a row, when a row of Not checked names its record.
 function awayFold(rows, head) {
   if (!rows.length) return "";
   return h`<details data-open="not-on-cluster" ${openAttr("not-on-cluster")}><summary>${rows.length} ${plural(rows.length, "record of a profile version", "records of profile versions")} that this cluster does not run</summary><div class="tw"><table>${head}<tbody>${rows}</tbody></table></div></details>`;
 }
 
 function profilesCard() {
-  // A profile with a newer version of itself or of a pack shows under "Newer", also when its status is a drift.
-  const has = (x, k) => k === "all" || (k === STATUS.OK ? x.status === STATUS.OK : k === STATUS.NEWER ? !!x.newerVersion || x.packs.some(p => p.newer) : asCount(x.status) === k || x.packs.some(p => p.status === k));
-  const list = D.profiles.filter(x => !folded(x)).sort((a, b) => SEVERITY.indexOf(a.status) - SEVERITY.indexOf(b.status));
+  // A profile with a newer version of itself or of a pack shows under "Newer", also when its status is a drift. A profile shows under
+  // "Not checked" when a row of Not checked names it. So the filter, the tile, and the screen Not checked count the same causes.
+  const has = (x, k) => k === "all" || (k === STATUS.OK ? x.status === STATUS.OK : k === STATUS.NEWER ? !!x.newerVersion || x.packs.some(p => p.newer)
+    : k === STATUS.NOT_CHECKED ? causeNames(undefined, subjectOf(x)) : x.status === k || x.packs.some(p => p.status === k));
+  // shows says that the row of x is in the table with the filter k. A row of the fold is in the table with the filter Not checked only.
+  const shows = (x, k) => has(x, k) && (!folded(x) || k === STATUS.NOT_CHECKED);
+  const all = D.profiles.slice().sort((a, b) => SEVERITY.indexOf(a.status) - SEVERITY.indexOf(b.status));
+  const list = all.filter(x => !folded(x));
   const cnt = {};
-  FILTERS.forEach(([k]) => { cnt[k] = list.filter(x => has(x, k)).length; });
+  FILTERS.forEach(([k]) => { cnt[k] = all.filter(x => shows(x, k)).length; });
   const q = S.q.toLowerCase();
   const named = x => !q || subjectOf(x).toLowerCase().includes(q);
   const row = x => {
     const subject = subjectOf(x);
     return h`<tr class="link" data-go="${profileHash(subject)}"><td class="w110">${statusBadge(x.status)}</td><td class="m nw"><a href="${profileHash(subject)}">${x.name}</a><span class="mut">@${x.version}</span></td><td class="mut narrow-hide">${x.type}</td><td class="narrow-hide nw">${hbar(x)}</td><td class="msg">${newsOf(x)}</td></tr>`;
   };
-  const rows = sortBy("pt", list.filter(x => has(x, S.filter) && named(x)), PROFILE_KEYS).map(row);
+  const rows = sortBy("pt", all.filter(x => shows(x, S.filter) && named(x)), PROFILE_KEYS).map(row);
   const what = S.q ? h`No profile matches <span class="m">${S.q}</span>.` : "No profile has this status.";
   const clear = h` <button type="button" class="lnk" data-clear="filter">Clear the filter</button>`;
   const empty = h`<tr><td colspan="5">${list.length ? inline(TONE.OFF, what, clear) : inline(TONE.OFF, "No profile yet.")}</td></tr>`;

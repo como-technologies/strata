@@ -1200,6 +1200,12 @@ field, a value, an input, or an option is in the sections above.
   table. The rest of the cell was then a new row. A carriage return before a line break also
   gives a space now, so a `\r\n` gives two spaces. `strata-preflight` writes its markdown in the
   same way.
+- **The filter "Not checked" of the observer shows more profiles.** It shows each profile that a
+  cause of "Not checked" names. Before, it showed a profile only when the profile was
+  `not-checked` or `no-record`, or when a pack of it was `not-checked`. It did not show a record
+  that the cluster does not run, or a profile `newer` with a cause `pin-error`. The tile and the
+  screen "Not checked" counted these causes. A check that reads the count of the filter must
+  read the new count. See [Not checked](../development/observer.md#not-checked).
 
 ### For a user of the CI drop-ins
 
