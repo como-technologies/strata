@@ -9,6 +9,7 @@ use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::sync::{Arc, Mutex};
 
+use strata::api::ROUTE_PREFIX;
 use strata::closed_set::ClosedSet;
 #[cfg(target_os = "linux")]
 use strata::config::{KEY_VARS, PROJECT_VARS, URL_VARS};
@@ -2987,7 +2988,7 @@ const POST_READS: [&str; 7] = [
 fn palette_paths(line: &str) -> Vec<String> {
     let mut paths = Vec::new();
     let mut rest = line;
-    while let Some(at) = rest.find("/v1/") {
+    while let Some(at) = rest.find(ROUTE_PREFIX) {
         let mut path = String::new();
         rest = &rest[at..];
         loop {

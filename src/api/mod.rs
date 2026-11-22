@@ -56,6 +56,9 @@ pub use retry::{Retry, RetryPolicy};
 #[cfg(test)]
 pub(crate) use http::{routes, server};
 
+/// The start of each route of Palette that strata reads, such as `/v1/clusterprofiles/{uid}`.
+pub const ROUTE_PREFIX: &str = "/v1/";
+
 /// The method of a request that strata sends to Palette.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "UPPERCASE")]

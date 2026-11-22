@@ -13,6 +13,9 @@ const BOOK: &str = "docs/src";
 /// The directory under the book that `just docs-examples` writes.
 const OUTPUT: &str = "output";
 
+/// The directory of the integration tests of a Rust package. They are a crate of their own.
+pub const RUST_TESTS: &str = "tests";
+
 /// The end of the name of a Go file of tests.
 const GO_TEST: &str = "_test.go";
 
@@ -120,7 +123,7 @@ pub fn under(path: &str, dir: &str) -> bool {
 /// file `tests.rs`.
 pub fn is_rust_test_file(path: &str) -> bool {
     let name = path.rsplit('/').next().unwrap_or(path);
-    under(path, "tests") || name == "tests.rs"
+    under(path, RUST_TESTS) || name == "tests.rs"
 }
 
 /// True when `attrs` mark the item as test code: `#[test]` or `#[cfg(test)]`.
@@ -304,5 +307,17 @@ mod tests {
     #[test]
     fn a_text_that_is_no_rust_is_an_error() {
         assert!(code_without_tests("fn {").is_err());
+    }
+
+    /// The criterion of #960. `marks_of` of `tests/common/sentences.rs` keeps its own text of each
+    /// extension, because the tests of strata include the file and cannot name `Lang`. The test
+    /// compares each extension of `Lang` with it.
+    #[test]
+    fn the_marks_of_the_comments_know_the_extension_of_each_language() {
+        for lang in Lang::ALL {
+            let marks = crate::sentences::marks_of(&format!("a.{}", lang.extension()));
+            let marks = marks.map(|m| (m.line, m.block));
+            assert_eq!(marks, Some((Some("//"), true)), "{lang:?}");
+        }
     }
 }
