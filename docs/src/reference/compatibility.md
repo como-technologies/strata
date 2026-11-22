@@ -1167,6 +1167,23 @@ it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
 
+## Release 0.36.0: changes that need action
+
+Release 0.36.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **The filter "Not checked" of the observer shows each profile that a cause of "Not checked"
+  names.** Before, it showed a profile only when the profile was `not-checked` or `no-record`,
+  or when a pack of it was `not-checked`. So it did not show a record in the fold of the
+  versions that the cluster does not run. It did not show a profile with the status `newer`
+  that a cause `pin-error` names either. The tile and the screen "Not checked" counted these
+  causes, and now the filter counts them too. A check that reads the count of the filter must
+  read the new count. See [Not checked](../development/observer.md#not-checked).
+
 ## Release 0.35.0: changes that need action
 
 Release 0.35.0 is a minor release, so it can change the API of the library. This

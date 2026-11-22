@@ -543,8 +543,9 @@ them:
   as the filter of Profiles does.
 - The table of the profiles lists the profiles that the cluster runs. A fold under it
   lists each record with the status `not-on-this-cluster`, with the filter "All" only.
-  No filter counts such a record. A record with a finding stays in the table as a
-  drift, also when the cluster does not run it.
+  Only the filter "Not checked" counts such a record, when a cause of "Not checked"
+  names it. It then shows the row of the record in the table. A record with a finding
+  stays in the table as a drift, also when the cluster does not run it.
 - For each record of a version that the cluster does not run, also a drift, the slabs
   of its packs name no newer version. The tile "Versions newer than the pins" does not
   count them as current. The page of such a pack shows no fact of a newer version. With
@@ -587,9 +588,9 @@ The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
 `first-seen`, `stale-unchecked`, `lost-unchecked`, `read-error`, `images`,
 `images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`, `alerts`,
-`alerts-unset`, `moved-drift`, `update-checks`, and `profile-checks`. The server listens
-on `127.0.0.1:8080`. The flag `-listen` takes another loopback address, and `-data` takes
-another directory of sets.
+`alerts-unset`, `moved-drift`, `moved-unchecked`, `update-checks`, and `profile-checks`.
+The server listens on `127.0.0.1:8080`. The flag `-listen` takes another loopback
+address, and `-data` takes another directory of sets.
 
 A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
 of each route as a JSON file. The dev server serves them through the real server
@@ -615,6 +616,10 @@ the page are those of the data.
   and the record of `wilma-gateway@3.1.2` that the cluster runs. A person edited the
   published version 3.0.4 after the move. A finding wins, so the record is a drift. It
   has no newer version, and no pack of it is current.
+- The set `moved-unchecked` names `moved-drift` in a file `base`. It holds the record of
+  `wilma-gateway@3.0.4` with no finding, so its status is `not-on-this-cluster`. Strata
+  could not read the upstream digest of `traefik`, so one cause of "Not checked" names the
+  record. The filter "Not checked" shows the row of the record in the table.
 - The set `no-records` is the output of the observer with no record. A test runs
   the observer on a stand-in and makes sure of this.
 - The sets `images`, `images-split`, `images-off`, and `images-unread` differ in

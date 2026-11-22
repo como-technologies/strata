@@ -717,7 +717,8 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateTextTooLarge, okOverview},
 		{devdata.StateAlerts, []string{needsAttention, "Alerts"}},
 		{devdata.StateAlertsUnset, []string{needsAttention, notSet}},
-		{devdata.StateMovedDrift, []string{needsAttention, publishedChanged, "3 of 3 packs in full", "1 profile · 1 this week"}},
+		{devdata.StateMovedDrift, []string{needsAttention, publishedChanged, movedInFull, movedNewer}},
+		{devdata.StateMovedUnchecked, []string{movedCause, movedNewer, "1 cause in Not checked limit what a check says."}},
 		{devdata.StateUpdateChecks, okOverview},
 		{devdata.StateProfileChecks, append([]string{"2 newer profile versions"}, okOverview...)},
 	}
@@ -892,7 +893,7 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 				switch s.Variant {
 				case "":
 					mustHold(t, "the screen of the profiles", s.HTML, button)
-				case "filter " + string(model.StatusNewer):
+				case filterVariant(model.StatusNewer):
 					shown = true
 					if rows := strings.Count(s.HTML, goToStart+"#p-"); rows != len(want) {
 						t.Errorf("the filter shows %d profiles, want %d", rows, len(want))

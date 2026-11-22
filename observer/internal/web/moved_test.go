@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -13,13 +14,18 @@ import (
 
 // The words of a version that the cluster no longer runs, and the fold of the table of the profiles that lists it. The version is
 // testkit.GatewayMoved: the cluster moved to wilma-gateway@3.1.2. The set ok holds it with no finding, and the set moved-drift holds
-// it with a finding.
+// it with a finding. The set moved-unchecked holds it with a cause of Not checked. The overview of the two sets of a move counts
+// the 3 packs of the record that the cluster runs, and its newer version. movedCause is the line of the tile Not checked of the set
+// moved-unchecked.
 const (
 	movedHash    = "#p-" + testkit.GatewayMoved
 	notOnCluster = "Not on this cluster"
 	notRunFact   = "This cluster does not run this version."
 	movedFold    = `data-open="not-on-cluster"`
 	foldWords    = "1 record of a profile version that this cluster does not run"
+	movedInFull  = "3 of 3 packs in full"
+	movedNewer   = "1 profile · 1 this week"
+	movedCause   = "1 cause · " + movedInFull
 )
 
 // filterButton gives the button of the filter of the table of the profiles, with its words. The filter is on when on is
@@ -35,6 +41,9 @@ func filterButtonClass(filter, words, class string) string {
 }
 
 const filterOpen = `<button data-filter="`
+
+// filterVariant names the variant of the crawl of the table of the profiles with the filter of the status.
+func filterVariant(status model.Status) string { return "filter " + string(status) }
 
 // versionPageOfMoved checks the page of the version moved. It must hold the badge of the status and the fact of a version
 // that the cluster no longer runs. It names no move and no newer version. Each of its 3 packs says only what images it lists.
@@ -69,7 +78,7 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 	mustHold(t, "the row", row, badge("y", notOnCluster), `<span class="mut">`+notRunFact+`</span>`)
 	mustNotHold(t, "the row", row, "Newer", string(model.StatusNewer))
 	for _, status := range []model.Status{model.StatusNewer, model.StatusOK, model.StatusDrift, model.StatusNotChecked} {
-		variant := "filter " + string(status)
+		variant := filterVariant(status)
 		mustNotHold(t, "the profiles with the "+variant, pageOf(t, screens, "#profiles", variant), testkit.GatewayMoved, movedFold)
 	}
 	overview := pageOf(t, screens, "#overview", "")
@@ -90,6 +99,67 @@ func TestAVersionThatTheClusterNoLongerRunsWithAFindingIsADriftWithNoNewerVersio
 	overview := pageOf(t, screens, "#overview", "")
 	mustHold(t, "the overview", overview, tileLabel("Profiles")+tileValue("2"))
 	versionPageOfMoved(t, screens, badge("r", "Drift"))
+}
+
+// Issue #895. In the set moved-unchecked, a cause of Not checked names the record of a version that the cluster no longer runs. The
+// tile, the screen, and the filter Not checked count the cause. The filter shows the row of the record in the table, with its badge
+// "Not on this cluster" and no fold. The filter All lists the record in the fold only, and the filters Drift, Newer, and OK do not
+// show it.
+func TestACauseOfAVersionThatTheClusterNoLongerRunsCountsOnTheTileTheScreenAndTheFilter(t *testing.T) {
+	screens := crawl(t, devdata.StateMovedUnchecked)
+	notChecked := string(model.StatusNotChecked)
+	mustHold(t, "the overview", pageOf(t, screens, "#overview", ""), tileLabel(wordNotChecked)+tileValue("1"), movedCause)
+	mustHold(t, "the screen", rowTo(t, pageOf(t, screens, "#notchecked", ""), movedHash), "traefik@37.4.0", testkit.GatewayMoved)
+	profiles := pageOf(t, screens, "#profiles", "")
+	mustHold(t, "the filters", profiles, filterButton("all", "All 1", true), filterButton(notChecked, wordNotChecked+" 1", false))
+	table, fold, found := strings.Cut(profiles, `<details `+movedFold)
+	if !found {
+		t.Fatal("the screen has no fold of the versions that the cluster does not run")
+	}
+	mustNotHold(t, "the table", table, goTo(movedHash))
+	mustHold(t, "the fold", fold, "<summary>"+foldWords+"</summary>")
+	filtered := pageOf(t, screens, "#profiles", filterVariant(model.StatusNotChecked))
+	mustHold(t, "the row", rowTo(t, filtered, movedHash), badge("y", notOnCluster), `<span class="mut">`+notRunFact+`</span>`)
+	mustNotHold(t, "the filter "+wordNotChecked, filtered, movedFold, goTo(wilmaHash))
+	for _, status := range []model.Status{model.StatusDrift, model.StatusNewer, model.StatusOK} {
+		variant := filterVariant(status)
+		mustNotHold(t, "the profiles with the "+variant, pageOf(t, screens, "#profiles", variant), goTo(movedHash), movedFold)
+	}
+}
+
+// profileRow finds the hash of each row of the table of the profiles.
+var profileRow = regexp.MustCompile(linkRow(`#p-([^"]*)`))
+
+// Issue #895. In each set with a table of the profiles, the filter Not checked shows each profile that a row of Not checked names, and
+// no other profile. The count of the filter is the number of those profiles. So the filter counts the causes that the tile and the
+// screen count. In the set moved-unchecked, a cause names a record of a version that the cluster no longer runs. In the set
+// read-error, a cause pin-error names a profile with the status newer. A page with no record file shows no table.
+func TestTheFilterNotCheckedShowsEachProfileThatACauseNames(t *testing.T) {
+	notChecked := string(model.StatusNotChecked)
+	for _, state := range devdata.States {
+		set := loadSet(t, state)
+		if len(set.Profiles.Profiles) == 0 || set.Cluster.Page == model.PageNoRecords {
+			continue
+		}
+		var named []string
+		for _, r := range set.NotChecked.NotChecked {
+			for _, subject := range r.Profiles {
+				named = append(named, encodeURIComponent(subject))
+			}
+		}
+		slices.Sort(named)
+		named = slices.Compact(named)
+		page := pageOf(t, crawl(t, state), "#profiles", filterVariant(model.StatusNotChecked))
+		mustHold(t, string(state), page, filterButton(notChecked, fmt.Sprintf("%s %d", wordNotChecked, len(named)), true))
+		var shown []string
+		for _, m := range profileRow.FindAllStringSubmatch(page, -1) {
+			shown = append(shown, m[1])
+		}
+		slices.Sort(shown)
+		if !slices.Equal(shown, named) {
+			t.Errorf("%s: the filter %s shows %v, and the causes name %v", state, wordNotChecked, shown, named)
+		}
+	}
 }
 
 // The page of each pack of the version shows no fact of a newer version. Strata does not look for a newer version of a version that the
@@ -148,6 +218,19 @@ func TestTheBookQuotesTheWordsOfAVersionThatTheClusterNoLongerRuns(t *testing.T)
 		shown += pageOf(t, screens, "#profiles", "") + pageOf(t, screens, movedHash, "")
 	}
 	for _, words := range []string{foldWords, notOnCluster, notRunFact, "Drift"} {
+		mustHold(t, "the book", section, `"`+words+`"`)
+		mustHold(t, "the page", shown, words)
+	}
+}
+
+// Issue #895. The page of the service has the section "A version that the cluster no longer runs". It quotes the words of the page
+// for a cause of Not checked that names such a version. The screens of the set moved-unchecked show each of them.
+func TestTheBookOfTheServiceQuotesTheWordsOfACauseOfAVersionThatTheClusterNoLongerRuns(t *testing.T) {
+	section := unwrapped(sectionOf(t, servicePage, "### A version that the cluster no longer runs"))
+	screens := crawl(t, devdata.StateMovedUnchecked)
+	shown := pageOf(t, screens, "#overview", "") + pageOf(t, screens, "#notchecked", "") +
+		pageOf(t, screens, "#profiles", "") + pageOf(t, screens, "#profiles", filterVariant(model.StatusNotChecked))
+	for _, words := range []string{notOnCluster, wordNotChecked, "All"} {
 		mustHold(t, "the book", section, `"`+words+`"`)
 		mustHold(t, "the page", shown, words)
 	}

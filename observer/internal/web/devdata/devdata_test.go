@@ -165,7 +165,7 @@ func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 		StateStaleUnchecked: model.PageStale, StateLostUnchecked: model.PageLost, StateReadError: model.PageOK,
 		StateImages: model.PageOK, StateImagesSplit: model.PageOK, StateImagesOff: model.PageOK, StateImagesUnread: model.PageOK,
 		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK, StateAlerts: model.PageOK, StateAlertsUnset: model.PageOK,
-		StateMovedDrift: model.PageOK, StateUpdateChecks: model.PageOK, StateProfileChecks: model.PageOK}
+		StateMovedDrift: model.PageOK, StateMovedUnchecked: model.PageOK, StateUpdateChecks: model.PageOK, StateProfileChecks: model.PageOK}
 	if len(pages) != len(States) {
 		t.Fatalf("States lists %d sets, and the table of pages %d", len(States), len(pages))
 	}
@@ -274,6 +274,35 @@ func TestMovedDriftHoldsADriftOfAVersionThatTheClusterDoesNotRun(t *testing.T) {
 	}
 	if here.Status != model.StatusNewer || len(set.Newer.Newer) != 1 || set.Cluster.Counts.Profiles != 2 {
 		t.Errorf("%s: status %q, %d newer rows, counts %+v", runs, here.Status, len(set.Newer.Newer), set.Cluster.Counts)
+	}
+}
+
+// The set moved-unchecked holds the record of moved-drift of a version that the cluster no longer runs, wilma-gateway@3.0.4, with no
+// finding. Its status is not-on-this-cluster. Strata could not read the upstream digest of traefik, so the pack is not-checked, and
+// one cause no-upstream-digest names the record and the pack. Its newer versions, its pods, and its answers of Palette are those of
+// moved-drift.
+func TestMovedUncheckedHoldsACauseOfAVersionThatTheClusterDoesNotRun(t *testing.T) {
+	const moved = testkit.GatewayMoved
+	drift, set := load(t, StateMovedDrift), load(t, StateMovedUnchecked)
+	sameAsOK(t, drift, set, StateMovedUnchecked, &set.Cluster, &set.Findings, &set.Profiles, &set.NotChecked, &set.Events, &set.Diffs)
+	p := profileOf(set, moved)
+	if p == nil {
+		t.Fatalf("the set lacks %s", moved)
+	}
+	if p.Status != model.StatusNotOnThisCluster || p.ClusterCopy == nil || p.ClusterCopy.Status != model.CopyNotOnThisCluster || len(p.Findings) != 0 {
+		t.Errorf("%s: status %q, copy %+v, findings %+v", moved, p.Status, p.ClusterCopy, p.Findings)
+	}
+	for _, k := range p.Packs {
+		if want := k.Key == testkit.TraefikKey; (k.Status == model.StatusNotChecked) != want {
+			t.Errorf("%s: the pack %s is %q", moved, k.Key, k.Status)
+		}
+	}
+	want := model.NotChecked{Cause: model.NoUpstreamDigest, Profiles: []string{moved}, Packs: []string{testkit.TraefikKey}}
+	if rows := set.NotChecked.NotChecked; len(rows) != 1 || !reflect.DeepEqual(rows[0], want) {
+		t.Errorf("notChecked %+v", rows)
+	}
+	if len(set.Findings.Findings) != 0 || len(set.Diffs) != 1 || set.Diffs[0].Profile != testkit.GatewayProfile {
+		t.Errorf("%d findings, diffs %+v", len(set.Findings.Findings), set.Diffs)
 	}
 }
 

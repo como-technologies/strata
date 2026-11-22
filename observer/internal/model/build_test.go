@@ -714,3 +714,36 @@ func TestAVersionThatTheClusterDoesNotRunWithAFindingIsADriftWithNoNewerVersion(
 		}
 	}
 }
+
+// Issue #895. A cause of the content cycle names a record of a version that the cluster does not run, as it names a record that the
+// cluster runs. Strata could not read the upstream digest of traefik in wilma-gateway@3.0.4, and it could not read the `verify` row
+// of aws-stack@1.0.0. Each record keeps the status not-on-this-cluster, and each pack that a cause names is not-checked.
+// counts.notChecked counts the two rows, and counts.packs and counts.packsInFull count the pack of aws-stack@1.1.0 only. The page reads
+// these rows for the tile, the screen, and the filter Not checked.
+func TestACauseOfTheContentNamesARecordThatTheClusterDoesNotRun(t *testing.T) {
+	unverified := notOnCluster(rec("wilma-gateway", "3.0.4", docs.VerifyUnverified, pk("addon", "traefik", "37.4.0"), pk("addon", "vendor-product", "2026.1.0")))
+	unverified.Row.Diff = &docs.Diff{UpstreamUnknown: []string{testkit.TraefikKey}}
+	unread := notOnCluster(rec("aws-stack", "1.0.0", docs.VerifyError, pk("csi", "csi-aws-ebs", "1.65.0")))
+	unread.Row.Error = &docs.Error{Kind: docs.KindAPI, Status: 500}
+	s := build(ptr(content(t, unverified, unread, aws())), nil)
+	want := []NotChecked{
+		{Cause: NoUpstreamDigest, Profiles: []string{testkit.GatewayMoved}, Packs: []string{testkit.TraefikKey}},
+		{Cause: ReadError, Profiles: []string{testkit.AWSStackOld}, Packs: []string{testkit.CSIKey}},
+	}
+	if !slices.EqualFunc(s.NotChecked, want, equalRow) {
+		t.Errorf("notChecked %+v", s.NotChecked)
+	}
+	named := map[string]bool{packID(testkit.GatewayMoved, testkit.TraefikKey): true, packID(testkit.AWSStackOld, testkit.CSIKey): true}
+	for _, p := range s.Profiles[:2] {
+		subject := Subject(p.Name, p.Version)
+		if p.Status != StatusNotOnThisCluster {
+			t.Errorf("%s: status %q", subject, p.Status)
+		}
+		for _, k := range p.Packs {
+			if (k.Status == StatusNotChecked) != named[packID(subject, k.Key)] {
+				t.Errorf("%s: the pack %s is %q", subject, k.Key, k.Status)
+			}
+		}
+	}
+	sameCounts(t, s.Counts, Counts{NotChecked: 2, Packs: 1, PacksInFull: 1, Profiles: 1})
+}
