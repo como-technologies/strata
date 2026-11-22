@@ -312,21 +312,22 @@ fn two_sends_of_strata_for_one_value_are_one_issue_with_a_count_of_both() {
 }
 
 #[test]
-fn the_issue_that_the_service_opens_has_the_line_done_when_and_a_second_send_keeps_a_tick() {
+fn the_issue_that_the_service_opens_has_the_line_done_when_and_a_second_send_keeps_the_text_after_it()
+ {
     let (github, state) = stand_in_github();
     let running = start_service(&github);
     post(&running.address, &report(&[entry("later", 1)]), 0).unwrap();
     running.settle();
-    let ticked = {
+    let written = {
         let mut state = state.lock().unwrap();
         let body = state.issues[0].body.clone();
         let at = body
-            .find(&format!("\n{DONE_WHEN}\n\n- [ ] "))
-            .unwrap_or_else(|| panic!("no line {DONE_WHEN:?} with an item: {body}"));
-        // a person ticks the first item in the editor of GitHub, which sends CRLF
-        let ticked = body[at..].replacen("- [ ] ", "- [x] ", 1);
-        state.issues[0].body = format!("{}{ticked}", &body[..at]).replace('\n', "\r\n");
-        ticked
+            .find(&format!("\n\n{DONE_WHEN}\n"))
+            .unwrap_or_else(|| panic!("the body has no line {DONE_WHEN:?}: {body}"));
+        // a person adds a line in the editor of GitHub, which sends CRLF
+        let written = format!("{}A line of a person.\n", &body[at..]);
+        state.issues[0].body = format!("{}{written}", &body[..at]).replace('\n', "\r\n");
+        written
     };
     post(&running.address, &report(&[entry("later", 1)]), 1).unwrap();
     running.settle();
@@ -334,7 +335,10 @@ fn the_issue_that_the_service_opens_has_the_line_done_when_and_a_second_send_kee
     assert_eq!(state.issues.len(), 1);
     let body = &state.issues[0].body;
     assert!(body.contains("| Lines | 2 |"), "{body}");
-    assert!(body.ends_with(&ticked), "the tick stays: {body}");
+    assert!(
+        body.ends_with(&written),
+        "the line of the person stays: {body}"
+    );
 }
 
 #[test]
