@@ -11,6 +11,7 @@
 use std::str::FromStr;
 
 use proc_macro2::{Delimiter, Spacing, TokenStream, TokenTree};
+use syn::parse::ParseStream;
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{
@@ -18,6 +19,7 @@ use syn::{
     Pat, ReturnType, Signature, Type, Visibility,
 };
 
+use super::keyword::Keyword;
 use super::rust_sets::{macro_table, match_table, serde_names};
 use super::token::{Delim, Token, leaves, text_of};
 use super::{Func, Scope};
@@ -29,8 +31,9 @@ const OPERATORS: [&str; 24] = [
     "/=", "%=", "^=", "&=", "|=", "<<", ">>", "<<=", ">>=",
 ];
 
-/// The macros whose table gives the texts of a closed set: `Variant => "text"`.
-const TABLE_MACROS: [&str; 2] = ["impl_closed_set", "impl_texts"];
+/// The macros whose table gives the texts of a closed set: `Variant => "text"`. True for a macro
+/// that implements a trait, so its texts reach the package.
+const TABLE_MACROS: [(&str, bool); 2] = [("impl_closed_set", true), ("impl_texts", false)];
 
 /// A value that a Rust file declares: a text of a closed set, or a string const.
 #[derive(Debug, PartialEq, Eq)]
@@ -257,19 +260,22 @@ impl<'ast> Visit<'ast> for Reader<'_> {
 
     fn visit_item_macro(&mut self, item: &'ast ItemMacro) {
         let name = item.mac.path.segments.last().map(|s| s.ident.to_string());
-        if name.is_some_and(|name| TABLE_MACROS.contains(&name.as_str())) {
-            let tokens = convert(item.mac.tokens.clone().into_iter().collect());
-            let (texts, scope) = macro_table(&tokens);
-            for (name, value, line) in texts {
-                self.file.values.push(RustValue {
-                    name,
-                    value,
-                    line,
-                    closed: true,
-                    scope,
-                });
-            }
+        let Some((_, implements)) = TABLE_MACROS
+            .into_iter()
+            .find(|(table, _)| name.as_deref() == Some(*table))
+        else {
+            return;
+        };
+        let vis = item
+            .mac
+            .parse_body_with(visibility)
+            .unwrap_or(Visibility::Inherited);
+        let tokens = convert(item.mac.tokens.clone().into_iter().collect());
+        let trait_impl = std::mem::replace(&mut self.trait_impl, implements);
+        for (name, value, line) in macro_table(&tokens) {
+            self.value(name, value, line, true, &vis);
         }
+        self.trait_impl = trait_impl;
     }
 
     fn visit_item_const(&mut self, item: &'ast ItemConst) {
@@ -295,10 +301,18 @@ impl<'ast> Visit<'ast> for Reader<'_> {
 fn scope_of(vis: &Visibility) -> Scope {
     match vis {
         Visibility::Inherited => Scope::Module,
-        Visibility::Restricted(r) if r.path.is_ident("super") => Scope::Parent,
-        Visibility::Restricted(r) if r.path.is_ident("self") => Scope::Module,
+        Visibility::Restricted(r) if r.path.is_ident(Keyword::Super.as_str()) => Scope::Parent,
+        Visibility::Restricted(r) if r.path.is_ident(Keyword::SelfValue.as_str()) => Scope::Module,
         Visibility::Public(_) | Visibility::Restricted(_) => Scope::Package,
     }
+}
+
+/// The visibility at the start of the tokens of a macro, such as `pub(super)` of
+/// `impl_texts!(pub(super) Format { ... })`. A start with no `pub` gives `Inherited`.
+fn visibility(input: ParseStream) -> syn::Result<Visibility> {
+    let vis = input.parse()?;
+    input.parse::<TokenStream>()?;
+    Ok(vis)
 }
 
 /// The last name of a type path, such as `Error` of `crate::error::Error`.

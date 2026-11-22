@@ -4,7 +4,6 @@
 use syn::meta::ParseNestedMeta;
 use syn::{Attribute, Block, Expr, ItemEnum, Lit, LitStr, Pat, Stmt};
 
-use super::Scope;
 use super::token::{Delim, Token, split};
 
 /// A text of a closed set: the name of its variant, such as `Tier::Running`, the text, and the line
@@ -135,28 +134,18 @@ pub fn rename(name: &str, rule: Option<&str>) -> String {
 }
 
 /// The texts of the table of `impl_closed_set!(Set { V => "text", ... })`, or of
-/// `impl_texts!(vis Set { ... })`, with the scope of `as_str`. `tokens` are those of the macro.
-pub fn macro_table(tokens: &[Token]) -> (Vec<SetText>, Scope) {
+/// `impl_texts!(vis Set { ... })`. `tokens` are those of the macro.
+pub fn macro_table(tokens: &[Token]) -> Vec<SetText> {
     let Some(at) = tokens.iter().position(|t| t.group(Delim::Brace).is_some()) else {
-        return (Vec::new(), Scope::Package);
+        return Vec::new();
     };
     let set = tokens[..at]
         .iter()
         .rev()
         .find_map(Token::word)
         .unwrap_or("");
-    let scope = match &tokens[..at] {
-        [only] if only.word().is_some() => Scope::Package,
-        [vis, group, _] if vis.is_word("pub") => match group.group(Delim::Paren) {
-            Some([word]) if word.is_word("super") => Scope::Parent,
-            Some([word]) if word.is_word("self") => Scope::Module,
-            _ => Scope::Package,
-        },
-        [vis, _] if vis.is_word("pub") => Scope::Package,
-        _ => Scope::Module,
-    };
     let rows = tokens[at].group(Delim::Brace).unwrap_or(&[]);
-    let texts = split(rows, ",")
+    split(rows, ",")
         .into_iter()
         .filter_map(|row| match row {
             [variant, arrow, Token::Text { value, line, .. }] if arrow.is_mark("=>") => {
@@ -164,8 +153,7 @@ pub fn macro_table(tokens: &[Token]) -> (Vec<SetText>, Scope) {
             }
             _ => None,
         })
-        .collect();
-    (texts, scope)
+        .collect()
 }
 
 /// The texts of a function whose body is one `match` that gives a text for a variant in two arms

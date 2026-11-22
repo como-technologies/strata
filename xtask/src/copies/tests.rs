@@ -940,6 +940,34 @@ fn a_new_const_and_helper_copy_a_private_item_of_another_module() {
     );
 }
 
+/// A sibling module returns four texts of a module. They come from `impl_texts!` with no
+/// visibility, `impl_texts!` with `pub(self)`, a private const, and `impl_closed_set!`.
+#[test]
+fn a_table_with_no_visibility_reaches_its_module_and_a_table_of_a_trait_reaches_the_package() {
+    let repo = Repo::new();
+    repo.write(Lang::Rust.root_file(), "[package]\nname = \"p\"\n");
+    repo.write(
+        "src/a.rs",
+        "impl_texts!(Pack { One => \"pack-one-x\" });\n\nimpl_texts!(pub(self) Other { Two => \"pack-two-x\" });\n\n\
+         const THREE: &str = \"pack-three-x\";\n\nimpl_closed_set!(Kind { Four => \"pack-four-x\" });\n",
+    );
+    repo.commit("base");
+    repo.branch("change");
+    repo.write(
+        "src/b.rs",
+        "fn one() -> &'static str {\n    \"pack-one-x\"\n}\n\nfn two() -> &'static str {\n    \"pack-two-x\"\n}\n\n\
+         fn three() -> &'static str {\n    \"pack-three-x\"\n}\n\nfn four() -> &'static str {\n    \"pack-four-x\"\n}\n",
+    );
+    repo.commit("change");
+    let (findings, _) = repo.copies();
+    assert_eq!(
+        findings,
+        [
+            "src/b.rs:14 [return] \"pack-four-x\": pack-four-x is the value of Kind::Four (src/a.rs:7)"
+        ]
+    );
+}
+
 /// Each string of a const array is a const. The change adds a string const and a table with the
 /// value of an older literal, and two arrays with one value.
 #[test]

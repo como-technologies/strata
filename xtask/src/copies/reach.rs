@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use super::Scope;
 use super::source::dir_of;
+use crate::files::Lang;
 
 /// The files that a declaration reaches. A directory has a `/` at its end, or is empty for the
 /// root of the repository.
@@ -85,7 +86,10 @@ pub fn rust_reach(path: &str, root: &str, roots: &[String], scope: Scope, test: 
         Scope::Module if module_file => tree(dir),
         Scope::Module => Reach::File {
             file: path.to_string(),
-            dir: format!("{}/", path.trim_end_matches(".rs")),
+            dir: format!(
+                "{}/",
+                path.trim_end_matches(&format!(".{}", Lang::Rust.extension()))
+            ),
             tests: test,
         },
         Scope::Parent if module_file => tree(dir_of(dir.trim_end_matches('/'))),
