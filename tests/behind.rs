@@ -831,7 +831,6 @@ fn the_move_names_a_required_dropdown_variable_with_no_default_option_and_not_on
 #[test]
 fn the_move_names_a_required_sensitive_variable_with_no_default_value_and_not_one_with_the_mask() {
     let dir = tempfile::tempdir().unwrap();
-    // 1.4.0 adds two required sensitive variables, and only the token has a default value
     let (token, password) = ("api_token", "db_password");
     let stored = [
         common::variable(token, token, "a-token-of-the-profile", true),
