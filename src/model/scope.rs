@@ -74,6 +74,14 @@ impl fmt::Display for ProfileScope {
     }
 }
 
+/// The project that the document `doc` names in `metadata.annotations.projectUid`, or empty text
+/// when it names none.
+///
+/// A profile of a project names its project there, and so do a cluster and an app deployment.
+pub(crate) fn project_of_document(doc: &Value) -> &str {
+    str_at(doc, "/metadata/annotations/projectUid")
+}
+
 /// A profile uid with its scope, when strata could read it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ScopedUid {
@@ -119,6 +127,17 @@ mod tests {
             [ProfileScope::Tenant, ProfileScope::System]
         );
         assert_eq!(ProfileScope::Tenant.others_listed(), [ProfileScope::System]);
+    }
+
+    #[test]
+    fn the_project_of_a_document_is_its_project_annotation_and_empty_text_when_it_has_none() {
+        let doc = json!({"metadata": {"annotations": {"scope": "project", "projectUid": "p1"}}});
+        assert_eq!(project_of_document(&doc), "p1");
+        let tenant = json!({"metadata": {"annotations": {"scope": "tenant"}}});
+        assert_eq!(project_of_document(&tenant), "");
+        let number = json!({"metadata": {"annotations": {"projectUid": 7}}});
+        assert_eq!(project_of_document(&number), "");
+        assert_eq!(project_of_document(&Value::Null), "");
     }
 
     #[test]
