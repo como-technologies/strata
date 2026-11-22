@@ -163,8 +163,14 @@ struct Reader<'a> {
 }
 
 impl Reader<'_> {
+    /// Note a value. A function of a trait impl reaches each file that names the type, so its texts
+    /// reach the package.
     fn value(&mut self, name: String, value: String, line: usize, closed: bool, vis: &Visibility) {
-        let scope = scope_of(vis);
+        let scope = if self.trait_impl {
+            Scope::Package
+        } else {
+            scope_of(vis)
+        };
         self.file.values.push(RustValue {
             name,
             value,
@@ -223,10 +229,9 @@ impl Reader<'_> {
             line: sig.fn_token.span.start().line,
             last: block.brace_token.span.close().end().line,
         });
-        if returns_str(&sig.output) {
-            for (name, text, line) in match_table(block, self.self_type.as_deref()) {
-                self.value(name, text, line, true, vis);
-            }
+        let owner = self.self_type.as_deref();
+        for (name, text, line) in match_table(block, owner, returns_str(&sig.output)) {
+            self.value(name, text, line, true, vis);
         }
     }
 }
@@ -288,8 +293,9 @@ impl<'ast> Visit<'ast> for Reader<'_> {
 
     fn visit_item_const(&mut self, item: &'ast ItemConst) {
         self.item(&item.attrs, item, |r| {
-            for (text, line) in const_texts(&item.expr) {
-                r.value(item.ident.to_string(), text, line, false, &item.vis);
+            let (texts, list) = const_texts(&item.expr);
+            for (text, line) in texts {
+                r.value(item.ident.to_string(), text, line, list, &item.vis);
             }
             visit::visit_item_const(r, item);
         });
@@ -301,8 +307,9 @@ impl<'ast> Visit<'ast> for Reader<'_> {
                 Some(owner) => format!("{owner}::{}", item.ident),
                 None => item.ident.to_string(),
             };
-            for (text, line) in const_texts(&item.expr) {
-                r.value(name.clone(), text, line, false, &item.vis);
+            let (texts, list) = const_texts(&item.expr);
+            for (text, line) in texts {
+                r.value(name.clone(), text, line, list, &item.vis);
             }
         });
     }
@@ -338,22 +345,25 @@ fn returns_str(output: &ReturnType) -> bool {
     }
 }
 
-/// The literals of a const: one string, or each string of an array or of a slice.
-fn const_texts(expr: &Expr) -> Vec<(String, usize)> {
+/// The literals of a const: one string, or each string of an array or of a slice, also in a tuple
+/// of the array. The flag is true for an array or a slice: its strings are a closed set, such as a
+/// list of names or a table of texts.
+fn const_texts(expr: &Expr) -> (Vec<(String, usize)>, bool) {
     match expr {
         Expr::Lit(lit) => match &lit.lit {
-            Lit::Str(text) => vec![(text.value(), text.span().start().line)],
-            _ => Vec::new(),
+            Lit::Str(text) => (vec![(text.value(), text.span().start().line)], false),
+            _ => (Vec::new(), false),
         },
-        Expr::Array(array) => array
-            .elems
-            .iter()
-            .flat_map(|e| match e {
-                Expr::Lit(_) => const_texts(e),
+        Expr::Array(array) => {
+            // a row of a table, such as `(Lang::Go, "go")`, gives each string of the row
+            let row = |e: &Expr| match e {
+                Expr::Tuple(tuple) => tuple.elems.iter().flat_map(|e| const_texts(e).0).collect(),
+                Expr::Lit(_) => const_texts(e).0,
                 _ => Vec::new(),
-            })
-            .collect(),
+            };
+            (array.elems.iter().flat_map(row).collect(), true)
+        }
         Expr::Reference(reference) => const_texts(&reference.expr),
-        _ => Vec::new(),
+        _ => (Vec::new(), false),
     }
 }

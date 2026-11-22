@@ -1,9 +1,24 @@
 //! What a Go file declares, for the scan: its package, its imports, its consts, its functions, and
 //! the fields of its structs.
 
-use super::go_lex;
+use super::go_lex::{self, MAP, STRUCT};
 use super::token::{Delim, Token, leaves, split, text_of};
 use super::{Func, Scope};
+
+/// The read of one kind of declaration of the top level: it takes the file, the line of the
+/// keyword, and the tokens after the keyword.
+type ReadDeclaration = fn(&mut GoFile, usize, &[Token]);
+
+/// The keyword of each declaration of the top level that the read takes, its read, and whether
+/// the code of the file keeps it. An import is no code: the walk of the literals skips it.
+const DECLARATIONS: [(&str, ReadDeclaration, bool); 6] = [
+    ("package", read_package, true),
+    ("import", read_imports, false),
+    ("const", read_consts, true),
+    ("var", read_vars, true),
+    ("type", read_types, true),
+    ("func", read_func, true),
+];
 
 /// A const of a Go file whose value is one string literal.
 #[derive(Debug, PartialEq, Eq)]
@@ -47,29 +62,14 @@ pub fn read(text: &str) -> Result<GoFile, String> {
         let Some(first) = declaration.first() else {
             continue;
         };
-        let rest = &declaration[1..];
-        match first.word() {
-            Some("package") => {
-                file.package = rest.first().and_then(Token::word).unwrap_or("").to_string();
-            }
-            Some("import") => {
-                file.imports.extend(import_paths(rest));
+        let read = DECLARATIONS
+            .iter()
+            .find(|(keyword, _, _)| first.is_word(keyword));
+        if let Some((_, read, code)) = read {
+            read(&mut file, first.line(), &declaration[1..]);
+            if !code {
                 continue;
             }
-            Some("const") => file
-                .consts
-                .extend(each_spec(rest).into_iter().flat_map(consts)),
-            Some("var") => {
-                file.aliases
-                    .extend(each_spec(rest).into_iter().filter_map(alias));
-                file.tables
-                    .extend(each_spec(rest).into_iter().flat_map(table));
-            }
-            Some("type") => file
-                .structs
-                .extend(each_spec(rest).into_iter().filter_map(named_struct)),
-            Some("func") => file.funcs.extend(func(first.line(), rest)),
-            _ => {}
         }
         file.code.extend(declaration.iter().cloned());
         file.code.push(Token::Mark {
@@ -164,7 +164,7 @@ fn alias(spec: &[Token]) -> Option<(String, String)> {
 /// The name and the fields of a spec `Name struct { ... }`.
 fn named_struct(spec: &[Token]) -> Option<(String, Vec<String>)> {
     match spec {
-        [name, keyword, body] if keyword.is_word("struct") => Some((
+        [name, keyword, body] if keyword.is_word(STRUCT) => Some((
             name.word()?.to_string(),
             struct_fields(body.group(Delim::Brace)?),
         )),
@@ -272,7 +272,7 @@ fn table(spec: &[Token]) -> Vec<GoConst> {
     let (Some(name), Some(rows)) = (name.word(), rows.group(Delim::Brace)) else {
         return Vec::new();
     };
-    if !equals.is_mark("=") || !keyword.is_word("map") {
+    if !equals.is_mark("=") || !keyword.is_word(MAP) {
         return Vec::new();
     }
     let mut out = Vec::new();
@@ -304,4 +304,33 @@ fn table(spec: &[Token]) -> Vec<GoConst> {
         }
     }
     out
+}
+
+fn read_package(file: &mut GoFile, _: usize, rest: &[Token]) {
+    file.package = rest.first().and_then(Token::word).unwrap_or("").to_string();
+}
+
+fn read_imports(file: &mut GoFile, _: usize, rest: &[Token]) {
+    file.imports.extend(import_paths(rest));
+}
+
+fn read_consts(file: &mut GoFile, _: usize, rest: &[Token]) {
+    file.consts
+        .extend(each_spec(rest).into_iter().flat_map(consts));
+}
+
+fn read_vars(file: &mut GoFile, _: usize, rest: &[Token]) {
+    file.aliases
+        .extend(each_spec(rest).into_iter().filter_map(alias));
+    file.tables
+        .extend(each_spec(rest).into_iter().flat_map(table));
+}
+
+fn read_types(file: &mut GoFile, _: usize, rest: &[Token]) {
+    file.structs
+        .extend(each_spec(rest).into_iter().filter_map(named_struct));
+}
+
+fn read_func(file: &mut GoFile, line: usize, rest: &[Token]) {
+    file.funcs.extend(func(line, rest));
 }

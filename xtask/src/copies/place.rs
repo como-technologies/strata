@@ -3,9 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use super::Lang;
 use super::go::struct_fields;
+use super::go_lex::STRUCT;
 use super::token::{Delim, Token};
+use super::{Lang, holds_line};
 
 /// The names of a field or of a parameter that holds the name of a case of a test.
 const CASE_NAMES: [&str; 4] = ["name", "case", "desc", "title"];
@@ -23,27 +24,57 @@ const GO_FAILURES: [&str; 8] = [
 /// no test.
 const GO_NOT_TESTS: [&str; 3] = ["fmt", "errors", "log"];
 
-/// The macros and methods of Rust whose arguments are a label, with the count of the arguments
-/// before the label.
-const RUST_FAILURES: [(&str, usize); 11] = [
-    ("assert!", 1),
-    ("debug_assert!", 1),
-    ("assert_eq!", 2),
-    ("assert_ne!", 2),
-    ("debug_assert_eq!", 2),
-    ("debug_assert_ne!", 2),
-    ("panic!", 0),
-    ("unreachable!", 0),
-    ("todo!", 0),
-    ("unimplemented!", 0),
-    ("expect", 0),
+/// The macros and methods of Rust whose arguments are each a label.
+const RUST_FAILURES: [&str; 5] = [
+    "panic!",
+    "unreachable!",
+    "todo!",
+    "unimplemented!",
+    "expect",
 ];
 
-/// The keywords that stop the read of an operand.
-const KEYWORDS: [&str; 13] = [
-    "return", "case", "if", "else", "for", "in", "let", "match", "const", "var", "static", "range",
-    "default",
+/// The macros of Rust whose arguments after the first are a label.
+const RUST_ASSERTS: [&str; 2] = ["assert!", "debug_assert!"];
+
+/// The macros of Rust that compare their first two arguments. The arguments after them are a label.
+const RUST_COMPARES: [&str; 4] = [
+    "assert_eq!",
+    "assert_ne!",
+    "debug_assert_eq!",
+    "debug_assert_ne!",
 ];
+
+/// The keywords that stop the read of an operand, with the class of a literal after each one. A
+/// literal after `case` is a case of a `switch`, and a literal after `return` is its value.
+const KEYWORDS: [(&str, Option<Class>); 11] = [
+    ("case", Some(Class::Switch)),
+    ("return", Some(Class::Return)),
+    ("if", None),
+    ("else", None),
+    ("let", None),
+    ("match", None),
+    ("const", None),
+    ("var", None),
+    ("static", None),
+    ("range", None),
+    ("default", None),
+];
+
+/// The two keywords of a Rust `for` loop: `for PATTERN in ROWS`.
+const FOR_IN: [&str; 2] = ["for", "in"];
+
+/// True for a keyword of [`KEYWORDS`] or of [`FOR_IN`]: no operand holds it.
+fn is_keyword(word: &str) -> bool {
+    KEYWORDS.iter().any(|(keyword, _)| *keyword == word) || FOR_IN.contains(&word)
+}
+
+/// The class of a literal after the keyword `word`, or `None` for another word.
+fn after_keyword(word: &str) -> Option<Class> {
+    KEYWORDS
+        .iter()
+        .find(|(keyword, _)| *keyword == word)
+        .and_then(|(_, class)| class.clone())
+}
 
 /// The class of the place of a string literal.
 ///
@@ -126,14 +157,6 @@ pub struct Context<'a> {
     pub tests: &'a [(usize, usize)],
 }
 
-impl Context<'_> {
-    fn in_test(&self, line: usize) -> bool {
-        self.tests
-            .iter()
-            .any(|(first, last)| (*first..=*last).contains(&line))
-    }
-}
-
 /// A string literal of a file, and the class of its place.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Literal {
@@ -190,7 +213,7 @@ fn walk<'a>(frames: &mut Vec<Frame<'a>>, context: &Context, out: &mut Vec<Litera
 }
 
 fn classify(frames: &[Frame], at: usize, context: &Context, value: &str, line: usize) -> Class {
-    let test = context.in_test(line);
+    let test = holds_line(context.tests, line);
     if test && is_json(value) {
         return Class::Json;
     }
@@ -267,7 +290,7 @@ fn is_tag(frames: &[Frame]) -> bool {
             .at
             .checked_sub(1)
             .and_then(|before| parent.tokens.get(before))
-            .is_some_and(|t| t.is_word("struct")),
+            .is_some_and(|t| t.is_word(STRUCT)),
         _ => false,
     }
 }
@@ -277,10 +300,7 @@ fn is_tag(frames: &[Frame]) -> bool {
 fn callee(before: &[Token]) -> Option<String> {
     match before {
         [.., name, bang] if bang.is_mark("!") => Some(format!("{}!", name.word()?)),
-        [.., name] => name
-            .word()
-            .filter(|w| !KEYWORDS.contains(w))
-            .map(str::to_string),
+        [.., name] => name.word().filter(|w| !is_keyword(w)).map(str::to_string),
         _ => None,
     }
 }
@@ -324,9 +344,11 @@ fn around(frames: &[Frame], at: usize, context: &Context, test: bool) -> Option<
                 GO_FAILURES.contains(&name.as_str())
                     && receiver(before).is_some_and(|r| !GO_NOT_TESTS.contains(&r))
             }
-            Lang::Rust => RUST_FAILURES
-                .iter()
-                .any(|(failure, first)| *failure == name && arg >= *first),
+            Lang::Rust => {
+                RUST_FAILURES.contains(&name.as_str())
+                    || (RUST_ASSERTS.contains(&name.as_str()) && arg >= 1)
+                    || (RUST_COMPARES.contains(&name.as_str()) && arg >= 2)
+            }
         };
         if label
             || context
@@ -362,14 +384,14 @@ fn near(frames: &[Frame], at: usize, context: &Context) -> Class {
     if mark(left, &["==", "!="]) || mark(right, &["==", "!="]) {
         return Class::Compare;
     }
-    if left.is_some_and(|t| t.is_word("case")) || mark(right, &["=>"]) {
+    if let Some(class) = left.and_then(Token::word).and_then(after_keyword) {
+        return class;
+    }
+    if mark(right, &["=>"]) {
         return Class::Switch;
     }
     if mark(left, &["=", ":="]) {
         return Class::Value;
-    }
-    if left.is_some_and(|t| t.is_word("return")) {
-        return Class::Return;
     }
     let call = frame.delim.and_then(|delim| {
         let parent = frames.get(frames.len().checked_sub(2)?)?;
@@ -379,9 +401,7 @@ fn near(frames: &[Frame], at: usize, context: &Context) -> Class {
     let arg = argument(tokens, at);
     let rust_block = context.lang == Lang::Rust && frame.delim == Some(Delim::Brace);
     match call.as_deref() {
-        Some("assert_eq!" | "assert_ne!" | "debug_assert_eq!" | "debug_assert_ne!") if arg < 2 => {
-            Class::Compare
-        }
+        Some(name) if RUST_COMPARES.contains(&name) && arg < 2 => Class::Compare,
         Some("matches!") if arg > 0 => Class::Switch,
         Some(name) if name != "vec!" => Class::Call(name.to_string()),
         // the last expression of a Rust block gives the value of the block
@@ -431,7 +451,7 @@ fn edge(tokens: &[Token], at: usize, left: bool) -> Option<&Token> {
         i = if left { i.checked_sub(1)? } else { i + 1 };
         let token = tokens.get(i)?;
         let part = match token {
-            Token::Word { text, .. } => !KEYWORDS.contains(&text.as_str()),
+            Token::Word { text, .. } => !is_keyword(text),
             Token::Text { .. } | Token::Other { .. } | Token::Group { .. } => true,
             Token::Mark { text, .. } => matches!(text.as_str(), "+" | "." | "::" | "&" | "|" | "!"),
         };
@@ -477,11 +497,11 @@ fn go_fields(frames: &[Frame], context: &Context) -> Option<Vec<String>> {
 /// element of `[]Name` or of `map[K]Name`. A type that the package does not declare gives none.
 fn fields_of_type(before: &[Token], context: &Context) -> Option<Vec<String>> {
     match before {
-        [.., keyword, body] if keyword.is_word("struct") => {
+        [.., keyword, body] if keyword.is_word(STRUCT) => {
             Some(struct_fields(body.group(Delim::Brace)?))
         }
         [.., name] => {
-            let name = name.word().filter(|w| !KEYWORDS.contains(w))?;
+            let name = name.word().filter(|w| !is_keyword(w))?;
             context.structs.get(name).cloned()
         }
         _ => None,
@@ -515,7 +535,8 @@ fn rust_names(frames: &[Frame], index: usize) -> Option<String> {
     let [.., keyword, pattern, within] = before else {
         return None;
     };
-    if !keyword.is_word("for") || !within.is_word("in") {
+    let [for_word, in_word] = FOR_IN;
+    if !keyword.is_word(for_word) || !within.is_word(in_word) {
         return None;
     }
     let last_word = |part: &[Token]| part.iter().rev().find_map(Token::word).map(str::to_string);

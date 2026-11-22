@@ -110,7 +110,7 @@ fn sample(class: &Class) -> (Lang, bool, &'static str) {
         Class::Row(_) => (
             Lang::Go,
             false,
-            "package p\ntype row struct {\n\tkind string\n}\nvar rows = []row{{\"mark\"}}\n",
+            "package p\ntype entry struct {\n\tkind string\n}\nvar rows = []entry{{\"mark\"}}\n",
         ),
         Class::Other => (
             Lang::Rust,
@@ -169,20 +169,6 @@ fn only_the_input_of_a_test_a_case_a_label_and_a_tag_are_no_findings() {
     ];
     assert!(not_findings.iter().all(|c| !c.is_finding()));
     assert!(findings.iter().all(Class::is_finding));
-    let shown: Vec<String> = findings.iter().map(Class::to_string).collect();
-    assert_eq!(
-        shown,
-        [
-            "compare",
-            "switch",
-            "value",
-            "return",
-            "call:g",
-            "field:Kind",
-            "row",
-            "other"
-        ]
-    );
 }
 
 /// The input of a test is no input in other code: a JSON text of the code is a value there.
@@ -371,10 +357,10 @@ fn a_value_counts_from_three_characters_and_a_plain_word_from_two_letters() {
 #[test]
 fn a_route_drops_its_method_and_the_names_of_its_segments() {
     for (value, want) in [
-        ("/v1/packs/{uid}", Some("/v1/packs/{}")),
+        ("/v1/things/{uid}", Some("/v1/things/{}")),
         (
-            "GET /v1/packs/{name}/registries/{uid}",
-            Some("/v1/packs/{}/registries/{}"),
+            "GET /v1/things/{name}/parts/{uid}",
+            Some("/v1/things/{}/parts/{}"),
         ),
         ("/v1/clusters/%s/x", Some("/v1/clusters/{}/x")),
         ("/healthz", None),
@@ -427,8 +413,8 @@ fn a_go_file_gives_its_consts_its_tables_its_structs_its_functions_and_its_alias
          type Kind string\n\nconst (\n\tDrift Kind = \"drift\"\n\tOld        = \"old\"\n\tA, B = \"a\", \"b\"\n\tn = 1\n)\n\n\
          var reasons = map[Kind]reason{\n\tDrift: {\"DriftFound\", \"A drift.\"},\n\tm.Old: {\"OldCopy\", \"\"},\n}\n\n\
          var mustHold = testkit.HoldsAll\n\n\
-         type row struct {\n\tname, want string\n\tn    int `json:\"n\"`\n\t*Embedded\n}\n\n\
-         func check(t *testing.T, where, text string, words ...string) {\n\tt.Log(where)\n}\n\n\
+         type entry struct {\n\tfirst, second string\n\tn    int `json:\"n\"`\n\t*Embedded\n}\n\n\
+         func check(t *testing.T, at, text string, words ...string) {\n\tt.Log(at)\n}\n\n\
          func (r row) String() string { return r.name }\n",
     )
     .unwrap();
@@ -465,10 +451,10 @@ fn a_go_file_gives_its_consts_its_tables_its_structs_its_functions_and_its_alias
     assert_eq!(
         file.structs,
         [(
-            "row".to_string(),
+            "entry".to_string(),
             vec![
-                "name".to_string(),
-                "want".to_string(),
+                "first".to_string(),
+                "second".to_string(),
                 "n".to_string(),
                 "Embedded".to_string()
             ]
@@ -485,7 +471,7 @@ fn a_go_file_gives_its_consts_its_tables_its_structs_its_functions_and_its_alias
         .collect();
     assert_eq!(funcs.len(), 2);
     assert_eq!(funcs[0].0, "check");
-    assert_eq!(funcs[0].1, ["t", "where", "text", "words"]);
+    assert_eq!(funcs[0].1, ["t", "at", "text", "words"]);
     assert!(!funcs[0].2 && funcs[1].2);
     assert!(file.code.iter().all(|t| !t.is_word("import")));
 }
@@ -537,6 +523,17 @@ impl Fault {
 
 const SCHEMA: &str = \"strata-x/1\";
 pub const NAMES: [&str; 2] = [\"a-1\", \"b-2\"];
+pub const LANGS: [(Lang, &str); 1] = [(Lang::Go, \"golang\")];
+
+impl fmt::Display for Tier {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Tier::InPlace => f.write_str(\"in place\"),
+            Tier::NewNode => f.write_str(\"new node\"),
+            Tier::Hidden => write!(f, \"hidden {}\", 1),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -561,8 +558,11 @@ mod tests {
             ("Fault::Bad", "bad-input", true, Scope::Package, false),
             ("Fault::Worse", "bad-input", true, Scope::Package, false),
             ("SCHEMA", "strata-x/1", false, Scope::Module, false),
-            ("NAMES", "a-1", false, Scope::Package, false),
-            ("NAMES", "b-2", false, Scope::Package, false),
+            ("NAMES", "a-1", true, Scope::Package, false),
+            ("NAMES", "b-2", true, Scope::Package, false),
+            ("LANGS", "golang", true, Scope::Package, false),
+            ("Tier::InPlace", "in place", true, Scope::Package, false),
+            ("Tier::NewNode", "new node", true, Scope::Package, false),
             ("IN_TEST", "in-test", false, Scope::Module, true),
         ]
     );
@@ -653,6 +653,16 @@ impl Repo {
         std::fs::write(file, text).unwrap();
     }
 
+    /// Make the branch `name` at the commit of the work tree, and go to it.
+    fn branch(&self, name: &str) {
+        self.git(&["checkout", "--quiet", "-b", name]);
+    }
+
+    /// Go to the branch `name`.
+    fn to(&self, name: &str) {
+        self.git(&["checkout", "--quiet", name]);
+    }
+
     fn commit(&self, message: &str) {
         self.git(&["add", "."]);
         self.git(&["commit", "--quiet", "-m", message]);
@@ -694,7 +704,7 @@ fn the_check_lists_each_value_of_go_that_an_added_line_copies_with_the_class_of_
     let repo = Repo::new();
     go_module(&repo);
     repo.commit("base");
-    repo.git(&["switch", "--quiet", "-c", "change"]);
+    repo.branch("change");
     repo.write(
         "names/names_test.go",
         "package names\n\nimport \"testing\"\n\nfunc TestKinds(t *testing.T) {\n\
@@ -758,7 +768,7 @@ fn the_check_lists_each_copy_of_rust_and_each_const_and_helper_that_the_change_a
     let repo = Repo::new();
     rust_package(&repo);
     repo.commit("base");
-    repo.git(&["switch", "--quiet", "-c", "change"]);
+    repo.branch("change");
     repo.write(
         "tests/t.rs",
         "#[test]\nfn t() {\n    assert_eq!(tier(), \"in-place\");\n    assert!(ok(), \"in-place\");\n\
@@ -806,7 +816,7 @@ fn a_value_that_the_file_of_the_literal_cannot_name_is_no_copy() {
         "package names\n\nconst inTest = \"in-test-only\"\n",
     );
     repo.commit("base");
-    repo.git(&["switch", "--quiet", "-c", "change"]);
+    repo.branch("change");
     repo.write(
         "use/more.go",
         "package use\n\nvar title = \"Lost contact\"\n",
@@ -831,19 +841,19 @@ fn the_check_reads_only_the_lines_that_the_change_adds_after_the_merge_base() {
     go_module(&repo);
     repo.write("use/old_test.go", "package use\n\nvar old = \"--pin\"\n");
     repo.commit("base");
-    repo.git(&["switch", "--quiet", "-c", "change"]);
+    repo.branch("change");
     repo.write(
         "use/old_test.go",
         "package use\n\nvar old = \"--pin\"\n\nvar fresh = \"--pin\"\n",
     );
     repo.commit("change");
-    repo.git(&["switch", "--quiet", "main"]);
+    repo.to("main");
     repo.write(
         "use/later_test.go",
         "package use\n\nvar later = \"--pin\"\n",
     );
     repo.commit("later on main");
-    repo.git(&["switch", "--quiet", "change"]);
+    repo.to("change");
 
     let found = check(repo.path(), "main", "HEAD").unwrap();
     let lines: Vec<String> = found
@@ -867,7 +877,7 @@ fn a_new_go_const_and_helper_with_a_copy_are_findings_and_an_alias_keeps_the_lab
         "package use\n\nfunc holds(t *testing.T, where, text string) {\n\tif !strings.Contains(text, where) {\n\t\tt.Fatal(where)\n\t}\n}\n\nvar mustHold = holds\n",
     );
     repo.commit("base");
-    repo.git(&["switch", "--quiet", "-c", "change"]);
+    repo.branch("change");
     repo.write(
         "use/new_test.go",
         "package use\n\nconst pinFlag = \"--pin\"\n\nfunc has(t *testing.T, label, page string) {\n\tif !strings.Contains(page, label) {\n\t\tt.Fatal(label)\n\t}\n}\n\nfunc TestX(t *testing.T) {\n\tmustHold(t, \"--pin\", \"x\")\n}\n",

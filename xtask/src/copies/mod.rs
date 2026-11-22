@@ -77,6 +77,13 @@ impl Lang {
     }
 }
 
+/// True when a range of `ranges`, a first and a last line, holds the line `line`.
+pub fn holds_line(ranges: &[(usize, usize)], line: usize) -> bool {
+    ranges
+        .iter()
+        .any(|(first, last)| (*first..=*last).contains(&line))
+}
+
 /// True for a Go file of tests.
 pub fn is_go_test(path: &str) -> bool {
     path.ends_with(GO_TEST)

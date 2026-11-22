@@ -2,6 +2,12 @@
 
 use super::token::{Delim, Token};
 
+/// The keyword of a struct type.
+pub const STRUCT: &str = "struct";
+
+/// The keyword of a map type.
+pub const MAP: &str = "map";
+
 /// The keywords of Go after which the end of a line gives no `;`. `break`, `continue`,
 /// `fallthrough`, and `return` give one, as an identifier does.
 const NO_SEMICOLON_AFTER: [&str; 21] = [
@@ -18,11 +24,11 @@ const NO_SEMICOLON_AFTER: [&str; 21] = [
     "if",
     "import",
     "interface",
-    "map",
+    MAP,
     "package",
     "range",
     "select",
-    "struct",
+    STRUCT,
     "switch",
     "type",
     "var",

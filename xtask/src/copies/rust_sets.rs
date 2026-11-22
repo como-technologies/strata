@@ -168,19 +168,26 @@ pub fn macro_table(tokens: &[Token]) -> (Vec<SetText>, Scope) {
     (texts, scope)
 }
 
-/// The texts of a function whose body is one `match` that gives a text for each variant, such
-/// as `Error::kind`. `owner` is the type of the `impl`, for `Self`. Another body gives none.
-pub fn match_table(block: &Block, owner: Option<&str>) -> Vec<SetText> {
+/// The texts of a function whose body is one `match` that gives a text for a variant in two arms
+/// or more, such as `Error::kind` or the `fmt` of `Display`. An arm gives the text that it returns
+/// when `returns_str` is true, or the text that it writes with `write_str`. `owner` is the type of
+/// the `impl`, for `Self`. Another body gives none.
+pub fn match_table(block: &Block, owner: Option<&str>, returns_str: bool) -> Vec<SetText> {
     let [Stmt::Expr(Expr::Match(table), None)] = block.stmts.as_slice() else {
         return Vec::new();
     };
     let mut out = Vec::new();
     for arm in &table.arms {
-        let Expr::Lit(lit) = arm.body.as_ref() else {
-            return Vec::new();
+        let text = match arm.body.as_ref() {
+            Expr::Lit(lit) if returns_str => &lit.lit,
+            Expr::MethodCall(call) if call.method == "write_str" => match call.args.first() {
+                Some(Expr::Lit(lit)) if call.args.len() == 1 => &lit.lit,
+                _ => continue,
+            },
+            _ => continue,
         };
-        let Lit::Str(text) = &lit.lit else {
-            return Vec::new();
+        let Lit::Str(text) = text else {
+            continue;
         };
         let line = text.span().start().line;
         for name in variants(&arm.pat, owner) {

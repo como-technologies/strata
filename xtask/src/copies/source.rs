@@ -10,7 +10,7 @@ use super::place::{Context, LABEL_NAMES, Literal, literals};
 use super::reach::{Reach, rust_reach};
 use super::rust::RustFile;
 use super::token::Token;
-use super::{Func, Holder, Kind, LANGS, Lang, Scope, go, is_go_test, rust};
+use super::{Func, Holder, Kind, LANGS, Lang, Scope, go, holds_line, is_go_test, rust};
 use crate::git_diff::{git, git_bytes};
 
 /// The directory of the integration tests of a Rust package, and the name of the file of the
@@ -48,9 +48,7 @@ pub struct Source {
 
 impl Source {
     pub fn in_test(&self, line: usize) -> bool {
-        self.tests
-            .iter()
-            .any(|(first, last)| (*first..=*last).contains(&line))
+        holds_line(&self.tests, line)
     }
 }
 
@@ -294,7 +292,7 @@ fn build(
         let (lang, funcs, shared) = match file {
             Parsed::Rust(file, _) => {
                 let reach = |f: &Func| {
-                    let test = tests.iter().any(|(a, b)| (*a..=*b).contains(&f.line));
+                    let test = holds_line(&tests, f.line);
                     rust_reach(&path, &root, rust_roots, f.scope, test)
                 };
                 (
