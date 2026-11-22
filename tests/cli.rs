@@ -2900,7 +2900,7 @@ fn snapshot_validate_with_json_writes_the_line_of_an_accept_after_the_record_on_
         (common::IMPORT_ROUTE.to_string(), serde_json::json!({})),
         (
             common::PROFILE_VALIDATE_PACKS.to_string(),
-            serde_json::json!({"packs": {"results": []}}),
+            common::no_pack_results(),
         ),
         (
             common::update_validate_packs_route(UID_A),

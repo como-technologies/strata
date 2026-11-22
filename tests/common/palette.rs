@@ -134,6 +134,11 @@ pub fn update_validate_packs_route(uid: &str) -> String {
     format!("{}/validate/packs", profile_route(uid))
 }
 
+/// The answer of a `validate/packs` route when Palette takes each pack: `packs.results` is empty.
+pub fn no_pack_results() -> Value {
+    json!({"packs": {"results": []}})
+}
+
 /// The template of the route of a profile version, with the text `{uid}` for the segment that varies.
 /// The log of the unknown values names a read by this template, and never by a real uid.
 pub const PROFILE_TEMPLATE: &str = "/v1/clusterprofiles/{uid}";
@@ -317,6 +322,18 @@ pub fn cluster_validate_repave_route(uid: &str) -> String {
 /// `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave`.
 pub fn template_validate_repave_route(uid: &str) -> String {
     format!("/v1/spectroclusters/clusterTemplates/{uid}/validate/repave")
+}
+
+/// The question whether Palette takes the packs of a change of the profiles of the cluster `uid`,
+/// `POST /v1/spectroclusters/{uid}/validate/packs`.
+pub fn cluster_validate_packs_route(uid: &str) -> String {
+    format!("{}/validate/packs", cluster_route(uid))
+}
+
+/// The question whether Palette takes the body of a create of a cluster on the cloud type `cloud`,
+/// `POST /v1/spectroclusters/{cloudType}/validate`.
+pub fn create_validate_route(cloud: &str) -> String {
+    format!("/v1/spectroclusters/{cloud}/validate")
 }
 
 /// The answer of a `validate/repave` route when the body repaves no node.

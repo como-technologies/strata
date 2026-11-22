@@ -35,8 +35,8 @@ takes:
   with `strata candidate <ref>@draft -o <file>`. Then give that file to
   `--from-candidate`. If Palette refuses the packs, strata exits `2` with the
   error `palette-refuses`, and writes no record. If Palette accepts them, the
-  last line says so after the record, as the answer of a check:
-  `palette    accepts`.
+  line `palette    accepts` says so, as the answer of a check: see
+  [The look of each line](../reference/formats.md#the-look-of-each-line).
 - `--format` needs `--dir`: it sets the format of the report of a set. A
   record is always JSON. With `--dir`, `--json` is `--format json`. Without
   `--dir`, `--json` writes an error as one JSON line on standard error, also

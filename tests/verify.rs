@@ -35,16 +35,16 @@ use common::{
     SECRET_VALUE, TAG_FILTER_LISTING, UID_A, UID_ADDONS, UID_B, WITH_IMPACT, access_denied_message,
     app_profile_route, app_tiers_route, behind_of, candidate_snapshot, cluster_manifests_route,
     cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
-    cluster_resolved_values_route, cluster_route, cluster_validate_repave_route,
-    cluster_variables_route, clusters_denied, edge_host_route, error_body, fetch_examples,
-    filters_denied, group_resolved_values_route, group_route, listing, manifest_route,
-    manifests_route, no_manifests, no_repave, no_roles_message, no_template, no_variables,
-    operation_forbidden_message, pack_entity_answer, pack_entity_route, pack_listing_route, post,
-    profile_document, profile_route, project_listing, rbacs_answer, read_json,
-    resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing, serve_profile,
-    serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command,
-    system_rbacs, template, template_validate_repave_route, update_validate_packs_route,
-    validate_name_route, variables_route, write_record, write_yaml,
+    cluster_resolved_values_route, cluster_route, cluster_validate_packs_route,
+    cluster_validate_repave_route, cluster_variables_route, clusters_denied, edge_host_route,
+    error_body, fetch_examples, filters_denied, group_resolved_values_route, group_route, listing,
+    manifest_route, manifests_route, no_manifests, no_pack_results, no_repave, no_roles_message,
+    no_template, no_variables, operation_forbidden_message, pack_entity_answer, pack_entity_route,
+    pack_listing_route, post, profile_document, profile_route, project_listing, rbacs_answer,
+    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
+    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
+    strata_command, system_rbacs, template, template_validate_repave_route,
+    update_validate_packs_route, validate_name_route, variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -9488,7 +9488,7 @@ fn validate_repave_route() -> String {
 
 /// The route that asks Palette if it takes the packs of a change of the cluster fixture.
 fn validate_packs_route() -> String {
-    format!("{}/validate/packs", cluster_route(CLUSTER_UID))
+    cluster_validate_packs_route(CLUSTER_UID)
 }
 
 /// The update that waits for the cluster fixture.
@@ -11516,7 +11516,7 @@ fn compare_validate_asks_the_route_of_the_profile_version_when_the_cluster_runs_
     );
 
     // a 200 with no error: Palette accepts
-    let accepting = cluster_api.with(post(&route), serde_json::json!({"packs": {"results": []}}));
+    let accepting = cluster_api.with(post(&route), no_pack_results());
     let v = ops::palette_validation(&Palette::new(&accepting), &cluster, &target).unwrap();
     assert!(v.answer.accepts());
     assert_eq!(accepting.calls(&validate_packs_route()), 0);
@@ -15866,7 +15866,7 @@ fn behind_prints_that_palette_accepts_when_it_gives_no_error_for_the_bump() {
     let record = profile_pinning(&base);
     let api = base.with(
         post(&update_validate_packs_route(BUMP_PROFILE_UID)),
-        serde_json::json!({"packs": {"results": []}}),
+        no_pack_results(),
     );
     let csi = dir.path().join("csi.json");
     common::write_snapshot(&csi, &record, false);
@@ -15919,7 +15919,7 @@ fn serve_kubernetes() -> MemoryApi {
 #[test]
 fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_next_step() {
     let dir = tempfile::tempdir().unwrap();
-    let accepts = serde_json::json!({"packs": {"results": []}});
+    let accepts = no_pack_results();
     let base = serve_kubernetes();
     let api = base
         .clone()
@@ -16489,7 +16489,7 @@ fn behind_does_not_say_that_palette_accepts_when_it_did_not_ask_a_record_of_anot
     let prod = profile_pinning_in(&base, "pr2", Some("prod"));
     let api = base.clone().with(
         post(&update_validate_packs_route(BUMP_PROFILE_UID)),
-        serde_json::json!({"packs": {"results": []}}),
+        no_pack_results(),
     );
     let files = ["dev.json", "prod.json"].map(|name| dir.path().join(name));
     common::write_snapshot(&files[0], &dev, false);
@@ -17812,7 +17812,7 @@ fn snapshot_validate_of_a_candidate_that_names_its_registry_reads_the_listing_on
     .unwrap();
     let key = post(PROFILE_VALIDATE_PACKS);
     let api = serve_candidate_checks(serve_registry_for_b(dir.path()), &recorded_b)
-        .with(key.as_str(), serde_json::json!({"packs": {"results": []}}));
+        .with(key.as_str(), no_pack_results());
     let snap = ops::snapshot_from_candidate(
         &file,
         true,
@@ -17933,9 +17933,7 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     assert_eq!(strata::render::acceptance_line(&snap), None);
 
     // a 200 with no error: Palette accepts, and the record holds the answer and the same root
-    let api = registry
-        .clone()
-        .with(path, serde_json::json!({"packs": {"results": []}}));
+    let api = registry.clone().with(path, no_pack_results());
     let snap = ops::snapshot_from_candidate(
         &file,
         true,
@@ -18071,10 +18069,8 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     let mut candidate = b.clone();
     candidate.source.uid = String::new();
     let accepting = || {
-        serve_candidate_checks(MemoryApi::new(), &candidate).with(
-            post(PROFILE_VALIDATE_PACKS),
-            serde_json::json!({"packs": {"results": []}}),
-        )
+        serve_candidate_checks(MemoryApi::new(), &candidate)
+            .with(post(PROFILE_VALIDATE_PACKS), no_pack_results())
     };
     let import = post(IMPORT_ROUTE);
     let refusal = |api: MemoryApi| ops::profile_validation(&Palette::new(&api), &candidate);
@@ -18183,10 +18179,7 @@ fn snapshot_validate_of_a_candidate_with_a_disabled_pack_prints_the_refusal_of_t
     );
     let api = serve_candidate_checks(serve_registry_for_b(dir.path()), &recorded_b)
         .failing(post(IMPORT_ROUTE), 500, body)
-        .with(
-            post(PROFILE_VALIDATE_PACKS),
-            serde_json::json!({"packs": {"results": []}}),
-        );
+        .with(post(PROFILE_VALIDATE_PACKS), no_pack_results());
     let snap = ops::snapshot_from_candidate(
         &file,
         true,
@@ -18255,10 +18248,7 @@ fn a_candidate_with_a_fault_that_only_a_route_answers_gives_a_record_with_the_sa
         r#"{"code":"VersionParseFailure","message":"Unable to parse the version '2.2.2.develop'"}"#;
     let api = serve_candidate_checks(registry, &snap)
         .failing(name_route(&snap), 500, body)
-        .with(
-            post(PROFILE_VALIDATE_PACKS),
-            serde_json::json!({"packs": {"results": []}}),
-        );
+        .with(post(PROFILE_VALIDATE_PACKS), no_pack_results());
     let refused = ops::snapshot_from_candidate(
         &file,
         true,

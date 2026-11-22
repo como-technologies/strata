@@ -7935,6 +7935,28 @@ fn the_answer_of_each_check_is_the_last_line_that_strata_prints_in_an_output_of_
     assert!(faults.is_empty(), "{}", faults.join("\n"));
 }
 
+/// The page of `candidate` includes an excerpt of `snapshot --validate` with the record on standard
+/// output. The excerpt shows the end of the record, and then the answer of Palette.
+#[test]
+fn the_excerpt_of_a_record_on_standard_output_shows_the_answer_after_the_record() {
+    let page = read(&docs().join("commands/candidate.md"));
+    assert!(
+        page.contains("{{#include ../output/snapshot-validate-stdout-lines.txt}}"),
+        "candidate.md lacks the excerpt"
+    );
+    let excerpt = read(&docs().join("output/snapshot-validate-stdout-lines.txt"));
+    let lines: Vec<&str> = excerpt.lines().collect();
+    let end = lines
+        .iter()
+        .rposition(|l| *l == "}")
+        .expect("the excerpt shows the end of the record");
+    let accepts = palette_line("accepts ");
+    assert!(
+        lines.get(end + 1).is_some_and(|l| l.starts_with(&accepts)),
+        "{excerpt}"
+    );
+}
+
 // ---- the comments of Wave 17 (#903) ------------------------------------------------------------
 
 /// The criterion of #903 from the verify of #885. The comment on `common_palette` in

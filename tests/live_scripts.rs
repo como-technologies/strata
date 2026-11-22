@@ -12,7 +12,9 @@ use strata::api::codes::{
     OPERATION_FORBIDDEN_CODE, PACKS_IN_CONFLICT_CODE, PROFILE_EXISTS_CODE,
     UPGRADE_NOT_SUPPORTED_CODE,
 };
-use strata::api::{MASKED, PROJECT_UID_HEADER};
+use strata::api::{MASKED, Method, PROJECT_UID_HEADER};
+use strata::closed_set::ClosedSet;
+use strata::model::cloud::Cloud;
 use strata::model::pack_state::PackState;
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
@@ -5726,7 +5728,7 @@ fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_re
 #[test]
 fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_its_registry() {
     let mut stage = Stage::new(serde_json::json!({}));
-    stage.route(PROFILE_VALIDATE_PACKS, r#"{"packs":{"results":[]}}"#);
+    stage.route(PROFILE_VALIDATE_PACKS, &no_pack_results().to_string());
     let pack = PackFixture::new("cert-manager", "addon", "1.21.1", "pk-1", "reg-pub", "", "");
     stage.route(
         "/v1/packs",
@@ -8525,7 +8527,7 @@ fn bump_stage_with(
     stage.env("CLUSTER", "fred");
     stage.route(&cluster_route(FRED_UID), &fred_document().to_string());
     stage.route(
-        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
+        &cluster_validate_packs_route(FRED_UID),
         r#"{"profiles":[]}"#,
     );
     arrange(&mut stage);
@@ -8612,8 +8614,8 @@ fn validate_packs_sh_stage_6_sends_the_route_of_the_cluster_a_tag_that_no_regist
     // the profile with kubernetes has its packs as the cluster runs them, with the tag 9.99.9.
     // The other profile of the cluster has its uid alone
     let sent = stage.sent(
-        "POST",
-        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
+        Method::Post.as_str(),
+        &cluster_validate_packs_route(FRED_UID),
     );
     assert_eq!(
         sent,
@@ -8646,8 +8648,8 @@ fn validate_packs_sh_stage_6_sends_the_route_of_the_cluster_a_body_longer_than_o
         ],
     );
     let sent = stage.sent(
-        "POST",
-        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
+        Method::Post.as_str(),
+        &cluster_validate_packs_route(FRED_UID),
     );
     assert_eq!(sent.len(), 1, "{steps}");
     assert!(sent[0].to_string().len() > LIMIT);
@@ -8663,7 +8665,7 @@ fn validate_packs_sh_stage_6_fails_when_the_route_of_the_cluster_checks_the_sent
     // Palette gives an error for the tag: the check of the tag fails, and the request passed
     let refusing = r#"{"profiles":[{"uid":"p-infra","packs":{"results":[{"name":"kubernetes",
         "errors":[{"code":"PackNotFound","message":"Pack 'kubernetes' 9.99.9 is not found"}]}]}}]}"#;
-    let route = format!("/v1/spectroclusters/{FRED_UID}/validate/packs");
+    let route = cluster_validate_packs_route(FRED_UID);
     let (_, steps) = bump_stage_with(&report, &report, |stage| stage.route(&route, refusing));
     passed(&steps, &["cluster-route-tag"]);
     failed(&steps, &["cluster-route-tag-says"]);
@@ -9450,7 +9452,8 @@ fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
             &route_report("passed", &[]),
         );
         let error = format!(
-            "POST {AWS_VALIDATE_ROUTE} failed with HTTP 500: {}",
+            "{} failed with HTTP 500: {}",
+            post(&aws_validate_route()),
             cidr_overlap_answer()
         );
         let messages: &[&str] = if verdict == "error" { &[&error] } else { &[] };
@@ -9596,11 +9599,13 @@ const LAB_VPCS: &str = r#"{"vpcs":[
 const LAB_VPCS_ROUTE: &str = "/v1/clouds/aws/regions/us-east-2/vpcs";
 
 /// The validate route of a create on AWS.
-const AWS_VALIDATE_ROUTE: &str = "/v1/spectroclusters/aws/validate";
+fn aws_validate_route() -> String {
+    create_validate_route(Cloud::Aws.as_str())
+}
 
 /// Palette answers the POST of the validate route of AWS with `status` and `body`.
 fn answer_aws_validate(stage: &Stage, status: &str, body: &str) {
-    stage.route(AWS_VALIDATE_ROUTE, body);
+    stage.route(&aws_validate_route(), body);
     std::fs::write(
         stage.path("routes/v1_spectroclusters_aws_validate.status"),
         status,
@@ -9714,7 +9719,10 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     // the lab (#816, #824)
     let cidr_file = bodies.join(format!("{CIDR_CASE}.json"));
     let mut cidr = read_json(&cidr_file);
-    assert_eq!(stage.sent("POST", AWS_VALIDATE_ROUTE), [cidr.clone()]);
+    assert_eq!(
+        stage.sent(Method::Post.as_str(), &aws_validate_route()),
+        [cidr.clone()]
+    );
     assert_eq!(cidr["spec"]["cloudConfig"]["vpcId"], "vpc-1");
     assert_eq!(
         cidr["spec"]["profiles"],
@@ -9996,7 +10004,12 @@ fn route_bodies_sh_skips_cidr_overlap_with_no_vpc_that_has_a_cidr_and_a_subnet_i
         assert!(skipped.contains(says), "{skipped}");
         assert!(!steps.contains("cidr-overlap-body"), "{steps}");
         assert!(!bodies.join("cidr-overlap.json").exists(), "{says}");
-        assert!(stage.sent("POST", AWS_VALIDATE_ROUTE).is_empty(), "{says}");
+        assert!(
+            stage
+                .sent(Method::Post.as_str(), &aws_validate_route())
+                .is_empty(),
+            "{says}"
+        );
         passed(&steps, &["aws-clean-body", "validate-route"]);
     }
 }
@@ -10028,7 +10041,11 @@ fn route_bodies_sh_skips_cidr_overlap_when_a_pool_of_the_clean_body_has_no_zone(
     );
     assert!(!steps.contains("cidr-overlap-body"), "{steps}");
     assert!(!bodies.join("cidr-overlap.json").exists());
-    assert!(stage.sent("POST", AWS_VALIDATE_ROUTE).is_empty());
+    assert!(
+        stage
+            .sent(Method::Post.as_str(), &aws_validate_route())
+            .is_empty()
+    );
     // the script asks for no VPC
     assert!(
         !stage
@@ -13483,8 +13500,8 @@ exit 0
 ///
 /// A click is `POST .../ask` with the header `Sec-Fetch-Site: same-origin`. Without the header, curl
 /// exits 22, as it does for a 403. A click on the observer of the machine adds POST lines to the log of
-/// the counter. `$FAKE_ASK_POSTS` gives the number for each click (default "1 0"). A click on the pod
-/// adds none, because the counter does not see the pod.
+/// the counter. Each is the line `$FAKE_VALIDATE_POST`, and `$FAKE_ASK_POSTS` gives their number for
+/// each click (default "1 0"). A click on the pod adds none, because the counter does not see the pod.
 ///
 /// `FAKE_ASK_POD` and `FAKE_ASK_LOCAL` give the verdict of each answer: no-error (default), refuses,
 /// refuses-accepts-message, refuses-no-code, no-answer, accepts-field, or unknown. `FAKE_ACCEPTS_IN`
@@ -13576,7 +13593,7 @@ case "$path" in
     if [ "$who" = LOCAL ]; then
       read -ra counts <<<"${FAKE_ASK_POSTS:-1 0}"
       for _ in $(seq "${counts[clicks - 1]:-0}"); do
-        echo "POST /v1/clusterprofiles/0123456789abcdef01234567/validate/packs" >> "$(cat "$obs/counter.last")"
+        echo "$FAKE_VALIDATE_POST" >> "$(cat "$obs/counter.last")"
       done
     fi
     answer "$verdict" ;;
@@ -13596,8 +13613,9 @@ if [ "$path" = "${FAKE_ACCEPTS_IN-}" ]; then echo '{"note":"Palette accepts the 
 /// runs the command. The observer logs its arguments, the key that it got, and the files of its
 /// records. It marks itself up, and it waits for a signal.
 ///
-/// `FAKE_ASK_POSTS_BEFORE` makes the counter write that many POST lines before it runs the command.
-/// A cycle that sends a POST does the same. `FAKE_OBSERVER_DIES` makes the observer stop at once.
+/// `FAKE_ASK_POSTS_BEFORE` makes the counter write that many lines `$FAKE_VALIDATE_POST` before it
+/// runs the command. A cycle that sends a POST does the same. `FAKE_OBSERVER_DIES` makes the observer
+/// stop at once.
 const FAKE_GO_FRED: &str = r##"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_OBS/go.log"
 [ -z "${FAKE_NO_GO-}" ] || { echo "go: cannot build" >&2; exit 1; }
@@ -13635,7 +13653,7 @@ echo "$target" >> "$FAKE_OBS/counter.targets"
 echo "$PWD/$log" > "$FAKE_OBS/counter.last"
 : > "$log"
 for _ in $(seq "${FAKE_REQUESTS:-3}"); do echo "GET /v1/spectroclusters/0123456789abcdef01234567" >> "$log"; done
-for _ in $(seq "${FAKE_ASK_POSTS_BEFORE:-0}"); do echo "POST /v1/clusterprofiles/0123456789abcdef01234567/validate/packs" >> "$log"; done
+for _ in $(seq "${FAKE_ASK_POSTS_BEFORE:-0}"); do echo "$FAKE_VALIDATE_POST" >> "$log"; done
 exec "$@"
 COUNTER
 ;;
@@ -13773,6 +13791,7 @@ fn observer_stage() -> Stage {
     stage.env("PALETTE_API_KEY", OBSERVER_KEY);
     stage.env("FAKE_OBS", obs.to_str().unwrap());
     stage.env("FAKE_REPO", env!("CARGO_MANIFEST_DIR"));
+    stage.env("FAKE_VALIDATE_POST", &ask_validate_post());
     stage
 }
 
@@ -14311,8 +14330,13 @@ fn observer_with(vars: &[(&str, &str)]) -> (Option<i32>, String, Stage) {
     (o.status.code(), steps, stage)
 }
 
+/// The uid of the add-on version in the log of the stand-in counter.
+const ASK_VERSION_UID: &str = "0123456789abcdef01234567";
+
 /// The POST line of a validate request to the add-on version, as the stand-in counter writes it.
-const ASK_VALIDATE_POST: &str = "POST /v1/clusterprofiles/0123456789abcdef01234567/validate/packs";
+fn ask_validate_post() -> String {
+    post(&update_validate_packs_route(ASK_VERSION_UID))
+}
 
 #[test]
 fn observer_sh_ask_one_post_passes_when_one_click_makes_one_post_to_the_validate_route_and_a_second_click_makes_none()
@@ -14330,7 +14354,7 @@ fn observer_sh_ask_one_post_passes_when_one_click_makes_one_post_to_the_validate
         assert!(said.contains(line), "{line}:\n{said}");
     }
     // the log of the counter holds the cycles and the one POST
-    assert_eq!(ask_posts(&stage), [ASK_VALIDATE_POST], "{said}");
+    assert_eq!(ask_posts(&stage), [ask_validate_post()], "{said}");
     let log = std::fs::read_to_string(stage.path("out/ask.log")).unwrap();
     assert_eq!(log.lines().count(), 4, "{log}");
     // the observer of the machine got both clicks, and the pod got the one click of ask-words
@@ -14427,7 +14451,7 @@ fn observer_sh_ask_one_post_fails_when_the_clicks_make_another_count_of_posts_th
         );
         // the check shows the POST lines that it counted
         if first + second > 0 {
-            assert!(said.contains(ASK_VALIDATE_POST), "{posts}:\n{said}");
+            assert!(said.contains(&ask_validate_post()), "{posts}:\n{said}");
         }
         if first == 1 {
             assert!(
@@ -14453,7 +14477,7 @@ fn observer_sh_ask_one_post_fails_when_a_cycle_sends_a_post_before_the_click_and
         said.contains("the cycles, before the click: 4 requests, 1 POST"),
         "{said}"
     );
-    assert!(said.contains(ASK_VALIDATE_POST), "{said}");
+    assert!(said.contains(&ask_validate_post()), "{said}");
     assert_eq!(
         observer_log(&stage, "LOCAL.clicks"),
         "",
@@ -14489,7 +14513,7 @@ fn observer_sh_ask_one_post_tries_the_next_move_when_the_click_on_the_first_gets
         "{said}"
     );
     // the click on the stale move sent nothing to Palette: the log holds the one POST
-    assert_eq!(ask_posts(&stage), [ASK_VALIDATE_POST], "{said}");
+    assert_eq!(ask_posts(&stage), [ask_validate_post()], "{said}");
     assert_eq!(observer_log(&stage, "LOCAL.clicks").trim(), "2");
 }
 
@@ -15049,7 +15073,9 @@ const OBSERVER_ROLE_ROUTES: [(&str, &str); 16] = [
 ];
 
 /// The path of the validate request that `observer-role.sh` sends, for the add-on version `ad-1`.
-const OBSERVER_ROLE_VALIDATE: &str = "/v1/clusterprofiles/ad-1/validate/packs";
+fn observer_role_validate_route() -> String {
+    update_validate_packs_route("ad-1")
+}
 
 /// The record of the add-on version, as strata writes it: one pack with values and one manifest. The
 /// record holds more than the validate body takes, such as the hashes.
@@ -15089,7 +15115,10 @@ fn observer_role_stage() -> Stage {
     for (_, path) in OBSERVER_ROLE_ROUTES {
         stage.route(path, "{}");
     }
-    stage.route(OBSERVER_ROLE_VALIDATE, r#"{"packs":{"results":[]}}"#);
+    stage.route(
+        &observer_role_validate_route(),
+        &no_pack_results().to_string(),
+    );
     stage.strata("snapshot ad-1 -o *", 0, &observer_role_record().to_string());
     stage.route(
         REGISTRY_LISTING,
@@ -15115,7 +15144,8 @@ fn observer_role_stage() -> Stage {
 fn observer_role_sh_stage_3_records_what_the_validate_route_of_the_create_answers_the_role() {
     let stage = observer_role_stage();
     let denied = format!(
-        "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {}",
+        "{} failed with HTTP 403: {}",
+        post(&aws_validate_route()),
         error_body(
             Denial::Route.as_str(),
             &access_denied_message("cluster.create", EACH_SCOPE),
@@ -15267,9 +15297,9 @@ fn observer_role_sh_sends_the_validate_request_with_the_body_of_the_record_with_
     // one POST for each key, and each carries the body that a record gives
     let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
     let posts: Vec<&str> = curl.lines().filter(|l| l.starts_with("POST ")).collect();
-    let want_post = format!("POST {OBSERVER_ROLE_VALIDATE}");
+    let want_post = post(&observer_role_validate_route());
     assert_eq!(posts, [want_post.as_str(), want_post.as_str()], "{curl}");
-    let sent = stage.sent("POST", OBSERVER_ROLE_VALIDATE);
+    let sent = stage.sent(Method::Post.as_str(), &observer_role_validate_route());
     let want_body = observer_role_validate_body();
     assert_eq!(sent, [want_body.clone(), want_body], "{sent:?}");
     // the record is the one of the add-on version, taken with the key of the example
@@ -15297,7 +15327,7 @@ fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_
         } else {
             error_body(code, "no validate")
         };
-        stage.route_as(OBSERVER_ROLE_VALIDATE, "role-k", status, &body);
+        stage.route_as(&observer_role_validate_route(), "role-k", status, &body);
         let (o, steps) = stage.run("observer-role.sh", &[]);
         assert_eq!(o.status.code(), Some(0), "{status}:\n{steps}");
         passed(&steps, &["control-validate-packs"]);
@@ -15315,7 +15345,7 @@ fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_
 fn observer_role_sh_fails_the_validate_request_of_the_example_key_when_palette_refuses_it() {
     let stage = observer_role_stage();
     stage.route_as(
-        OBSERVER_ROLE_VALIDATE,
+        &observer_role_validate_route(),
         "k",
         400,
         r#"{"code":"ShouldNotBeEmpty"}"#,
