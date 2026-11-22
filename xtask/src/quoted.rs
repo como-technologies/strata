@@ -26,21 +26,20 @@ pub fn unquote(quoted: &str) -> Result<Vec<u8>, String> {
 ///
 /// The error names an escape that is not Go, or a text with no end quote on its line.
 pub fn read(chars: &[char], line: usize) -> Result<(Vec<u8>, usize), String> {
-    let mut reader = Reader { chars, at: 0, line };
     let mut bytes = Vec::new();
+    let mut at = 0;
     loop {
-        match reader.peek(0) {
-            Some('"') => break,
-            Some('\\') => reader.escape(&mut bytes)?,
+        match chars.get(at) {
+            Some('"') => return Ok((bytes, at + 1)),
+            Some('\\') => at += escape(&chars[at..], line, &mut bytes)?,
             Some('\n') | None => return Err(no_end(line)),
             Some(c) => {
                 let mut buffer = [0; 4];
                 bytes.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
-                reader.at += 1;
+                at += 1;
             }
         }
     }
-    Ok((bytes, reader.at + 1))
 }
 
 /// The error of a text at `line` that does not end.
@@ -48,64 +47,46 @@ fn no_end(line: usize) -> String {
     format!("line {line}: a text does not end")
 }
 
-/// The state of the read of one text.
-struct Reader<'a> {
-    chars: &'a [char],
-    at: usize,
-    line: usize,
-}
-
-impl Reader<'_> {
-    fn peek(&self, ahead: usize) -> Option<char> {
-        self.chars.get(self.at + ahead).copied()
+/// Decode the escape at the start of `chars` into `bytes`, and give the count of its chars.
+fn escape(chars: &[char], line: usize, bytes: &mut Vec<u8>) -> Result<usize, String> {
+    let Some(&kind) = chars.get(1) else {
+        return Err(no_end(line));
+    };
+    let simple = match kind {
+        'a' => Some(0x07),
+        'b' => Some(0x08),
+        'f' => Some(0x0c),
+        'n' => Some(b'\n'),
+        'r' => Some(b'\r'),
+        't' => Some(b'\t'),
+        'v' => Some(0x0b),
+        '\\' | '\'' | '"' => Some(kind as u8),
+        _ => None,
+    };
+    if let Some(byte) = simple {
+        bytes.push(byte);
+        return Ok(2);
     }
-
-    /// Decode the escape at the read position into `bytes`.
-    fn escape(&mut self, bytes: &mut Vec<u8>) -> Result<(), String> {
-        let line = self.line;
-        let Some(kind) = self.peek(1) else {
-            return Err(no_end(line));
-        };
-        self.at += 2;
-        let simple = match kind {
-            'a' => Some(0x07),
-            'b' => Some(0x08),
-            'f' => Some(0x0c),
-            'n' => Some(b'\n'),
-            'r' => Some(b'\r'),
-            't' => Some(b'\t'),
-            'v' => Some(0x0b),
-            '\\' | '\'' | '"' => Some(kind as u8),
-            _ => None,
-        };
-        if let Some(byte) = simple {
-            bytes.push(byte);
-            return Ok(());
-        }
-        let (count, radix) = match kind {
-            'x' => (2, 16),
-            'u' => (4, 16),
-            'U' => (8, 16),
-            '0'..='7' => {
-                // an octal escape has three digits, and the first one is `kind`
-                self.at -= 1;
-                (3, 8)
-            }
-            _ => return Err(format!("line {line}: the escape \\{kind} is not Go")),
-        };
-        let digits: String = (0..count).filter_map(|i| self.peek(i)).collect();
-        self.at += count;
-        let number = u32::from_str_radix(&digits, radix)
-            .map_err(|e| format!("line {line}: the escape {digits}: {e}"))?;
-        if matches!(kind, 'u' | 'U') {
-            let c = char::from_u32(number).unwrap_or(char::REPLACEMENT_CHARACTER);
-            let mut buffer = [0; 4];
-            bytes.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
-        } else {
-            bytes.push(u8::try_from(number).map_err(|e| format!("line {line}: {e}"))?);
-        }
-        Ok(())
+    // the digits start after the kind, and the first digit of an octal escape is the kind
+    let (start, count, radix) = match kind {
+        'x' => (2, 2, 16),
+        'u' => (2, 4, 16),
+        'U' => (2, 8, 16),
+        '0'..='7' => (1, 3, 8),
+        _ => return Err(format!("line {line}: the escape \\{kind} is not Go")),
+    };
+    let digits: String = chars.iter().skip(start).take(count).collect();
+    let number = u32::from_str_radix(&digits, radix)
+        .map_err(|e| format!("line {line}: the escape {digits}: {e}"))?;
+    if matches!(kind, 'u' | 'U') {
+        // Go refuses a number that is no char, such as a surrogate, and git writes no such escape
+        let c = char::from_u32(number).unwrap_or(char::REPLACEMENT_CHARACTER);
+        let mut buffer = [0; 4];
+        bytes.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
+    } else {
+        bytes.push(u8::try_from(number).map_err(|e| format!("line {line}: {e}"))?);
     }
+    Ok(start + count)
 }
 
 #[cfg(test)]

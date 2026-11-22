@@ -719,7 +719,7 @@ fn a_fixture_that_failed_has_no_document_to_compare() {
 fn the_code_that_the_scan_reads_has_no_test_module_no_test_file_and_no_comment() {
     let dir = tempfile::tempdir().unwrap();
     let src = dir.path().join("src");
-    std::fs::create_dir_all(src.join("tests")).unwrap();
+    std::fs::create_dir_all(src.join(crate::files::RUST_TESTS)).unwrap();
     std::fs::write(
         src.join("lib.rs"),
         "// us-east-2 in a comment\nconst A: &str = \"x\";\n#[cfg(test)]\nmod tests {\n    const R: &str = \"us-east-1\";\n}\n",

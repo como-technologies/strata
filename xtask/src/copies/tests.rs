@@ -1156,7 +1156,10 @@ fn a_pub_crate_item_of_the_library_does_not_reach_the_integration_tests() {
 #[test]
 fn a_file_name_that_is_not_utf_8_is_an_error_when_the_check_reads_the_file() {
     let listing = b"src/a.rs\0docs/caf\xe9.md\0go.mod\0";
-    assert_eq!(source::tree_paths(listing).unwrap(), ["src/a.rs", "go.mod"]);
+    assert_eq!(
+        source::tree_paths(listing).unwrap(),
+        ["src/a.rs", Lang::Go.root_file()]
+    );
     for name in [&b"src/caf\xe9.rs"[..], b"x\xe9/Cargo.toml", b"caf\xe9.go"] {
         let listing = [&b"src/a.rs\0"[..], name, b"\0"].concat();
         let error = source::tree_paths(&listing).unwrap_err();

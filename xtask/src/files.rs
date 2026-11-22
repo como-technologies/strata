@@ -13,7 +13,8 @@ const BOOK: &str = "docs/src";
 /// The directory under the book that `just docs-examples` writes.
 const OUTPUT: &str = "output";
 
-/// The directory of the integration tests of a Rust package. They are a crate of their own.
+/// The name of a directory of Rust tests. At the root of a package, it holds the integration tests,
+/// a crate of their own.
 pub const RUST_TESTS: &str = "tests";
 
 /// The end of the name of a Go file of tests.

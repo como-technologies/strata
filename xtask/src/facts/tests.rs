@@ -518,9 +518,9 @@ fn only_a_request_fact_has_a_request_and_each_request_fact_has_one() {
 #[test]
 fn a_request_must_be_a_method_and_a_path_under_v1() {
     for request in [
-        "DELETE /v1/clusterprofiles/{uid}",
-        "GET /v2/clusterprofiles/{uid}",
-        "GET /v1clusterprofiles",
+        "DELETE /v1/things/{uid}",
+        "GET /v2/things/{uid}",
+        "GET /v1things",
     ] {
         let mut sources = world();
         sources.facts[0].request = Some(request.to_string());

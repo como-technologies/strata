@@ -32,12 +32,12 @@ impl Repo {
 
     /// Make the branch `name` at the commit of the work tree, and go to it.
     pub fn branch(&self, name: &str) {
-        git(self.path(), &["switch", "--quiet", "--create", name]);
+        git(self.path(), &["checkout", "--quiet", "-b", name]);
     }
 
     /// Go to the branch `name`.
     pub fn to(&self, name: &str) {
-        git(self.path(), &["switch", "--quiet", name]);
+        git(self.path(), &["checkout", "--quiet", name]);
     }
 
     /// Stage each file of the work tree.
