@@ -21,6 +21,7 @@ mod fresh;
 mod go;
 mod go_lex;
 mod hits;
+mod keyword;
 mod place;
 mod reach;
 mod routes;
@@ -36,43 +37,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::Path;
 
+use crate::files::Lang;
 use crate::git_diff;
 use place::Class;
 use reach::Reach;
 
-/// Each language of the check: the extension of its files, and the file that makes a directory
-/// the root of a package tree.
-const LANGS: [(Lang, &str, &str); 2] =
-    [(Lang::Rust, "rs", "Cargo.toml"), (Lang::Go, "go", "go.mod")];
-
 /// The most characters of a literal that a line of the report shows.
 const SHOWN: usize = 60;
-
-/// The language of a source file.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Lang {
-    Rust,
-    Go,
-}
-
-impl Lang {
-    /// The language of the file `path`, by its extension, or `None` for another file.
-    pub fn of(path: &str) -> Option<Lang> {
-        let (_, extension) = path.rsplit_once('.')?;
-        LANGS
-            .iter()
-            .find(|(_, ext, _)| *ext == extension)
-            .map(|(lang, _, _)| *lang)
-    }
-
-    /// The file that makes a directory the root of a package tree of the language.
-    pub fn root_file(self) -> &'static str {
-        LANGS
-            .iter()
-            .find(|(lang, _, _)| *lang == self)
-            .map_or("", |(_, _, file)| file)
-    }
-}
 
 /// The part of its package that a declaration reaches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,7 +77,7 @@ pub struct Func {
 /// What a declaration that holds a value is.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Kind {
-    /// A string const that is in no closed set.
+    /// A string const that is in no closed set, or a string of a const array.
     Const,
     /// A Go const of a named type, by the name of the type: a value of the closed set of the type.
     Typed(String),
@@ -116,7 +87,7 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// The closed set of the value, or `None` for a const in no closed set.
+    /// The closed set of the value, or `None` for a const.
     fn set(&self) -> Option<&str> {
         match self {
             Kind::Const => None,
@@ -206,7 +177,10 @@ impl Found {
 /// `repo` is the root of the repository. The error names the git command or the file that failed.
 pub fn check(repo: &Path, base: &str, head: &str) -> Result<Found, String> {
     let range = format!("{base}...{head}");
-    let pathspecs: Vec<String> = LANGS.iter().map(|(_, ext, _)| format!("*.{ext}")).collect();
+    let pathspecs: Vec<String> = Lang::ALL
+        .iter()
+        .map(|lang| format!("*.{}", lang.extension()))
+        .collect();
     let pathspecs: Vec<&str> = pathspecs.iter().map(String::as_str).collect();
     let added = git_diff::added(repo, &range, &pathspecs)?;
     let tree = source::read_tree(repo, head)?;

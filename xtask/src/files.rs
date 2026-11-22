@@ -70,6 +70,42 @@ pub fn pages(dir: &Path) -> Vec<PathBuf> {
     files_under(dir, "md")
 }
 
+/// The language of a source file of the repository.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Lang {
+    Rust,
+    Go,
+}
+
+impl Lang {
+    /// Each language, in the order of the type.
+    pub const ALL: [Lang; 2] = [Lang::Rust, Lang::Go];
+
+    /// The language of the file `path`, by its extension, or `None` for another file.
+    pub fn of(path: &str) -> Option<Lang> {
+        let (_, extension) = path.rsplit_once('.')?;
+        Lang::ALL
+            .into_iter()
+            .find(|lang| lang.extension() == extension)
+    }
+
+    /// The extension of the files of the language, without the dot.
+    pub fn extension(self) -> &'static str {
+        match self {
+            Lang::Rust => "rs",
+            Lang::Go => "go",
+        }
+    }
+
+    /// The file that makes a directory the root of a package tree of the language.
+    pub fn root_file(self) -> &'static str {
+        match self {
+            Lang::Rust => "Cargo.toml",
+            Lang::Go => "go.mod",
+        }
+    }
+}
+
 /// True for the path of a Go file of tests.
 pub fn is_go_test(path: &str) -> bool {
     path.ends_with(GO_TEST)

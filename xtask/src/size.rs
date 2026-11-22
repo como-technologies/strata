@@ -9,7 +9,7 @@ use syn::visit::{self, Visit};
 use syn::{Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature};
 use syn::{TraitItemFn, parse_file};
 
-use crate::files::{files_under, is_go_test, is_rust_test_file, is_test_code};
+use crate::files::{Lang, files_under, is_go_test, is_rust_test_file, is_test_code, under};
 
 /// The most lines that a module file has.
 const MODULE_LINES: usize = 800;
@@ -105,7 +105,7 @@ fn read_under(dir: &Path, paths: Vec<PathBuf>) -> Vec<(String, String)> {
 /// Each Rust file under `src` with its text, in name order. A file that holds only tests is not in
 /// the list: a file of tests can be longer than the limit.
 fn sources(src: &Path) -> Vec<(String, String)> {
-    let paths = files_under(src, "rs")
+    let paths = files_under(src, Lang::Rust.extension())
         .into_iter()
         .filter(|path| {
             let relative = path.strip_prefix(src).unwrap_or(path);
@@ -118,7 +118,7 @@ fn sources(src: &Path) -> Vec<(String, String)> {
 /// Each file of Go and of JavaScript under `dir` with its text, in name order. A file that holds
 /// only tests is not in the list, so it can be longer than the limit.
 fn observer_sources(dir: &Path) -> Vec<(String, String)> {
-    let mut paths: Vec<PathBuf> = ["go", "js"]
+    let mut paths: Vec<PathBuf> = [Lang::Go.extension(), "js"]
         .into_iter()
         .flat_map(|ext| files_under(dir, ext))
         .filter(|path| !holds_only_tests(dir, path))
@@ -130,12 +130,8 @@ fn observer_sources(dir: &Path) -> Vec<(String, String)> {
 /// True when the file `path` of the observer at `dir` holds only tests: a Go file of tests, or a
 /// file under a directory `testdata`.
 fn holds_only_tests(dir: &Path, path: &Path) -> bool {
-    is_go_test(&path.to_string_lossy())
-        || path
-            .strip_prefix(dir)
-            .unwrap_or(path)
-            .components()
-            .any(|part| part.as_os_str() == "testdata")
+    let relative = path.strip_prefix(dir).unwrap_or(path).to_string_lossy();
+    is_go_test(&relative) || under(&relative, "testdata")
 }
 
 /// The files of `files` with more than [`MODULE_LINES`] lines, each with its count.

@@ -23,7 +23,7 @@ use strata_preflight::rule::{Catalog, Check, ExecCheck, Rule, Tier};
 
 use super::model::{Fact, Kind, PaletteRoute, expand, has_placeholder, split_request};
 use super::sources::{Sources, shape};
-use crate::files::{code_without_tests, files_under, is_rust_test_file};
+use crate::files::{Lang, code_without_tests, files_under, is_rust_test_file};
 
 #[cfg(test)]
 mod tests;
@@ -237,7 +237,7 @@ pub fn read_code(repo: &Path) -> (BTreeMap<String, String>, Vec<String>) {
     let mut code = BTreeMap::new();
     let mut bad = Vec::new();
     for directory in CODE {
-        for file in files_under(&repo.join(directory), "rs") {
+        for file in files_under(&repo.join(directory), Lang::Rust.extension()) {
             let Ok(relative) = file.strip_prefix(repo) else {
                 continue;
             };

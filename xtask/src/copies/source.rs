@@ -10,8 +10,8 @@ use super::place::{Context, LABEL_NAMES, Literal, literals};
 use super::reach::{Reach, rust_reach};
 use super::rust::RustFile;
 use super::token::Token;
-use super::{Func, Holder, Kind, LANGS, Lang, go, rust};
-use crate::files::{TestLines, is_go_test, is_rust_test_file, under};
+use super::{Func, Holder, Kind, go, rust};
+use crate::files::{Lang, TestLines, is_go_test, is_rust_test_file, under};
 use crate::git_diff::{git, git_bytes};
 
 /// The directory of the helpers that the integration tests of a Rust package share.
@@ -53,9 +53,9 @@ pub fn read_tree(repo: &Path, head: &str) -> Result<Tree, String> {
     let paths: Vec<&str> = listing.split('\0').filter(|p| !p.is_empty()).collect();
     let mut roots: BTreeMap<Lang, Vec<String>> = BTreeMap::new();
     for path in &paths {
-        for (lang, _, file) in LANGS {
+        for lang in Lang::ALL {
             if let Some(dir) = path
-                .strip_suffix(file)
+                .strip_suffix(lang.root_file())
                 .filter(|d| d.is_empty() || d.ends_with('/'))
             {
                 roots.entry(lang).or_default().push(dir.to_string());

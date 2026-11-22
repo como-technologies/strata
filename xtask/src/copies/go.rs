@@ -2,7 +2,8 @@
 //! the fields of its structs.
 
 use super::Func;
-use super::go_lex::{self, MAP, STRUCT};
+use super::go_lex;
+use super::keyword::Keyword;
 use super::token::{Delim, Token, leaves, split, text_of};
 
 /// The read of one kind of declaration of the top level. It takes the file, the line of the
@@ -11,13 +12,13 @@ type ReadDeclaration = fn(&mut GoFile, usize, &[Token]);
 
 /// The keyword of each declaration of the top level that the read takes, its read, and whether
 /// the code of the file keeps it. An import is no code: the walk of the literals skips it.
-const DECLARATIONS: [(&str, ReadDeclaration, bool); 6] = [
-    ("package", read_package, true),
-    ("import", read_imports, false),
-    ("const", read_consts, true),
-    ("var", read_vars, true),
-    ("type", read_types, true),
-    ("func", read_func, true),
+const DECLARATIONS: [(Keyword, ReadDeclaration, bool); 6] = [
+    (Keyword::Package, read_package, true),
+    (Keyword::Import, read_imports, false),
+    (Keyword::Const, read_consts, true),
+    (Keyword::Var, read_vars, true),
+    (Keyword::Type, read_types, true),
+    (Keyword::Func, read_func, true),
 ];
 
 /// A const of a Go file whose value is one string literal.
@@ -65,7 +66,7 @@ pub fn read(text: &str) -> Result<GoFile, String> {
         };
         let reader = DECLARATIONS
             .iter()
-            .find(|(keyword, _, _)| first.is_word(keyword));
+            .find(|(keyword, _, _)| first.is_word(keyword.as_str()));
         if let Some((_, read_one, keep)) = reader {
             read_one(&mut file, first.line(), &declaration[1..]);
             if !keep {
@@ -165,7 +166,7 @@ fn alias(spec: &[Token]) -> Option<(String, String)> {
 /// The name and the fields of a spec `Name struct { ... }`.
 fn named_struct(spec: &[Token]) -> Option<(String, Vec<String>)> {
     match spec {
-        [name, keyword, body] if keyword.is_word(STRUCT) => Some((
+        [name, keyword, body] if keyword.is_word(Keyword::Struct.as_str()) => Some((
             name.word()?.to_string(),
             struct_fields(body.group(Delim::Brace)?),
         )),
@@ -267,7 +268,7 @@ fn table(spec: &[Token]) -> Vec<GoConst> {
     let (Some(name), Some(rows)) = (name.word(), rows.group(Delim::Brace)) else {
         return Vec::new();
     };
-    if !equals.is_mark("=") || !keyword.is_word(MAP) {
+    if !equals.is_mark("=") || !keyword.is_word(Keyword::Map.as_str()) {
         return Vec::new();
     }
     let mut out = Vec::new();

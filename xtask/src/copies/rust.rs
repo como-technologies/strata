@@ -1,11 +1,12 @@
 //! What a Rust file declares, for the scan, and the tokens of the file.
 //!
-//! The texts of a closed set come from four places:
+//! The texts of a closed set come from three places:
 //!
 //! - the serde names of an enum;
 //! - the table of `impl_closed_set!` or of `impl_texts!`;
-//! - a function whose body matches each variant to a text, such as `Error::kind`;
-//! - the strings of a const array.
+//! - a function whose body matches each variant to a text, such as `Error::kind`.
+//!
+//! A const gives its string, or each string of its array. A string of a const array is a const.
 
 use std::str::FromStr;
 
@@ -39,7 +40,7 @@ pub struct RustValue {
     pub value: String,
     /// The line of the declaration: the literal of the value, or the variant of a serde name.
     pub line: usize,
-    /// True for a text of a closed set, false for a const.
+    /// True for a text of a closed set, false for a const or a string of a const array.
     pub closed: bool,
     pub scope: Scope,
 }
@@ -272,9 +273,8 @@ impl<'ast> Visit<'ast> for Reader<'_> {
     }
 
     fn visit_item_const(&mut self, item: &'ast ItemConst) {
-        let (texts, list) = const_texts(&item.expr);
-        for (text, line) in texts {
-            self.value(item.ident.to_string(), text, line, list, &item.vis);
+        for (text, line) in const_texts(&item.expr) {
+            self.value(item.ident.to_string(), text, line, false, &item.vis);
         }
         visit::visit_item_const(self, item);
     }
@@ -284,9 +284,8 @@ impl<'ast> Visit<'ast> for Reader<'_> {
             Some(owner) => format!("{owner}::{}", item.ident),
             None => item.ident.to_string(),
         };
-        let (texts, list) = const_texts(&item.expr);
-        for (text, line) in texts {
-            self.value(name.clone(), text, line, list, &item.vis);
+        for (text, line) in const_texts(&item.expr) {
+            self.value(name.clone(), text, line, false, &item.vis);
         }
     }
 }
@@ -322,24 +321,23 @@ fn returns_str(output: &ReturnType) -> bool {
 }
 
 /// The literals of a const: one string, or each string of an array or of a slice, also in a tuple
-/// of the array. The flag is true for an array or a slice. Its strings are a closed set, such as
-/// a list of names or a table of texts.
-fn const_texts(expr: &Expr) -> (Vec<(String, usize)>, bool) {
+/// of the array.
+fn const_texts(expr: &Expr) -> Vec<(String, usize)> {
     match expr {
         Expr::Lit(lit) => match &lit.lit {
-            Lit::Str(text) => (vec![(text.value(), text.span().start().line)], false),
-            _ => (Vec::new(), false),
+            Lit::Str(text) => vec![(text.value(), text.span().start().line)],
+            _ => Vec::new(),
         },
         Expr::Array(array) => {
             // a row of a table, such as `(Lang::Go, "go")`, gives each string of the row
             let row = |e: &Expr| match e {
-                Expr::Tuple(tuple) => tuple.elems.iter().flat_map(|e| const_texts(e).0).collect(),
-                Expr::Lit(_) => const_texts(e).0,
+                Expr::Tuple(tuple) => tuple.elems.iter().flat_map(const_texts).collect(),
+                Expr::Lit(_) => const_texts(e),
                 _ => Vec::new(),
             };
-            (array.elems.iter().flat_map(row).collect(), true)
+            array.elems.iter().flat_map(row).collect()
         }
         Expr::Reference(reference) => const_texts(&reference.expr),
-        _ => (Vec::new(), false),
+        _ => Vec::new(),
     }
 }

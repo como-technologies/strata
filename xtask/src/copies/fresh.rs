@@ -10,7 +10,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::hits::{Added, Reported, counts, places};
 use super::place::Class;
 use super::source::{Source, Tree};
-use super::{Func, Hit, Holder, Kind, Lang, Place, shown};
+use super::{Func, Hit, Holder, Kind, Place, shown};
+use crate::files::Lang;
 
 /// The least count of tokens of the body of a function that the rule of the helpers reads.
 const SMALLEST_BODY: usize = 6;
@@ -55,8 +56,9 @@ fn copies<'a>(
 }
 
 /// The consts that the change adds with a value that another declaration or another literal of
-/// the same tree holds. A text of a closed set that is no const is out. Two values of two closed
-/// sets can have one text, such as two sets that both hold `newer`.
+/// the same tree holds. Each string of a const array is a const. A text of a closed set that is no
+/// const, such as the serde name of a variant, is out. Two values of two closed sets can have one
+/// text, such as two sets that both hold `newer`.
 pub fn new_consts(tree: &Tree, added: &Added, reported: &Reported) -> Vec<Hit> {
     let sources = sources(tree);
     let copies = copies(tree, reported);

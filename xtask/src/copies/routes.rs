@@ -4,7 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::hits::{Added, Reported, touches};
 use super::source::{Source, Tree};
-use super::{Hit, Lang, Place, shown};
+use super::{Hit, Place, shown};
+use crate::files::Lang;
 
 /// The start of a route of the API of Palette and of the observer.
 const ROUTE_START: &str = "/v1/";

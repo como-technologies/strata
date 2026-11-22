@@ -1,37 +1,32 @@
 //! The tokens of a Go file, as "Lexical elements" of the Go specification gives them.
 
+use super::keyword::Keyword;
 use super::token::{Delim, Token};
-
-/// The keyword of a struct type.
-pub const STRUCT: &str = "struct";
-
-/// The keyword of a map type.
-pub const MAP: &str = "map";
 
 /// The keywords of Go after which the end of a line gives no `;`. `break`, `continue`,
 /// `fallthrough`, and `return` give one, as an identifier does.
-const NO_SEMICOLON_AFTER: [&str; 21] = [
-    "case",
-    "chan",
-    "const",
-    "default",
-    "defer",
-    "else",
-    "for",
-    "func",
-    "go",
-    "goto",
-    "if",
-    "import",
-    "interface",
-    MAP,
-    "package",
-    "range",
-    "select",
-    STRUCT,
-    "switch",
-    "type",
-    "var",
+const NO_SEMICOLON_AFTER: [Keyword; 21] = [
+    Keyword::Case,
+    Keyword::Chan,
+    Keyword::Const,
+    Keyword::Default,
+    Keyword::Defer,
+    Keyword::Else,
+    Keyword::For,
+    Keyword::Func,
+    Keyword::Go,
+    Keyword::Goto,
+    Keyword::If,
+    Keyword::Import,
+    Keyword::Interface,
+    Keyword::Map,
+    Keyword::Package,
+    Keyword::Range,
+    Keyword::Select,
+    Keyword::Struct,
+    Keyword::Switch,
+    Keyword::Type,
+    Keyword::Var,
 ];
 
 /// The operators of Go with more than one character, the longest first. A read takes the longest
@@ -127,7 +122,9 @@ impl Lexer {
             return;
         };
         let semicolon = match last {
-            Token::Word { text, .. } => !NO_SEMICOLON_AFTER.contains(&text.as_str()),
+            Token::Word { text, .. } => !NO_SEMICOLON_AFTER
+                .iter()
+                .any(|k| k.as_str() == text.as_str()),
             Token::Text { .. } | Token::Other { .. } | Token::Group { .. } => true,
             Token::Mark { text, .. } => text == "++" || text == "--",
         };

@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use super::keyword::Keyword;
 use super::place::{Class, Context, Literal, literals};
 use super::rust_sets::rename;
 use super::token::Token;
@@ -382,7 +383,8 @@ fn the_go_tokens_end_a_line_with_a_semicolon_where_the_compiler_adds_one() {
             _ => "?".to_string(),
         })
         .collect();
-    assert_eq!(marks, ["x", ":=", "f", "()", ";", "if", "y", "()", ";"]);
+    let keyword = Keyword::If.as_str();
+    assert_eq!(marks, ["x", ":=", "f", "()", ";", keyword, "y", "()", ";"]);
 }
 
 #[test]
@@ -474,7 +476,11 @@ fn a_go_file_gives_its_consts_its_tables_its_structs_its_functions_and_its_alias
     assert_eq!(funcs[0].0, "check");
     assert_eq!(funcs[0].1, ["t", "at", "text", "words"]);
     assert!(!funcs[0].2 && funcs[1].2);
-    assert!(file.code.iter().all(|t| !t.is_word("import")));
+    assert!(
+        file.code
+            .iter()
+            .all(|t| !t.is_word(Keyword::Import.as_str()))
+    );
 }
 
 #[test]
@@ -562,9 +568,9 @@ mod tests {
             ("Fault::Bad", "bad-input", true, Scope::Package, false),
             ("Fault::Worse", "bad-input", true, Scope::Package, false),
             ("SCHEMA", "strata-x/1", false, Scope::Module, false),
-            ("NAMES", "a-1", true, Scope::Package, false),
-            ("NAMES", "b-2", true, Scope::Package, false),
-            ("LANGS", "golang", true, Scope::Package, false),
+            ("NAMES", "a-1", false, Scope::Package, false),
+            ("NAMES", "b-2", false, Scope::Package, false),
+            ("LANGS", "golang", false, Scope::Package, false),
             ("Tier::InPlace", "in place", true, Scope::Package, false),
             ("Tier::NewNode", "new node", true, Scope::Package, false),
             ("IN_TEST", "in-test", false, Scope::Module, true),
@@ -930,6 +936,38 @@ fn a_new_const_and_helper_copy_a_private_item_of_another_module() {
             "src/new.rs:3 [helper] double: the body of twice (src/old.rs:3)",
             "use/more.go:3 [const] use.heading = \"Lost contact\": the value of names.title (names/names.go:15)",
             "use/more.go:5 [helper] joined: the body of join (low/join.go:3)",
+        ]
+    );
+}
+
+/// Each string of a const array is a const. The change adds a string const and a table with the
+/// value of an older literal, and two arrays with one value.
+#[test]
+fn each_string_of_a_const_array_is_a_const_that_the_check_reads() {
+    let repo = Repo::new();
+    repo.write(Lang::Rust.root_file(), "[package]\nname = \"p\"\n");
+    repo.write(
+        "src/size.rs",
+        "pub fn count() -> usize {\n    files_under(\"src\", \"rs-ext\")\n}\n",
+    );
+    repo.commit("base");
+    repo.branch("change");
+    repo.write("src/one.rs", "pub const EXT: &str = \"rs-ext\";\n");
+    repo.write(
+        "src/langs.rs",
+        "pub const LANGS: [(Lang, &str); 1] = [(Lang::Rust, \"rs-ext\")];\n\
+         const DECLARATIONS: [&str; 2] = [\"package-kw\", \"func-kw\"];\n\
+         const NO_SEMICOLON_AFTER: [&str; 2] = [\"func-kw\", \"struct-kw\"];\n",
+    );
+    repo.commit("change");
+    let (findings, _) = repo.copies();
+    assert_eq!(
+        findings,
+        [
+            "src/langs.rs:1 [const] LANGS = \"rs-ext\": the value of EXT (src/one.rs:1); the literal at src/size.rs:2 [call:files_under]",
+            "src/langs.rs:2 [const] DECLARATIONS = \"func-kw\": the value of NO_SEMICOLON_AFTER (src/langs.rs:3)",
+            "src/langs.rs:3 [const] NO_SEMICOLON_AFTER = \"func-kw\": the value of DECLARATIONS (src/langs.rs:2)",
+            "src/one.rs:1 [const] EXT = \"rs-ext\": the value of LANGS (src/langs.rs:1); the literal at src/size.rs:2 [call:files_under]",
         ]
     );
 }

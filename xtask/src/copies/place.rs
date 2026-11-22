@@ -3,11 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use super::Lang;
 use super::go::struct_fields;
-use super::go_lex::STRUCT;
+use super::keyword::Keyword;
 use super::token::{Delim, Token, split};
-use crate::files::TestLines;
+use crate::files::{Lang, TestLines};
 
 /// The names of a field or of a parameter that holds the name of a case of a test.
 const CASE_NAMES: [&str; 4] = ["name", "case", "desc", "title"];
@@ -47,33 +46,34 @@ const RUST_COMPARES: [&str; 4] = [
 
 /// The keywords that stop the read of an operand, with the class of a literal after each one. A
 /// literal after `case` is a case of a `switch`, and a literal after `return` is its value.
-const KEYWORDS: [(&str, Option<Class>); 11] = [
-    ("case", Some(Class::Switch)),
-    ("return", Some(Class::Return)),
-    ("if", None),
-    ("else", None),
-    ("let", None),
-    ("match", None),
-    ("const", None),
-    ("var", None),
-    ("static", None),
-    ("range", None),
-    ("default", None),
+const KEYWORDS: [(Keyword, Option<Class>); 11] = [
+    (Keyword::Case, Some(Class::Switch)),
+    (Keyword::Return, Some(Class::Return)),
+    (Keyword::If, None),
+    (Keyword::Else, None),
+    (Keyword::Let, None),
+    (Keyword::Match, None),
+    (Keyword::Const, None),
+    (Keyword::Var, None),
+    (Keyword::Static, None),
+    (Keyword::Range, None),
+    (Keyword::Default, None),
 ];
 
 /// The two keywords of a Rust `for` loop: `for PATTERN in ROWS`.
-const FOR_IN: [&str; 2] = ["for", "in"];
+const FOR_IN: [Keyword; 2] = [Keyword::For, Keyword::In];
 
 /// True for a keyword of [`KEYWORDS`] or of [`FOR_IN`]: no operand holds it.
 fn is_keyword(word: &str) -> bool {
-    KEYWORDS.iter().any(|(keyword, _)| *keyword == word) || FOR_IN.contains(&word)
+    KEYWORDS.iter().any(|(keyword, _)| keyword.as_str() == word)
+        || FOR_IN.iter().any(|keyword| keyword.as_str() == word)
 }
 
 /// The class of a literal after the keyword `word`, or `None` for another word.
 fn after_keyword(word: &str) -> Option<Class> {
     KEYWORDS
         .iter()
-        .find(|(keyword, _)| *keyword == word)
+        .find(|(keyword, _)| keyword.as_str() == word)
         .and_then(|(_, class)| class.clone())
 }
 
@@ -294,7 +294,7 @@ fn is_tag(frames: &[Frame]) -> bool {
             .at
             .checked_sub(1)
             .and_then(|before| parent.tokens.get(before))
-            .is_some_and(|t| t.is_word(STRUCT)),
+            .is_some_and(|t| t.is_word(Keyword::Struct.as_str())),
         _ => false,
     }
 }
@@ -544,7 +544,7 @@ fn go_fields(frames: &[Frame], context: &Context) -> Option<Vec<String>> {
 /// element of `[]Name` or of `map[K]Name`. A type that the package does not declare gives none.
 fn fields_of_type(before: &[Token], context: &Context) -> Option<Vec<String>> {
     match before {
-        [.., keyword, body] if keyword.is_word(STRUCT) => {
+        [.., keyword, body] if keyword.is_word(Keyword::Struct.as_str()) => {
             Some(struct_fields(body.group(Delim::Brace)?))
         }
         [.., name] => {
@@ -583,7 +583,7 @@ fn rust_names(frames: &[Frame], index: usize) -> Option<String> {
         return None;
     };
     let [for_word, in_word] = FOR_IN;
-    if !keyword.is_word(for_word) || !within.is_word(in_word) {
+    if !keyword.is_word(for_word.as_str()) || !within.is_word(in_word.as_str()) {
         return None;
     }
     let last_word = |part: &[Token]| part.iter().rev().find_map(Token::word).map(str::to_string);
