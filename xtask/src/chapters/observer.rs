@@ -203,8 +203,12 @@ fn alerts(r: &mut Runner) {
 }
 
 /// The environment of the chapter `observer-clusters`: the project of the key `api-key`, by its
-/// uid, and the revision of the records.
-const SET_ENV: &[(&str, &str)] = &[("PALETTE_PROJECT_UID", DEV), ("GIT_SHA", REVISION)];
+/// name for the playground and by its uid for the observer, and the revision of the records.
+const SET_ENV: &[(&str, &str)] = &[
+    ("PALETTE_PROJECT", "dev"),
+    ("PALETTE_PROJECT_UID", DEV),
+    ("GIT_SHA", REVISION),
+];
 
 /// The command line of a run of `once` for the set of the chapter `observer-clusters`. Two
 /// selectors pick the clusters of the teams payments and search, and the observer runs on

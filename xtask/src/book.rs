@@ -652,20 +652,6 @@ impl Runner {
         let text = std::fs::read_to_string(&listing).unwrap_or_default();
         let doc: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::json!({}));
         let items = doc["items"].as_array().cloned().unwrap_or_default();
-        // a chapter that names its project by the uid, as the chapter of a set of clusters does,
-        // gets the name of that project too
-        let by_uid = self
-            .env
-            .iter()
-            .find(|(k, _)| k == "PALETTE_PROJECT_UID")
-            .and_then(|(_, uid)| items.iter().find(|p| p["metadata"]["uid"] == uid.as_str()))
-            .and_then(|p| p["metadata"]["name"].as_str())
-            .unwrap_or_default();
-        let project = if project.is_empty() {
-            by_uid.to_string()
-        } else {
-            project
-        };
         let others: Vec<String> = items
             .iter()
             .map(|p| {

@@ -68,7 +68,7 @@ the status codes. This page tells how the code keeps them.
 
 ## The page
 
-The route `/` serves the dashboard. The page is eight files, two icons, and two fonts,
+The route `/` serves the dashboard. The page is nine files, two icons, and two fonts,
 and the program carries them. A person opens it through the port-forward of
 [Access to the page](#access-to-the-page). `observer/internal/web/assets/` holds these files:
 
@@ -79,6 +79,7 @@ and the program carries them. A person opens it through the port-forward of
 | `frame.js` | The links of the nav, the top bar, the menus of the cycles, the alert bars, and the cards of the overview. |
 | `screens.js` | The screens, the stack of the packs, the images, and the alerts. |
 | `pack.js` | The screen of a pack: the comparison, and the card "Check this yourself". |
+| `clusters.js` | The screens of a set of clusters, the links of a cluster of a set, and the read of the set. |
 | `routes.js` | The routes, the write of markup, and the events. It starts the page. |
 | `theme.js` | The choice of a theme. It runs in the head, before the first paint. |
 | `app.css` | The style, the colors, and the two `@font-face` rules. |
@@ -86,7 +87,7 @@ and the program carries them. A person opens it through the port-forward of
 | `fonts/` | Public Sans and Roboto Mono, as variable Latin files. |
 | `LICENSES.md` | The version, the checksum, and the license of each font. |
 
-The five scripts from `app.js` to `routes.js` are the scripts of the screens.
+The six scripts from `app.js` to `routes.js` are the scripts of the screens.
 `index.html` loads them at the end of its body, in the order of the table, and they
 share one scope. [The Go of the observer](./code.md#the-go-of-the-observer) gives the
 rules of this order.
@@ -96,6 +97,16 @@ eight summary routes `/v1/cluster`, `/v1/findings`, `/v1/profiles`, `/v1/newer`,
 `/v1/notchecked`, `/v1/events`, `/v1/images`, and `/v1/alerts`. The ninth is the
 route `/v1/asks` of the detail tier. A failed read of `/v1/alerts` or `/v1/asks` keeps
 the last answer, and the page does not show the observer as out of reach.
+
+A set of clusters serves no route of one cluster at the top, so the first read gets
+`404`. The page then reads `/v1/clusters`, `/v1/shared`, and `/v1/alerts`. Its first
+screen is `#clusters`, and `#shared` lists the shared versions.
+
+The hash of a screen of
+one cluster starts with `#c-<uid>/`, and the page reads the routes of that cluster
+under `/v1/clusters/<uid>`. A profile of a cluster of a set has its uid in a hash. With
+no `--clusters`, the page reads and shows the routes of one cluster, as above. [The
+observer of a set of clusters](../automation/observer-clusters.md) gives the screens.
 
 The page reads the detail route of a pack when a person opens the pack. The hash of
 the address names the screen:
@@ -598,7 +609,7 @@ sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
 `first-seen`, `stale-unchecked`, `lost-unchecked`, `lost-held`, and `read-error`. The other sets
 are `images`, `images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`,
 `alerts`, `alerts-unset`, `moved-drift`, `moved-unchecked`, `update-checks`, and
-`profile-checks`. The server listens on `127.0.0.1:8080`. The flag `-listen` takes
+`profile-checks`. The set `clusters` is a set of clusters. The server listens on `127.0.0.1:8080`. The flag `-listen` takes
 another loopback address, and `-data` takes another directory of sets.
 
 A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
@@ -636,6 +647,11 @@ the page are those of the data.
   record. The filter "Not checked" shows the row of the record in the table.
 - The set `no-records` is the output of the observer with no record. A test runs
   the observer on a stand-in and makes sure of this.
+- The set `clusters` is the page of a set of three clusters in two projects. It holds
+  `clusters.json`, `shared.json`, and the rules of the alerts. Each cluster has a set in
+  `members/`, under its uid, that names a set of one cluster in a file `base`. `quarry-1`
+  runs the observer and holds the finding of `ok`. `ledger` is quiet, and the key of the
+  project of `search` is refused. One selector selects no cluster.
 - The sets `images`, `images-split`, `images-off`, and `images-unread` differ in
   `images.json`, the document `strata-observed/1`. `images` holds one moved tag, and
   `images-split` holds one tag with two digests. `images-off` has the state `off`.

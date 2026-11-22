@@ -54,7 +54,9 @@ lists the routes.
 | Flag | Default | What it does |
 | --- | --- | --- |
 | `--strata` | `strata`, on `PATH` | Names the binary, as a path or as a name on `PATH`. A relative path starts at the directory where the observer starts. The image has `/usr/local/bin/strata`. |
-| `--cluster-uid` | required | Names the cluster. The name comes from the read of the cluster. |
+| `--cluster-uid` | required | Names the cluster. The name comes from the read of the cluster. With `--clusters`, it names the cluster where the observer runs, and it is optional. |
+| `--clusters` | off | Names [a set of clusters](../automation/observer-clusters.md): `tag:KEY=VALUE`, `tag:KEY`, `tag:A=B+C=D`, or `filter:NAME`. Give it once or more. One value can hold one selector on each line. |
+| `--keys` | none | With `--clusters`, the directory of the keys: `api-key` for the project of `PALETTE_PROJECT_UID`, and one file for each other project, by its uid. `--clusters` needs it, and `PALETTE_PROJECT_UID`. |
 | `--records` | required | The directory of `*.json.gz` records and `meta.json`. |
 | `--work` | required | A volume in memory for the files of a cycle. |
 | `--state` | required | A directory for `state.json`. It holds names, times, and counts, and no value. |
@@ -81,6 +83,7 @@ any other command and any other flag.
 | Versions | 2 | `compare pack:<registryUid>/<name>@<version> pack:<registryUid>/<name>@<newest> --full --json --compact -q` | 0 or 1 |
 | Versions | 3 | `compare <record> <uid> --full --json --compact -q` | 0 or 1 |
 | Click | 1 | `behind <record> --pin <layer>/<name> --json --compact -q` | 0, 1, or 2 with a document |
+| Set | 1 | `list clusters --tag <label>... --project <uid> --json --compact -q`, or `--filter <name>` in place of the labels | 0 |
 
 Steps 3 and 4 run for each record that the cluster runs. The side comes from
 the raw answers of step 2, so these two steps make no request.
@@ -96,6 +99,12 @@ timer. See [The answers of Palette](#the-answers-of-palette).
 
 With `--read-pods`, the content cycle lists the pods before step 1: see [The read of
 the pods](#the-read-of-the-pods).
+
+With `--clusters`, a content cycle runs the row `Set` for each selector in the project of
+each key. Then it runs step 1 one time for the records of each project, and steps 2 to 4
+for each cluster. A versions cycle runs its steps for the records of each project. Each
+run gets the key of its project: see [The observer of a set of
+clusters](../automation/observer-clusters.md).
 
 - A cycle starts at the start of the process, and then after its period. The
   observer adds a random 0 to 10 percent to each wait.

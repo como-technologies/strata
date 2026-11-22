@@ -111,6 +111,20 @@ of the provider is a label: `env:prod` is `env=prod`. Palette searches every
 project the key can read, so the listing is at tenant scope, and each row names
 its project and ends with the labels of the cluster.
 
+`--project` or `--project-name` keeps the search in that project:
+
+```text
+{{#include ../output/fleet-tag-project.txt}}
+```
+
+A key with a role in one project needs it, such as the key of [a set of
+clusters](../automation/observer-clusters.md). At tenant scope, Palette refuses the
+search to a key with no `project.list` in the tenant, with HTTP 403 and
+`AccessDenied`. The saved tag filters of `--filter` need `filter.list` and
+`filter.get` in the tenant. The code of Palette shows these refusals; no live run
+shows them yet. See [The reach of a
+search](../internals/palette/clusters.md#the-reach-of-a-search).
+
 `--filter NAME` keeps the clusters that a saved tag filter selects, by its name
 or uid. `strata list filters` names each saved tag filter of the tenant, and
 what it selects:

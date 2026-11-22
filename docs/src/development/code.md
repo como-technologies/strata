@@ -432,9 +432,11 @@ the Rust code, and these rules are for the Go code.
   `STRATA_QUIET` and `NO_COLOR` are not in the list, because each call has `-q`
   and no call writes a terminal report.
 - Some flags have a command of their own in `internal/runner`. `--full` is for
-  `compare` and `verify`, and `--pin` is for `behind`. The runner refuses a
+  `compare` and `verify`, and `--pin` is for `behind`. `--tag`, `--filter`, and
+  `--project` are for `list`, the search of a set of clusters. The runner refuses a
   `behind` run that has neither `--no-impact` nor `--pin`. It refuses `--validate`
-  and `--repave` of `compare`. So no cycle can send a `POST` to Palette.
+  and `--repave` of `compare`. So the one `POST` of a cycle is the search of a set,
+  which reads.
 - An error of a run holds a kind and a status. It never holds a message,
   because the message of the kind `api` can hold the body of an answer from
   Palette.
@@ -457,6 +459,10 @@ the Rust code, and these rules are for the Go code.
   status, and it names no profile and no pack. The line for an alert holds the name
   of the channel, a verdict, an error kind, and a status, and no address and no
   text. A log line holds no output of a process. The rule has no exception.
+- In a set of clusters, a log line of a cluster also names the uid of the cluster. A
+  cluster that leaves the set gives one line with its uid. A run of a set gets the key of
+  its project in `PALETTE_API_KEY` and `PALETTE_PROJECT_UID`. It gets no variable of the
+  key of the observer.
 - `internal/baseline` reads the records, and decodes each one only into
   `docs.Record`. `internal/model` holds the summary and the rules that build it.
   `internal/check` runs the cycles through its `Strata` interface, so a test
@@ -533,15 +539,15 @@ the Rust code, and these rules are for the Go code.
   fails on a `max-width` on `.page`. Other tests of the package fail on a copy of the
   logo that differs from `assets/logo/`. They also fail on a `prefers-color-scheme`
   rule in `app.css`, and on a drift that is not white on `#c9252f`. See [The page](./observer-api.md#the-page).
-- The page has five scripts: `app.js`, `frame.js`, `screens.js`, `pack.js`, and
-  `routes.js`. Each one is a classic script, with no module and no build step. `index.html`
+- The page has six scripts: `app.js`, `frame.js`, `screens.js`, `pack.js`, `clusters.js`,
+  and `routes.js`. Each one is a classic script, with no module and no build step. `index.html`
   loads them in this order at the end of its body, and they share one scope. `app.js`
   holds the template, so it loads first. `routes.js` starts the page, so it loads last. A
   test of `internal/web` fails on a script of `assets/` that `index.html` does not load,
   and on another first or last script.
 - `app.js` keeps its path and the largest part of the old script, so `git log --follow`
   keeps its history. The other parts are new files beside it.
-- A test that reads the scripts as text reads all five, in the order of `index.html`. So
+- A test that reads the scripts as text reads all six, in the order of `index.html`. So
   a count over the page, such as the one write of markup, stays a count over the page.
 - A value from the data reaches a copied command only through `shq()` in `app.js`.
   A test of `internal/web` gives the page names that a shell reads as code. It runs
@@ -558,6 +564,8 @@ the Rust code, and these rules are for the Go code.
   tier each have a slot of their own. So the two cycles run at the same time. A click
   holds the slot of the versions, so no versions cycle moves the pin while Palette
   answers. A test makes sure that no more processes run at one time than the pool has.
+- The clusters of a set share the pool and the slot of the versions. The versions cycle
+  of a set takes that slot for one project at a time.
 - A test of a route has a line in the table of the sentinel test. The test fails
   when a route has none.
 - A test uses a table when it has more than two cases. A test that needs the

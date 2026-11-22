@@ -118,6 +118,45 @@ plain text. The route `/` serves the page of the dashboard.
 | `502` | The detail route asked for a compare of the `newer` side, and the compare failed. Or the click failed in the observer. The next request asks again. |
 | `503` | The detail route or the click did not end in 50 seconds. For a click, the usual cause is a versions cycle that holds its slot. |
 
+## The routes of a set
+
+With `--clusters`, the server serves the routes of [a set of
+clusters](../automation/observer-clusters.md). It serves no route of one cluster at the
+top. Each route of [The routes](#the-routes) but `/healthz` is under
+`/v1/clusters/{uid}`, for the cluster with that uid. A cluster that is not in the set
+gets `404`.
+
+| Tier | Route | What it carries |
+| --- | --- | --- |
+| Summary | `/v1/clusters` | The summary of the set: `page`, `strataVersion`, `records`, the two clocks, `counts`, `projects`, `selectors`, and `clusters`. |
+| Summary | `/v1/shared` | `shared`: each profile version that a cluster of the set runs. |
+| Summary | `/v1/alerts` | The rules of the alerts of the set, with their states. |
+| Cycle | `POST /v1/cycles/{cycle}` | The click "Check now": a cycle of the set starts now. |
+| Each | `/v1/clusters/{uid}/...` | Each route of one cluster, for the cluster `uid`. |
+
+- `counts` has `clusters`, `drift`, `newer`, `notChecked`, and `findings`. `drift` counts
+  the clusters with the status `drift` or `differs`, and `newer` the clusters with a
+  newer version.
+- A row of `clusters` has `uid`, `name`, `project` with `uid` and `name`, `profiles`,
+  `status`, `drift`, `newer`, `notChecked`, `checkedAt`, and `page`. `drift` counts its
+  findings. `here` is true for the cluster where the observer runs. `lastError` is the
+  refusal of the key of its project.
+- `status` is `drift` when a finding names a published version or the pods, and
+  `differs` when each finding names the copy of the cluster. It is `not-checked` when
+  no check of the cluster ended well, its key was refused, or a cause of "Not checked"
+  limits its check. It is `ok` otherwise. The rows come the worst first.
+- A row of `projects` names each project with a key: `uid`, `name`, and `lastError`, the
+  error of its last search or check.
+- A row of `selectors` names each selector of `--clusters`, with the number of clusters
+  that it selected at the last search. `unread` is true when its search failed.
+- A row of `shared` has `uid`, `name`, `version`, `scope`, `clusters`, and `projects`,
+  the uid of each project. `published` is absent for a version with no record. `copies`
+  has `same`, `of`, `differ`, and `notRead`. `differ` names each cluster whose copy
+  differs, with its `uid` and `name`.
+- A profile of a cluster of a set has `uid`. `{name}` and `{profile}` of a route of a
+  cluster take the uid, because two projects can hold one name and version. The id of a
+  finding holds the uid of the cluster and of the record.
+
 ## The images
 
 `strata-observed/1` is the document of the pods. It is no tier of a record, and it
@@ -236,7 +275,7 @@ of the file, so Git shows who muted what.
 | --- | --- |
 | `channels` | A name for each webhook. `urlFile` is the path of the file that holds its address. |
 | `level` | `cluster`, `profile`, or `pack`. |
-| `match` | A profile name or `name@version`, for `profile`. A pack name or `layer/name`, for `pack`. A `cluster` rule has none. |
+| `match` | A profile name or `name@version`, for `profile`. A pack name or `layer/name`, for `pack`. For `cluster`, the name of a cluster of [a set](../automation/observer-clusters.md), or none for each cluster. With no `--clusters`, a `cluster` rule has none. |
 | `news` | The kind of news: `drift`, `image`, `lost`, or `newer`. |
 | `send` | `now` sends immediately. `digest` waits for the next digest. A rule with no `send` is a mute. |
 | `to` | The name of a channel. A mute has none. |
@@ -259,6 +298,9 @@ of the file, so Git shows who muted what.
 - **A mute can be beside a rule that sends.** Write the mute as a second rule with
   the same level, match, and news. The mute wins until its end date. Then the rule that
   sends decides again, and the item sends its message.
+- **In a set, each message names its cluster.** A digest names the cluster on each line.
+  A cluster that leaves the set drops its items with no clear message: no check showed
+  that its findings are fixed.
 - **A newer version never pages a person.** The observer does not start with a rule
   `newer` that has `send: now`. Use `digest`.
 - **`serve` does not start with a file that does not parse.** The error names the line

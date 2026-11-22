@@ -94,6 +94,7 @@
 - [The knurl adapter](./automation/knurl.md)
 - [Preflight in a pipeline](./automation/preflight.md)
 - [The observer](./automation/observer.md)
+  - [The observer of a set of clusters](./automation/observer-clusters.md)
 
 # Reference
 

@@ -665,11 +665,11 @@ and it never shows "No change" for a pack that it did not check.
    alone stops the alerts and the read of the pods. A pod on a cluster that Palette
    built reaches the API, and it ends its first cycle. The read of the pods adds TCP
    6443: see [Add the read](#add-the-read).
-4. **Requests.** A cycle sends `GET` requests and no other method. A content cycle
-   reads the cluster, the profile version of each record, and the audit log for a
-   record that drifted. A versions cycle reads the registries and the packs
-   that the records pin. A click sends one `POST` to Palette, and each message of the
-   alerts is one `POST` to your webhook. [The requests of a
+4. **Requests.** A cycle sends `GET` requests. The search of a set of clusters is a
+   `POST` that reads. A content cycle reads the cluster, the profile version of each
+   record, and the audit log for a record that drifted. A versions cycle reads the
+   registries and the packs that the records pin. A click sends one `POST` to Palette,
+   and each message of the alerts is one `POST` to your webhook. [The requests of a
    cycle](../development/observer.md#the-requests-of-a-cycle) gives the counts.
 5. **The page holds pack values.** The detail tier shows the old and the new value of
    a pack, and the text of its diff. A secret in a value that the schema does not mark
@@ -745,6 +745,7 @@ compatibility](../reference/compatibility.md) for each change that moves a root.
 
 - [The observer shows an edit in place](../use-cases/observer.md): the problem, the
   commands, and the fix.
+- [The observer of a set of clusters](./observer-clusters.md): one observer for the clusters of some labels.
 - [The API of the observer](../reference/observer-api.md): the routes, the two
   tiers, the fields that no answer carries, and the alerts.
 - [The checks of the observer](../development/observer.md): the command of each
