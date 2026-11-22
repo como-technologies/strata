@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use super::{ANSWER_FILE, Choice, Facts, Step, keep_answer, post, question, read_answer, step};
 use crate::api::server::{HttpAnswer, Request, serve_each};
-use crate::api::{Method, PROFILE_TEMPLATE};
+use crate::api::{JSON_TYPE, Method, PROFILE_TEMPLATE};
 use crate::closed_set::ClosedSet;
 use crate::closed_set::unknown::log::Line;
 use crate::closed_set::unknown::report::{Report, SCHEMA};
@@ -323,7 +323,7 @@ fn the_post_sends_the_report_as_json_with_the_user_agent_of_strata() {
     );
     assert_eq!(
         request.header("Content-Type"),
-        Some("application/json"),
+        Some(JSON_TYPE),
         "{request:?}"
     );
     assert_eq!(

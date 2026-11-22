@@ -1067,6 +1067,15 @@ pub fn behind_of(
     .unwrap()
 }
 
+/// The bump of `pin`, a pin of a report of [`behind_of`]: what a move to the newest version does.
+///
+/// # Panics
+///
+/// When the pin has no bump.
+pub fn pin_bump(pin: &strata::ops::Pin) -> &strata::ops::Bump {
+    pin.bump.as_ref().expect("the pin is behind, with a bump")
+}
+
 /// A snapshot of the candidate file `file`, resolved against the in-memory Palette `api` and
 /// fetched at `t0`, with no validation and no progress output.
 pub fn candidate_snapshot(

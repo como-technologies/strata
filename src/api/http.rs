@@ -17,8 +17,9 @@ pub const API_KEY_HEADER: &str = "ApiKey";
 /// The header that carries the uid of the project.
 pub const PROJECT_UID_HEADER: &str = "ProjectUid";
 
-/// The media type of a JSON document, for `Accept` and for the body of a `POST`.
-const JSON_TYPE: &str = "application/json";
+/// The media type of a JSON document, for `Accept` and for the body of a `POST`. The send of the
+/// report and the servers of the tests give it to a body too.
+pub const JSON_TYPE: &str = "application/json";
 
 /// The media type that a request for a file accepts. Palette sends a file, such as the download of
 /// a profile version, only to a request that accepts a file.
