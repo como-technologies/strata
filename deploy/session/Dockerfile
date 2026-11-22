@@ -23,8 +23,10 @@ ARG JQ_VERSION=1.7.1
 ARG JQ_SHA256=5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5
 
 # The observer in observer/ is in Go. GO_VERSION is the latest stable Go at the build of the image.
-ARG GO_VERSION=1.27.3
-ARG GO_SHA256=65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
+# It is not older than the go line of each go.mod, because GOTOOLCHAIN=local below stops at a module
+# that needs a newer Go. A test of the book fails when it is older.
+ARG GO_VERSION=1.27.4
+ARG GO_SHA256=7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840
 
 # gcc and libc6-dev: the linker of rustc, and the C code of a crate. make and pkg-config: the
 # build of a crate with C code.
