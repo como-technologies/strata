@@ -9,7 +9,7 @@ use std::path::Path;
 use regex::Regex;
 
 use crate::contract::StandIn;
-use crate::files::{book, output_dir, pages};
+use crate::files::{Lang, book, output_dir, pages, under};
 use crate::toml::toml_value;
 
 /// The use cases of the book, from the root of the repository.
@@ -91,11 +91,11 @@ fn read(repo: &Path, path: &Path, bad: &mut Vec<String>) -> Option<String> {
 /// shapes below count.
 fn release_tags(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();
-    let Some(manifest) = read(repo, &repo.join("Cargo.toml"), &mut bad) else {
+    let Some(manifest) = read(repo, &repo.join(Lang::Rust.root_file()), &mut bad) else {
         return bad;
     };
     let Some(version) = toml_value(manifest.lines(), "version").map(|v| format!("v{v}")) else {
-        return vec!["Cargo.toml has no version line".to_string()];
+        return vec![format!("{} has no version line", Lang::Rust.root_file())];
     };
     let copyable = Regex::new(
         r#"(?:--version|strata-version:|STRATA_VERSION:|v=)\s*(v\d+\.\d+\.\d+)|uses:.*@(v\d+\.\d+\.\d+)|\btag = "(v\d+\.\d+\.\d+)""#,
@@ -223,7 +223,7 @@ const PLAYGROUND_OPEN: &str = "<div class=\"playground-demo\">";
 fn playground_in_a_callout(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();
     for page in pages(&book(repo)) {
-        if page.components().any(|c| c.as_os_str() == "development") {
+        if under(&shown(repo, &page), "development") {
             continue;
         }
         let Some(text) = read(repo, &page, &mut bad) else {
@@ -523,7 +523,7 @@ mod tests {
         let repo = temp.path();
         let use_cases = book(repo).join(USE_CASES);
         std::fs::create_dir_all(&use_cases).unwrap();
-        std::fs::write(repo.join("Cargo.toml"), "version = \"1.0.0\"\n").unwrap();
+        std::fs::write(repo.join(Lang::Rust.root_file()), "version = \"1.0.0\"\n").unwrap();
         std::fs::write(repo.join("README.md"), "strata\n").unwrap();
         // bytes that are not UTF-8, so the read of the page fails
         let broken = use_cases.join("broken.md");
@@ -630,7 +630,7 @@ mod tests {
         let repo = temp.path();
         let docs = book(repo);
         std::fs::create_dir_all(&docs).unwrap();
-        std::fs::write(repo.join("Cargo.toml"), "version = \"1.0.0\"\n").unwrap();
+        std::fs::write(repo.join(Lang::Rust.root_file()), "version = \"1.0.0\"\n").unwrap();
         std::fs::write(
             docs.join("current.md"),
             "strata = { git = \"ssh://git@example.com/a.git\", tag = \"v1.0.0\" }\n",

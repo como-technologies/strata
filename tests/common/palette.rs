@@ -335,6 +335,16 @@ pub fn pack_entity_route(name: &str, registry: &str) -> String {
     format!("/v1/packs/{name}/registries/{registry}")
 }
 
+/// The answer of [`pack_entity_route`], with one row of its list `tags` for each pair of `tags`. A
+/// pair holds a tag and the uid of the pack that the tag points at.
+pub fn pack_entity_answer(tags: &[(&str, &str)]) -> Value {
+    let rows: Vec<Value> = tags
+        .iter()
+        .map(|(tag, pack)| json!({"tag": tag, "packUid": pack}))
+        .collect();
+    json!({ "tags": rows })
+}
+
 /// The registry listing, `GET /v1/registries/metadata`.
 pub const REGISTRY_LISTING: &str = "/v1/registries/metadata";
 

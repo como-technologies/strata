@@ -9,8 +9,6 @@ use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::sync::{Arc, Mutex};
 
-#[cfg(target_os = "linux")]
-use strata::api::API_KEY_HEADER;
 use strata::closed_set::ClosedSet;
 #[cfg(target_os = "linux")]
 use strata::config::{KEY_VARS, PROJECT_VARS, URL_VARS};
@@ -32,9 +30,12 @@ mod walk;
 
 use walk::walk;
 
-// the stand-in for Palette, which only a test on Linux uses
+// The small HTTP server of the tests of strata, which only a test on Linux uses. The test serves
+// one answer for each request, and serves no list.
 #[cfg(target_os = "linux")]
-mod common;
+#[path = "../../../tests/common/server.rs"]
+#[allow(dead_code)]
+mod server;
 
 // The lock of the tests of strata: a process that a test starts takes it.
 #[path = "../../../tests/common/process.rs"]
@@ -1988,19 +1989,17 @@ fn arguments_of_each_process() -> Vec<String> {
 /// request waits for the answer, so it is one of the processes.
 #[cfg(target_os = "linux")]
 fn palette_that_keeps_the_key(body: &str) -> (String, Arc<Mutex<Vec<Seen>>>) {
-    let header = format!("{API_KEY_HEADER}: ");
-    let answer = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
-    common::stand_in(answer, move |head| Seen {
-        key: head
-            .iter()
-            .find_map(|line| line.strip_prefix(&header))
-            .unwrap_or_default()
-            .to_string(),
-        arguments: arguments_of_each_process(),
-    })
+    let answer = server::HttpAnswer::json(200, body);
+    let kept = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&kept);
+    let (address, _) = server::serve(move |request, _| {
+        seen.lock().unwrap().push(Seen {
+            key: request.key().unwrap_or_default().to_string(),
+            arguments: arguments_of_each_process(),
+        });
+        Some(answer.clone())
+    });
+    (address, kept)
 }
 
 /// A person runs a `reproduce` line by hand, also on a shared machine such as a runner of CI. A

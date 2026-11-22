@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -938,7 +939,8 @@ func TestAnAnswerForANewerVersionThanTheRowShowsBesideTheMove(t *testing.T) {
 func TestAClickThatGetsAnAnswerWithoutAVersionEndsWithTheWordNoAnswer(t *testing.T) {
 	for _, newest := range []string{"2.44.0", ""} {
 		t.Run("newest "+newest, func(t *testing.T) {
-			reply := `{"asks":[{"profile":"` + testkit.DexProfile + `","key":"` + testkit.DexKey + `","newest":"` + newest + `",` + testkit.NoAnswerVerdict + `,"refusals":[],"status":502}]}`
+			answer := model.Answer{Profile: testkit.DexProfile, Key: testkit.DexKey, Newest: newest, Verdict: model.VerdictNoAnswer, Refusals: []docs.Refusal{}, Status: 502}
+			reply := string(testkit.MustJSON(t, api.AsksView{Asks: []model.Answer{answer}}))
 			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": wholeFile(reply)})
 			r := clickIn(t, dir, scratch, dexHash, "0", dexClick)
 			mustHold(t, "after", textOf(r.After), gaveNoAnswer+": HTTP 502.")
