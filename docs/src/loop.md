@@ -262,6 +262,10 @@ clears. This send is optional too. It needs a Secret with the address of each we
 see [Alerts](./automation/observer.md#alerts). Palette has no event for a published
 version that changed, so the observer sends one until Palette has it.
 
+One observer can also watch a set of clusters in more than one project, with one key
+for each project. Then the publish step adds `--set`: see [The observer of a set of
+clusters](./automation/observer-clusters.md).
+
 ### You move a cluster
 
 Before the move, ask Palette if the move replaces the nodes:
