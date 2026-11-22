@@ -6,7 +6,9 @@
 //! reads the line comments, `//` and `#`, and the block comments, `/* ... */`.
 //!
 //! A sentence that the change does not touch is not in the count, also in a block that the change
-//! touches. The lines of a file that git finds as moved are not added lines.
+//! touches. The lines of a file that git finds as moved are not added lines. A comment after code
+//! on its line is not in the count. A `//`, a `#`, or a `/*` after code can also be in a string,
+//! and the check reads no string of a language.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -183,8 +185,8 @@ mod tests {
         format!("{}.", vec!["word"; count].join(" "))
     }
 
-    /// The criterion of #903: a sentence of more than 25 words fails, in a line comment `//` and
-    /// `#`, and in a block comment.
+    /// The criteria of #903 and #944. A sentence of more than 25 words fails in a line comment `//`
+    /// and `#`, in a block comment, and in a query of CodeQL.
     #[test]
     fn a_comment_sentence_of_more_than_25_words_is_a_fault_in_each_form_of_comment() {
         let over = sentence_of(MOST_WORDS + 1);
@@ -194,6 +196,7 @@ mod tests {
             ("a.sh", format!("#!/bin/sh\n# {over}\n")),
             ("a.go", format!("/*\n{over}\n*/\npackage a\n")),
             ("a.css", format!("/* {over} */\n")),
+            ("a.ql", format!("// {over}\nselect 1\n")),
         ] {
             let marks = marks_of(path).unwrap();
             let all: BTreeSet<usize> = (1..=text.lines().count()).collect();
@@ -233,6 +236,22 @@ mod tests {
             changed_sentences(&marks, &text, &BTreeSet::from([1])).len(),
             1
         );
+    }
+
+    /// The criterion of #944. A comment after code on its line is not in the count, as
+    /// "The check of the comment sentences" in `documentation.md` states.
+    #[test]
+    fn a_comment_after_code_on_its_line_is_not_in_the_count() {
+        let over = sentence_of(MOST_WORDS + 1);
+        for (path, text) in [
+            ("a.rs", format!("let a = 1; // {over}\n")),
+            ("a.sh", format!("a=1 # {over}\n")),
+            ("a.ql", format!("select 1 /* {over} */\n")),
+        ] {
+            let marks = marks_of(path).unwrap();
+            let found = changed_sentences(&marks, &text, &BTreeSet::from([1]));
+            assert!(found.is_empty(), "{path}: {found:?}");
+        }
     }
 
     #[test]
@@ -283,5 +302,42 @@ mod tests {
             "{found:?}"
         );
         assert!(check(repo, "no-such-ref").is_err());
+    }
+
+    /// The result of the check of a git repository that stages each file of `names` with a comment
+    /// sentence of 26 words. The base `main` is an empty commit.
+    fn check_of_staged(names: &[&str]) -> Result<Found, String> {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path();
+        let over = sentence_of(MOST_WORDS + 1);
+        crate::git::git(repo, &["init", "--quiet", "--initial-branch=main"]);
+        crate::git::git(repo, &["commit", "--quiet", "--allow-empty", "-m", "base"]);
+        for name in names {
+            std::fs::write(repo.join(name), format!("// {over}\n")).unwrap();
+        }
+        crate::git::git(repo, &["add", "."]);
+        check(repo, "main")
+    }
+
+    /// The criterion of #944. git writes a tab after a name with a space, and a name that is not
+    /// ASCII in quotes. The check reads each such file, and names it as the tree names it.
+    #[test]
+    fn the_check_reads_a_file_with_a_space_or_a_character_that_is_not_ascii_in_its_name() {
+        let found = check_of_staged(&["a b.rs", "café.rs", "a é.rs"]).unwrap();
+        assert_eq!(found.sentences, 3, "{found:?}");
+        let places: Vec<&str> = found
+            .faults
+            .iter()
+            .filter_map(|fault| fault.split(": ").next())
+            .collect();
+        assert_eq!(places, ["a b.rs:1", "a é.rs:1", "café.rs:1"], "{found:?}");
+    }
+
+    /// The criterion of #944. git writes the name `notes é 2.md` in quotes and with a tab at its
+    /// end. The check reads the name, skips the file, and finds no fault.
+    #[test]
+    fn a_staged_markdown_file_with_a_space_and_a_character_that_is_not_ascii_gives_no_fault() {
+        let found = check_of_staged(&["notes é 2.md"]).unwrap();
+        assert_eq!((found.sentences, found.faults.len()), (0, 0), "{found:?}");
     }
 }
