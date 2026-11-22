@@ -84,16 +84,17 @@ fn added_lines(diff: &str) -> Result<BTreeMap<String, BTreeSet<usize>>, String> 
 /// The path of the new side of a file, from its header line without the first `+++ `. A deleted
 /// file has `/dev/null` as its new side, and no path.
 ///
-/// git writes a name that holds a space with a tab at its end. It writes a name that holds a
-/// control character, a `"`, a `\`, or a character that is not ASCII in quotes, with the escapes of
-/// C. The error names a name in quotes that does not decode to UTF-8.
+/// git writes a name that holds a space with a tab at its end, also after the end quote. It writes
+/// a name that holds a control character, a `"`, a `\`, or a character that is not ASCII in quotes,
+/// with the escapes of C. The error names a name in quotes that does not decode to UTF-8.
 fn new_path(name: &str) -> Result<Option<String>, String> {
+    let name = name.strip_suffix('\t').unwrap_or(name);
     let path = if name.starts_with('"') {
         let bytes = go_lex::unquote(name).map_err(|e| format!("git diff: {e}"))?;
         String::from_utf8(bytes)
             .map_err(|_| format!("git diff: the file name {name} is not UTF-8"))?
     } else {
-        name.strip_suffix('\t').unwrap_or(name).to_string()
+        name.to_string()
     };
     Ok(path.strip_prefix("b/").map(str::to_string))
 }
@@ -146,8 +147,9 @@ rename to new.go
         assert_eq!(added["new.go"], BTreeSet::from([4]));
     }
 
-    /// The criterion of #944. git writes a tab after a name with a space. It writes a name with a
-    /// mark or a character that is not ASCII in quotes. A name that is not UTF-8 is an error.
+    /// The criterion of #944. git writes a tab after a name with a space, also after the end quote.
+    /// It writes a name with a mark or a character that is not ASCII in quotes. A name that is not
+    /// UTF-8 is an error.
     #[test]
     fn the_added_lines_of_a_diff_name_a_file_with_a_space_a_mark_or_a_character_that_is_not_ascii()
     {
@@ -161,12 +163,16 @@ diff --git \"a/caf\\303\\251.rs\" \"b/caf\\303\\251.rs\"
 diff --git \"a/q\\\"t\\tb.rs\" \"b/q\\\"t\\tb.rs\"
 +++ \"b/q\\\"t\\tb.rs\"
 @@ -0,0 +3 @@
+diff --git \"a/a \\303\\251.rs\" \"b/a \\303\\251.rs\"
++++ \"b/a \\303\\251.rs\"\t
+@@ -0,0 +4 @@
 ";
         let added = added_lines(diff).unwrap();
         assert_eq!(
             added,
             BTreeMap::from([
                 ("a b.rs".to_string(), BTreeSet::from([1])),
+                ("a é.rs".to_string(), BTreeSet::from([4])),
                 ("café.rs".to_string(), BTreeSet::from([2])),
                 ("q\"t\tb.rs".to_string(), BTreeSet::from([3])),
             ])

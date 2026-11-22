@@ -304,27 +304,40 @@ mod tests {
         assert!(check(repo, "no-such-ref").is_err());
     }
 
-    /// The criterion of #944. git writes a tab after a name with a space, and a name that is not
-    /// ASCII in quotes. The check reads each such file, and names it as the tree names it.
-    #[test]
-    fn the_check_reads_a_file_with_a_space_or_a_character_that_is_not_ascii_in_its_name() {
+    /// The result of the check of a git repository that stages each file of `names` with a comment
+    /// sentence of 26 words. The base `main` is an empty commit.
+    fn check_of_staged(names: &[&str]) -> Result<Found, String> {
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path();
         let over = sentence_of(MOST_WORDS + 1);
         crate::git::git(repo, &["init", "--quiet", "--initial-branch=main"]);
         crate::git::git(repo, &["commit", "--quiet", "--allow-empty", "-m", "base"]);
-        for name in ["a b.rs", "café.rs"] {
+        for name in names {
             std::fs::write(repo.join(name), format!("// {over}\n")).unwrap();
         }
         crate::git::git(repo, &["add", "."]);
+        check(repo, "main")
+    }
 
-        let found = check(repo, "main").unwrap();
-        assert_eq!(found.sentences, 2, "{found:?}");
+    /// The criterion of #944. git writes a tab after a name with a space, and a name that is not
+    /// ASCII in quotes. The check reads each such file, and names it as the tree names it.
+    #[test]
+    fn the_check_reads_a_file_with_a_space_or_a_character_that_is_not_ascii_in_its_name() {
+        let found = check_of_staged(&["a b.rs", "café.rs", "a é.rs"]).unwrap();
+        assert_eq!(found.sentences, 3, "{found:?}");
         let places: Vec<&str> = found
             .faults
             .iter()
             .filter_map(|fault| fault.split(": ").next())
             .collect();
-        assert_eq!(places, ["a b.rs:1", "café.rs:1"], "{found:?}");
+        assert_eq!(places, ["a b.rs:1", "a é.rs:1", "café.rs:1"], "{found:?}");
+    }
+
+    /// The criterion of #944. git writes the name `notes é 2.md` in quotes and with a tab at its
+    /// end. The check reads the name, skips the file, and finds no fault.
+    #[test]
+    fn a_staged_markdown_file_with_a_space_and_a_character_that_is_not_ascii_gives_no_fault() {
+        let found = check_of_staged(&["notes é 2.md"]).unwrap();
+        assert_eq!((found.sentences, found.faults.len()), (0, 0), "{found:?}");
     }
 }

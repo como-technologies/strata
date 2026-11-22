@@ -817,6 +817,25 @@ fn the_check_lists_each_copy_of_rust_and_each_const_and_helper_that_the_change_a
     );
 }
 
+/// The criterion of #944. git writes the name `src/b é.rs` in quotes and with a tab at its end.
+/// The check reads the file, and names it as the tree names it.
+#[test]
+fn the_check_reads_a_file_with_a_space_and_a_character_that_is_not_ascii_in_its_name() {
+    let repo = Repo::new();
+    rust_package(&repo);
+    repo.commit("base");
+    repo.branch("change");
+    repo.write("src/b é.rs", "pub const AGAIN: &str = \"strata-x/1\";\n");
+    repo.commit("change");
+
+    let (findings, skipped) = repo.copies();
+    assert_eq!(
+        findings,
+        ["src/b é.rs:1 [const] AGAIN = \"strata-x/1\": the value of SCHEMA (src/lib.rs:19)"]
+    );
+    assert!(skipped.is_empty(), "{skipped:?}");
+}
+
 /// A value that the file of a literal cannot name is no copy. The test has an unexported const of
 /// another package, and a const of a package that imports the package of the literal. It also has
 /// a const of a test, for code that is no test.
