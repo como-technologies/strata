@@ -34,7 +34,7 @@ pub(super) fn answered(root: &Path, request: &Request, body: Vec<u8>) -> io::Res
     };
     // a Palette user always has an email, and no subject has an empty name. So the empty name is a
     // user that no binding names.
-    let user = key_user(root, request.key.as_deref())?.unwrap_or_default();
+    let user = key_user(root, request.key())?.unwrap_or_default();
     Ok(rbacs_answer(stored, &user).to_string().into_bytes())
 }
 
@@ -58,6 +58,7 @@ mod tests {
     use std::fs;
 
     use serde_json::Value;
+    use strata::api::{API_KEY_HEADER, PROJECT_UID_HEADER};
 
     use crate::common_palette::system_rbacs;
     use crate::palette::{Request, served};
@@ -96,13 +97,8 @@ mod tests {
             ("k-wilma", "wilma@example.com"),
         ]);
         let answer = |target: &str, key: Option<&str>| {
-            let request = Request {
-                target: target.to_string(),
-                project: Some("p1".to_string()),
-                key: key.map(str::to_string),
-                accept: None,
-                body: Vec::new(),
-            };
+            let headers = [(PROJECT_UID_HEADER, Some("p1")), (API_KEY_HEADER, key)];
+            let request = Request::new("GET", target, &headers, "");
             let (status, body) = served(dir, &request).unwrap();
             assert_eq!(status, 200, "{target}");
             serde_json::from_slice::<Value>(&body).unwrap()

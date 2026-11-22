@@ -19,7 +19,7 @@ use crate::common_palette;
 use crate::facts::subjects::{Origin, Read, SOURCES, floor, request_of, unsourced};
 use crate::facts::{Fact, Kind, Scope, expand, fill};
 use crate::palette::{TENANT_ROUTES, serve_on};
-use crate::tenant::{TAG_FILTER_LISTING, TENANT, Tenant};
+use crate::tenant::{CLUSTER_LISTING, TAG_FILTER_LISTING, TENANT, Tenant};
 
 /// The facts of a small list: the cluster listing, the document of a cluster, and its cloud
 /// config. The list also has a search that sends a body and a host that the run cannot find.
@@ -108,7 +108,7 @@ const FACTS: &str = r#"
 fn documents(state: &str) -> Vec<(&'static str, Value)> {
     vec![
         (
-            "v1/dashboard/spectroclusters/meta",
+            CLUSTER_LISTING,
             json!([{
                 "metadata": {"name": "payments", "uid": "c1"},
                 "spec": {"cloudType": "aws"},
@@ -155,11 +155,17 @@ fn stand_in(docs: &[(&str, Value)]) -> (tempfile::TempDir, StandIn) {
 fn serving(docs: &[(&str, Value)]) -> (tempfile::TempDir, String) {
     let dir = tempfile::tempdir().unwrap();
     write_tenant(dir.path(), docs);
+    let url = serve_files(dir.path());
+    (dir, url)
+}
+
+/// The address of the stand-in server on the files under `root`.
+fn serve_files(root: &Path) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
-    let root = dir.path().to_path_buf();
+    let root = root.to_path_buf();
     std::thread::spawn(move || serve_on(&root, &listener));
-    (dir, url)
+    url
 }
 
 /// A client of the stand-in server on a tenant that holds `docs`.
@@ -372,7 +378,7 @@ fn a_listing_is_read_once_for_all_the_requests_that_use_it() {
         subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}");
     }
     assert_eq!(
-        api.calls("/v1/dashboard/spectroclusters/meta"),
+        api.calls(common_palette::CLUSTER_LISTING),
         1,
         "the listing is read once"
     );
@@ -380,11 +386,11 @@ fn a_listing_is_read_once_for_all_the_requests_that_use_it() {
 
 #[test]
 fn a_tenant_with_no_cluster_has_no_subject_and_the_reason_says_what_the_listing_held() {
-    let api = MemoryApi::new().with("/v1/dashboard/spectroclusters/meta", json!([]));
+    let api = MemoryApi::new().with(common_palette::CLUSTER_LISTING, json!([]));
     let probe = subject::Probe::new(&api, &api);
     match subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}") {
         subject::Subject::Missing(why) => {
-            assert!(why.contains("/v1/dashboard/spectroclusters/meta"), "{why}");
+            assert!(why.contains(common_palette::CLUSTER_LISTING), "{why}");
             assert!(why.contains("/0/metadata/uid"), "{why}");
         }
         other => panic!("expected no subject, got {other:?}"),
@@ -393,7 +399,7 @@ fn a_tenant_with_no_cluster_has_no_subject_and_the_reason_says_what_the_listing_
 
 #[test]
 fn a_listing_that_fails_is_a_failure_to_find_and_not_a_missing_object() {
-    let api = MemoryApi::new().failing("/v1/dashboard/spectroclusters/meta", 403, "{}");
+    let api = MemoryApi::new().failing(common_palette::CLUSTER_LISTING, 403, "{}");
     let probe = subject::Probe::new(&api, &api);
     match subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}") {
         subject::Subject::Failed(failure) => assert_eq!(failure.status, Some(403)),
@@ -405,7 +411,7 @@ fn a_listing_that_fails_is_a_failure_to_find_and_not_a_missing_object() {
 fn a_value_with_a_slash_is_one_segment_of_the_path_with_the_escape_of_the_library() {
     // the run skipped the fact for such a value before. Now it sends what strata sends
     let listing = json!([{"metadata": {"uid": "a/b"}}]);
-    let api = MemoryApi::new().with("/v1/dashboard/spectroclusters/meta", listing);
+    let api = MemoryApi::new().with(common_palette::CLUSTER_LISTING, listing);
     let probe = subject::Probe::new(&api, &api);
     assert_eq!(
         subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}"),
@@ -840,7 +846,7 @@ fn a_fact_that_reads_no_field_and_no_value_is_skipped_with_a_reason() {
 #[test]
 fn a_skipped_fact_does_not_change_the_exit_code() {
     let (_root, stand_in) = stand_in(&documents("Running"));
-    let empty = MemoryApi::new().with("/v1/dashboard/spectroclusters/meta", json!([]));
+    let empty = MemoryApi::new().with(common_palette::CLUSTER_LISTING, json!([]));
     let contract = contract(&stand_in, &empty);
     assert_eq!(outcome(&contract, "cluster-document"), Outcome::Skipped);
     assert_eq!(contract.summary.differs, 0);
@@ -1379,7 +1385,7 @@ fn a_status_that_is_not_2xx_makes_the_fact_differ() {
 #[test]
 fn a_listing_that_fails_makes_the_fact_that_needs_it_an_error_and_the_exit_code_2() {
     let (_root, stand_in) = stand_in(&documents("Running"));
-    let api = MemoryApi::new().failing("/v1/dashboard/spectroclusters/meta", 500, "{}");
+    let api = MemoryApi::new().failing(common_palette::CLUSTER_LISTING, 500, "{}");
     let contract = contract(&stand_in, &api);
     assert_eq!(outcome(&contract, "cluster-document"), Outcome::Error);
     assert_eq!(contract.exit_code(), 2);
@@ -1532,10 +1538,7 @@ fn github(tags: &[(&str, &str)]) -> (tempfile::TempDir, String) {
         let release = json!({"tag_name": tag, "published_at": "2026-10-29T09:20:20Z"});
         tenant.put(TENANT, &format!("repos/{repo}/releases/latest"), &release);
     }
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
-    let root = dir.path().to_path_buf();
-    std::thread::spawn(move || serve_on(&root, &listener));
+    let url = serve_files(dir.path());
     (dir, url)
 }
 
@@ -2508,7 +2511,7 @@ fn a_fact_with_one_request_keeps_its_entry_and_with_more_it_takes_the_outcome_th
 #[test]
 fn a_window_with_a_cluster_turns_a_skipped_fact_of_a_cluster_into_an_error() {
     let (_root, stand_in) = stand_in(&documents("Running"));
-    let empty = MemoryApi::new().with("/v1/dashboard/spectroclusters/meta", json!([]));
+    let empty = MemoryApi::new().with(common_palette::CLUSTER_LISTING, json!([]));
     let mut contract = contract(&stand_in, &empty);
     // the weekly run: a tenant with no cluster skips the facts of a cluster, and the exit code is 0
     assert_eq!(outcome(&contract, "cluster-document"), Outcome::Skipped);

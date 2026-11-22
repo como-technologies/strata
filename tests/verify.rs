@@ -39,12 +39,12 @@ use common::{
     cluster_variables_route, clusters_denied, edge_host_route, error_body, fetch_examples,
     filters_denied, group_resolved_values_route, group_route, listing, manifest_route,
     manifests_route, no_manifests, no_repave, no_roles_message, no_template, no_variables,
-    operation_forbidden_message, pack_entity_route, pack_listing_route, post, profile_document,
-    profile_route, project_listing, rbacs_answer, read_json, resolved_values_route, serve_cluster,
-    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
-    snapshot_of_at, snapshot_of_ref, strata_command, system_rbacs, template,
-    template_validate_repave_route, update_validate_packs_route, validate_name_route,
-    variables_route, write_record, write_yaml,
+    operation_forbidden_message, pack_entity_answer, pack_entity_route, pack_listing_route, post,
+    profile_document, profile_route, project_listing, rbacs_answer, read_json,
+    resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing, serve_profile,
+    serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command,
+    system_rbacs, template, template_validate_repave_route, update_validate_packs_route,
+    validate_name_route, variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -6088,19 +6088,18 @@ fn serve_registry_for_b(dir: &Path) -> MemoryApi {
             .iter()
             .find(|m| m["spec"]["name"] == name)
             .unwrap();
+        let uid = pack["packUid"].as_str().unwrap();
         let summary = PackFixture::public(
             name,
             pack["layer"].as_str().unwrap(),
             pack["version"].as_str().unwrap(),
-            pack["packUid"].as_str().unwrap(),
+            uid,
             entry["spec"]["digest"].as_str().unwrap_or_default(),
             "registry: defaults",
         )
         .summary(&[]);
-        let entity = serde_json::json!({"tags": [
-            {"tag": "floating.x", "packUid": pack["packUid"]},
-            {"tag": pack["tag"], "packUid": pack["packUid"]},
-        ]});
+        let entity =
+            pack_entity_answer(&[("floating.x", uid), (pack["tag"].as_str().unwrap(), uid)]);
         api = serve_registry_pack(
             api,
             name,
@@ -6369,10 +6368,10 @@ fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
         "",
     );
     let summary = serde_json::json!([ubuntu.summary(&[])]);
-    let entity = serde_json::json!({"tags": [
-        {"tag": "LTS__24.x", "packUid": "pk-ubuntu-2404"},
-        {"tag": "LTS__24.04", "packUid": "pk-ubuntu-2404"},
-    ]});
+    let entity = pack_entity_answer(&[
+        ("LTS__24.x", "pk-ubuntu-2404"),
+        ("LTS__24.04", "pk-ubuntu-2404"),
+    ]);
     let mut api = serve_registry_pack(MemoryApi::new(), "ubuntu-aws", summary, entity, "reg");
     // Palette refuses a cluster profile with no k8s, cni, or csi layer: serve one of each
     let core = [
@@ -6388,7 +6387,7 @@ fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
             serde_json::json!([
                 PackFixture::new(name, layer, "1.0.0", &uid, "reg", "", "").summary(&[])
             ]),
-            serde_json::json!({"tags": [{"tag": "1.0.0", "packUid": uid}]}),
+            pack_entity_answer(&[("1.0.0", &uid)]),
             "reg",
         );
     }
