@@ -108,8 +108,9 @@ fn app_profile(r: &mut Runner) {
     );
 }
 
-/// A profile of a project. Its manifest pack has a manifest with a uid in the published template
-/// and in the draft. Its variable has every property that Palette gives.
+/// A profile of a project. The cluster of [`cluster_and_group`] runs it, so the two lists of the
+/// clusters in its status name that cluster. Its manifest pack has a manifest with a uid in the
+/// published template and in the draft. Its variable has every property that Palette gives.
 fn profile(r: &mut Runner) {
     let manifests = json!([{"name": "namespace-policy", "uid": format!("{FIELDS_PROFILE}m")}]);
     let pack = json!({"name": "namespace-policy", "layer": "addon", "type": "manifest",
@@ -122,7 +123,8 @@ fn profile(r: &mut Runner) {
             "spec": {"version": "1.0.0",
                 "published": {"type": "add-on", "cloudType": "all", "packs": [pack]},
                 "draft": {"type": "add-on", "cloudType": "all", "packs": [pack]}},
-            "status": {"isPublished": true, "inUseClusterUids": []}}),
+            "status": {"isPublished": true, "inUseClusterUids": [FIELDS_CLUSTER],
+                "inUseClusters": [{"uid": FIELDS_CLUSTER, "name": "ledger", "projectUid": DEV}]}}),
     );
     r.answer(
         DEV,
