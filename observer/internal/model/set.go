@@ -2,6 +2,7 @@ package model
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -183,7 +184,7 @@ func RowOf(m Member) ClusterRow {
 }
 
 // Shared is one profile version that the clusters of a set run: the screen of the shared versions. Clusters counts
-// the clusters that run it, in Projects projects. Published is the answer of `verify` for its record, and it is
+// the clusters that run it, and Projects names the project of each, by uid. Published is the answer of `verify` for its record, and it is
 // absent when no record holds the version.
 type Shared struct {
 	UID       string     `json:"uid"`
@@ -191,7 +192,7 @@ type Shared struct {
 	Version   string     `json:"version"`
 	Scope     string     `json:"scope,omitempty"`
 	Clusters  int        `json:"clusters"`
-	Projects  int        `json:"projects"`
+	Projects  []string   `json:"projects"`
 	Published *Published `json:"published,omitempty"`
 	Copies    Copies     `json:"copies"`
 }
@@ -246,7 +247,7 @@ func SharedOf(members []Member) []Shared {
 	out := make([]Shared, 0, len(order))
 	for _, uid := range order {
 		sh := *byUID[uid]
-		sh.Projects = len(projects[uid])
+		sh.Projects = slices.Sorted(maps.Keys(projects[uid]))
 		out = append(out, sh)
 	}
 	slices.SortStableFunc(out, func(a, b Shared) int {

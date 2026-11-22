@@ -63,24 +63,41 @@ const vm = require("vm");
 const [scripts, apiDir, state, mode, ...args] = process.argv.slice(2);
 const EVIL = "<img src=x onerror=alert(1)>\"'&";
 
-// read gives a file of the set, or of its base. With a fallback, a file that neither holds gives the fallback.
-function read(name, fallback) {
-  const own = path.join(apiDir, state, name);
+// readIn gives a file of the set in dir, or of its base. With a fallback, a file that neither holds gives the fallback.
+function readIn(dir, name, fallback) {
+  const own = path.join(apiDir, dir, name);
   if (fs.existsSync(own)) return JSON.parse(fs.readFileSync(own, "utf8"));
-  const basePath = path.join(apiDir, state, "base");
+  const basePath = path.join(apiDir, dir, "base");
   const base = fs.existsSync(basePath) ? fs.readFileSync(basePath, "utf8").trim() : "";
   const inBase = base ? path.join(apiDir, base, name) : "";
   if (fallback !== undefined && !(inBase && fs.existsSync(inBase))) return fallback;
   return JSON.parse(fs.readFileSync(inBase, "utf8"));
 }
 
-const data = {
-  cluster: read("cluster.json"), findings: read("findings.json"), profiles: read("profiles.json"), newer: read("newer.json"),
-  notchecked: read("notchecked.json"), events: read("events.json"), diffs: read("diffs.json"), images: read("images.json"),
-  asks: read("asks.json"), replies: read("replies.json", {asks: []}),
-  // A set with no alerts.json is a page of an observer that started without --alerts.
-  alerts: read("alerts.json", {set: false, channels: [], digestEvery: "", waiting: 0, rules: [], sample: ""}),
-};
+// NO_ALERTS is the answer of /v1/alerts of an observer that started without --alerts.
+const NO_ALERTS = {set: false, channels: [], digestEvery: "", waiting: 0, rules: [], sample: ""};
+
+// dataOf reads the answers of one cluster in the directory dir.
+function dataOf(dir) {
+  const read = (name, fallback) => readIn(dir, name, fallback);
+  return {
+    cluster: read("cluster.json"), findings: read("findings.json"), profiles: read("profiles.json"), newer: read("newer.json"),
+    notchecked: read("notchecked.json"), events: read("events.json"), diffs: read("diffs.json"), images: read("images.json"),
+    asks: read("asks.json"), replies: read("replies.json", {asks: []}),
+    // A set with no alerts.json is a page of an observer that started without --alerts.
+    alerts: read("alerts.json", NO_ALERTS),
+  };
+}
+
+// A set of clusters holds clusters.json, shared.json, and the answers of each cluster in members/<uid>. Each cluster of the set gets
+// the alerts of the set.
+const isSet = fs.existsSync(path.join(apiDir, state, "clusters.json"));
+function setDataOf() {
+  const alerts = readIn(state, "alerts.json", NO_ALERTS), members = {};
+  for (const uid of fs.readdirSync(path.join(apiDir, state, "members"))) members[uid] = {...dataOf(path.join(state, "members", uid)), alerts};
+  return {set: readIn(state, "clusters.json"), shared: readIn(state, "shared.json"), alerts, members};
+}
+const data = isSet ? setDataOf() : dataOf(state);
 
 // poison puts the injection after each name that the page shows, in each file. A name that appears in
 // more than one file gets it in each, so the data stays consistent and the links still lead somewhere.
@@ -154,7 +171,19 @@ function poison(d) {
   return out;
 }
 
-const served = mode === "poison" ? poison(data) : data;
+// poisonSet puts the injection in each name of the set, and poisons the answers of each cluster.
+function poisonSet(d) {
+  const tag = s => typeof s === "string" && s ? s + EVIL : s;
+  const set = JSON.parse(JSON.stringify(d.set)), shared = JSON.parse(JSON.stringify(d.shared));
+  set.clusters.forEach(c => { c.name = tag(c.name); c.project.name = tag(c.project.name); });
+  set.projects.forEach(p => { p.name = tag(p.name); });
+  set.selectors.forEach(s => { s.selector = tag(s.selector); });
+  shared.shared.forEach(s => { s.name = tag(s.name); s.version = tag(s.version); s.scope = tag(s.scope); s.copies.differ.forEach(c => { c.name = tag(c.name); }); });
+  const members = Object.fromEntries(Object.entries(d.members).map(([uid, m]) => [uid, poison(m)]));
+  return {set, shared, alerts: d.alerts, members};
+}
+
+const served = mode === "poison" ? (isSet ? poisonSet(data) : poison(data)) : data;
 
 
 // requests lists each request that the page sent, in order. jumps lists the id of each element that the page scrolled to.
@@ -173,43 +202,46 @@ let gate = Promise.resolve();
 const ROUTES = {"/v1/cluster": "cluster", "/v1/findings": "findings", "/v1/profiles": "profiles", "/v1/newer": "newer", "/v1/notchecked": "notchecked", "/v1/events": "events", "/v1/images": "images", "/v1/asks": "asks", "/v1/alerts": "alerts"};
 const fail = status => ({ok: false, status, json: async () => ({error: "failed"})});
 
-// replyTo gives the answer of the dev server to a question: the answer that the set holds, else its reply.
-function replyTo(profile, key) {
+// replyTo gives the answer of the dev server to a question: the answer that the cluster d holds, else its reply.
+function replyTo(d, profile, key) {
   const same = a => a.profile === profile && a.key === key;
-  const held = served.asks.asks.find(same);
+  const held = d.asks.asks.find(same);
   if (held && held.verdict !== "no-answer") return held;
-  return served.replies.asks.find(same) || held || null;
+  return d.replies.asks.find(same) || held || null;
 }
 
-async function fakeFetch(url, opts = {}) {
-  if (fetchFails) throw new TypeError("the network failed");
-  const u = new URL(url, "http://127.0.0.1");
-  const method = opts.method || "GET";
-  requests.push({method, path: u.pathname + u.search, headers: Object.keys(opts.headers || {})});
+// subjectOfSegment reads the profile of a route of a pack: name@version, or the uid of a profile of a cluster of a set.
+function subjectOfSegment(d, segment) {
+  const p = d.profiles.profiles.find(x => x.uid && x.uid === segment);
+  return p ? `${p.name}@${p.version}` : segment;
+}
+
+// answerOf answers a route of one cluster, whose answers are d. pathname is the route of an observer of one cluster.
+async function answerOf(d, pathname, u, method) {
   let body = null;
-  if (failAsks && u.pathname === "/v1/asks") return fail(500);
-  if (ROUTES[u.pathname]) {
-    body = served[ROUTES[u.pathname]];
+  if (failAsks && pathname === "/v1/asks") return fail(500);
+  if (ROUTES[pathname]) {
+    body = d[ROUTES[pathname]];
   } else {
-    const m = /^\/v1\/packs\/([^/]+)\/([^/]+)\/([^/]+)\/diff$/.exec(u.pathname);
+    const m = /^\/v1\/packs\/([^/]+)\/([^/]+)\/([^/]+)\/diff$/.exec(pathname);
     if (m && failDiffs > 0) {
       failDiffs--;
       return fail(503);
     }
     if (m) {
-      const [profile, layer, name] = m.slice(1).map(decodeURIComponent);
-      body = served.diffs.find(d => d.profile === profile && d.key === `${layer}/${name}` && d.side === u.searchParams.get("side")) || null;
+      const [segment, layer, name] = m.slice(1).map(decodeURIComponent), profile = subjectOfSegment(d, segment);
+      body = d.diffs.find(x => x.profile === profile && x.key === `${layer}/${name}` && x.side === u.searchParams.get("side")) || null;
     }
-    const ask = /^\/v1\/packs\/([^/]+)\/([^/]+)\/([^/]+)\/ask$/.exec(u.pathname);
+    const ask = /^\/v1\/packs\/([^/]+)\/([^/]+)\/([^/]+)\/ask$/.exec(pathname);
     if (ask && method === "POST") {
       await gate;
       if (postStatus === "network") throw new TypeError("the network failed");
       if (postStatus) return fail(Number(postStatus));
-      const [profile, layer, name] = ask.slice(1).map(decodeURIComponent);
-      body = replyTo(profile, `${layer}/${name}`);
+      const [segment, layer, name] = ask.slice(1).map(decodeURIComponent);
+      body = replyTo(d, subjectOfSegment(d, segment), `${layer}/${name}`);
     }
     // the click "Check now": the observer starts the cycle, as the dev server says
-    const cycle = /^\/v1\/cycles\/([^/]+)$/.exec(u.pathname);
+    const cycle = /^\/v1\/cycles\/([^/]+)$/.exec(pathname);
     if (cycle && method === "POST") {
       await gate;
       if (postStatus === "network") throw new TypeError("the network failed");
@@ -220,6 +252,23 @@ async function fakeFetch(url, opts = {}) {
   return {ok: body !== null, status: body === null ? 404 : 200, json: async () => JSON.parse(JSON.stringify(body))};
 }
 
+// SET_ROUTES are the routes of a set of clusters. A set serves no route of one cluster at the top: each one is under
+// /v1/clusters/<uid>, and the cycles and the alerts belong to the set.
+const SET_ROUTES = {"/v1/clusters": "set", "/v1/shared": "shared", "/v1/alerts": "alerts"};
+const json = body => ({ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(body))});
+
+async function fakeFetch(url, opts = {}) {
+  if (fetchFails) throw new TypeError("the network failed");
+  const u = new URL(url, "http://127.0.0.1");
+  const method = opts.method || "GET";
+  requests.push({method, path: u.pathname + u.search, headers: Object.keys(opts.headers || {})});
+  if (!isSet) return answerOf(served, u.pathname, u, method);
+  if (SET_ROUTES[u.pathname]) return json(served[SET_ROUTES[u.pathname]]);
+  if (/^\/v1\/cycles\/[^/]+$/.test(u.pathname)) return answerOf(served.alerts, u.pathname, u, method);
+  const m = /^\/v1\/clusters\/([^/]+)(\/.*)$/.exec(u.pathname);
+  const member = m ? served.members[decodeURIComponent(m[1])] : null;
+  return member ? answerOf(member, "/v1" + m[2], u, method) : fail(404);
+}
 // listeners holds the handlers that the scripts add to the document, by event type.
 const listeners = {};
 const elements = {};

@@ -122,7 +122,7 @@ func TestOneProfileVersionOnThreeClustersIsOneCheckOfVerify(t *testing.T) {
 		t.Errorf("%d compares, want one for each cluster", compares)
 	}
 	shared := s.Shared()
-	if len(shared) != 1 || shared[0].Clusters != 3 || shared[0].Copies.Same != 3 || shared[0].Copies.Of != 3 || shared[0].Projects != 1 {
+	if len(shared) != 1 || shared[0].Clusters != 3 || shared[0].Copies.Same != 3 || shared[0].Copies.Of != 3 || len(shared[0].Projects) != 1 {
 		t.Errorf("shared %+v", shared)
 	}
 }

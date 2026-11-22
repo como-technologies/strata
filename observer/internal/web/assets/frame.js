@@ -12,6 +12,7 @@ function alertsCount() {
 
 // imagesCount is the count of the nav item Images: "Off" when the observer does not read the pods, and "-" before the first read.
 function imagesCount() {
+  if (elsewhere()) return h`<span class="cnt" title="${ELSEWHERE_WORDS}">Own cluster only</span>`;
   return h`<span class="cnt">${podsOff() ? "Off" : imageNum(D.images.counts.images)}</span>`;
 }
 
@@ -20,6 +21,7 @@ const ORDER = ["findings", "images", "newer", "notchecked", "profiles"];
 const inOrder = byKey => ORDER.filter(k => byKey[k]).map(k => byKey[k]);
 
 function navLinks(cur) {
+  if (SET && S.cluster === null) return setNavLinks(cur);
   const c = D.cluster, n = c.counts;
   const sections = {
     findings: ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${heldOnly() ? n.findings : num(n.findings)}</span>`],
@@ -29,7 +31,8 @@ function navLinks(cur) {
     profiles: ["profiles", "Profiles", h`<span class="cnt">${known(n.profiles)}</span>`],
   };
   const items = [["overview", "Overview", ""], ...inOrder(sections), ["alerts", "Alerts", alertsCount()]];
-  return items.map(([k, l, cnt]) => h`<a href="#${k}" class="${k === cur ? "on" : ""}"><span>${l}</span>${cnt}</a>`);
+  const links = items.map(([k, l, cnt]) => h`<a href="${link(k)}" class="${k === cur ? "on" : ""}"><span>${l}</span>${cnt}</a>`);
+  return SET ? [clustersLink(), ...links] : links;
 }
 
 // ring draws the progress of a cycle: an arc of done in total. A cycle that does not know its work yet gets a dotted ring. Nothing
@@ -167,7 +170,8 @@ function recordsChip(r) {
 }
 
 function topBar(crumbs) {
-  return h`<nav class="crumbs" aria-label="Where you are">${crumbs}</nav><div class="topr">${recordsChip(D.cluster.records)}${clocks()}</div>`;
+  const choice = SET && S.cluster === null ? projectChoice() : "";
+  return h`<nav class="crumbs" aria-label="Where you are">${crumbs}</nav><div class="topr">${choice}${recordsChip(D.cluster.records)}${clocks()}</div>`;
 }
 
 const crumbs = (...a) => a.map((x, i) => i === a.length - 1 ? h`<b>${x}</b>` : h`${x} <span>/</span> `);
@@ -207,7 +211,7 @@ function alertBars(held = false) {
 /* ---- The cards ---- */
 function tiles() {
   const c = D.cluster, n = c.counts;
-  const T = (cls, label, value, sub, href) => h`<a class="tile ${cls}" href="#${href}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></a>`;
+  const T = (cls, label, value, sub, href) => h`<a class="tile ${cls}" href="${link(href)}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></a>`;
   const driftSub = n.drift === 0 ? (calmOk() ? "Nothing changed" : "None in what was checked") : n.drift === 1 ? driftSubject() : `${n.drift} profiles`;
   const fresh = D.newer.filter(r => r.new).length;
   // The profiles with a newer published version of their own count apart from the packs. An observer of an older release gives no count.
@@ -270,7 +274,7 @@ function findingsCard() {
       <td><div class="fw"><a href="${href}">${findingTitle(f)}</a></div><div>${lab("profile", f.profile)}${findingLabs(f)}</div><div class="mut small narrow-show">${ago(f.firstSeen)}</div></td>
       <td class="n mut small w60 nw narrow-hide">${ago(f.firstSeen)}</td></tr>`;
   })}</tbody></table></div>` : noFindings();
-  return h`<section class="card"><div class="chead"><h2>Needs attention <span class="sub">${rows.length || known(0)}</span></h2><a class="small" href="#findings">All findings</a></div>${body}</section>`;
+  return h`<section class="card"><div class="chead"><h2>Needs attention <span class="sub">${rows.length || known(0)}</span></h2><a class="small" href="${link("findings")}">All findings</a></div>${body}</section>`;
 }
 
 // objectLinks names the objects of an event. A profile or an image that the page holds is a link to its page.
@@ -304,7 +308,7 @@ function eventsCard() {
 function coverageCard() {
   const l = D.limits;
   const row = (title, sub, value) => h`<tr><td>${title}<div class="small mut">${sub}</div></td><td class="n">${value}</td></tr>`;
-  const behindATag = podsRead() ? h`<a href="#images">Compared with the first digest seen in pods</a>` : "Strata compares the name and the tag.";
+  const behindATag = podsRead() ? h`<a href="${link("images")}">Compared with the first digest seen in pods</a>` : "Strata compares the name and the tag.";
   return h`<section class="card" id="coverage"><div class="chead"><h2>What a check does not cover</h2></div><div class="tw"><table><tbody>
     ${row("Image behind a tag", behindATag, num(l.imagesNamedByATag))}
     ${row("Bytes of a chart", "The record holds the digest Palette lists", num(l.helmPacks))}

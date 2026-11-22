@@ -1,0 +1,8 @@
+{
+  "shared": [
+    {"uid":"u-barney-base-150","name":"barney-base","version":"1.5.0","scope":"tenant","clusters":2,"projects":["p-dev"],"published":{"status":"unchanged","rootRecorded":"9c1e0f6a2b7d4c3e8f5a1b0c9d2e7f4a6b3c8d1e0f9a2b5c7d4e6f8a1b3c5d7e","rootLive":"9c1e0f6a2b7d4c3e8f5a1b0c9d2e7f4a6b3c8d1e0f9a2b5c7d4e6f8a1b3c5d7e"},"copies":{"same":2,"of":2,"differ":[],"notRead":0}},
+    {"uid":"u-fred-identity-230","name":"fred-identity","version":"2.3.0","scope":"tenant","clusters":2,"projects":["p-dev"],"published":{"status":"drifted","rootRecorded":"3a1f","rootLive":"7d2e"},"copies":{"same":2,"of":2,"differ":[],"notRead":0}},
+    {"uid":"u-wilma-gateway-312","name":"wilma-gateway","version":"3.1.2","scope":"project","clusters":2,"projects":["p-dev"],"published":{"status":"unchanged","rootRecorded":"5b0c","rootLive":"5b0c"},"copies":{"same":1,"of":2,"differ":[{"uid":"c-ledger","name":"ledger"}],"notRead":0}},
+    {"uid":"u-edge-agent-100","name":"edge-agent","version":"1.0.0","scope":"project","clusters":1,"projects":["p-prod"],"copies":{"same":0,"of":1,"differ":[],"notRead":1}}
+  ]
+}

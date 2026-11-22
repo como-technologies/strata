@@ -24,6 +24,7 @@ mod draft_secret;
 mod fuzz;
 mod live_scripts;
 mod masked;
+mod names;
 mod observer_deploy;
 mod observer_up;
 mod presets;

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/web"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
@@ -37,8 +38,8 @@ func main() {
 
 // stateNames lists the sets for the help text.
 func stateNames() string {
-	names := make([]string, 0, len(devdata.States))
-	for _, s := range devdata.States {
+	names := make([]string, 0, len(devdata.States)+len(devdata.SetStates))
+	for _, s := range append(slices.Clone(devdata.States), devdata.SetStates...) {
 		names = append(names, string(s))
 	}
 	return strings.Join(names, ", ")
@@ -55,11 +56,12 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if !slices.Contains(devdata.States, devdata.State(*state)) {
+	inSet := slices.Contains(devdata.SetStates, devdata.State(*state))
+	if !inSet && !slices.Contains(devdata.States, devdata.State(*state)) {
 		fmt.Fprintf(stderr, "devserver: --state: %q is no set; the sets are %s\n", *state, stateNames())
 		return 2
 	}
-	set, err := devdata.Load(os.DirFS(*data), devdata.State(*state), time.Now())
+	srv, page, err := server(*data, devdata.State(*state), inSet)
 	if err != nil {
 		fmt.Fprintln(stderr, "devserver:", err)
 		return 2
@@ -76,10 +78,29 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	defer ln.Close()
 	log := slog.New(slog.NewTextHandler(stderr, nil))
-	log.Info("serving test data", "state", *state, "page", set.Cluster.Page)
-	if err := (&api.Server{Source: set, Page: api.Page(files)}).Serve(ctx, ln, log); err != nil {
+	log.Info("serving test data", "state", *state, "page", page)
+	srv.Page = api.Page(files)
+	if err := srv.Serve(ctx, ln, log); err != nil {
 		fmt.Fprintln(stderr, "devserver: the server stopped:", err)
 		return 2
 	}
 	return 0
+}
+
+// server gives the server of a set of the directory data, with no page, and the state of its page. A set of clusters serves the routes of the
+// set, and each route of one cluster under its uid.
+func server(data string, state devdata.State, inSet bool) (*api.Server, model.Page, error) {
+	fsys := os.DirFS(data)
+	if inSet {
+		s, err := devdata.LoadSet(fsys, state, time.Now())
+		if err != nil {
+			return nil, "", err
+		}
+		return &api.Server{Set: s}, s.Summary.Page, nil
+	}
+	s, err := devdata.Load(fsys, state, time.Now())
+	if err != nil {
+		return nil, "", err
+	}
+	return &api.Server{Source: s}, s.Cluster.Page, nil
 }

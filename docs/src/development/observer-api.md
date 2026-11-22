@@ -363,13 +363,15 @@ These places have a splash:
 | The page is `lost` and holds no data | `lost` | `lg` | We lost the signal from Palette |
 | The page is `stale` and holds no data | `warn` | `lg` | Checks stopped before one ended well |
 | The page cannot reach the observer | `lost` | `lg` | This page lost its line to the observer |
-| A route that does not exist | `off` | `lg` | This profile is not here, This pack is not here, or No pod runs this image |
+| A route that does not exist | `off` | `lg` | This profile is not here, This pack is not here, No pod runs this image, or This cluster is not in the set |
+| A screen of a cluster of a set before its first answers | `build` | `lg` | Reading the cluster |
 | No findings | `calm`, `warn`, or `off` | `md` | All quiet on `<cluster>`, or No finding |
 | The first read of the versions runs | `build` | `md` | Reading the registries |
 | No read of the versions ended well | `warn` | `md` | No version was read yet |
 | No newer versions | `calm`, `warn`, or `off` | `md` | Nothing newer to dig up, or No newer version is listed |
 | Nothing in "Not checked" | `calm`, `warn`, or `off` | `md` | Every layer was read, or Every pack was checked in full |
 | The read of the pods is off | `off` | `md` | Pods are not on the menu here |
+| The Images screen of another cluster of a set | `off` | `md` | Pods of another cluster |
 | The first read of the pods runs | `build` | `md` | Reading the pods |
 | The pods run no image | `off` | `md` | No image to list |
 | The read of the pods failed | `warn` | `md` | The pods stay silent |

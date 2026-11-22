@@ -376,7 +376,7 @@ function undisturbed(side, list) {
 
 // notCheckedSplash is the splash of a pack that strata did not check in full. It names the cause, and it points to the screen of the causes.
 const notCheckedSplash = x => splash(TONE.WARN, "Part of this layer is hidden", h`This pack was not fully checked. ${notCheckedLine(x)} The content check runs every ${D.cluster.content.every}.`,
-  next(h`<a href="#notchecked">Why, on the Not checked page</a>`), SIZE.CARD);
+  next(h`<a href="${link("notchecked")}">Why, on the Not checked page</a>`), SIZE.CARD);
 
 function comparePack(subject, x, p, row) {
   const sides = sidesOf(x, row), changed = changedSides(subject, x, p, row), id = "side-" + subject + "-" + p.key;
@@ -471,10 +471,10 @@ function checkCard(rows) {
 
 function viewPack(subject, layer, name) {
   const x = profileOf(subject), p = x ? x.packs.find(q => q.layer === layer && q.name === name) : null;
-  const cr = crumbs(h`<a href="#profiles">Profiles</a>`, h`<a href="${profileHash(subject)}">${subjectRef(subject)}</a>`, p ? ref(name, p.version) : name);
+  const cr = crumbs(h`<a href="${link("profiles")}">Profiles</a>`, h`<a href="${profileHash(subject)}">${subjectRef(subject)}</a>`, p ? ref(name, p.version) : name);
   if (!p) {
     return viewMissing(cr, "profiles", x ? {title: "This pack is not here", name, why: "is not in this profile now.", home: [profileHash(subject), "This profile"]}
-      : {title: "This profile is not here", name: subject, why: "is in no record now. A new revision of the records can remove it.", home: ["#profiles", "All profiles"]});
+      : {title: "This profile is not here", name: subject, why: "is in no record now. A new revision of the records can remove it.", home: [link("profiles"), "All profiles"]});
   }
   const row = newerRowOf(subject, p);
   const extra = p.status === STATUS.DRIFT && p.newer ? statusBadge(STATUS.NEWER) : "";

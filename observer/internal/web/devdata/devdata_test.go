@@ -214,7 +214,7 @@ func TestTheStatesAreTheStatesOfTheRecipe(t *testing.T) {
 	for _, e := range entries {
 		dirs[e.Name()] = true
 	}
-	for _, state := range States {
+	for _, state := range append(slices.Clone(States), SetStates...) {
 		if !dirs[string(state)] {
 			t.Errorf("no directory for the state %s", state)
 		}
