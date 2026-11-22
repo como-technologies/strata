@@ -445,8 +445,8 @@ fn is_go_block(frame: &Frame, context: &Context) -> bool {
         && (starts_with_keyword || frame.tokens.iter().any(|t| t.is_mark(";")))
 }
 
-/// The class that the statement of the literal at `at` gives it: a value after an assignment, or
-/// the class after the keyword that starts the statement, such as `return`.
+/// The class that the statement of the literal at `at` gives it. A literal after an assignment is
+/// a value. A keyword at the start of the statement, such as `return`, gives its class.
 fn in_statement(tokens: &[Token], at: usize) -> Option<Class> {
     let start = tokens[..at]
         .iter()
