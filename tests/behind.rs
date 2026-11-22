@@ -504,8 +504,7 @@ fn behind_names_what_the_move_to_the_newest_profile_version_does_as_compare_give
     let reads = |uid: &str| api.calls(&profile_route(uid));
     let before = (reads(HELD), reads(NEWEST));
     let r = behind_of(&api, std::slice::from_ref(&record), &WITH_IMPACT);
-    let held = &r.profiles[0];
-    let bump = held.bump.as_ref().expect("the version is behind 1.4.0");
+    let bump = held_bump(&r);
     // one read of the document of each of the two versions: for the newer versions, the time of
     // the create, and the move
     assert_eq!((reads(HELD), reads(NEWEST)), (before.0 + 1, before.1 + 1));
@@ -574,7 +573,7 @@ fn behind_names_what_the_move_to_the_newest_profile_version_does_as_compare_give
         ])
     );
     let back: ops::BehindReport = serde_json::from_value(doc).unwrap();
-    assert_eq!(back.profiles[0].bump.as_ref().unwrap().packs.len(), 4);
+    assert_eq!(held_bump(&back).packs.len(), 4);
 }
 
 #[test]
@@ -743,7 +742,7 @@ fn compare_of_two_versions_of_one_profile_gives_the_checks_of_the_bump_and_no_ot
     // the bump of behind reads the same comparison, so it gives the same checks
     let record = record_of(&api, HELD, dir.path(), "barney.json");
     let r = behind_of(&api, &[record], &WITH_IMPACT);
-    assert_eq!(&r.profiles[0].bump.as_ref().unwrap().update_checks, checks);
+    assert_eq!(&held_bump(&r).update_checks, checks);
 
     // the report names each check in a note, and the JSON gives them in updateChecks
     let text = common::terminal()
@@ -825,9 +824,10 @@ fn the_move_names_a_required_dropdown_variable_with_no_default_option_and_not_on
     assert_eq!(marks("size"), [Value::Null, Value::Null]);
 }
 
-/// The profile route serves `********` in place of a default value that is not empty of a
-/// sensitive variable, and `""` for no default value: see [`common::profile_route_variable`]. At
-/// the update, Palette takes the default value that the profile holds (#912).
+/// 1.4.0 adds two required sensitive variables: `api_token` has a default value, and
+/// `db_password` has none. The profile route serves them through
+/// [`common::profile_route_variable`], as `********` and `""`. The move names only `db_password`,
+/// also in the terminal, and `compare` of the two versions gives the same checks.
 #[test]
 fn the_move_names_a_required_sensitive_variable_with_no_default_value_and_not_one_with_the_mask() {
     let dir = tempfile::tempdir().unwrap();
