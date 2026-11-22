@@ -2837,7 +2837,7 @@ fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
 /// its lines of errors, and its error is the last line.
 #[test]
 fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
-    let validate_route = format!("{}/validate/packs", common::profile_route(UID_A));
+    let validate_route = common::update_validate_packs_route(UID_A);
     let mut routes = barney_tenant();
     routes.insert(validate_route.clone(), serde_json::json!({}));
     let stand = Stand::new(routes.clone(), "p-dev");
@@ -2896,6 +2896,69 @@ fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
             "message": "a pack is missing"}]),
         "{e}"
     );
+}
+
+/// Issue #940. The test runs `snapshot --validate --json -q` of a candidate and of a version against
+/// a stand-in Palette that accepts each. The run writes the record, and standard error holds only
+/// the line of the accept. The line comes after the record, and the run without `--json` writes
+/// the same line. With `-o`, the line is the one line of output.
+#[test]
+fn snapshot_validate_with_json_writes_the_line_of_an_accept_after_the_record_on_standard_error() {
+    let mut routes = barney_tenant();
+    routes.extend([
+        (REGISTRY_LISTING.to_string(), common::two_registries()),
+        (
+            common::validate_name_route("demo", "1.0.0"),
+            serde_json::Value::Null,
+        ),
+        (common::IMPORT_ROUTE.to_string(), serde_json::json!({})),
+        (
+            common::PROFILE_VALIDATE_PACKS.to_string(),
+            serde_json::json!({"packs": {"results": []}}),
+        ),
+        (
+            common::update_validate_packs_route(UID_A),
+            serde_json::json!({}),
+        ),
+    ]);
+    let stand = Stand::new(routes, "p-dev");
+    common::write_yaml(
+        &stand.home.path().join("demo.yaml"),
+        &serde_json::json!({"name": "demo", "version": "1.0.0", "type": "add-on",
+            "layers": [{"name": "policy", "version": "1.0.0", "type": "manifest",
+                "manifests": [{"name": "policy", "content": "kind: Namespace"}]}]}),
+    );
+    for source in [
+        &["--from-candidate", "demo.yaml"][..],
+        &["barney@1.0.0"][..],
+    ] {
+        let args = [&["snapshot"][..], source, &["--validate", "--json", "-q"]].concat();
+        let r = stand.run_loud(&args);
+        assert_eq!(r.code, 0, "{args:?}: {}", r.err);
+        let record: strata::snapshot::Snapshot = serde_json::from_str(&r.out).unwrap();
+        let line = format!(
+            "{}\n",
+            strata::render::acceptance_line(&record)
+                .unwrap_or_else(|| panic!("{args:?}: no accept in the record: {}", r.out))
+        );
+        assert_eq!(r.err, line, "{args:?}: the one line on standard error");
+        let (_, text) = stand.run_joined(&args);
+        assert!(
+            text.ends_with(&format!("}}\n{line}")),
+            "{args:?}: the line after the record: {text}"
+        );
+        let text_form: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
+        assert_eq!(stand.run_loud(&text_form).err, line, "{text_form:?}");
+
+        let to_file = [&args[..], &["-o", "validated.json"]].concat();
+        let (code, text) = stand.run_joined(&to_file);
+        assert_eq!((code, text), (0, line), "{to_file:?}");
+        let file = read_json(&stand.home.path().join("validated.json"));
+        assert_eq!(
+            file["source"]["paletteValidation"]["accepts"], true,
+            "{to_file:?}: {file}"
+        );
+    }
 }
 
 /// Issue #625. `appprofile:<name>@latest` writes the note of the profile form, and names the
@@ -2990,7 +3053,7 @@ fn the_note_of_a_retry_shows_each_control_character_of_a_message_of_palette_as_a
 fn a_refusal_line_of_snapshot_validate_shows_each_control_character_as_a_visible_escape() {
     let mut routes = barney_tenant();
     routes.insert(
-        format!("{}/validate/packs", common::profile_route(UID_A)),
+        common::update_validate_packs_route(UID_A),
         serde_json::json!({"packs": {"results": [{"name": "cert-manager", "errors": [
             {"code": "PackDependencyNotFound", "message": common::ANSWER_CONTROLS}]}]}}),
     );

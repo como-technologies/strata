@@ -30,20 +30,21 @@ use strata::term::progress::Progress;
 use common::CommandExt;
 use common::{
     APP_PROFILE_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID,
-    EACH_SCOPE, EDGE_HOST_SEARCH, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH,
-    PROJECT_LISTING, PackFixture, REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A,
-    UID_ADDONS, UID_B, WITH_IMPACT, access_denied_message, app_profile_route, app_tiers_route,
-    behind_of, candidate_snapshot, cluster_manifests_route, cluster_namespaces_route,
-    cluster_rbacs_route, cluster_ref, cluster_repave_route, cluster_resolved_values_route,
-    cluster_route, cluster_validate_repave_route, cluster_variables_route, clusters_denied,
-    edge_host_route, error_body, fetch_examples, filters_denied, group_resolved_values_route,
-    group_route, listing, manifest_route, manifests_route, no_manifests, no_repave,
-    no_roles_message, no_template, no_variables, operation_forbidden_message, pack_entity_route,
-    pack_listing_route, post, profile_document, profile_route, project_listing, rbacs_answer,
-    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
-    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
-    strata_command, system_rbacs, template, template_validate_repave_route, variables_route,
-    write_record, write_yaml,
+    EACH_SCOPE, EDGE_HOST_SEARCH, IMPORT_ROUTE, OCI_REGISTRY_SUMMARY, PROFILE_LISTING,
+    PROFILE_SEARCH, PROFILE_VALIDATE_PACKS, PROJECT_LISTING, PackFixture, REGISTRY_LISTING,
+    SECRET_VALUE, TAG_FILTER_LISTING, UID_A, UID_ADDONS, UID_B, WITH_IMPACT, access_denied_message,
+    app_profile_route, app_tiers_route, behind_of, candidate_snapshot, cluster_manifests_route,
+    cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
+    cluster_resolved_values_route, cluster_route, cluster_validate_repave_route,
+    cluster_variables_route, clusters_denied, edge_host_route, error_body, fetch_examples,
+    filters_denied, group_resolved_values_route, group_route, listing, manifest_route,
+    manifests_route, no_manifests, no_repave, no_roles_message, no_template, no_variables,
+    operation_forbidden_message, pack_entity_route, pack_listing_route, post, profile_document,
+    profile_route, project_listing, rbacs_answer, read_json, resolved_values_route, serve_cluster,
+    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
+    snapshot_of_at, snapshot_of_ref, strata_command, system_rbacs, template,
+    template_validate_repave_route, update_validate_packs_route, validate_name_route,
+    variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -17765,21 +17766,7 @@ fn verify_reports_a_renamed_version_as_renamed_and_not_as_overwritten() {
 
 /// The route of the check of the name and the version of `snap`.
 fn name_route(snap: &strata::snapshot::Snapshot) -> String {
-    format!(
-        "/v1/clusterprofiles/validate/name?name={}&version={}",
-        snap.source.name, snap.source.version
-    )
-}
-
-/// The import validate route.
-const IMPORT_ROUTE: &str = "/v1/clusterprofiles/import/validate";
-
-/// The route that asks Palette if it takes the packs of a new profile.
-const PROFILE_VALIDATE_PACKS: &str = "/v1/clusterprofiles/validate/packs";
-
-/// The route that asks Palette if it takes the packs of an update of the profile version `uid`.
-fn update_validate_packs_route(uid: &str) -> String {
-    format!("{}/validate/packs", profile_route(uid))
+    validate_name_route(&snap.source.name, &snap.source.version)
 }
 
 /// The registry listing that `snapshot --validate` reads for the body of the import validate

@@ -508,6 +508,13 @@ fn candidate_validate_packs(r: &mut Runner) {
         false,
         "jq -c .source.paletteValidation validated.json",
     );
+    // --json changes only the error, so the line of the accept stays on standard error (#940)
+    r.step(
+        "candidate-validate-accepts-json",
+        0,
+        true,
+        "strata snapshot --from-candidate aws-stack.yaml --validate --json --quiet -o validated.json",
+    );
 }
 
 /// The part of the chapter `candidate` where a disabled pack makes the import check refuse.
