@@ -80,8 +80,8 @@ pub fn under(path: &str, dir: &str) -> bool {
     path.starts_with(&format!("{dir}/")) || path.contains(&format!("/{dir}/"))
 }
 
-/// True for the path of a Rust file that holds only tests: a file under a directory `tests`, such
-/// as the integration tests of a package, or the file `tests.rs` of the unit tests of a module.
+/// True for the path of a Rust file that holds only tests: a file under a directory `tests`, or a
+/// file `tests.rs`.
 pub fn is_rust_test_file(path: &str) -> bool {
     let name = path.rsplit('/').next().unwrap_or(path);
     under(path, "tests") || name == "tests.rs"

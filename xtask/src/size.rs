@@ -127,8 +127,8 @@ fn observer_sources(dir: &Path) -> Vec<(String, String)> {
     read_under(dir, paths)
 }
 
-/// True when the file `path` of the observer at `dir` holds only tests: it is a Go file of tests,
-/// or a directory `testdata` holds it.
+/// True when the file `path` of the observer at `dir` holds only tests: a Go file of tests, or a
+/// file under a directory `testdata`.
 fn holds_only_tests(dir: &Path, path: &Path) -> bool {
     is_go_test(&path.to_string_lossy())
         || path

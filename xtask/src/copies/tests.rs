@@ -895,8 +895,8 @@ fn a_new_go_const_and_helper_with_a_copy_are_findings_and_an_alias_keeps_the_lab
     );
 }
 
-/// A new const and a new function are copies of a private item of another module, also when
-/// neither of the two can name the other. The test has them in Rust and in Go.
+/// A new const and a new function are copies of a private item of another module. Neither of the
+/// two items can name the other. The test has them in Rust and in Go.
 #[test]
 fn a_new_const_and_helper_copy_a_private_item_of_another_module() {
     let repo = Repo::new();
