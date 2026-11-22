@@ -394,8 +394,13 @@ fn near(frames: &[Frame], at: usize, context: &Context) -> Class {
     if mark(right, &["=>"]) {
         return Class::Switch;
     }
-    if mark(left, &["=", ":="]) {
+    if mark(left, &ASSIGNS) {
         return Class::Value;
+    }
+    // a statement of a block, such as `a, b := "x", "y"` or `return "x", "y"`
+    let block = frame.delim.is_none() || is_go_block(frame, context);
+    if block && let Some(class) = in_statement(tokens, at) {
+        return class;
     }
     // a pattern of a `match`, such as `Some("x") =>`
     let parent = frames.len().checked_sub(2).and_then(|k| frames.get(k));
@@ -416,12 +421,45 @@ fn near(frames: &[Frame], at: usize, context: &Context) -> Class {
                 false => Class::Return,
             }
         }
-        _ if rust_block || frame.delim.is_none() => Class::Other,
+        _ if rust_block || block => Class::Other,
         _ => match row_field(frames, at, context) {
             Some(field) => by_name(&field, Class::Row(Some(field.clone()))),
             None => Class::Row(None),
         },
     }
+}
+
+/// The marks of an assignment: a literal after one of them is a value.
+const ASSIGNS: [&str; 3] = ["=", ":=", "+="];
+
+/// True for a Go block: a group in braces that holds a statement. A `;` ends a statement, and no
+/// composite literal holds one. The body of a `switch` starts with a keyword, such as `case`.
+fn is_go_block(frame: &Frame, context: &Context) -> bool {
+    let starts_with_keyword = frame
+        .tokens
+        .first()
+        .and_then(Token::word)
+        .is_some_and(is_keyword);
+    context.lang == Lang::Go
+        && frame.delim == Some(Delim::Brace)
+        && (starts_with_keyword || frame.tokens.iter().any(|t| t.is_mark(";")))
+}
+
+/// The class that the statement of the literal at `at` gives it: a value after an assignment, or
+/// the class after the keyword that starts the statement, such as `return`.
+fn in_statement(tokens: &[Token], at: usize) -> Option<Class> {
+    let start = tokens[..at]
+        .iter()
+        .rposition(|t| t.is_mark(";"))
+        .map_or(0, |i| i + 1);
+    let before = &tokens[start..at];
+    if let Some(class) = before.first().and_then(Token::word).and_then(after_keyword) {
+        return Some(class);
+    }
+    before
+        .iter()
+        .any(|t| ASSIGNS.iter().any(|m| t.is_mark(m)))
+        .then_some(Class::Value)
 }
 
 /// The class of a field or of an element named `name`: a case or a label for their names, and

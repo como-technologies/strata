@@ -904,3 +904,24 @@ fn a_literal_in_the_pattern_of_an_arm_is_a_case_of_a_switch() {
     let code = "fn f(k: Option<&str>) {\n    match k {\n        Some(\"mark\") => {}\n        _ => {}\n    }\n}\n";
     assert_eq!(class_of_mark(Lang::Rust, code, false), Class::Switch);
 }
+
+#[test]
+fn the_statement_of_a_go_block_gives_the_class_of_each_literal_after_the_first() {
+    for (code, class) in [
+        (
+            "package p\nfunc f() {\n\ta, b := \"x\", \"mark\"\n}\n",
+            Class::Value,
+        ),
+        (
+            "package p\nfunc f() (string, string) {\n\treturn \"x\", \"mark\"\n}\n",
+            Class::Return,
+        ),
+        (
+            "package p\nfunc f(k string) {\n\tswitch k {\n\tcase \"x\", \"mark\":\n\t}\n}\n",
+            Class::Switch,
+        ),
+        ("package p\nvar a, b = \"x\", \"mark\"\n", Class::Value),
+    ] {
+        assert_eq!(class_of_mark(Lang::Go, code, false), class, "{code}");
+    }
+}
