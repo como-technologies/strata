@@ -5675,10 +5675,7 @@ fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_re
 #[test]
 fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_its_registry() {
     let mut stage = Stage::new(serde_json::json!({}));
-    stage.route(
-        "/v1/clusterprofiles/validate/packs",
-        r#"{"packs":{"results":[]}}"#,
-    );
+    stage.route(PROFILE_VALIDATE_PACKS, r#"{"packs":{"results":[]}}"#);
     let pack = PackFixture::new("cert-manager", "addon", "1.21.1", "pk-1", "reg-pub", "", "");
     stage.route(
         "/v1/packs",
@@ -5724,7 +5721,7 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
     );
     let wilma = std::fs::read_to_string(stage.path("out/strata-validate-wilma.yaml")).unwrap();
     assert!(wilma.contains("    layer: csi\n"), "{wilma}");
-    let validate = &stage.sent("POST", "/v1/clusterprofiles/validate/packs")[0];
+    let validate = &stage.sent("POST", PROFILE_VALIDATE_PACKS)[0];
     assert_eq!(validate["packs"][0]["layer"], "csi", "{validate}");
     let create = &stage.sent("POST", "/v1/clusterprofiles")[0]["spec"]["template"]["packs"][0];
     assert_eq!(
