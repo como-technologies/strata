@@ -1,8 +1,9 @@
 //! The consts and the functions that a change adds with a value or a body that another line of
 //! the same tree holds.
 //!
-//! A new declaration is a copy at each place of its tree, also when neither of the two can name
-//! the other. Then the fix moves the value or the body to one place that both can name.
+//! A new declaration copies a value or a body at any place of its tree. It is a copy also when
+//! neither of the two can name the other. Then the fix moves the value or the body to one place
+//! that both can name.
 
 use std::collections::{BTreeMap, BTreeSet};
 

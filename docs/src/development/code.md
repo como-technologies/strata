@@ -218,12 +218,16 @@ A finding is one of these:
 2. A route on an added line is also on another line of its tree. A route of a
    test is a copy only of a route of the code, or of a helper that the tests
    share.
-3. A const that the change adds has the value of another declaration, or of a
-   literal that it can replace.
-4. A function that the change adds has the same body as another function, apart
-   from the names of its arguments. One of the two functions can call the other.
+3. A const that the change adds has the value of another declaration or of a
+   literal of its tree.
+4. A function that the change adds has the same body as another function of its
+   tree, apart from the names of its arguments.
 
-A literal is a copy only of a value that its file can name:
+A const or a function of the kinds 3 and 4 is a copy also when neither of the
+two can name the other. Two private items of two modules are such a copy. Move
+the value or the body to one place that both can name.
+
+A literal of the kind 1 is a copy only of a value that its file can name:
 
 - A private Rust item reaches its module and the children of its module. A
   `pub` or `pub(crate)` item reaches its package.
