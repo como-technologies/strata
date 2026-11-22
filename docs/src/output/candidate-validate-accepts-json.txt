@@ -1,0 +1,2 @@
+$ strata snapshot --from-candidate aws-stack.yaml --validate --json --quiet -o validated.json
+palette    accepts the name, the version, and the packs of 'aws-stack.yaml'
