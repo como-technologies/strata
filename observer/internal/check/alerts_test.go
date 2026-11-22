@@ -167,7 +167,7 @@ func TestARestartSendsNothingAgainAndANewPodWithAnEmptyStateSendsTheOpenFindingO
 	if len(sender.texts) != 1 {
 		t.Fatalf("a restart with the state sent %d messages in all", len(sender.texts))
 	}
-	if err := os.Remove(filepath.Join(r.state, testkit.StateFile)); err != nil {
+	if err := os.Remove(filepath.Join(r.state, stateFile)); err != nil {
 		t.Fatal(err)
 	}
 	pod := alerting(t, r, w, sender)
@@ -193,7 +193,7 @@ func TestTheStateThatAnOlderObserverWroteLoadsWithAnEmptyStoreOfAlerts(t *testin
 	if err := os.MkdirAll(r.state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	testkit.WriteIn(t, r.state, testkit.StateFile, `{"startedAt":"2026-11-03T14:00:00Z"}`)
+	testkit.WriteIn(t, r.state, stateFile, `{"startedAt":"2026-11-03T14:00:00Z"}`)
 	if s := readState(t, r); s.Alerts.Items == nil || s.Alerts.Outbox == nil {
 		t.Errorf("state %+v", s.Alerts)
 	}

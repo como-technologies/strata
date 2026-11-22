@@ -4,6 +4,7 @@ use crate::common;
 
 use std::path::{Path, PathBuf};
 
+use strata::config::KEY_VARS;
 use strata::diff::DIFF_SCHEMA;
 use strata::ops::{CHAIN_SCHEMA, VERIFY_SUMMARY_SCHEMA};
 use strata::render::palette_line;
@@ -773,7 +774,7 @@ fn bad_inputs_exit_two() {
     let r = run_in(
         &["verify", &fx.a],
         &[("HOME", home.path().to_str().unwrap())],
-        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        &KEY_VARS,
     );
     assert_eq!(r.code, 2, "{}", r.err);
     assert!(r.err.contains("PALETTE_API_KEY is required"));
@@ -786,7 +787,7 @@ fn compare_refuses_a_pair_that_a_question_to_palette_cannot_take_before_it_needs
     let fx = fixtures();
     let home = tempfile::tempdir().unwrap();
     let no_key = [("HOME", home.path().to_str().unwrap())];
-    let clear = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
+    let clear = KEY_VARS;
     let ask = |args: &[&str]| {
         let mut all = vec!["compare", "--json"];
         all.extend_from_slice(args);
@@ -882,7 +883,7 @@ fn verify_over_many_records_prints_one_line_each_and_a_summary_document() {
     let fx = fixtures();
     let home = tempfile::tempdir().unwrap();
     let no_creds = [("HOME", home.path().to_str().unwrap())];
-    let clear = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
+    let clear = KEY_VARS;
     let r = run_in(&["verify", &fx.a, &fx.b], &no_creds, &clear);
     assert_eq!(r.code, 2, "{}", r.err);
     let lines: Vec<&str> = r.out.lines().collect();
@@ -1175,7 +1176,7 @@ fn list_needs_credentials_and_takes_only_known_kinds() {
     let r = run_in(
         &["list", "--json", "projects"],
         &[("HOME", home.path().to_str().unwrap())],
-        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        &KEY_VARS,
     );
     assert_eq!(r.code, 2, "{}", r.err);
     let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
@@ -1213,7 +1214,7 @@ fn list_refuses_packs_before_any_request_and_names_detail_and_the_packs_command(
         let r = run_in(
             &["list", kind],
             &[("HOME", home.path().to_str().unwrap())],
-            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+            &KEY_VARS,
         );
         assert_eq!(r.code, 2, "{}", r.err);
         assert!(
@@ -1406,7 +1407,7 @@ fn snapshot_from_candidate_reports_local_problems_without_credentials() {
     let r = run_in(
         &["snapshot", "--from-candidate", file.to_str().unwrap()],
         &[("HOME", home.path().to_str().unwrap())],
-        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        &KEY_VARS,
     );
     assert_eq!(r.code, 2);
     assert!(
@@ -2085,7 +2086,7 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
     let r = run_in(
         &["compare", "--json", &fx.a, "aws-stack@1.1.1"],
         &[("HOME", home.path().to_str().unwrap())],
-        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        &KEY_VARS,
     );
     assert_eq!(r.code, 2, "{}", r.err);
     let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
@@ -2102,7 +2103,7 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
     let r = run_in(
         &["verify", "--format", "json", &fx.a],
         &[("HOME", home.path().to_str().unwrap())],
-        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        &KEY_VARS,
     );
     assert_eq!(r.code, 2);
     let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
@@ -2337,7 +2338,7 @@ fn snapshot_validate_of_a_draft_is_a_usage_error_that_names_the_draft_and_the_ca
     let r = run_in(
         &["snapshot", "aws-stack@1.1.1@draft", "--validate"],
         &[("HOME", home)],
-        &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        &KEY_VARS,
     );
     assert_eq!(r.code, 2, "{}", r.err);
     assert!(r.err.starts_with(&error_text("--validate ")), "{}", r.err);
@@ -2373,11 +2374,7 @@ fn snapshot_of_a_set_with_json_prints_an_error_of_the_query_as_one_json_line() {
             "-q",
         ][..],
     ] {
-        let r = run_in(
-            args,
-            &[("HOME", home.path().to_str().unwrap())],
-            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
-        );
+        let r = run_in(args, &[("HOME", home.path().to_str().unwrap())], &KEY_VARS);
         assert_eq!(r.code, 2, "{args:?}: {}", r.err);
         assert_eq!(r.out, "", "{args:?}: no document when the query fails");
         let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
@@ -2437,7 +2434,8 @@ fn snapshot_of_one_ref_with_json_gives_its_error_as_one_json_line_with_the_exit_
 #[test]
 fn snapshot_of_one_ref_that_succeeds_with_json_writes_the_same_record_and_no_json_line() {
     let pack = common::listed_pack("csi", "1.0.0", common::PUBLIC_REGISTRY);
-    let tags = serde_json::json!({"tags": [{"tag": "1.0.0", "packUid": pack["metadata"]["uid"]}]});
+    let uid = pack["metadata"]["uid"].as_str().unwrap();
+    let tags = common::pack_entity_answer(&[("1.0.0", uid)]);
     let routes = std::collections::BTreeMap::from([
         (REGISTRY_LISTING.to_string(), common::two_registries()),
         (
@@ -2517,11 +2515,7 @@ fn snapshot_refuses_format_with_each_argument_that_refuses_dir_and_takes_json_wi
         assert_eq!(r.out, "", "{format:?}");
 
         let json = [&["snapshot"][..], &args, &["--json", "-q"]].concat();
-        let r = run_in(
-            &json,
-            &[("HOME", dir.path().to_str().unwrap())],
-            &strata::config::KEY_VARS,
-        );
+        let r = run_in(&json, &[("HOME", dir.path().to_str().unwrap())], &KEY_VARS);
         assert_eq!(r.code, 2, "{json:?}: {}", r.err);
         assert_eq!(r.out, "", "{json:?}");
         assert_eq!(r.err.lines().count(), 1, "{json:?}: one line: {}", r.err);
@@ -2544,7 +2538,7 @@ fn snapshot_macros_names_the_refs_it_takes_and_refuses_another_before_any_reques
         let r = run_in(
             &["snapshot", reference, "--macros"],
             &[("HOME", home)],
-            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+            &KEY_VARS,
         );
         assert_eq!(r.code, 2, "{reference}: {}", r.err);
         assert_eq!(
@@ -2632,11 +2626,7 @@ fn snapshot_of_a_set_with_no_dir_says_what_records_each_cluster_before_any_reque
     let home = home.path().to_str().unwrap();
     for reference in ["tag:env=dev", "filter:prod"] {
         // no key: a usage error comes before strata needs one
-        let r = run_in(
-            &["snapshot", reference],
-            &[("HOME", home)],
-            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
-        );
+        let r = run_in(&["snapshot", reference], &[("HOME", home)], &KEY_VARS);
         assert_eq!(r.code, 2, "{reference}: {}", r.err);
         assert_eq!(
             r.err.trim_end(),
@@ -2661,11 +2651,7 @@ fn snapshot_validate_with_no_profile_to_ask_about_is_a_usage_error_before_any_re
         &["snapshot", "tag:env=dev", "--dir", "records", "--validate"][..],
     ] {
         // no key: a usage error comes before strata needs one
-        let r = run_in(
-            args,
-            &[("HOME", home)],
-            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
-        );
+        let r = run_in(args, &[("HOME", home)], &KEY_VARS);
         assert_eq!(r.code, 2, "{args:?}: {}", r.err);
         assert!(
             r.err.starts_with(&error_text("--validate ")),
@@ -2837,7 +2823,7 @@ fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
 /// its lines of errors, and its error is the last line.
 #[test]
 fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
-    let validate_route = format!("{}/validate/packs", common::profile_route(UID_A));
+    let validate_route = common::update_validate_packs_route(UID_A);
     let mut routes = barney_tenant();
     routes.insert(validate_route.clone(), serde_json::json!({}));
     let stand = Stand::new(routes.clone(), "p-dev");
@@ -2896,6 +2882,69 @@ fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
             "message": "a pack is missing"}]),
         "{e}"
     );
+}
+
+/// Issue #940. The test runs `snapshot --validate --json -q` of a candidate and of a version against
+/// a stand-in Palette that accepts each. The run writes the record, and standard error holds only
+/// the line of the accept. The line comes after the record, and the run without `--json` writes
+/// the same line. With `-o`, the line is the one line of output.
+#[test]
+fn snapshot_validate_with_json_writes_the_line_of_an_accept_after_the_record_on_standard_error() {
+    let mut routes = barney_tenant();
+    routes.extend([
+        (REGISTRY_LISTING.to_string(), common::two_registries()),
+        (
+            common::validate_name_route("demo", "1.0.0"),
+            serde_json::Value::Null,
+        ),
+        (common::IMPORT_ROUTE.to_string(), serde_json::json!({})),
+        (
+            common::PROFILE_VALIDATE_PACKS.to_string(),
+            serde_json::json!({"packs": {"results": []}}),
+        ),
+        (
+            common::update_validate_packs_route(UID_A),
+            serde_json::json!({}),
+        ),
+    ]);
+    let stand = Stand::new(routes, "p-dev");
+    common::write_yaml(
+        &stand.home.path().join("demo.yaml"),
+        &serde_json::json!({"name": "demo", "version": "1.0.0", "type": "add-on",
+            "layers": [{"name": "policy", "version": "1.0.0", "type": "manifest",
+                "manifests": [{"name": "policy", "content": "kind: Namespace"}]}]}),
+    );
+    for source in [
+        &["--from-candidate", "demo.yaml"][..],
+        &["barney@1.0.0"][..],
+    ] {
+        let args = [&["snapshot"][..], source, &["--validate", "--json", "-q"]].concat();
+        let r = stand.run_loud(&args);
+        assert_eq!(r.code, 0, "{args:?}: {}", r.err);
+        let record: strata::snapshot::Snapshot = serde_json::from_str(&r.out).unwrap();
+        let line = format!(
+            "{}\n",
+            strata::render::acceptance_line(&record)
+                .unwrap_or_else(|| panic!("{args:?}: no accept in the record: {}", r.out))
+        );
+        assert_eq!(r.err, line, "{args:?}: the one line on standard error");
+        let (_, text) = stand.run_joined(&args);
+        assert!(
+            text.ends_with(&format!("}}\n{line}")),
+            "{args:?}: the line after the record: {text}"
+        );
+        let text_form: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
+        assert_eq!(stand.run_loud(&text_form).err, line, "{text_form:?}");
+
+        let to_file = [&args[..], &["-o", "validated.json"]].concat();
+        let (code, text) = stand.run_joined(&to_file);
+        assert_eq!((code, text), (0, line), "{to_file:?}");
+        let file = read_json(&stand.home.path().join("validated.json"));
+        assert_eq!(
+            file["source"]["paletteValidation"]["accepts"], true,
+            "{to_file:?}: {file}"
+        );
+    }
 }
 
 /// Issue #625. `appprofile:<name>@latest` writes the note of the profile form, and names the
@@ -2990,7 +3039,7 @@ fn the_note_of_a_retry_shows_each_control_character_of_a_message_of_palette_as_a
 fn a_refusal_line_of_snapshot_validate_shows_each_control_character_as_a_visible_escape() {
     let mut routes = barney_tenant();
     routes.insert(
-        format!("{}/validate/packs", common::profile_route(UID_A)),
+        common::update_validate_packs_route(UID_A),
         serde_json::json!({"packs": {"results": [{"name": "cert-manager", "errors": [
             {"code": "PackDependencyNotFound", "message": common::ANSWER_CONTROLS}]}]}}),
     );

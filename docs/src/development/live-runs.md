@@ -1244,7 +1244,7 @@ state what it shows.
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
 | `slash-registry`, `slash-listing`, `slash-listed` | 0 | #853: Palette takes a second registry over the Spectro pack registry, with the name `strata-live/packs`, and the registry listing names it. A live run passed. |
 | `slash-sync` | 0 | Palette reads the registry `strata-live/packs`. A live run passed. |
-| `slash-several`, `slash-several-uid` | 2, 0 | #853: a ref of the pack with no registry is `pack-in-several-registries`. The check runs `compare --json --quiet`, which writes the error as JSON on standard error. The field `registries` gives `strata-live/packs` by its uid, and never by its name. A live run passed. |
+| `slash-several`, `slash-several-uid` | 2, 0 | #853, #940: a ref of the pack with no registry is `pack-in-several-registries`. The check runs `snapshot` of the ref with `--json --quiet`, which writes the error as JSON on standard error. The field `registries` gives `strata-live/packs` by its uid, and never by its name. A live run passed with `compare --json --quiet` in place of `snapshot`. No live window ran the form of `snapshot` yet. |
 | `slash-record`, `slash-named` | 0 | #853: the ref `pack:<uid>/strata-live-pack@1.0.0` records the pack, and the record names the registry `strata-live/packs` and its uid. A live run passed. |
 | `slash-delete` | 0 | #853: the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack. A live run passed. |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |

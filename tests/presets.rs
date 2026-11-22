@@ -11,7 +11,10 @@ use strata::snapshot::{PresetOption, Snapshot};
 use strata::term::progress::Progress;
 
 use crate::common;
-use common::{PUBLIC_REGISTRY, PackFixture, candidate_snapshot, serve_registry_pack, write_yaml};
+use common::{
+    PUBLIC_REGISTRY, PackFixture, candidate_snapshot, pack_entity_answer, serve_registry_pack,
+    write_yaml,
+};
 
 /// `api` with the registry routes for the pack `name` 1.0.0, with `template` in its listing
 /// entry.
@@ -26,7 +29,7 @@ fn with_pack(api: MemoryApi, name: &str, template: Option<Value>) -> MemoryApi {
         api,
         name,
         json!([summary]),
-        json!({"tags": [{"tag": "1.0.0", "packUid": uid}]}),
+        pack_entity_answer(&[("1.0.0", &uid)]),
         PUBLIC_REGISTRY,
     )
 }

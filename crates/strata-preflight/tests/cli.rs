@@ -5,7 +5,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-mod common;
+// The small HTTP server of the tests of strata. These tests count its requests, and serve no list.
+#[path = "../../../tests/common/server.rs"]
+#[allow(dead_code)]
+mod server;
+use server::{HttpAnswer, serve};
 
 // The lock of the tests of strata: a process that a test starts takes it. These tests write no
 // script, so they do not call `executable`.
@@ -560,13 +564,10 @@ fn a_cluster_ref_names_the_whole_cluster_and_needs_palette() {
     assert!(err.contains("cluster:UID needs Palette"), "{err}");
 }
 
-/// A server on this machine that refuses each request. Gives its address and the first line of each
-/// request that it got, such as `GET /v1/projects HTTP/1.1`.
-fn refusing_server() -> (String, Arc<Mutex<Vec<String>>>) {
-    common::stand_in(
-        "HTTP/1.1 500 Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
-        |head| head.first().cloned().unwrap_or_default(),
-    )
+/// A server on this machine that refuses each request with HTTP 500. Gives its address and each
+/// request that it got.
+fn refusing_server() -> (String, Arc<Mutex<Vec<server::Request>>>) {
+    serve(|_, _| Some(HttpAnswer::json(500, "")))
 }
 
 /// The binary, set to run against the server `host` with the project `payments` and, when given, a

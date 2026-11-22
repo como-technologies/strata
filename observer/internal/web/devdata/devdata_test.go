@@ -149,7 +149,7 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 			t.Errorf("%s: an image that no pod runs gave %d", state, code)
 		}
 		for _, d := range s.Diffs {
-			path := "/v1/packs/" + d.Profile + "/" + d.Key + "/diff?side=" + string(d.Side)
+			path := testkit.DiffPath(d.Profile, d.Key, string(d.Side))
 			serves(path, d)
 		}
 		if _, found, _ := s.PackDiff(context.Background(), testkit.NobodyProfile, testkit.NoneKey, model.SideNewer); found {

@@ -3,6 +3,8 @@ package testkit
 import (
 	"encoding/json"
 	"log/slog"
+	"net/url"
+	"path"
 	"strings"
 	"testing"
 
@@ -109,5 +111,16 @@ func TestRulesHoldsEachChannelAndPutsEachRuleOnALineFromLine4(t *testing.T) {
 	}
 	if lines := strings.Split(text, "\n"); len(lines) < 5 || lines[3] != DriftNow+"," || lines[4] != LostNow {
 		t.Errorf("the lines %q", lines)
+	}
+}
+
+// DiffPath puts the side in the query, and an empty side gives no query. The path of the diff and the path of the
+// question of AskPath start with the same route of the pack.
+func TestDiffPathPutsTheSideInTheQueryAndAnEmptySideGivesNone(t *testing.T) {
+	for _, side := range []string{"x", ""} {
+		u, err := url.Parse(DiffPath(DexProfile, DexKey, side))
+		if err != nil || u.Query().Get("side") != side || (u.RawQuery == "") != (side == "") || path.Dir(u.Path) != path.Dir(DexAsk) {
+			t.Errorf("the side %q gives %v, %v", side, u, err)
+		}
 	}
 }

@@ -5,9 +5,12 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
@@ -110,9 +113,21 @@ func TestTheSetAsksListsOneAnswerOfEachVerdictAtTheStart(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("the list gave %d", code)
 	}
-	testkit.HoldsAll(t, "the list of answers", list, []string{testkit.NoErrorVerdict, testkit.RefusesVerdict, testkit.NoAnswerVerdict, `"code":"` + testkit.CodeDependency + `"`, `"status":403`}...)
+	var answers api.AsksView
+	testkit.Decode(t, "the list of answers", []byte(list), &answers)
+	var verdicts []model.Verdict
+	for _, a := range answers.Asks {
+		verdicts = append(verdicts, a.Verdict)
+	}
+	slices.Sort(verdicts)
+	if !slices.Equal(verdicts, []model.Verdict{model.VerdictNoAnswer, model.VerdictNoError, model.VerdictRefuses}) {
+		t.Errorf("the list of answers gives the verdicts %v", verdicts)
+	}
+	testkit.HoldsAll(t, "the list of answers", list, `"code":"`+testkit.CodeDependency+`"`, `"status":403`)
 	code, body := send(t, http.MethodPost, base+testkit.AskPath(testkit.GatewayProfile, testkit.TraefikKey), true)
-	if code != 200 || !strings.Contains(body, testkit.RefusesVerdict) {
+	var refused model.Answer
+	testkit.Decode(t, "the answer of the click", []byte(body), &refused)
+	if code != 200 || refused.Verdict != model.VerdictRefuses {
 		t.Errorf("a click on the refused move gave %d %s", code, body)
 	}
 }

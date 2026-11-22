@@ -1,10 +1,11 @@
 //! The tests of the decision, the answer, and the post of the send.
 
-use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::sync::{Arc, Mutex};
 
 use super::{ANSWER_FILE, Choice, Facts, Step, keep_answer, post, question, read_answer, step};
-use crate::api::PROFILE_TEMPLATE;
+use crate::api::server::{HttpAnswer, Request, serve_each};
+use crate::api::{Method, PROFILE_TEMPLATE};
+use crate::closed_set::ClosedSet;
 use crate::closed_set::unknown::log::Line;
 use crate::closed_set::unknown::report::{Report, SCHEMA};
 use crate::error::Error;
@@ -299,55 +300,45 @@ fn a_report_document_with_another_field_does_not_parse() {
     assert_eq!(serde_json::from_str::<Report>(&text).unwrap(), report);
 }
 
-/// An endpoint that answers one request with `status` and `body`, and gives the text it got.
-fn answering(status: u16, body: &'static str) -> (String, std::thread::JoinHandle<String>) {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://{}/path", listener.local_addr().unwrap());
-    let handle = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let mut got = Vec::new();
-        let mut chunk = [0u8; 4096];
-        while !String::from_utf8_lossy(&got).contains("\"unknown\"") {
-            match stream.read(&mut chunk) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => got.extend_from_slice(&chunk[..n]),
-            }
-        }
-        let _ = write!(
-            stream,
-            "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        String::from_utf8_lossy(&got).into_owned()
-    });
-    (url, handle)
+/// An endpoint that answers one request with `status` and the JSON text `body`. It gives the
+/// address, and each request that it took.
+fn answering(status: u16, body: &str) -> (String, Arc<Mutex<Vec<Request>>>) {
+    let (address, requests) = serve_each(vec![HttpAnswer::json(status, body)]);
+    (format!("{address}/path"), requests)
+}
+
+/// The request that the endpoint of [`answering`] took.
+fn taken(requests: &Mutex<Vec<Request>>) -> Request {
+    requests.lock().unwrap()[0].clone()
 }
 
 #[test]
 fn the_post_sends_the_report_as_json_with_the_user_agent_of_strata() {
     let (url, got) = answering(200, "{}");
     post(&url, &report_of(&[line("a")]), 0).unwrap();
-    let request = got.join().unwrap().to_ascii_lowercase();
-    assert!(request.starts_with("post /path http/1.1"), "{request}");
-    assert!(
-        request.contains("content-type: application/json"),
-        "{request}"
+    let request = taken(&got);
+    assert_eq!(
+        (request.method.as_str(), request.target.as_str()),
+        (Method::Post.as_str(), "/path")
     );
-    assert!(
-        request.contains(&format!("user-agent: strata/{}", crate::TOOL_VERSION)),
-        "{request}"
+    assert_eq!(
+        request.header("Content-Type"),
+        Some("application/json"),
+        "{request:?}"
     );
-    assert!(
-        request.contains(&format!(r#""schema":"{SCHEMA}""#)),
-        "{request}"
+    assert_eq!(
+        request.header("User-Agent"),
+        Some(format!("strata/{}", crate::TOOL_VERSION).as_str()),
+        "{request:?}"
     );
+    let sent: Report = serde_json::from_str(&request.body).unwrap();
+    assert_eq!(sent.schema, SCHEMA, "{request:?}");
 }
 
-/// The value of the header `Idempotency-Key` in `request`, a lower-case text of a request.
-fn key_of(request: &str) -> String {
+/// The value of the header [`super::KEY_HEADER`] in `request`.
+fn key_of(request: &Request) -> String {
     request
-        .lines()
-        .find_map(|l| l.strip_prefix("idempotency-key: "))
+        .header(super::KEY_HEADER)
         .unwrap_or_default()
         .to_string()
 }
@@ -359,7 +350,7 @@ fn the_key_of_a_post_is_64_hex_characters_and_the_same_lines_at_the_same_place_g
     for position in [0, 0, 7] {
         let (url, got) = answering(200, "{}");
         post(&url, &report, position).unwrap();
-        keys.push(key_of(&got.join().unwrap().to_ascii_lowercase()));
+        keys.push(key_of(&taken(&got)));
     }
     assert_eq!(keys[0].len(), super::KEY_LENGTH, "{keys:?}");
     assert!(keys[0].bytes().all(|b| b.is_ascii_hexdigit()), "{keys:?}");
@@ -370,14 +361,14 @@ fn the_key_of_a_post_is_64_hex_characters_and_the_same_lines_at_the_same_place_g
     );
     let (url, got) = answering(200, "{}");
     post(&url, &report_of(&[line("a")]), 0).unwrap();
-    assert_ne!(keys[0], key_of(&got.join().unwrap().to_ascii_lowercase()));
+    assert_ne!(keys[0], key_of(&taken(&got)));
 }
 
 #[test]
 fn the_key_holds_no_text_of_the_report() {
     let (url, got) = answering(200, "{}");
     post(&url, &report_of(&[line("hunter2")]), 0).unwrap();
-    let request = got.join().unwrap().to_ascii_lowercase();
+    let request = taken(&got);
     assert!(!key_of(&request).contains("hunter2"));
 }
 
@@ -430,12 +421,11 @@ fn the_post_to_an_address_that_refuses_the_connection_is_an_error_of_the_send() 
 
 #[test]
 fn the_post_gives_the_numbers_in_the_list_waiting_of_the_answer() {
-    let (url, got) = answering(
+    let (url, _) = answering(
         202,
         r#"{"ok":true,"opens":1,"updates":0,"waiting":[2,3,4,5]}"#,
     );
     let waiting = post(&url, &report_of(&[line("a")]), 0).unwrap();
-    got.join().unwrap();
     assert_eq!(waiting, [2, 3, 4, 5]);
 }
 
@@ -449,17 +439,15 @@ fn the_post_gives_no_number_for_an_answer_with_no_list_waiting_or_with_a_body_th
         (200, ""),
         (202, r#"{"waiting":"all"}"#),
     ] {
-        let (url, got) = answering(status, body);
+        let (url, _) = answering(status, body);
         let waiting = post(&url, &report_of(&[line("a")]), 0).unwrap();
-        got.join().unwrap();
         assert!(waiting.is_empty(), "{body}: {waiting:?}");
     }
 }
 
 #[test]
 fn the_post_reads_only_the_numbers_of_the_list_waiting() {
-    let (url, got) = answering(202, r#"{"ok":true,"waiting":[3,"x",-1,1.5,null,1]}"#);
+    let (url, _) = answering(202, r#"{"ok":true,"waiting":[3,"x",-1,1.5,null,1]}"#);
     let waiting = post(&url, &report_of(&[line("a")]), 0).unwrap();
-    got.join().unwrap();
     assert_eq!(waiting, [3, 1]);
 }

@@ -5,13 +5,16 @@ use std::path::{Path, PathBuf};
 use proc_macro2::Span;
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
-use syn::{Attribute, ImplItemFn, Item, TraitItemFn, parse_file};
+use syn::{Attribute, File, ImplItemConst, ImplItemFn, Item, TraitItemFn, parse_file};
 
 /// The book, from the root of the repository.
 const BOOK: &str = "docs/src";
 
 /// The directory under the book that `just docs-examples` writes.
 const OUTPUT: &str = "output";
+
+/// The end of the name of a Go file of tests.
+const GO_TEST: &str = "_test.go";
 
 /// The directory of the book, in the repository at `repo`.
 pub fn book(repo: &Path) -> PathBuf {
@@ -67,6 +70,59 @@ pub fn pages(dir: &Path) -> Vec<PathBuf> {
     files_under(dir, "md")
 }
 
+/// The language of a source file of the repository.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Lang {
+    Rust,
+    Go,
+}
+
+impl Lang {
+    /// Each language, in the order of the type.
+    pub const ALL: [Lang; 2] = [Lang::Rust, Lang::Go];
+
+    /// The language of the file `path`, by its extension, or `None` for another file.
+    pub fn of(path: &str) -> Option<Lang> {
+        let (_, extension) = path.rsplit_once('.')?;
+        Lang::ALL
+            .into_iter()
+            .find(|lang| lang.extension() == extension)
+    }
+
+    /// The extension of the files of the language, without the dot.
+    pub fn extension(self) -> &'static str {
+        match self {
+            Lang::Rust => "rs",
+            Lang::Go => "go",
+        }
+    }
+
+    /// The file that makes a directory the root of a package tree of the language.
+    pub fn root_file(self) -> &'static str {
+        match self {
+            Lang::Rust => "Cargo.toml",
+            Lang::Go => "go.mod",
+        }
+    }
+}
+
+/// True for the path of a Go file of tests.
+pub fn is_go_test(path: &str) -> bool {
+    path.ends_with(GO_TEST)
+}
+
+/// True when the path `path` is under a directory `dir` of the repository or of a package.
+pub fn under(path: &str, dir: &str) -> bool {
+    path.starts_with(&format!("{dir}/")) || path.contains(&format!("/{dir}/"))
+}
+
+/// True for the path of a Rust file that holds only tests: a file under a directory `tests`, or a
+/// file `tests.rs`.
+pub fn is_rust_test_file(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    under(path, "tests") || name == "tests.rs"
+}
+
 /// True when `attrs` mark the item as test code: `#[test]` or `#[cfg(test)]`.
 pub fn is_test_code(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
@@ -99,15 +155,28 @@ fn attrs_of(item: &Item) -> &[Attribute] {
 }
 
 /// The lines, first and last, that each item of test code takes. A line number starts at 1.
-#[derive(Default)]
-struct TestLines(Vec<(usize, usize)>);
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TestLines(Vec<(usize, usize)>);
 
 impl TestLines {
+    /// The lines of each item of test code of the Rust file `file`.
+    pub fn of(file: &File) -> TestLines {
+        let mut tests = TestLines::default();
+        tests.visit_file(file);
+        tests
+    }
+
+    /// The lines of a file that is test code from its first line to its last.
+    pub fn whole() -> TestLines {
+        TestLines(vec![(1, usize::MAX)])
+    }
+
     fn note(&mut self, span: Span) {
         self.0.push((span.start().line, span.end().line));
     }
 
-    fn holds(&self, line: usize) -> bool {
+    /// True when an item of test code holds the line `line`.
+    pub fn holds(&self, line: usize) -> bool {
         self.0
             .iter()
             .any(|(first, last)| (*first..=*last).contains(&line))
@@ -138,6 +207,14 @@ impl<'ast> Visit<'ast> for TestLines {
             visit::visit_trait_item_fn(self, item);
         }
     }
+
+    fn visit_impl_item_const(&mut self, item: &'ast ImplItemConst) {
+        if is_test_code(&item.attrs) {
+            self.note(item.span());
+        } else {
+            visit::visit_impl_item_const(self, item);
+        }
+    }
 }
 
 /// The lines of the Rust file `text` that are no comment and no test code. An item for the tests
@@ -145,8 +222,7 @@ impl<'ast> Visit<'ast> for TestLines {
 /// line `mod tests;`, or a function. The code after such an item stays. A file that is not Rust
 /// is an error.
 pub fn code_without_tests(text: &str) -> Result<String, syn::Error> {
-    let mut tests = TestLines::default();
-    tests.visit_file(&parse_file(text)?);
+    let tests = TestLines::of(&parse_file(text)?);
     Ok(text
         .lines()
         .enumerate()
