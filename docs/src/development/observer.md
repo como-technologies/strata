@@ -500,6 +500,13 @@ minus the packs that a cause names. The cause `read-error` names all the packs o
 its record. A side that the observer did not read is not `ok`: the profile and its
 packs are `not-checked`, and `counts.packsInFull` does not count them.
 
+The tile "Not checked" counts the rows, and the screen "Not checked" lists them. The
+filter "Not checked" of the table of the profiles shows each profile that a row
+names, with any status. So it also shows a profile with the status `newer` that a row
+`pin-error` names. It shows a record of a version that the cluster does not run too:
+see [A version that the cluster no longer
+runs](#a-version-that-the-cluster-no-longer-runs).
+
 ## The newer versions
 
 A pin with `behind` true is one row. The row holds `newest` and `listed` from
@@ -773,14 +780,22 @@ summary above gives its record the status `not-on-this-cluster`, the word of its
   cluster does not run the version. No row of the newer versions names the record, and
   no event or alert of a newer version names it.
 - **The counts.** `counts.profiles` does not count the record, so `payments` has 2
-  profiles for 3 records. The filters of the table of the profiles, the tile
-  "Profiles", and the tile "Newer versions" do not count it.
+  profiles for 3 records. The tile "Profiles", the tile "Newer versions", and the
+  filters of the table of the profiles do not count it. The filter "Not checked" is
+  the one exception: see the next paragraph.
 - **The page.** A fold under the table of the profiles lists the record, with the
   filter "All" only. The fold says "1 record of a profile version that this cluster
   does not run". On the page of the version, no pack says "newer" or "current", and
   no card "Move to" shows. The page of each of its packs shows no fact of a newer
   version, such as "Current". The row has the badge "Not on this cluster", and the
   message "This cluster does not run this version."
+
+A cause of the content cycle names such a record as it names a record that the cluster
+runs. The cause is `read-error` or `no-upstream-digest`. The record stays
+`not-on-this-cluster`, and each pack that the cause names is `not-checked`. The tile
+"Not checked", the screen "Not checked", and the filter "Not checked" count the cause.
+The filter shows the row of the record in the table, with the badge "Not on this
+cluster". The set `moved-unchecked` of `just observer-dev` shows such a record.
 
 A finding wins. The cluster `ledger` runs `aws-stack@1.1.0`, and a person changed the
 copy that Palette holds for the cluster. It does not run `aws-stack@1.0.0` or

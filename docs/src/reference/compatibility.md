@@ -1215,6 +1215,18 @@ field, a value, an input, or an option is in the sections above.
   report and its lines of `--verbose` do it. A name, a state, a condition, an event, and the
   message of a check are such texts. Before, these lines wrote each text as it was. A line break
   of an event was a space, and now it is `\n`. The JSON form keeps each text as Palette gave it.
+- **A ref that starts with `project:` and holds a `/` names its project.**
+  `project:<project>/<ref>` reads the ref in that project. Before, strata read
+  such a text as the path of a record file, and gave the error `io` when no file
+  was there. A file at that path stays a file. A refusal of the key in that
+  project is the new kind `project-denied`, which names the project. See
+  [Refs](./refs.md) and [Errors](./errors.md).
+- **The filter "Not checked" of the observer shows more profiles.** It shows each profile that a
+  cause of "Not checked" names. Before, it showed a profile only when the profile was
+  `not-checked` or `no-record`, or when a pack of it was `not-checked`. It did not show a record
+  that the cluster does not run, or a profile `newer` with a cause `pin-error`. The tile and the
+  screen "Not checked" counted these causes. A check that reads the count of the filter must
+  read the new count. See [Not checked](../development/observer.md#not-checked).
 
 ### For a user of the CI drop-ins
 
@@ -1244,6 +1256,14 @@ field, a value, an input, or an option is in the sections above.
 - `text::terminal_text` writes each mark of the direction of a text as a visible escape. The new
   `text::DIRECTION_MARKS` holds the marks. A caller that compares the text must compare the
   escapes.
+- `reference::Ref` has the new variant `InProject`, for
+  `project:<project>/<ref>`. `Ref` has no `#[non_exhaustive]`, so a `match` on
+  `Ref` with no wildcard arm must name it. `Ref::project` gives the project, and
+  `Ref::without_project` gives the ref to read. For such a ref, the `connect` of
+  `ops::snapshot_for`, `ops::snapshot_pair`, and `ops::consumers_with` gives a
+  client of that project. `api::project_uid_of` finds the uid of the project.
+- `error::Error` has the new variant `ProjectDenied`. A `match` on `Error` with
+  no wildcard arm must name it.
 
 ## Release 0.35.0: changes that need action
 

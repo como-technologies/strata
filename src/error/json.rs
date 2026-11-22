@@ -129,6 +129,12 @@ impl Error {
             | Error::NotArchive { method, path, .. } => {
                 put_request(m, method.as_str(), path);
             }
+            // the answer is a document of its own kind, so a program reads it as it reads an
+            // error of the kind `api`
+            Error::ProjectDenied { project, source } => {
+                put(m, "project", project.as_str());
+                put(m, "error", source.to_json());
+            }
             _ => {}
         }
     }

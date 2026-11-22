@@ -8,7 +8,7 @@ use strata::ops::{Policy, SameReleaseOptions};
 use strata::reference::Ref;
 
 use super::args::{Allow, SameReleaseArgs};
-use super::{connect_in, connect_to, now_utc};
+use super::{connect_for, connect_in, now_utc};
 
 pub(crate) fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
@@ -18,10 +18,11 @@ pub(crate) fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
     let mut records = Vec::with_capacity(a.records.len());
     let content = ops::SnapshotOptions::default();
     for (index, r) in a.records.iter().enumerate() {
+        let reference = Ref::parse(r);
         let snap = ops::snapshot_for(
-            &Ref::parse(r),
+            &reference,
             &content,
-            || connect_to(progress, sides.of_ref(index)),
+            || connect_for(progress, reference.project(), sides.of_ref(index)),
             &now,
             &progress,
         )?;

@@ -31,14 +31,16 @@ PALETTE_PROJECT=dev
 A profile version and a cluster belong to a project. Strata uses the project in
 this order:
 
-1. `--project <uid>` or `--project-name <name>`, on each command that reads
+1. A ref `project:<project>/<ref>`, which names the project of that ref: see
+   [Refs](./reference/refs.md).
+2. `--project <uid>` or `--project-name <name>`, on each command that reads
    Palette. `compare` and `same-release` also take a project for each side:
    see [Environments in the projects of one tenant](./use-cases/projects.md).
-2. `PALETTE_PROJECT_UID`.
-3. `PALETTE_PROJECT`. Strata finds its uid at tenant scope, one time for each
+3. `PALETTE_PROJECT_UID`.
+4. `PALETTE_PROJECT`. Strata finds its uid at tenant scope, one time for each
    command. An unknown name is an error that lists the projects that the key can
    see.
-4. No project: tenant scope.
+5. No project: tenant scope.
 
 Set a uid and a name together and the uid decides, so the name changes nothing.
 When the two name two projects, strata answers for the uid and writes a warning

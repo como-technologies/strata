@@ -2,10 +2,9 @@
 //!
 //! This module takes a snapshot and compares two. Each other command has a module of its own:
 //! `verify`, `same_release`, `consumers`, `list`, `packs`, and `report`. `sides` gives the project
-//! of each side of `compare` and `same-release`.
+//! of each side of `compare` and `same-release`. `scope` gives the client of each project that an
+//! operation reads, and `in_project` reads a ref that names its project.
 
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
 
 use crate::api::registry::{Registries, RegistryListing};
@@ -23,12 +22,14 @@ mod behind;
 mod consumer_list;
 mod consumers;
 mod fleet;
+mod in_project;
 mod list;
 mod live;
 mod packs;
 mod repave;
 mod report;
 mod same_release;
+mod scope;
 mod sides;
 mod source;
 mod validate;
@@ -43,6 +44,8 @@ pub use packs::*;
 pub use repave::*;
 pub use report::*;
 pub use same_release::*;
+pub use scope::scope_of;
+use scope::{client_for, connected};
 pub use sides::*;
 pub use source::*;
 pub use validate::*;
@@ -144,15 +147,18 @@ fn names_a_set(reference: &Ref) -> Error {
 /// returns, with `options`. So a comparison of two files needs no credentials. The record names
 /// the ref as it displays: the text as typed, with no empty part after a separator.
 ///
-/// `connect` runs only when the ref needs Palette. `fetched_at` is the time of the read, in
+/// `connect` runs only when the ref needs Palette. For `project:<project>/<ref>`, it gives a
+/// client of the project that [`Ref::project`] names. `fetched_at` is the time of the read, in
 /// RFC 3339: the record states it in `source.fetchedAt`.
 ///
 /// # Errors
 ///
-/// `Usage` for an option that does not fit the ref, and for a set of clusters, before any
-/// request. Then the error of a request, such as a 404 for a uid that Palette does not have.
+/// `Usage` for an option that does not fit the ref, and for a set of clusters, before any request.
+/// A ref in a project that belongs to no project is `Usage` too, before any request. Then the
+/// error of a request, such as a 404 for a uid that Palette does not have.
 /// `Usage` for a uid that Palette does not have and that is the name of a profile: the ref gives
 /// no version.
+/// [`Error::ProjectDenied`] when Palette refuses the key in the project of the ref.
 ///
 /// # Examples
 ///
@@ -229,24 +235,27 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
-    options.check(reference)?;
+    options.check(reference.without_project())?;
     let text = reference.to_string();
-    let raw_dir = options.raw_dir.as_deref();
-    let live =
-        |read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| read_live(connect, raw_dir, listing, read);
+    let mut live = |connect: F, read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| {
+        read_live(connect, options.raw_dir.as_deref(), listing, read)
+    };
     match reference {
         Ref::Snapshot(path) => Snapshot::load(path),
         Ref::ClusterSet { .. } => Err(names_a_set(reference)),
-        Ref::NameVersion { name, version } => live(&|palette| {
+        Ref::InProject { .. } => in_project::read(reference, |r| {
+            snapshot_in(r, options, connect, listing, fetched_at, progress)
+        }),
+        Ref::NameVersion { name, version } => live(connect, &|palette| {
             let uid = palette.profile_uid(name, Some(version), progress)?;
             profile_snapshot(palette, &uid, options, &text, fetched_at, progress)
         }),
         // a text with no version can be a name, and the error of the read then says so
-        Ref::Uid(uid) => live(&|palette| {
+        Ref::Uid(uid) => live(connect, &|palette| {
             let read = profile_snapshot(palette, uid, options, &text, fetched_at, progress);
             palette.or_name_with_no_version(reference, read)
         }),
-        Ref::Draft { id, version } => live(&|palette| {
+        Ref::Draft { id, version } => live(connect, &|palette| {
             let read = draft_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress);
             palette.or_name_with_no_version(reference, read)
         }),
@@ -254,7 +263,7 @@ where
             registry,
             name,
             version,
-        } => live(&|palette| {
+        } => live(connect, &|palette| {
             pack_snapshot(
                 palette,
                 registry.as_deref(),
@@ -269,21 +278,18 @@ where
             uid,
             profile,
             pending,
-        } => live(&|palette| {
+        } => live(connect, &|palette| {
             let reads = HolderReads::cluster(profile.as_deref(), *pending, options);
             cluster_snapshot(palette, uid, &reads, &text, fetched_at, progress)
         }),
-        Ref::AppProfile { id, version } => live(&|palette| {
+        Ref::AppProfile { id, version } => live(connect, &|palette| {
             app_profile_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
         }),
-        Ref::ClusterGroup { uid } => live(&|palette| {
+        Ref::ClusterGroup { uid } => live(connect, &|palette| {
             cluster_group_snapshot(palette, uid, options.macros, &text, fetched_at, progress)
         }),
-        Ref::EdgeHost { uid, profile } => live(&|palette| {
-            let reads = HolderReads {
-                profile: profile.as_deref(),
-                ..HolderReads::default()
-            };
+        Ref::EdgeHost { uid, profile } => live(connect, &|palette| {
+            let reads = HolderReads::of_profile(profile.as_deref());
             held_snapshot(
                 palette,
                 SubjectKind::EdgeHost,
@@ -368,6 +374,15 @@ struct HolderReads<'a> {
 }
 
 impl<'a> HolderReads<'a> {
+    /// What a record reads of the profiles `profile` of a holder, as `profile` of [`Ref::EdgeHost`],
+    /// and nothing more.
+    fn of_profile(profile: Option<&'a str>) -> Self {
+        HolderReads {
+            profile,
+            ..HolderReads::default()
+        }
+    }
+
     /// What `snapshot` reads of a cluster: the `profile` and the `pending` update of its ref, and
     /// what `options` ask for.
     fn cluster(profile: Option<&'a str>, pending: bool, options: &'a SnapshotOptions) -> Self {
@@ -559,7 +574,7 @@ where
     A: PaletteApi,
     F: FnMut(Side) -> Result<Palette<A>>,
 {
-    let open = |r: &Ref| matches!(r, Ref::Cluster { profile: None, .. });
+    let open = |r: &Ref| matches!(r.without_project(), Ref::Cluster { profile: None, .. });
     let content = SnapshotOptions::default();
     if open(a) && !open(b) {
         let sb = snapshot_for(b, &content, || connect(Side::B), fetched_at, progress)?;
@@ -592,6 +607,9 @@ where
             pending,
         } if other.source.is_profile_version() => read_live(connect, None, &mut None, |palette| {
             cluster_beside(palette, uid, *pending, &other.source, fetched_at, progress)
+        }),
+        Ref::InProject { .. } => in_project::read(r, |inner| {
+            side_beside(inner, other, connect, fetched_at, progress)
         }),
         _ => snapshot_for(
             &narrowed(r, other),
@@ -749,51 +767,4 @@ pub fn compare(a: &Snapshot, b: &Snapshot, generated_at: &str) -> Diff {
     let mut d = diff::compute(a, b, generated_at, None);
     d.update_checks = UpdateChecks::of_versions(a, b);
     d
-}
-
-/// The scope that the project uid `project` names: `None`, the scope of the connection, when it
-/// is empty. A record of the tenant scope and a cluster with no project both give an empty uid.
-pub fn scope_of(project: &str) -> Option<&str> {
-    Some(project).filter(|p| !p.is_empty())
-}
-
-/// The client that reads a cluster of project `project`: the one already connected for that
-/// project, or a new one. It is `home` when the cluster names no project of its own. A cluster
-/// with no project is in the scope the operation already works in, so `home` reads it.
-/// `consumers` and `list clusters --detail` answered that differently until they shared this.
-fn client_for<'a, A, F>(
-    clients: &'a mut HashMap<Option<String>, Palette<A>>,
-    home: &'a Palette<A>,
-    project: &str,
-    connect: &mut F,
-) -> Result<&'a Palette<A>>
-where
-    A: PaletteApi,
-    F: FnMut(Option<&str>) -> Result<Palette<A>>,
-{
-    if project.is_empty() || Some(project) == home.project_uid() {
-        return Ok(home);
-    }
-    connected(clients, Some(project), connect)
-}
-
-/// The client of the scope `scope`: the one that `clients` holds for it, or a new one from
-/// `connect`, which `clients` then holds.
-///
-/// `None` is the scope of the command, and `Some` with the empty text is the tenant. `verify` reads
-/// each record in its own scope with it. An operation that has a home client reads a cluster
-/// through [`client_for`].
-fn connected<'a, A, F>(
-    clients: &'a mut HashMap<Option<String>, Palette<A>>,
-    scope: Option<&str>,
-    connect: &mut F,
-) -> Result<&'a Palette<A>>
-where
-    A: PaletteApi,
-    F: FnMut(Option<&str>) -> Result<Palette<A>>,
-{
-    match clients.entry(scope.map(str::to_string)) {
-        Entry::Occupied(e) => Ok(e.into_mut()),
-        Entry::Vacant(v) => connect(scope).map(|p| &*v.insert(p)),
-    }
 }

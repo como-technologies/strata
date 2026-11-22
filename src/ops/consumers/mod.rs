@@ -388,8 +388,8 @@ impl ConsumersReport {
 /// state `unknown` and its error, and the cluster still counts. Then strata reads each cluster the
 /// key can list for the profiles it applies: see [`consumers_with`] to read the list alone.
 ///
-/// `connect` gives a client for a project uid, with `None` for the configured scope.
-/// `generated_at` is the time of the report, in RFC 3339.
+/// `connect` gives a client for a project uid. `None` is the configured scope, or the project that
+/// a ref `project:<project>/<ref>` names. `generated_at` is the time of the report, in RFC 3339.
 ///
 /// # Errors
 ///
@@ -431,7 +431,9 @@ where
 /// # Errors
 ///
 /// [`ProfileRefRequired`](crate::Error::ProfileRefRequired) for a ref that names no profile, and for
-/// a record of a cluster or of a pack. [`NoUid`](crate::Error::NoUid) for a record with no uid.
+/// a record of a cluster or of a pack. `Usage` for a ref in a project that belongs to no project.
+/// [`ProjectDenied`](crate::Error::ProjectDenied) when Palette refuses the key in that project.
+/// [`NoUid`](crate::Error::NoUid) for a record with no uid.
 /// The error of `connect` for the scope of the profile, and the error of the read of the profile.
 /// The read gives [`ProfileNotFound`](crate::Error::ProfileNotFound) and
 /// [`ProfileNameAmbiguous`](crate::Error::ProfileNameAmbiguous) for a name. It gives `Usage` for a
@@ -452,6 +454,8 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
+    // a refusal of the key in the project of the ref names the project
+    let denied = |e| super::in_project::denied(reference, e);
     let (profile_scope, uid_hint) = match target_of(reference)? {
         Target::App { scope, id, version } => {
             return app_consumers(
@@ -462,16 +466,20 @@ where
                 connect,
                 generated_at,
                 progress,
-            );
+            )
+            .map_err(denied);
         }
         Target::Profile { scope, uid } => (scope, uid),
     };
 
     let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
     let home = connect(profile_scope.as_deref())?;
-    let uid = uid_of_ref(reference, uid_hint, &home, progress)?;
+    let read = reference.without_project();
+    let uid = uid_of_ref(read, uid_hint, &home, progress).map_err(denied)?;
     progress.note(&format!("listing consumers of profile {uid}"));
-    let doc = home.or_name_with_no_version(reference, home.profile_document(&uid))?;
+    let doc = home
+        .or_name_with_no_version(read, home.profile_document(&uid))
+        .map_err(denied)?;
 
     let mut list = listed_consumers(&doc, &uid, &home, &mut clients, &mut connect);
     // The list above can omit a cluster: see `second_reading`, which adds it.

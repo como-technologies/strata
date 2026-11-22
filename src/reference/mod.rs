@@ -89,6 +89,14 @@ pub enum Ref {
         /// Cluster group uid, or its name.
         uid: String,
     },
+    /// `project:<project>/<ref>`: `reference`, read in the project that `project` names, and not
+    /// in the configured project.
+    InProject {
+        /// The uid or the name of the project: the text between `project:` and the first `/`.
+        project: String,
+        /// The ref to read in the project: the text after the first `/`.
+        reference: Box<Ref>,
+    },
 }
 
 /// The suffix of a cluster ref that names the update that waits for the cluster.
@@ -118,50 +126,81 @@ pub const CLUSTER_GROUP_PREFIX: &str = "clustergroup:";
 /// The prefix of a pack ref.
 pub const PACK_PREFIX: &str = "pack:";
 
+/// The prefix of a ref that names its project.
+pub const PROJECT_PREFIX: &str = "project:";
+
 impl Ref {
-    /// A path to an existing file is a snapshot; `pack:[<registry>/]<name>@<version>` is a pack
-    /// version; `cluster:<uid>[/<profile>][@pending]` with a non-empty uid is a cluster;
-    /// `edgehost:<uid>[/<profile>]` is an edge host; `clustergroup:<uid>` is a cluster group;
-    /// `appprofile:<uid>` or `appprofile:<name>@<version>` is an app profile; `tag:<key>=<value>`
-    /// and `filter:<name>` are a set of clusters; `name@version@draft` and `uid@draft` are the
-    /// draft of a version; `name@version` with both parts non-empty is a name and version;
-    /// anything else is a uid.
+    /// The ref that `text` names.
+    ///
+    /// A path to an existing file is a snapshot. `project:<project>/<ref>` is a ref in a project.
+    /// `pack:[<registry>/]<name>@<version>` is a pack version. `cluster:<uid>[/<profile>][@pending]`
+    /// with a non-empty uid is a cluster. `edgehost:<uid>[/<profile>]` is an edge host, and
+    /// `clustergroup:<uid>` is a cluster group. `appprofile:<uid>` or `appprofile:<name>@<version>`
+    /// is an app profile. `tag:<key>=<value>` and `filter:<name>` are a set of clusters.
+    /// `name@version@draft` and `uid@draft` are the draft of a version. `name@version` with both
+    /// parts non-empty is a name and version. Each other text is a uid.
     pub fn parse(text: &str) -> Ref {
         Self::parse_with(text, |p| p.is_file())
     }
 
     /// [`Ref::parse`] with a caller-supplied "is this a file" check, for tests.
     pub fn parse_with(text: &str, is_file: impl Fn(&Path) -> bool) -> Ref {
-        if is_file(Path::new(text)) {
-            return Ref::Snapshot(PathBuf::from(text));
+        parse_dyn(text, &is_file)
+    }
+}
+
+/// [`Ref::parse_with`] with no type parameter, so that the ref of `project:<project>/<ref>` parses
+/// with the same check.
+fn parse_dyn(text: &str, is_file: &dyn Fn(&Path) -> bool) -> Ref {
+    if is_file(Path::new(text)) {
+        return Ref::Snapshot(PathBuf::from(text));
+    }
+    // a prefix with nothing valid after it is no ref of its kind, so the text goes to the next
+    // rule
+    let prefixed = project_ref(text, is_file)
+        .or_else(|| pack_ref(text))
+        .or_else(|| cluster_ref(text))
+        .or_else(|| edge_host_ref(text))
+        .or_else(|| tag_ref(text))
+        .or_else(|| filter_ref(text))
+        .or_else(|| app_profile_ref(text))
+        .or_else(|| cluster_group_ref(text));
+    if let Some(parsed) = prefixed {
+        return parsed;
+    }
+    // A ref that is shaped like a path is a file, whether or not the file is there. The loader
+    // then says which file is missing, and Palette does not answer 404 for a uid that it never had.
+    if looks_like_a_path(text) {
+        return Ref::Snapshot(PathBuf::from(text));
+    }
+    if let Some(draft) = draft_ref(text) {
+        return draft;
+    }
+    if let Some((name, version)) = name_at_version(text) {
+        return Ref::NameVersion {
+            name: name.to_string(),
+            version: version.to_string(),
+        };
+    }
+    Ref::Uid(text.to_string())
+}
+
+impl Ref {
+    /// The ref with no project: the ref of `project:<project>/<ref>`, else this ref.
+    pub fn without_project(&self) -> &Ref {
+        match self {
+            Ref::InProject { reference, .. } => reference,
+            _ => self,
         }
-        // a prefix with nothing valid after it is no ref of its kind, so the text goes to the
-        // next rule
-        let prefixed = pack_ref(text)
-            .or_else(|| cluster_ref(text))
-            .or_else(|| edge_host_ref(text))
-            .or_else(|| tag_ref(text))
-            .or_else(|| filter_ref(text))
-            .or_else(|| app_profile_ref(text))
-            .or_else(|| cluster_group_ref(text));
-        if let Some(parsed) = prefixed {
-            return parsed;
+    }
+
+    /// The uid or the name of the project that `project:<project>/<ref>` names. `None` for each
+    /// other ref: it reads in the configured project.
+    pub fn project(&self) -> Option<&str> {
+        match self {
+            Ref::InProject { project, .. } => Some(project),
+            _ => None,
         }
-        // A ref that is shaped like a path is a file, whether or not the file is there: the loader
-        // then says which file is missing, instead of Palette answering 404 for a uid it never had.
-        if looks_like_a_path(text) {
-            return Ref::Snapshot(PathBuf::from(text));
-        }
-        if let Some(draft) = draft_ref(text) {
-            return draft;
-        }
-        if let Some((name, version)) = name_at_version(text) {
-            return Ref::NameVersion {
-                name: name.to_string(),
-                version: version.to_string(),
-            };
-        }
-        Ref::Uid(text.to_string())
     }
 
     /// True when the ref names a profile version: `<name>@<version>`, a uid, or either with
@@ -222,6 +261,16 @@ fn uid_and_profile(text: &str) -> (&str, Option<&str>) {
         Some((uid, profile)) => (uid, Some(profile).filter(|p| !p.is_empty())),
         None => (text, None),
     }
+}
+
+/// The ref `project:<project>/<ref>`, when `text` is one: the project ends at the first `/`.
+/// `is_file` reads the ref after it, as [`parse_dyn`] reads a ref.
+fn project_ref(text: &str, is_file: &dyn Fn(&Path) -> bool) -> Option<Ref> {
+    let (project, rest) = text.strip_prefix(PROJECT_PREFIX)?.split_once('/')?;
+    (!project.is_empty() && !rest.is_empty()).then(|| Ref::InProject {
+        project: project.to_string(),
+        reference: Box::new(parse_dyn(rest, is_file)),
+    })
 }
 
 /// The pack ref `pack:[<registry>/]<name>@<version>`, when `text` is one.
@@ -347,6 +396,12 @@ fn draft_ref(text: &str) -> Option<Ref> {
     })
 }
 
+/// The text of a ref in a project: `project:<project>/<reference>`. A record of the ref names its
+/// source with it.
+pub(crate) fn in_project(project: &str, reference: &str) -> String {
+    format!("{PROJECT_PREFIX}{project}/{reference}")
+}
+
 /// A profile version as a ref writes it: `<name>@<version>`.
 pub(crate) fn name_version(name: &str, version: &str) -> String {
     format!("{name}@{version}")
@@ -403,6 +458,9 @@ impl fmt::Display for Ref {
                 Some(p) => write!(f, "{EDGE_HOST_PREFIX}{uid}/{p}"),
                 None => write!(f, "{EDGE_HOST_PREFIX}{uid}"),
             },
+            Ref::InProject { project, reference } => {
+                f.write_str(&in_project(project, &reference.to_string()))
+            }
         }
     }
 }

@@ -142,13 +142,19 @@ impl PaletteQuestions {
     ///
     /// # Errors
     ///
-    /// - [`Error::Usage`] for a pair that a question cannot ask about, and for a set of clusters.
+    /// - [`Error::Usage`] for a pair that a question cannot ask about, for a set of clusters, and
+    ///   for a ref in a project that belongs to no project.
     /// - The error of the read of a record file.
     pub fn check(&self, a: &Ref, b: &Ref) -> Result<()> {
         let asked = self.asked();
         if asked.is_empty() {
             return Ok(());
         }
+        // a question reads the ref of a project as it reads the ref
+        let (a, b) = (
+            super::in_project::checked(a)?,
+            super::in_project::checked(b)?,
+        );
         if let Some(set) = [a, b]
             .into_iter()
             .find(|r| matches!(r, Ref::ClusterSet { .. }))

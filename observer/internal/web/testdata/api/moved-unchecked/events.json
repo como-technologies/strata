@@ -1,0 +1,5 @@
+{
+  "events": [
+    {"type":"newer","reason":"NewVersion","time":"2026-11-01T12:00:00Z","object":"wilma-gateway@3.1.2","message":"traefik@38.1.0 is listed."}
+  ]
+}

@@ -14,7 +14,7 @@ use crate::closed_set::{Open, impl_closed_set};
 use crate::error::{Error, ErrorDocument, Result};
 use crate::model::cloud::Cloud;
 use crate::model::profile_type::ProfileType;
-use crate::model::scope::{ProfileScope, project_of_document};
+use crate::model::scope::{PROJECT_UID_AT, ProfileScope};
 use crate::reference::Ref;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
@@ -669,7 +669,9 @@ pub(super) fn name_cluster_projects<A: PaletteApi>(
 }
 
 /// The text at `listing` of an entry of the cluster listing, or at `search` of an entry of the
-/// search: the listing gives a field in the spec, and the search in a summary.
+/// search.
+///
+/// The listing gives a field in the spec or in an annotation, and the search in a summary.
 fn listing_or_search(it: &Value, listing: &str, search: &str) -> String {
     first_nonempty(&[str_at(it, listing), str_at(it, search)])
 }
@@ -678,10 +680,7 @@ fn listing_or_search(it: &Value, listing: &str, search: &str) -> String {
 ///
 /// The listing gives it in an annotation, and the search in its summary.
 pub(super) fn project_uid_of(it: &Value) -> String {
-    first_nonempty(&[
-        project_of_document(it),
-        str_at(it, "/specSummary/projectMeta/uid"),
-    ])
+    listing_or_search(it, PROJECT_UID_AT, "/specSummary/projectMeta/uid")
 }
 
 /// The clusters of `rows`, the entries of the listing or the items of a search, by name. A

@@ -10,7 +10,7 @@ use strata::term::color::{LineClass, Paint};
 use strata::term::progress::Progress;
 
 use super::args::{SnapshotArgs, stderr_paint_auto};
-use super::{connect_in, connect_to, now_utc};
+use super::{connect_for, connect_in, now_utc};
 
 pub(crate) fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
     let progress = a.quiet.progress();
@@ -49,7 +49,7 @@ fn record_object(
     now: &str,
     progress: Progress,
 ) -> Result<ExitCode> {
-    let connect = || connect_to(progress, Some(&a.project));
+    let connect = || connect_for(progress, source.project(), Some(&a.project));
     let snap = ops::snapshot_object(source, options, connect, now, &progress)?;
     // the answer of Palette is what --validate asks for, so -q does not hide it. It goes to
     // standard error, beside the record on standard output. The error of a refusal follows the
