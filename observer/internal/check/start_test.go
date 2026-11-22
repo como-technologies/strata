@@ -119,8 +119,8 @@ func TestAChangeOfTheRecordsStartsAContentCycle(t *testing.T) {
 	})
 	// the kubelet changes a mounted Secret in one step, so the test writes a new file and renames it
 	next := t.TempDir()
-	testkit.WriteMeta(t, next, testkit.ApprovedMeta(testkit.NewRevision))
-	if err := os.Rename(filepath.Join(next, testkit.MetaFile), filepath.Join(r.records, testkit.MetaFile)); err != nil {
+	testkit.WriteIn(t, next, baseline.MetaFile, testkit.ApprovedMeta(testkit.NewRevision))
+	if err := os.Rename(filepath.Join(next, baseline.MetaFile), filepath.Join(r.records, baseline.MetaFile)); err != nil {
 		t.Fatal(err)
 	}
 	// a change during a cycle starts one more cycle after it, so the count can pass 2

@@ -145,7 +145,7 @@ func TestThePageOfASetReadsTheSetAfterThe404OfTheRouteOfOneCluster(t *testing.T)
 		paths = append(paths, r.Path)
 	}
 	first := slices.Index(paths, api.PatternClusters)
-	if first < 0 || slices.Index(paths, "/v1/cluster") > first || slices.Contains(paths[first:], "/v1/cluster") {
+	if first < 0 || slices.Index(paths, api.PatternCluster) > first || slices.Contains(paths[first:], api.PatternCluster) {
 		t.Errorf("the requests %q", paths)
 	}
 	if !slices.Contains(paths, "/v1/clusters/c-ledger/profiles") {

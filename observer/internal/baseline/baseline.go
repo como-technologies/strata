@@ -28,8 +28,8 @@ const (
 // recordSuffix ends the name of each record file.
 const recordSuffix = ".json.gz"
 
-// metaFile names the file that says where the records come from.
-const metaFile = "meta.json"
+// MetaFile names the file that says where the records come from.
+const MetaFile = "meta.json"
 
 // maxRecordBytes limits a record after the unzip, so that a bad file cannot fill the memory.
 const maxRecordBytes = 64 << 20
@@ -94,7 +94,7 @@ func Mark(dir string) string {
 	}
 	var b strings.Builder
 	for _, n := range names {
-		if n.Name() != metaFile && !strings.HasSuffix(n.Name(), recordSuffix) {
+		if n.Name() != MetaFile && !strings.HasSuffix(n.Name(), recordSuffix) {
 			continue
 		}
 		// Stat follows the link of the kubelet to the file that it wrote last.
@@ -145,7 +145,7 @@ func EntryOf(file string, raw []byte) (Entry, error) {
 
 // readMeta gives Unknown when the file is absent, is not JSON, or names another baseline.
 func readMeta(dir string) Meta {
-	raw, err := os.ReadFile(filepath.Join(dir, metaFile))
+	raw, err := os.ReadFile(filepath.Join(dir, MetaFile))
 	if err != nil {
 		return Meta{Baseline: Unknown}
 	}

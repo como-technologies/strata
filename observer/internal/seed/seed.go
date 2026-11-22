@@ -26,11 +26,10 @@ import (
 )
 
 // Secrets is the number of Secrets of the records, and Limit is the most bytes of base64 in one of
-// them, as in the script. MetaKey is the key of the meta file in the first Secret.
+// them, as in the script. The first Secret also holds the meta file, under the key baseline.MetaFile.
 const (
 	Secrets = 4
 	Limit   = 900000
-	MetaKey = "meta.json"
 )
 
 // Labels are the labels of each Secret of the records.
@@ -69,7 +68,7 @@ func Run(ctx context.Context, strata Strata, store Store, namespace, clusterUID,
 		if err != nil {
 			return Result{}, err
 		}
-		if slices.ContainsFunc(keys, func(k string) bool { return k != MetaKey }) {
+		if slices.ContainsFunc(keys, func(k string) bool { return k != baseline.MetaFile }) {
 			return Result{Kept: true}, nil
 		}
 	}
@@ -166,7 +165,7 @@ func Shards(records []Record, meta baseline.Meta) ([]map[string][]byte, error) {
 	for i := range shards {
 		shards[i] = map[string][]byte{}
 	}
-	shards[0][MetaKey] = m
+	shards[0][baseline.MetaFile] = m
 	seen := map[string]bool{}
 	for _, r := range records {
 		if seen[r.Key] {

@@ -27,6 +27,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/media"
 	"github.com/como-technologies/strata/observer/internal/model"
 )
 
@@ -91,19 +92,19 @@ type Route struct {
 	Tier    Tier
 }
 
-// The patterns of the routes.
+// The patterns of the routes. A pattern that the tests of another package call has a capital letter.
 const (
 	patternHealth     = "/healthz"
-	patternCluster    = "/v1/cluster"
-	patternFindings   = "/v1/findings"
-	patternProfiles   = "/v1/profiles"
+	PatternCluster    = "/v1/cluster"
+	PatternFindings   = "/v1/findings"
+	PatternProfiles   = "/v1/profiles"
 	patternProfile    = "/v1/profiles/{name}"
-	patternNewer      = "/v1/newer"
-	patternNotChecked = "/v1/notchecked"
-	patternEvents     = "/v1/events"
-	patternImages     = "/v1/images"
+	PatternNewer      = "/v1/newer"
+	PatternNotChecked = "/v1/notchecked"
+	PatternEvents     = "/v1/events"
+	PatternImages     = "/v1/images"
 	patternImage      = "/v1/images/{ref}"
-	patternAlerts     = "/v1/alerts"
+	PatternAlerts     = "/v1/alerts"
 	patternPackDiff   = "/v1/packs/{profile}/{layer}/{name}/diff"
 	patternAsks       = "/v1/asks"
 	patternAsk        = "/v1/packs/{profile}/{layer}/{name}/ask"
@@ -144,16 +145,16 @@ type clusterEntry struct {
 // clusterTable lists the routes of one cluster, with the patterns of an observer of one cluster.
 func clusterTable() []clusterEntry {
 	return []clusterEntry{
-		{Route{patternCluster, http.MethodGet, TierSummary}, (*Server).cluster},
-		{Route{patternFindings, http.MethodGet, TierSummary}, (*Server).findings},
-		{Route{patternProfiles, http.MethodGet, TierSummary}, (*Server).profiles},
+		{Route{PatternCluster, http.MethodGet, TierSummary}, (*Server).cluster},
+		{Route{PatternFindings, http.MethodGet, TierSummary}, (*Server).findings},
+		{Route{PatternProfiles, http.MethodGet, TierSummary}, (*Server).profiles},
 		{Route{patternProfile, http.MethodGet, TierSummary}, (*Server).profile},
-		{Route{patternNewer, http.MethodGet, TierSummary}, (*Server).newer},
-		{Route{patternNotChecked, http.MethodGet, TierSummary}, (*Server).notChecked},
-		{Route{patternEvents, http.MethodGet, TierSummary}, (*Server).events},
-		{Route{patternImages, http.MethodGet, TierSummary}, (*Server).images},
+		{Route{PatternNewer, http.MethodGet, TierSummary}, (*Server).newer},
+		{Route{PatternNotChecked, http.MethodGet, TierSummary}, (*Server).notChecked},
+		{Route{PatternEvents, http.MethodGet, TierSummary}, (*Server).events},
+		{Route{PatternImages, http.MethodGet, TierSummary}, (*Server).images},
 		{Route{patternImage, http.MethodGet, TierSummary}, (*Server).image},
-		{Route{patternAlerts, http.MethodGet, TierSummary}, (*Server).alerts},
+		{Route{PatternAlerts, http.MethodGet, TierSummary}, (*Server).alerts},
 		{Route{patternPackDiff, http.MethodGet, TierDetail}, (*Server).packDiff},
 		{Route{patternAsks, http.MethodGet, TierDetail}, (*Server).asks},
 		{Route{patternAsk, http.MethodPost, TierDetail}, (*Server).ask},
@@ -176,7 +177,7 @@ func (s *Server) table() []entry {
 	out = append(out,
 		entry{Route{PatternClusters, http.MethodGet, TierSummary}, s.clusters},
 		entry{Route{PatternShared, http.MethodGet, TierSummary}, s.shared},
-		entry{Route{patternAlerts, http.MethodGet, TierSummary}, top.alerts},
+		entry{Route{PatternAlerts, http.MethodGet, TierSummary}, top.alerts},
 		entry{Route{patternCycle, http.MethodPost, TierCycle}, top.startCycle})
 	for _, e := range clusterTable() {
 		route := e.Route
@@ -319,7 +320,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	if err != nil {
 		status, body = http.StatusInternalServerError, []byte(`{"error":"internal server error"}`)
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", media.JSONType)
 	w.WriteHeader(status)
 	_, _ = w.Write(append(body, '\n'))
 }

@@ -88,8 +88,8 @@ func TestARunWritesTheFirstSeenRecordsOnceAndThenKeepsThem(t *testing.T) {
 		t.Fatalf(testkit.ResultAndError, res, err)
 	}
 	first := store.data[Name(0)]
-	if got := string(first[MetaKey]); got != testkit.FirstSeenMeta(testkit.ClusterUID) {
-		t.Errorf(MetaKey+" is %s", got)
+	if got := string(first[baseline.MetaFile]); got != testkit.FirstSeenMeta(testkit.ClusterUID) {
+		t.Errorf(baseline.MetaFile+" is %s", got)
 	}
 	for _, p := range profiles {
 		key := p[0] + "_" + p[1] + ".json.gz"
@@ -107,7 +107,7 @@ func TestARunWritesTheFirstSeenRecordsOnceAndThenKeepsThem(t *testing.T) {
 // A Secret that holds meta.json alone holds no record, so a run writes the records.
 func TestASecretWithMetaAloneIsNoRecord(t *testing.T) {
 	store := newStore()
-	store.data[Name(0)][MetaKey] = []byte(testkit.FirstSeenMeta(testkit.ClusterUID))
+	store.data[Name(0)][baseline.MetaFile] = []byte(testkit.FirstSeenMeta(testkit.ClusterUID))
 	if res, err := Run(context.Background(), &fakeStrata{}, store, "ns", testkit.ClusterUID, t.TempDir()); err != nil || res.Kept {
 		t.Errorf(testkit.ResultAndError, res, err)
 	}
@@ -176,7 +176,7 @@ func TestTheSeedWritesWhatTheScriptOfThePipelineWrites(t *testing.T) {
 			switch {
 			case !ok:
 				t.Errorf("%s: the seed has no %s", Name(i), k)
-			case k == MetaKey:
+			case k == baseline.MetaFile:
 				testkit.SamePlain(t, Name(i)+": the meta file of the seed", json.RawMessage(g), json.RawMessage(w))
 			case gunzip(t, g) != gunzip(t, w):
 				t.Errorf("%s: %s differs from the record of the script", Name(i), k)

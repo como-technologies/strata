@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/media"
 )
 
 // ServiceDir is the directory of the projected volume that holds the token and the CA of the
@@ -224,7 +225,7 @@ func (c *Client) page(ctx context.Context, client *http.Client, token, next stri
 		return podList{}, &Error{Kind: docs.KindKubeConfig}
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", media.JSONType)
 	resp, err := client.Do(req)
 	if err != nil {
 		return podList{}, transportError(ctx)

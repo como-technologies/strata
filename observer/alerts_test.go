@@ -73,7 +73,7 @@ func TestServeWithAlertsSendsOneMessageForAFindingAndShowsItsRuleAsFiring(t *tes
 	addr, stop, stderr := startServe(t, args)
 	var view alert.View
 	testkit.WaitFor(t, "the rule of drift fires", func() bool {
-		return getJSON(addr, "/v1/alerts", &view) && len(view.Rules) == 2 && view.Rules[0].State == alert.StateFiring
+		return getJSON(addr, api.PatternAlerts, &view) && len(view.Rules) == 2 && view.Rules[0].State == alert.StateFiring
 	})
 	// The observer sets the state of the rule before it sends the message. So the state does not show
 	// the send, and the count does.
@@ -92,10 +92,10 @@ func TestServeWithoutAlertsSendsNothingAndTheRouteSaysSo(t *testing.T) {
 	defer stop()
 	testkit.WaitFor(t, "the finding of the drift", func() bool {
 		var got api.FindingsView
-		return getJSON(addr, "/v1/findings", &got) && len(got.Findings) == 1
+		return getJSON(addr, api.PatternFindings, &got) && len(got.Findings) == 1
 	})
 	var view alert.View
-	if !getJSON(addr, "/v1/alerts", &view) || view.Set || len(view.Rules) != 0 {
+	if !getJSON(addr, api.PatternAlerts, &view) || view.Set || len(view.Rules) != 0 {
 		t.Errorf("view %+v", view)
 	}
 	testkit.HoldsNone(t, "stderr", stderr.String(), "msg=alert")

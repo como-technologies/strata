@@ -55,9 +55,9 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	events := eventsAt(&c, v, map[string]time.Time{FindingID(PublishedChanged, testkit.DexProfile): t0.Add(-5 * time.Hour)})
 	want := []string{
 		dexDrift,
-		string(EventInfo) + " " + reasonProfileUpdated + " " + testkit.DexProfile,
-		string(EventNewer) + " " + reasonNewVersion + " " + testkit.GatewayProfile,
-		string(EventNotChecked) + " " + reasonOldCopy + " " + hoppy + ", rubble-dns@1.0.0",
+		string(EventInfo) + " " + ReasonProfileUpdated + " " + testkit.DexProfile,
+		string(EventNewer) + " " + ReasonNewVersion + " " + testkit.GatewayProfile,
+		string(EventNotChecked) + " " + ReasonOldCopy + " " + hoppy + ", rubble-dns@1.0.0",
 	}
 	if got := reasons(events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
@@ -150,7 +150,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t 
 		t.Errorf("counts %+v", s.Counts)
 	}
 	// the notice is as new as the last sight, and the drift is as old as the first
-	want := []string{string(EventInfo) + " " + reasonAuditUnread + " " + testkit.DexProfile, dexDrift}
+	want := []string{string(EventInfo) + " " + ReasonAuditUnread + " " + testkit.DexProfile, dexDrift}
 	if got := reasons(s.Events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
 	}
@@ -171,7 +171,7 @@ func TestAFindingWithItsWritesSaysNothingOfAnUnreadAuditLog(t *testing.T) {
 		t.Errorf("finding %+v", s.Findings[0])
 	}
 	for _, e := range s.Events {
-		if e.Reason == reasonAuditUnread {
+		if e.Reason == ReasonAuditUnread {
 			t.Errorf("event %+v", e)
 		}
 	}

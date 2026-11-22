@@ -32,7 +32,7 @@ func TestTheRouteAlertsShowsTheRulesTheirStatesAndTheChannelNames(t *testing.T) 
 	o := alerting(t, r, w, &fakeStrata{dir: r.fixtures})
 	r.once(o)
 	var v alert.View
-	rec := get(handlerOf(o), summaryRoutes[patternAlerts])
+	rec := get(handlerOf(o), summaryRoutes[PatternAlerts])
 	decode(t, rec, &v)
 	if rec.Code != http.StatusOK || !v.Set || len(v.Channels) != 1 || v.Channels[0] != "oncall" || len(v.Rules) != 3 {
 		t.Fatalf("status %d, view %+v", rec.Code, v)
@@ -46,7 +46,7 @@ func TestTheRouteAlertsShowsTheRulesTheirStatesAndTheChannelNames(t *testing.T) 
 func TestAnObserverWithoutAlertsSaysSoOnTheRoute(t *testing.T) {
 	var v alert.View
 	r := newRig(t)
-	rec := get(handlerOf(r.observer(&fakeStrata{dir: r.fixtures})), summaryRoutes[patternAlerts])
+	rec := get(handlerOf(r.observer(&fakeStrata{dir: r.fixtures})), summaryRoutes[PatternAlerts])
 	decode(t, rec, &v)
 	if rec.Code != http.StatusOK || v.Set || len(v.Rules) != 0 || v.Channels == nil || v.Rules == nil {
 		t.Errorf("status %d, view %+v, body %s", rec.Code, v, rec.Body.String())

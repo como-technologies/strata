@@ -9,7 +9,7 @@ import (
 )
 
 // awsFile is the record file of the tests of the mark.
-const awsFile = testkit.AWSStackOld + ".json.gz"
+const awsFile = testkit.AWSStackOld + recordSuffix
 
 // Mark changes when meta.json or a record file changes, and not when another file changes. A directory
 // that cannot be listed gives the empty text.
@@ -24,10 +24,10 @@ func TestMarkChangesWithTheRecordsAndMetaJSONAndNotWithAnotherFile(t *testing.T)
 	if Mark(dir) != first {
 		t.Error("a file that is no record changed the mark")
 	}
-	testkit.WriteMeta(t, dir, testkit.ApprovedMeta(testkit.Revision))
+	testkit.WriteIn(t, dir, MetaFile, testkit.ApprovedMeta(testkit.Revision))
 	second := Mark(dir)
 	if second == first {
-		t.Error("a new " + metaFile + " kept the mark")
+		t.Error("a new " + MetaFile + " kept the mark")
 	}
 	testkit.WriteGzip(t, dir, awsFile, `{"schema":"`+docs.SnapshotSchema+`"`+testkit.NoPacks+`}`)
 	if Mark(dir) == second {
@@ -35,12 +35,5 @@ func TestMarkChangesWithTheRecordsAndMetaJSONAndNotWithAnotherFile(t *testing.T)
 	}
 	if Mark(filepath.Join(dir, "nope")) != "" {
 		t.Error("a directory that is not there has a mark")
-	}
-}
-
-// The const of testkit that copies a const of baseline holds the value of that const.
-func TestEachCopyInTestkitHoldsTheValueOfItsConst(t *testing.T) {
-	if testkit.MetaFile != metaFile {
-		t.Errorf("testkit holds %q, and baseline holds %q", testkit.MetaFile, metaFile)
 	}
 }

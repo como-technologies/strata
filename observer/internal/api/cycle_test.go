@@ -2,14 +2,20 @@ package api
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
+// cyclePath gives the route of the click "Check now" on the cycle name.
+func cyclePath(name string) string {
+	return strings.Replace(patternCycle, "{cycle}", name, 1)
+}
+
 // pathCycle is the click "Check now" on the content cycle.
-const pathCycle = "/v1/cycles/content"
+var pathCycle = cyclePath("content")
 
 // cycles is a Source that answers the click "Check now" with start, and keeps each name that it got.
 type cycles struct {
@@ -45,7 +51,7 @@ func TestTheClickCheckNowAnswers202ForACycleThatStartsOrRunsAnd429WithRetryAfter
 		{model.StartWait, "42", 42, http.StatusTooManyRequests},
 	} {
 		h, names := cyclesWith(tc.state, tc.retry)
-		rec := click(h, "/v1/cycles/versions")
+		rec := click(h, cyclePath("versions"))
 		var got model.Start
 		decode(t, rec, &got)
 		if rec.Code != tc.code || got != (model.Start{Cycle: "versions", State: tc.state, RetryAfter: tc.retry}) {
@@ -64,7 +70,7 @@ func TestTheClickCheckNowAnswers202ForACycleThatStartsOrRunsAnd429WithRetryAfter
 // not loopback, starts nothing.
 func TestTheClickCheckNowRefusesAnotherNameAndAPostThatThePageDidNotSend(t *testing.T) {
 	h, names := cyclesWith(model.StartStarted, 0)
-	if rec := click(h, "/v1/cycles/pods"); rec.Code != http.StatusNotFound {
+	if rec := click(h, cyclePath("pods")); rec.Code != http.StatusNotFound {
 		t.Errorf("another name gave %d", rec.Code)
 	}
 	*names = nil

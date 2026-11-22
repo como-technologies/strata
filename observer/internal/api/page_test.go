@@ -5,6 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/como-technologies/strata/observer/internal/media"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
@@ -31,12 +32,12 @@ func TestPageServesEachFileWithTheTypeOfItsKind(t *testing.T) {
 		{"/LICENSES.md", testkit.PageTypes[".md"], 200},
 		{"/" + testkit.FaviconDark, testkit.PageTypes[".svg"], 200},
 		// A kind that has no type is not served, and nor is a file that does not exist.
-		{"/secret.json", testkit.JSONType, 404},
-		{"/fonts/readme.txt", testkit.JSONType, 404},
-		{"/missing.js", testkit.JSONType, 404},
-		{"/fonts", testkit.JSONType, 404},
-		{"/fonts/", testkit.JSONType, 404},
-		{"/index.html/", testkit.JSONType, 404},
+		{"/secret.json", media.JSONType, 404},
+		{"/fonts/readme.txt", media.JSONType, 404},
+		{"/missing.js", media.JSONType, 404},
+		{"/fonts", media.JSONType, 404},
+		{"/fonts/", media.JSONType, 404},
+		{"/" + pageIndex + "/", media.JSONType, 404},
 	} {
 		rec := get(h, c.path)
 		if rec.Code != c.status || rec.Header().Get("Content-Type") != c.typ {

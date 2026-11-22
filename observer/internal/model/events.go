@@ -26,13 +26,18 @@ func (k Kind) Sentence() string {
 	return eventKinds[k].message
 }
 
+// Reason names the event of the first sight of a finding of this kind.
+func (k Kind) Reason() string {
+	return eventKinds[k].reason
+}
+
 // The reasons of the events that no kind of finding names.
 const (
-	reasonProfileUpdated = "ProfileUpdated"
-	reasonNewVersion     = "NewVersion"
-	reasonNewProfile     = "NewProfileVersion"
-	reasonOldCopy        = "OldCopy"
-	reasonAuditUnread    = "AuditUnread"
+	ReasonProfileUpdated = "ProfileUpdated"
+	ReasonNewVersion     = "NewVersion"
+	ReasonNewProfile     = "NewProfileVersion"
+	ReasonOldCopy        = "OldCopy"
+	ReasonAuditUnread    = "AuditUnread"
 )
 
 // eventsOf gives the events of the last 7 days, the newest first. A finding makes a drift event at
@@ -56,11 +61,11 @@ func eventsOf(findings []Finding, versions *Versions, now time.Time) []Event {
 		add(Event{Type: EventDrift, Reason: k.reason, Time: f.FirstSeen, Object: f.Profile, Message: k.message})
 		for _, w := range f.Who {
 			if t, ok := parseTime(w.Time); ok {
-				add(Event{Type: EventInfo, Reason: reasonProfileUpdated, Time: t, Object: f.Profile, Message: whoMessage(w)})
+				add(Event{Type: EventInfo, Reason: ReasonProfileUpdated, Time: t, Object: f.Profile, Message: whoMessage(w)})
 			}
 		}
 		if f.WhoUnread {
-			add(Event{Type: EventInfo, Reason: reasonAuditUnread, Time: f.LastSeen, Object: f.Profile, Message: whoUnreadMessage})
+			add(Event{Type: EventInfo, Reason: ReasonAuditUnread, Time: f.LastSeen, Object: f.Profile, Message: whoUnreadMessage})
 		}
 	}
 	if versions != nil {
@@ -98,7 +103,7 @@ func versionEvents(vs *Versions) []Event {
 		profiles := pinProfiles(pin.PinnedBy)
 		if pin.Behind && len(pin.Newer) > 0 {
 			if t, ok := parseTime(pin.Newer[0].Listed); ok {
-				out = append(out, Event{Type: EventNewer, Reason: reasonNewVersion, Time: t, Object: strings.Join(profiles, ", "),
+				out = append(out, Event{Type: EventNewer, Reason: ReasonNewVersion, Time: t, Object: strings.Join(profiles, ", "),
 					Message: fmt.Sprintf("%s@%s is listed.", pin.Name, pin.Newer[0].Version)})
 			}
 		}
@@ -118,7 +123,7 @@ func versionEvents(vs *Versions) []Event {
 	}
 	for registry, c := range copies {
 		slices.Sort(c.profiles)
-		out = append(out, Event{Type: EventNotChecked, Reason: reasonOldCopy, Time: c.at, Object: strings.Join(slices.Compact(c.profiles), ", "),
+		out = append(out, Event{Type: EventNotChecked, Reason: ReasonOldCopy, Time: c.at, Object: strings.Join(slices.Compact(c.profiles), ", "),
 			Message: fmt.Sprintf("Current against a copy of %s from %s.", registry, c.at.UTC().Format("Jan 2"))})
 	}
 	return append(out, profileEvents(vs.Profiles)...)
@@ -134,7 +139,7 @@ func profileEvents(profiles []docs.ProfilePin) []Event {
 			continue
 		}
 		if t, ok := parseTime(newest.Created); ok {
-			out = append(out, Event{Type: EventNewer, Reason: reasonNewProfile, Time: t, Object: strings.Join(pinProfiles(p.PinnedBy), ", "),
+			out = append(out, Event{Type: EventNewer, Reason: ReasonNewProfile, Time: t, Object: strings.Join(pinProfiles(p.PinnedBy), ", "),
 				Message: fmt.Sprintf("%s@%s is a newer version of the profile.", p.Name, newest.Version)})
 		}
 	}

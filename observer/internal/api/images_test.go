@@ -16,7 +16,7 @@ import (
 func TestTheImagesRouteServesTheDocumentOfThePods(t *testing.T) {
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
-	rec := get(h, summaryRoutes[patternImages])
+	rec := get(h, summaryRoutes[PatternImages])
 	var got model.Observed
 	decode(t, rec, &got)
 	if rec.Code != http.StatusOK || got.Schema != model.ObservedSchema || got.Pods != model.PodsRead || got.ReadAt == nil || len(got.Images) != 1 ||
@@ -32,11 +32,11 @@ func TestTheImageRouteTakesTheReferenceAsOneEscapedSegment(t *testing.T) {
 		path string
 		code int
 	}{
-		{"/v1/images/" + url.PathEscape(testkit.ImageRef), 200},
+		{PatternImages + "/" + url.PathEscape(testkit.ImageRef), 200},
 		{summaryRoutes[patternImage], 200},
-		{"/v1/images/" + testkit.ImageRef, 404},
-		{"/v1/images/" + url.PathEscape("a/c:9"), 404},
-		{"/v1/images/", 404},
+		{PatternImages + "/" + testkit.ImageRef, 404},
+		{PatternImages + "/" + url.PathEscape("a/c:9"), 404},
+		{PatternImages + "/", 404},
 	} {
 		if rec := get(h, c.path); rec.Code != c.code {
 			t.Errorf("%s gave %d, want %d: %s", c.path, rec.Code, c.code, rec.Body.String())
@@ -47,7 +47,7 @@ func TestTheImageRouteTakesTheReferenceAsOneEscapedSegment(t *testing.T) {
 	if view.Schema != model.ObservedSchema || view.Image.Ref != testkit.ImageRef || view.Pods != model.PodsRead {
 		t.Errorf("view %+v", view)
 	}
-	testkit.HoldsNone(t, "the answer of an unknown reference", get(h, "/v1/images/"+url.PathEscape("SECRET-REF:1")).Body.String(), "SECRET-REF")
+	testkit.HoldsNone(t, "the answer of an unknown reference", get(h, PatternImages+"/"+url.PathEscape("SECRET-REF:1")).Body.String(), "SECRET-REF")
 }
 
 func TestWithTheReadOffTheRouteSaysSoAndListsNoImage(t *testing.T) {
@@ -55,7 +55,7 @@ func TestWithTheReadOffTheRouteSaysSoAndListsNoImage(t *testing.T) {
 	r.pods = nil
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var got model.Observed
-	decode(t, get(h, summaryRoutes[patternImages]), &got)
+	decode(t, get(h, summaryRoutes[PatternImages]), &got)
 	if got.Pods != model.PodsOff || got.ReadAt != nil || got.Images == nil || len(got.Images) != 0 {
 		t.Errorf("document %+v", got)
 	}
@@ -70,14 +70,14 @@ func TestAReadThatFailsShowsTheKindAndTheStatusAndNothingElse(t *testing.T) {
 		return nil, &kube.Error{Kind: docs.KindKubeAPI, Status: 403}
 	})
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
-	rec := get(h, summaryRoutes[patternImages])
+	rec := get(h, summaryRoutes[PatternImages])
 	var got model.Observed
 	decode(t, rec, &got)
 	if got.Pods != model.PodsUnread || got.Error == nil || got.Error.Kind != docs.KindKubeAPI || got.Error.Status != 403 || len(got.Images) != 0 {
 		t.Errorf("document %+v", got)
 	}
 	var nc NotCheckedView
-	decode(t, get(h, summaryRoutes[patternNotChecked]), &nc)
+	decode(t, get(h, summaryRoutes[PatternNotChecked]), &nc)
 	found := false
 	for _, row := range nc.NotChecked {
 		found = found || row.Cause == model.PodsNotRead

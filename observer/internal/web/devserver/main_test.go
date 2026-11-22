@@ -38,7 +38,7 @@ func TestADirectoryWithNoSetExitsTwo(t *testing.T) {
 // The server gives the page and the routes, with the headers of the real server.
 func TestTheServerGivesThePageAndTheRoutesOfTheSet(t *testing.T) {
 	addr, stop := startSet(t, string(devdata.StateLost))
-	resp, body := request(t, http.MethodGet, "http://"+addr+"/v1/cluster", false)
+	resp, body := request(t, http.MethodGet, "http://"+addr+api.PatternCluster, false)
 	if resp.StatusCode != 200 || !strings.Contains(body, `"page":"lost"`) || resp.Header.Get(testkit.HeaderPolicy) == "" {
 		t.Errorf("status %d, headers %v, body %s", resp.StatusCode, resp.Header, body)
 	}

@@ -470,12 +470,12 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 		t.Errorf("counts %+v", s.Counts)
 	}
 	got := reasons(s.Events)
-	addonsEvent, baseEvent := string(EventNewer)+" "+reasonNewProfile+" "+testkit.BarneyAddons, string(EventNewer)+" "+reasonNewProfile+" "+testkit.BaseProfile
+	addonsEvent, baseEvent := string(EventNewer)+" "+ReasonNewProfile+" "+testkit.BarneyAddons, string(EventNewer)+" "+ReasonNewProfile+" "+testkit.BaseProfile
 	if !slices.Contains(got, addonsEvent) || slices.Contains(got, baseEvent) {
 		t.Errorf("events %q", got)
 	}
 	for _, e := range s.Events {
-		if e.Reason == reasonNewProfile && (e.Message != "barney-addons@1.4.0 is a newer version of the profile." || !e.Time.Equal(t0.Add(-2*time.Hour))) {
+		if e.Reason == ReasonNewProfile && (e.Message != "barney-addons@1.4.0 is a newer version of the profile." || !e.Time.Equal(t0.Add(-2*time.Hour))) {
 			t.Errorf("the event %+v", e)
 		}
 	}

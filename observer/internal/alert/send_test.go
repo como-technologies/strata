@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/media"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
@@ -44,7 +45,7 @@ func TestAMessageIsAPostOfJSONWithTheTextToAnHttpsAddress(t *testing.T) {
 	}
 	var sent struct{ Text string }
 	got := r.Got()
-	if len(got) != 1 || got[0].Method != http.MethodPost || json.Unmarshal([]byte(got[0].Body), &sent) != nil || sent.Text != text || got[0].ContentType != testkit.JSONType {
+	if len(got) != 1 || got[0].Method != http.MethodPost || json.Unmarshal([]byte(got[0].Body), &sent) != nil || sent.Text != text || got[0].ContentType != media.JSONType {
 		t.Errorf("requests %q", got)
 	}
 }

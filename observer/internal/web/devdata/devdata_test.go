@@ -131,21 +131,21 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 			}
 			testkit.SamePlain(t, string(state)+": "+path, json.RawMessage(rec.Body.Bytes()), want)
 		}
-		for route, file := range map[string]string{"/v1/cluster": fileCluster, "/v1/findings": fileFindings, "/v1/profiles": fileProfiles,
-			"/v1/newer": fileNewer, "/v1/notchecked": fileNotChecked, "/v1/events": fileEvents, "/v1/images": fileImages, testkit.AsksRoute: fileAsks} {
+		for route, file := range map[string]string{api.PatternCluster: fileCluster, api.PatternFindings: fileFindings, api.PatternProfiles: fileProfiles,
+			api.PatternNewer: fileNewer, api.PatternNotChecked: fileNotChecked, api.PatternEvents: fileEvents, api.PatternImages: fileImages, testkit.AsksRoute: fileAsks} {
 			raw, err := Read(sets(), state, file)
 			if err != nil {
 				t.Fatal(err)
 			}
 			serves(route, json.RawMessage(raw))
 		}
-		serves("/v1/alerts", s.AlertRules)
+		serves(api.PatternAlerts, s.AlertRules)
 		for _, img := range s.Images.Images {
 			view, _ := s.Images.ImageOf(img.Ref)
-			path := "/v1/images/" + url.PathEscape(img.Ref)
+			path := api.PatternImages + "/" + url.PathEscape(img.Ref)
 			serves(path, view)
 		}
-		if code := testkit.Get(h, "/v1/images/"+url.PathEscape(testkit.NoImage)).Code; code != http.StatusNotFound {
+		if code := testkit.Get(h, api.PatternImages+"/"+url.PathEscape(testkit.NoImage)).Code; code != http.StatusNotFound {
 			t.Errorf("%s: an image that no pod runs gave %d", state, code)
 		}
 		for _, d := range s.Diffs {
@@ -449,10 +449,7 @@ func hasPack(s *Set, profile, key string) bool {
 // A finding of an image names the images of the document, and an image that makes a finding has one. The
 // finding has an event, and the profile lists it. The other kinds of finding name no image.
 func TestEachFindingOfAnImageNamesAnImageOfTheDocumentAndHasItsEvent(t *testing.T) {
-	kinds := map[model.Kind]struct {
-		status model.ImageStatus
-		reason string
-	}{model.ImageMoved: {model.ImageStatusMoved, "ImageMoved"}, model.ImageSplit: {model.ImageStatusSplit, "ImageSplit"}}
+	kinds := map[model.Kind]model.ImageStatus{model.ImageMoved: model.ImageStatusMoved, model.ImageSplit: model.ImageStatusSplit}
 	for _, state := range States {
 		t.Run(string(state), func(t *testing.T) {
 			s := load(t, state)
@@ -463,7 +460,7 @@ func TestEachFindingOfAnImageNamesAnImageOfTheDocumentAndHasItsEvent(t *testing.
 			named := map[string]bool{}
 			var found int
 			for _, f := range s.Findings.Findings {
-				kind, isImage := kinds[f.Kind]
+				status, isImage := kinds[f.Kind]
 				if !isImage {
 					if len(f.Images) != 0 {
 						t.Errorf("the finding %s of the kind %s names images", f.ID, f.Kind)
@@ -476,15 +473,15 @@ func TestEachFindingOfAnImageNamesAnImageOfTheDocumentAndHasItsEvent(t *testing.
 				}
 				for _, ref := range f.Images {
 					img, ok := byRef[ref]
-					if !ok || img.Status != kind.status || !slices.ContainsFunc(img.Packs, func(p model.ImagePack) bool { return p.Profile == f.Profile && slices.Contains(f.Packs, p.Key) }) {
-						t.Errorf("the finding %s names %s, which the document does not hold as %s of this profile", f.ID, ref, kind.status)
+					if !ok || img.Status != status || !slices.ContainsFunc(img.Packs, func(p model.ImagePack) bool { return p.Profile == f.Profile && slices.Contains(f.Packs, p.Key) }) {
+						t.Errorf("the finding %s names %s, which the document does not hold as %s of this profile", f.ID, ref, status)
 					}
 					named[ref] = true
 				}
 				if !slices.ContainsFunc(s.Events.Events, func(e model.Event) bool {
-					return e.Reason == kind.reason && e.Object == f.Profile && e.Type == model.EventDrift
+					return e.Reason == f.Kind.Reason() && e.Object == f.Profile && e.Type == model.EventDrift
 				}) {
-					t.Errorf("the finding %s has no event %s", f.ID, kind.reason)
+					t.Errorf("the finding %s has no event %s", f.ID, f.Kind.Reason())
 				}
 			}
 			for _, img := range s.Images.Images {
@@ -494,7 +491,7 @@ func TestEachFindingOfAnImageNamesAnImageOfTheDocumentAndHasItsEvent(t *testing.
 			}
 			var events int
 			for _, e := range s.Events.Events {
-				if e.Reason == "ImageMoved" || e.Reason == "ImageSplit" {
+				if e.Reason == model.ImageMoved.Reason() || e.Reason == model.ImageSplit.Reason() {
 					events++
 				}
 			}

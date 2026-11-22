@@ -978,7 +978,7 @@ func TestNothingAsksWithoutAClick(t *testing.T) {
 					t.Errorf("the page sent %s %s without a click", r.Method, r.Path)
 				}
 				asks += strings.Count(r.Path, testkit.AsksRoute)
-				diffs += strings.Count(r.Path, "/diff?side=")
+				diffs += strings.Count(r.Path, testkit.DiffSide)
 			}
 			if asks == 0 || diffs == 0 {
 				t.Errorf("the crawl read the list of answers %d times and %d diffs", asks, diffs)
