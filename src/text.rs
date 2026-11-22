@@ -158,10 +158,12 @@ pub fn markdown_cell(s: &str) -> String {
 ///
 /// Each control character is the visible escape of [`terminal_text`], so a line end starts no new
 /// line. A bare address that GitHub surely links stays as it is, so its link goes to its target.
-/// The link ends before the escape after the address. Each other word is [`html_text`], with a
-/// `\` before each mark of markdown. It also gets a zero width space in each mention and each
-/// reference to an issue. So a text that strata quotes from an answer, such as a message of
-/// Palette, shows as text. A `@name` in it notifies nobody, and a `#12` in it links to no issue.
+/// The link ends before the escape after the address.
+///
+/// Each other word is [`html_text`], with a `\` before each mark of markdown. It also gets a zero
+/// width space in each mention and each reference to an issue. So a text that strata quotes from
+/// an answer, such as a message of Palette, shows as text. A `@name` in it notifies nobody, and a
+/// `#12` in it links to no issue.
 ///
 /// GitHub links an address with a scheme only when no letter comes before the scheme. So a
 /// caller puts no letter right before the line. A `|` outside a table needs no escape, and a `\`
@@ -195,11 +197,13 @@ pub const ADDRESS_END: &str = "<wbr>";
 /// text, which can follow the text of the caller with no space.
 ///
 /// Each character that [`terminal_text`] escapes ends a part of the word. A part that is a bare
-/// address stays as it is, and [`ADDRESS_END`] comes after it when an escape follows. GitHub cuts
-/// the marks at the end of the address from the link, and a `\` before such a mark stays in the
-/// link. So a cut `*` is `&ast;` and a cut `_` is `&lowbar;`, and GitHub shows each one as text.
-/// HTML names no entity for a `~`. A cut `~` stays as it is, and GitHub shows it as text, as its
-/// markdown route shows. Each other text of the word is [`quoted_text`] of its escape.
+/// address stays as it is, and [`ADDRESS_END`] comes after it when an escape follows. Each other
+/// text of the word is [`quoted_text`] of its escape.
+///
+/// GitHub cuts the marks at the end of the address from the link, and a `\` before such a mark
+/// stays in the link. So a cut `*` is `&ast;` and a cut `_` is `&lowbar;`, and GitHub shows each
+/// one as text. HTML names no entity for a `~`. A cut `~` stays as it is, and GitHub shows it as
+/// text, as its markdown route shows.
 fn markdown_word(word: &str, first: bool) -> String {
     let mut out = String::with_capacity(word.len());
     let mut before = (!first).then_some(' ');
@@ -264,11 +268,12 @@ const LINK_CUTS: [char; 11] = ['?', '!', '.', ',', ':', '*', '_', '~', '\'', '"'
 ///
 /// The address starts with `https://` or `http://`, after an optional `(`, `"`, or `'`. Or it
 /// starts with `www.` after a `(`, or after a space. GitHub links no scheme right after a letter
-/// of ASCII, such as the `n` of the escape `\n`. Its host has two labels or more of letters,
-/// digits, and `-` of ASCII, with a letter or a digit at each end of a label. The word holds only
-/// printable characters of ASCII, and no `<`. The markdown route of GitHub links each such
-/// address, with each mark and each `@` in it as text. The range ends where the link ends: see
-/// [`link_end`].
+/// of ASCII, such as the `n` of the escape `\n`.
+///
+/// Its host has two labels or more of letters, digits, and `-` of ASCII, with a letter or a digit
+/// at each end of a label. The word holds only printable characters of ASCII, and no `<`. The
+/// markdown route of GitHub links each such address, with each mark and each `@` in it as text.
+/// The range ends where the link ends: see [`link_end`].
 fn bare_address(word: &str, before: Option<char>) -> Option<std::ops::Range<usize>> {
     if !word.bytes().all(|b| b.is_ascii_graphic()) || word.contains('<') {
         return None;
