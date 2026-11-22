@@ -58,7 +58,7 @@ command -v curl > /dev/null || die "curl is not installed"
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/report-send}
 mkdir -p "$run" && cd "$run" || exit 2
 summary() {
-  write_summary "report send test" ": the endpoint at \`$url\`, the issues of \`$repo\`."
+  write_summary "report send test" ": the endpoint at $(md span "$url"), the issues of $(md span "$repo")."
 }
 trap summary EXIT
 

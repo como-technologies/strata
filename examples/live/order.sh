@@ -53,9 +53,9 @@ for v in C P R PALETTE_PROJECT_UID; do
 done
 summary() {
   local stage4=""
-  [ -z "${B:-}" ] || stage4=" Stage 4: cluster B \`$B\`, release 1.0.2 \`${P2:-}\`, added profile \`${X:-}\`."
-  write_summary "order test" ", cluster \`$C\`," \
-    "release version \`$P\`, registries version \`$R\`.$stage4"
+  [ -z "${B:-}" ] || stage4=" Stage 4: cluster B $(md span "$B"), release 1.0.2 $(md span "${P2:-}"), added profile $(md span "${X:-}")."
+  write_summary "order test" ", cluster $(md span "$C")," \
+    "release version $(md span "$P"), registries version $(md span "$R").$stage4"
 }
 trap summary EXIT
 

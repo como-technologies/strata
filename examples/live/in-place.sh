@@ -58,8 +58,8 @@ export STRATA_QUIET=1
 
 # summary.md from steps.log, written on any exit, so a resumed run keeps its earlier stages
 summary() {
-  write_summary "in-place edit test, flag $mode" ". Cluster A \`${C:-}\`," \
-    "cluster B \`${B:-}\`, release \`${P:-}\`, add-on \`${AN:-}\` uids \`${AD1:-}\` and \`${AD2:-}\`."
+  write_summary "in-place edit test, flag $mode" ". Cluster A $(md span "${C:-}")," \
+    "cluster B $(md span "${B:-}"), release $(md span "${P:-}"), add-on $(md span "${AN:-}") uids $(md span "${AD1:-}") and $(md span "${AD2:-}")."
 }
 trap summary EXIT
 

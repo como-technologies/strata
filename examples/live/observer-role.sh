@@ -43,7 +43,7 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "observer role test" ", cluster \`${C:-}\`, role \`$OBSERVER_ROLE\`."
+  write_summary "observer role test" ", cluster $(md span "${C:-}"), role $(md span "$OBSERVER_ROLE")."
 }
 trap summary EXIT
 

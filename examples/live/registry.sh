@@ -59,8 +59,8 @@ cluster_var=()
 [ -n "$(out cluster_uid)" ] || cluster_var=(-var cluster=false)
 
 summary() {
-  write_summary "registry test" ", registry \`$REG_NAME\`," \
-    "pack \`$PACK\`."
+  write_summary "registry test" ", registry $(md span "$REG_NAME")," \
+    "pack $(md span "$PACK")."
 }
 trap '[ -z "${M:-}" ] || "$live/api.sh" delete "$M" > /dev/null 2>&1; summary' EXIT
 

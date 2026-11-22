@@ -62,8 +62,8 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "cluster tiers test" ", cluster A \`${C:-}\`," \
-    "cluster B \`${B:-}\`."
+  write_summary "cluster tiers test" ", cluster A $(md span "${C:-}")," \
+    "cluster B $(md span "${B:-}")."
 }
 trap summary EXIT
 

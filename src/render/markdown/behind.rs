@@ -9,12 +9,12 @@ use crate::render::behind::{
     shown_pins, shown_profiles, update_check_lines,
 };
 use crate::render::entry_error;
-use crate::text::{code_cell, dash, lines_cell, markdown_cell};
+use crate::text::{code_cell, dash, lines_cell, markdown_cell, markdown_line};
 
 /// The report of `behind` as markdown. A table that has no row is not there. With `behind_only`,
 /// no table has a row that is current.
 pub(super) fn markdown_behind(r: &BehindReport, behind_only: bool) -> String {
-    let mut o = format!("### behind: {}\n\n", markdown_cell(&behind_heading(r)));
+    let mut o = format!("### behind: {}\n\n", markdown_line(&behind_heading(r)));
     let pins = shown_pins(r, behind_only);
     let profiles = shown_profiles(r, behind_only);
     if !pins.is_empty() {

@@ -41,8 +41,8 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "macro repave test" ", cluster \`${C:-}\`," \
-    "release \`${R:-}\`, project macro \`$macro\`."
+  write_summary "macro repave test" ", cluster $(md span "${C:-}")," \
+    "release $(md span "${R:-}"), project macro $(md span "$macro")."
 }
 trap summary EXIT
 

@@ -2,8 +2,8 @@
 //!
 //! - A phrase from a list of names, and the name of an object.
 //! - A long text cut to a length.
-//! - A mark for an empty text, a text of HTML, a text on a terminal, a text in a cell of a markdown
-//!   table, a text in a code span, and a text in a fenced code block.
+//! - A mark for an empty text, a text of HTML, a text on a terminal, a line of markdown, a text in
+//!   a cell of a markdown table, a text in a code span, and a text in a fenced code block.
 //! - A command as a person types it in a shell.
 //! - A JSON Schema as text, with its descriptions in plain words.
 //!
@@ -141,28 +141,44 @@ pub fn html_text(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
-/// `s` as the text of one cell of a markdown table, or of one line of markdown.
+/// `s` as the text of one cell of a markdown table: [`markdown_line`], with each `|` escaped.
 ///
-/// A `|` ends a cell, and a line break ends the row. So the cell escapes each `|`, and writes a
-/// line break as a space. A bare address that GitHub surely links stays as it is, so its link goes
-/// to its target. Each other word is [`html_text`], with a `\` before each mark of markdown and a
-/// zero width space in each mention. So a text that strata quotes from an answer, such as a
-/// message of Palette, shows as text, and a `@name` in it notifies nobody. A code span shows an
-/// entity and a `\` as they are, so [`code_cell`] writes a value in a code span.
+/// A `|` ends a cell, and the table reads a `\|` as a `|` before it reads the text of the cell.
+/// So the cell escapes each `|`, also in a bare address, and the link of the address keeps its
+/// target. A code span shows an entity and a `\` as they are, so [`code_cell`] writes a value in a
+/// code span.
+pub fn markdown_cell(s: &str) -> String {
+    table_text(&markdown_line(s))
+}
+
+/// `s` as one line of markdown, such as a heading, a note, or an item of a list.
+///
+/// A line end starts a new line, so the line writes each `\n` and each `\r` as a space. A bare
+/// address that GitHub surely links stays as it is, so its link goes to its target. Each other
+/// word is [`html_text`], with a `\` before each mark of markdown. It also gets a zero width space
+/// in each mention and each reference to an issue. So a text that strata quotes from an answer,
+/// such as a message of Palette, shows as text. A `@name` in it notifies nobody, and a `#12` in it
+/// links to no issue.
 ///
 /// GitHub links an address with a scheme only when no letter comes before the scheme. So a
-/// caller puts no letter right before the cell.
-pub fn markdown_cell(s: &str) -> String {
-    let text: String = s
-        .split_inclusive(|c: char| c.is_ascii_whitespace())
+/// caller puts no letter right before the line. A `|` outside a table needs no escape, and a `\`
+/// before it stays in the link of an address. So the line keeps each `|` as it is.
+pub fn markdown_line(s: &str) -> String {
+    s.split_inclusive(|c: char| c.is_ascii_whitespace())
         .enumerate()
         .map(|(i, piece)| {
             let word = piece.trim_end_matches(|c: char| c.is_ascii_whitespace());
-            markdown_word(word, i == 0) + &piece[word.len()..]
+            markdown_word(word, i == 0) + &piece[word.len()..].replace(LINE_ENDS, " ")
         })
-        .collect();
-    table_text(&text)
+        .collect()
 }
+
+/// The characters that end a line: a line break and a carriage return.
+///
+/// Markdown reads a carriage return with no line break after it as a line end too, so it ends a
+/// row of a table. A text on one line, such as a cell or the body of an answer in an error, writes
+/// each one as a space.
+pub const LINE_ENDS: [char; 2] = ['\n', '\r'];
 
 /// `word`, a text with no space of ASCII, as markdown. `first` is true for the first word of the
 /// text, which can follow the text of the caller with no space.
@@ -181,10 +197,22 @@ fn markdown_word(word: &str, first: bool) -> String {
     format!("{}{}{cut}", quoted_text(&word[..link.start]), &word[link])
 }
 
-/// `s` with the escapes of a quoted text that is no bare address. It is [`html_text`], with a `\`
-/// before each mark of markdown and a zero width space in each mention.
+/// `s` with the escapes of a quoted text that is no bare address. It is [`quoted_html`], with a
+/// `\` before each mark of markdown.
 fn quoted_text(s: &str) -> String {
-    mention_text(&html_text(&markdown_text(s)))
+    quoted_html(&markdown_text(s))
+}
+
+/// `s` as a text of HTML that strata quotes in the markdown of GitHub, such as the words of the
+/// `<summary>` of a fold. It is [`html_text`], with a zero width space in each mention and each
+/// reference to an issue.
+///
+/// GitHub reads no markdown in a block of HTML, so a `\` before a mark shows there. But it reads
+/// a mention and a reference to an issue there too. So a `@name` in the words notifies nobody,
+/// and a `#12` in them links to no issue. A blank line ends the block, so the text writes each
+/// line end as a space.
+pub(crate) fn quoted_html(s: &str) -> String {
+    reference_text(&html_text(s)).replace(LINE_ENDS, " ")
 }
 
 /// The schemes of a bare address that GitHub links after each character that is not a letter.
@@ -276,26 +304,47 @@ fn is_entity_end(text: &str) -> bool {
 /// The entity of a zero width space. GitHub shows no character for it.
 const ZERO_WIDTH_SPACE: &str = "&#8203;";
 
-/// `s` with a zero width space after each `@` that can start a mention of GitHub, such as
-/// `@name` or `@org/team`. So a quoted name notifies nobody.
+/// `s` with a zero width space in each mention of GitHub and in each reference to an issue of
+/// GitHub. So a quoted `@name` notifies nobody, and a quoted `#12` links to no issue.
 ///
-/// A mention starts at a `@` with a letter or a digit of ASCII after it. A `@` after such a
-/// character starts no mention, as in an address of mail or in `k@1.0`. So such a `@` stays as it
-/// is, and a ref keeps its form. GitHub reads no mention in a code span, so [`code_cell`] writes
-/// no space.
-fn mention_text(s: &str) -> String {
-    let word = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+/// The space goes after the character that [`starts_reference`] finds. GitHub reads no mention
+/// and no reference in a code span, so [`code_cell`] writes no space.
+fn reference_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
-    let mut before = None;
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
+    for (i, c) in s.char_indices() {
         out.push(c);
-        if c == '@' && !word(before) && word(chars.peek().copied()) {
+        if starts_reference(&s[..i], c, &s[i + c.len_utf8()..]) {
             out.push_str(ZERO_WIDTH_SPACE);
         }
-        before = Some(c);
     }
     out
+}
+
+/// True when GitHub can read a mention or a reference to an issue right after `c`. `before` and
+/// `after` are the text on each side of `c`.
+///
+/// - A mention, such as `@name` or `@org/team`, starts at a `@` with a letter or a digit of ASCII
+///   after it. A `@` after such a character starts no mention, as in an address of mail or in
+///   `k@1.0`. So such a `@` stays as it is, and a ref keeps its form.
+/// - A reference to an issue is a `#` with a digit of ASCII after it, as in `#12` or in
+///   `owner/repo#12`. A link to an issue of another repository adds an event to that issue.
+/// - GitHub also reads `GH-12`, in each case of the letters, as a reference to an issue. A
+///   `GH-` after a letter or a digit of ASCII starts no reference, as in `high-12`.
+fn starts_reference(before: &str, c: char, after: &str) -> bool {
+    let word = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+    let digit = after.starts_with(|c: char| c.is_ascii_digit());
+    match c {
+        '@' => !word(before.chars().next_back()) && word(after.chars().next()),
+        '#' => digit,
+        '-' => {
+            digit
+                && before
+                    .strip_suffix(['h', 'H'])
+                    .and_then(|b| b.strip_suffix(['g', 'G']))
+                    .is_some_and(|b| !word(b.chars().next_back()))
+        }
+        _ => false,
+    }
 }
 
 /// The marks of markdown that get a `\` in each place. [`markdown_text`] gives a `_` its `\` only
@@ -347,10 +396,10 @@ pub(crate) fn lines_cell<S: AsRef<str>>(lines: impl IntoIterator<Item = S>) -> S
     dash(&cells.join("<br>")).to_string()
 }
 
-/// `s` with each `|` escaped and each line break as a space, so that it cannot end a cell or a
-/// row of a markdown table.
+/// `s` with each `|` escaped and each [`LINE_ENDS`] character as a space, so that it cannot end a
+/// cell or a row of a markdown table.
 fn table_text(s: &str) -> String {
-    s.replace('|', "\\|").replace('\n', " ")
+    s.replace('|', "\\|").replace(LINE_ENDS, " ")
 }
 
 /// `text` as a code span of markdown. The fence is longer than each run of backticks in the text,
@@ -391,7 +440,7 @@ fn longest_backticks(text: &str) -> usize {
 }
 
 /// `text` as a code span in one cell of a markdown table: [`code_span`], with each `|` escaped and
-/// each line break as a space. So a value cannot end a cell or a row of the table.
+/// each line end as a space. So a value cannot end a cell or a row of the table.
 ///
 /// A code span shows an entity as it is, so the span gets no [`html_text`]. It shows a tag as text.
 pub fn code_cell(text: &str) -> String {
@@ -456,329 +505,4 @@ mod block_read;
 mod span_read;
 
 #[cfg(test)]
-mod tests {
-    use super::answer_tags::{
-        ANSWER_ADDRESSES, ANSWER_CONTROLS, ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS,
-        assert_answer_addresses_as_they_are, assert_answer_controls_as_text,
-        assert_answer_marks_as_text, assert_answer_mentions_as_text,
-    };
-    use super::*;
-    use std::borrow::Cow;
-
-    #[test]
-    fn a_noun_agrees_with_its_count_and_only_one_takes_the_singular() {
-        assert_eq!(plural(0, "cluster", "clusters"), "clusters");
-        assert_eq!(plural(1, "cluster", "clusters"), "cluster");
-        assert_eq!(plural(2, "cluster", "clusters"), "clusters");
-        assert_eq!(plural(1, "was", "were"), "was");
-        assert_eq!(plural(3, String::from("a"), String::from("b")), "b");
-    }
-
-    #[test]
-    fn an_object_shows_its_name_and_its_uid_only_when_it_has_no_name() {
-        assert_eq!(name_or_uid("lab", "u1"), "lab");
-        assert_eq!(name_or_uid("", "u1"), "u1");
-        assert_eq!(name_or_uid("", ""), "");
-    }
-
-    #[test]
-    fn a_cut_text_has_at_most_n_characters_and_ends_with_a_mark() {
-        assert_eq!(cut("abc", 3), "abc");
-        assert_eq!(cut("abcd", 3), "ab…");
-        assert_eq!(cut("abcd", 3).chars().count(), 3);
-        // a character of two bytes is one character, and no cut stops in it
-        assert_eq!(cut("ééééé", 4), "ééé…");
-        assert_eq!(cut("abcd", 1), "…");
-        assert_eq!(cut("abcd", 0), "");
-        assert_eq!(cut("", 0), "");
-    }
-
-    #[test]
-    fn a_cut_text_ends_with_the_mark_that_the_caller_gives_and_has_at_most_n_characters() {
-        assert_eq!(cut_with("abcdef", 5, "..."), "ab...");
-        assert_eq!(cut_with("abcde", 5, "..."), "abcde");
-        assert_eq!(cut_with("ééééé", 4, "..."), "é...");
-        // an n that is smaller than the mark leaves no room for the text
-        assert_eq!(cut_with("abcdef", 2, "..."), "");
-        assert_eq!(cut_with("abcdef", 3, "..."), "...");
-        assert_eq!(cut_with("abcdef", 4, "…"), cut("abcdef", 4));
-    }
-
-    #[test]
-    fn a_doc_comment_shows_each_link_as_a_plain_code_span_and_keeps_the_other_text() {
-        assert_eq!(
-            plain_doc("The digest, as [`Snapshot::content_digest`] gives it: see [`Template`]."),
-            "The digest, as `Snapshot::content_digest` gives it: see `Template`."
-        );
-        assert_eq!(
-            plain_doc("an [array] and `code` and [`open"),
-            "an [array] and `code` and [`open"
-        );
-        assert_eq!(plain_doc("[`a`][`b`]"), "`a``b`");
-        assert_eq!(plain_doc(""), "");
-    }
-
-    #[test]
-    fn a_schema_prints_each_description_without_link_markup() {
-        let schema = Schema::try_from(serde_json::json!({
-            "description": "A [`Type`].",
-            "properties": {
-                "description": {"description": "see [`Field`]", "type": "string"},
-                "list": {"items": [{"description": "[`First`]"}]}
-            },
-            "const": "[`kept`]"
-        }))
-        .unwrap();
-        let printed: Value = serde_json::from_str(&schema_json(&schema).unwrap()).unwrap();
-        assert_eq!(printed["description"], "A `Type`.");
-        assert_eq!(
-            printed["properties"]["description"]["description"],
-            "see `Field`"
-        );
-        assert_eq!(
-            printed["properties"]["list"]["items"][0]["description"],
-            "`First`"
-        );
-        assert_eq!(printed["const"], "[`kept`]", "only a description changes");
-    }
-
-    #[test]
-    fn an_empty_text_shows_a_dash_and_another_text_shows_as_it_is() {
-        assert_eq!(dash(""), "-");
-        assert_eq!(dash("lab"), "lab");
-    }
-
-    #[test]
-    fn a_cell_of_a_markdown_table_holds_no_bar_and_no_line_break() {
-        assert_eq!(markdown_cell("a|b"), "a\\|b");
-        assert_eq!(markdown_cell("first\nsecond"), "first second");
-        assert_eq!(markdown_cell("plain"), "plain");
-    }
-
-    #[test]
-    fn a_text_of_html_shows_each_tag_and_each_entity_as_text() {
-        assert_eq!(
-            html_text(ANSWER_TAGS),
-            "&lt;a href=\"https://example.com\"&gt;x&lt;/a&gt; &lt;Code&gt;AccessDenied&lt;/Code&gt;"
-        );
-        // an entity of the answer shows as it is, and not as the character that it names
-        assert_eq!(html_text("a &lt; b & c"), "a &amp;lt; b &amp; c");
-        assert_eq!(html_text("plain"), "plain");
-    }
-
-    #[test]
-    fn a_text_on_a_terminal_shows_each_control_character_as_a_visible_escape() {
-        assert_answer_controls_as_text(&terminal_text(ANSWER_CONTROLS));
-        // a tab, a delete, and a control character of C1, such as the one that starts a sequence
-        assert_eq!(terminal_text("a\tb\u{7f}c\u{9b}d"), r"a\tb\u{7f}c\u{9b}d");
-        // a text with no control character is the same text, with no copy
-        assert!(matches!(
-            terminal_text("plain é \\n"),
-            Cow::Borrowed("plain é \\n")
-        ));
-    }
-
-    #[test]
-    fn a_cell_of_a_markdown_table_holds_no_tag_of_html_from_a_quoted_text() {
-        let cell = markdown_cell(&format!("{ANSWER_TAGS}\n| next"));
-        assert!(!cell.contains('<'), "{cell}");
-        assert_eq!(cell, format!("{} \\| next", html_text(ANSWER_TAGS)));
-    }
-
-    #[test]
-    fn a_cell_of_a_markdown_table_shows_each_mark_of_markdown_of_a_quoted_text_as_text() {
-        assert_answer_marks_as_text(&markdown_cell(ANSWER_MARKS));
-        // two backticks open no code span, so a code span cannot show an entity as it is
-        assert_eq!(markdown_cell("`a < b`"), "\\`a &lt; b\\`");
-        assert_eq!(markdown_cell("``a``"), "\\`\\`a\\`\\`");
-        assert_eq!(
-            markdown_cell("~~gone~~ _it_ ![i](x)"),
-            "\\~\\~gone\\~\\~ \\_it\\_ !\\[i\\](x)"
-        );
-        // a `\` of the text stays a `\`, also before a mark and before a `|`
-        assert_eq!(markdown_cell("a\\*b\\|c"), "a\\\\\\*b\\\\\\|c");
-    }
-
-    #[test]
-    fn a_cell_of_a_markdown_table_holds_no_mention_of_github_from_a_quoted_text() {
-        assert_answer_mentions_as_text(&markdown_cell(ANSWER_MENTIONS));
-        // a `@` with no letter or digit of ASCII after it, or with one before it, starts no mention
-        assert_eq!(
-            markdown_cell("ops@example.com k@1.0 a@-b @ @-"),
-            "ops@example.com k@1.0 a@-b @ @-"
-        );
-        assert_eq!(
-            markdown_cell("(@a) @@b é@c _@d *@e\n@f|@g"),
-            "(@&#8203;a) @@&#8203;b é@&#8203;c \\_@&#8203;d \\*@&#8203;e @&#8203;f\\|@&#8203;g"
-        );
-        // the space is an entity of strata, so its `&` gets no escape, and an `&` of the text does
-        assert_eq!(markdown_cell("&@a <@b"), "&amp;@&#8203;a &lt;@&#8203;b");
-        assert_eq!(code_cell("@a"), "`@a`");
-    }
-
-    #[test]
-    fn a_cell_of_a_markdown_table_keeps_each_bare_address_that_github_links_as_it_is() {
-        assert_answer_addresses_as_they_are(&markdown_cell(ANSWER_ADDRESSES));
-        assert_eq!(markdown_cell(ANSWER_ADDRESSES), ANSWER_ADDRESSES);
-        for address in [
-            "https://example.com/?a=1&b=2",
-            "http://A.b-c.example:8080/x?y=@z#`f`[g](h)",
-            "https://xn--bcher-kva.example/a\\b>c",
-        ] {
-            assert_eq!(markdown_cell(address), address);
-            assert_eq!(
-                markdown_cell(&format!("*a* {address} @b")),
-                format!("\\*a\\* {address} @&#8203;b")
-            );
-        }
-        // GitHub links `www.` only after a space or a `(`, and a scheme also after a quote
-        assert_eq!(
-            markdown_cell("a www.example.com/@b (www.example.com/@b) 'https://example.com/@b'"),
-            "a www.example.com/@b (www.example.com/@b) 'https://example.com/@b'"
-        );
-        assert_eq!(
-            markdown_cell("www.example.com/@b"),
-            "www.example.com/@&#8203;b"
-        );
-        assert_eq!(
-            markdown_cell("a \"www.example.com/@b\""),
-            "a \"www.example.com/@&#8203;b\""
-        );
-        // GitHub cuts the marks at the end from the link, and no `\` comes before them
-        assert_eq!(
-            markdown_cell("https://example.com/a_(b)) https://example.com/x_*~.\""),
-            "https://example.com/a_(b)) https://example.com/x&lowbar;&ast;~.\""
-        );
-        // a form that GitHub does not surely link keeps each escape, and each `@` gets its space
-        for (text, escaped) in [
-            ("https://-a.example/@b", "https://-a.example/@&#8203;b"),
-            ("https://a_b.example/@b", "https://a_b.example/@&#8203;b"),
-            ("https://localhost/@b", "https://localhost/@&#8203;b"),
-            ("xhttps://example.com/@b", "xhttps://example.com/@&#8203;b"),
-            ("ftp://example.com/@b", "ftp://example.com/@&#8203;b"),
-            ("https://example.com/é@b", "https://example.com/é@&#8203;b"),
-            ("https://example.com/<b>", "https://example.com/&lt;b&gt;"),
-            (
-                "https://example.com/a&amp;",
-                "https://example.com/a&amp;amp;",
-            ),
-            ("https://", "https://"),
-            ("www.", "www."),
-        ] {
-            assert_eq!(markdown_cell(text), escaped, "{text}");
-        }
-        assert_eq!(
-            markdown_cell("https://example.com/a|b"),
-            "https://example.com/a\\|b"
-        );
-    }
-
-    #[test]
-    fn a_run_of_underscores_inside_a_word_has_no_escape_and_each_other_run_has_one() {
-        // a run with a letter or a digit on each side starts no emphasis, so a name keeps its form
-        assert_eq!(
-            markdown_cell("aws_stack LTS__24.x é_ü"),
-            "aws_stack LTS__24.x é_ü"
-        );
-        assert_eq!(
-            markdown_cell("__init__ a_ _b a_-b"),
-            "\\_\\_init\\_\\_ a\\_ \\_b a\\_-b"
-        );
-        assert_eq!(markdown_cell("_"), "\\_");
-        assert_eq!(markdown_cell(""), "");
-    }
-
-    #[test]
-    fn a_code_span_in_a_table_cell_shows_a_tag_as_text_with_no_entity() {
-        assert_eq!(code_cell("<Code>"), "`<Code>`");
-        assert_eq!(code_cell("a & b|c"), "`a & b\\|c`");
-    }
-
-    #[test]
-    fn a_code_span_has_a_fence_longer_than_each_run_of_backticks_in_the_text() {
-        assert_eq!(code_span("later"), "`later`");
-        assert_eq!(code_span("late`r"), "``late`r``");
-        assert_eq!(code_span("late``r"), "```late``r```");
-        // a backtick at an end needs a space, or it joins the fence
-        assert_eq!(code_span("`later"), "`` `later ``");
-        assert_eq!(code_span("later`"), "`` later` ``");
-        assert_eq!(code_span("`"), "`` ` ``");
-        assert_eq!(code_span(""), "``");
-    }
-
-    #[test]
-    fn a_code_span_writes_the_text_as_it_is_for_a_title_and_a_sentence() {
-        assert_eq!(code_span("a|b"), "`a|b`");
-        assert_eq!(code_span("first\nsecond"), "`first\nsecond`");
-    }
-
-    #[test]
-    fn a_code_block_has_a_fence_of_three_backticks_or_one_longer_than_each_run_in_the_text() {
-        assert_eq!(code_block("diff", "+ a\n- b\n"), "```diff\n+ a\n- b\n```\n");
-        assert_eq!(code_block("diff", "+ a``b\n"), "```diff\n+ a``b\n```\n");
-        // a line of three backticks, after the space of a line of context, does not end the block
-        assert_eq!(
-            code_block("diff", " ```\n <Code>\n"),
-            "````diff\n ```\n <Code>\n````\n"
-        );
-        assert_eq!(code_block("", "`````"), "``````\n`````\n``````\n");
-        // the last line gets its line break, and an empty text gives an empty block
-        assert_eq!(
-            code_block("bash", "strata diff"),
-            "```bash\nstrata diff\n```\n"
-        );
-        assert_eq!(code_block("diff", ""), "```diff\n```\n");
-    }
-
-    /// The tests of an output read each code span and each code block with the reads of
-    /// `tests/common/`. Each read gives the text that this module wrote. So a test cannot see
-    /// a part of a span or of a block as text outside it.
-    #[test]
-    fn the_reads_of_the_tests_give_the_text_that_each_code_span_and_each_code_block_holds() {
-        for text in [
-            "later", "late`r", "late``r", "`later", "later`", "`", "a ``` b",
-        ] {
-            assert_eq!(span_read::code_spans(&code_span(text)), [text]);
-        }
-        for text in ["+ a\n- b", " ```\n <Code>", "`````", "   ```"] {
-            assert_eq!(
-                block_read::code_blocks(&code_block("diff", text), "diff"),
-                [text]
-            );
-        }
-    }
-
-    #[test]
-    fn a_code_span_in_a_table_cell_holds_no_bar_and_no_line_break() {
-        assert_eq!(code_cell("a|b"), "`a\\|b`");
-        assert_eq!(code_cell("first\nsecond"), "`first second`");
-        assert_eq!(code_cell("late`r|x"), "``late`r\\|x``");
-        assert_eq!(code_cell("plain"), code_span("plain"));
-    }
-
-    #[test]
-    fn a_list_of_names_has_a_comma_before_and_only_from_three_names() {
-        assert_eq!(and_list::<&str>(&[]), "");
-        assert_eq!(and_list(&["os"]), "os");
-        assert_eq!(and_list(&["os", "k8s"]), "os and k8s");
-        assert_eq!(and_list(&["os", "k8s", "cni"]), "os, k8s, and cni");
-        assert_eq!(
-            and_list(&[
-                "a".to_string(),
-                "b".to_string(),
-                "c".to_string(),
-                "d".to_string()
-            ]),
-            "a, b, c, and d"
-        );
-    }
-
-    #[test]
-    fn a_shell_word_is_quoted_only_when_the_shell_reads_a_character_of_it() {
-        assert_eq!(
-            shell_words(&["strata", "compare", "pack:k@1.0", "pack:Public Repo/k@1.1"]),
-            "strata compare pack:k@1.0 'pack:Public Repo/k@1.1'"
-        );
-        assert_eq!(shell_words(&["", "a$b", "it's"]), "'' 'a$b' 'it'\\''s'");
-    }
-}
+mod tests;

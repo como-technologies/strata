@@ -338,6 +338,35 @@ live-profiles: build
     examples/live/tf.sh init -input=false || exit 1
     examples/live/tf.sh apply -var cluster=false
 
+# The platform cluster wilma (#700) has a state of its own, so live-up and live-down never touch it. It
+# runs the release profile of the lab, so live-profiles or live-up comes first, and live-down after
+# live-platform-down. See "The platform cluster" in docs/src/development/live-example.md.
+
+# Write the pins of wilma from the tenant: the newest version of each pack, or the version before it for some (#700)
+[group('live')]
+live-platform-pins: build
+    examples/live/platform.sh pins
+
+# Build wilma with seven add-on profiles and 14 community packs, and wait until each pack is ready (#700). Billable until live-platform-down.
+[group('live')]
+live-platform-up: build
+    examples/live/platform.sh up
+
+# The cases of wilma (#700): drift and diff where the profiles cross. CASE starts the run at that case. Needs live-platform-up.
+[group('live checks')]
+live-platform case="": build
+    examples/live/platform.sh {{case}}
+
+# Remove wilma, its profiles, its private zone, and the policy of its nodes, and read the inventory (#700)
+[group('live')]
+live-platform-down: build
+    examples/live/platform.sh down
+
+# What wilma still has in AWS; 0 on every line after live-platform-down (#700)
+[group('live')]
+live-platform-inventory: build
+    examples/live/platform.sh inventory
+
 # The checks of the lab itself, with no build: the tools, the key, the cloud CLIs, the APIs, the leftovers (#91)
 [group('live checks')]
 live-preflight: build

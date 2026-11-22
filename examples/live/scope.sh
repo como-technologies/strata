@@ -36,7 +36,7 @@ T=""
 
 summary() {
   write_summary "scope test" ": the release" \
-    "\`$NAME@$VERSION\` (\`$R\`) of the project, and its copy of the tenant (\`${T:-none}\`)."
+    "$(md span "$NAME@$VERSION") ($(md span "$R")) of the project, and its copy of the tenant ($(md span "${T:-none}"))."
 }
 # the tenant profile goes at the end, also when a check stops the script
 cleanup() {

@@ -442,6 +442,30 @@ The priority is in the values, so the values hash and the root cover it, and a
 change to it is an `AUTHORED` change. The list order is content because Palette
 keeps it: two orders are two published versions.
 
+## One pack in two profiles of a cluster
+
+Palette keeps one pack name in one profile of a workload scope of a cluster. The
+two scopes are the system scope and the app scope. Each route below refuses a
+second pin of that name in another profile of the same scope, at the point where
+the second pin reaches the cluster. The code of Palette shows it; no live run
+shows it yet. Case 2 of [platform.sh](../../development/live-runs.md#platformsh)
+asks each route.
+
+| Request | Answer of Palette |
+| --- | --- |
+| An edit in place, `PUT /v1/clusterprofiles/{uid}`, of a version that a cluster runs. The edit adds a pack that another profile of that cluster pins. | HTTP 500, `ClusterProfilePacksInConflict`. The message names each such cluster. The version keeps its content. |
+| A new version with that pack, which no cluster runs. | Palette makes it, because no cluster runs it. |
+| A move of the cluster to that version: `PUT` or `PATCH /v1/spectroclusters/{uid}/profiles`. | HTTP 500, `DuplicateClusterPacksForbidden`. The message names the pack. |
+| The same move, as a question to `POST /v1/spectroclusters/{uid}/validate/packs`. | HTTP 500, `DuplicateClusterPacksForbidden`. See [The validate routes](validate-routes.md). |
+
+Palette checks one name in two profiles before two versions of one pack. So
+the move of a second pin at another version gives
+`DuplicateClusterPacksForbidden`, and not `MultiPackVersionsForbidden`.
+
+Strata asks Palette, and copies no rule. `compare --validate` prints the refusal
+of the move as the answer of Palette, and `behind` prints it under `bump to`:
+see [Errors](../../reference/errors.md).
+
 ## What the cluster listing answers
 
 `GET /v1/dashboard/spectroclusters/meta` is the listing that `strata list

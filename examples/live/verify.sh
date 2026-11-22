@@ -183,8 +183,8 @@ digest_table() {
 }
 
 run_id=$(basename "$run")
-write_summary "strata live verification" ". Cluster \`$C\`, project \`$PALETTE_PROJECT_UID\`," \
-  "profile \`$N\` versions 1.0.0 (\`$P\`) and 1.0.1 (\`$P2\`), registries profile \`$R\`."
+write_summary "strata live verification" ". Cluster $(md span "$C"), project $(md span "$PALETTE_PROJECT_UID")," \
+  "profile $(md span "$N") versions 1.0.0 ($(md span "$P")) and 1.0.1 ($(md span "$P2")), registries profile $(md span "$R")."
 digest_table >> summary.md
 
 total=$(command grep -cE '^(PASS|FAIL) ' steps.log)

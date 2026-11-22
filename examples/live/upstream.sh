@@ -54,8 +54,8 @@ report=("$live/../../scripts/ci/upstream-report.sh")
 export STRATA_BIN="$strata"
 
 summary() {
-  write_summary "upstream test" ", registry \`$REG_NAME\`," \
-    "pack \`$PACK\`, issues of \`$GH_REPO\` with the label \`$LABEL\`."
+  write_summary "upstream test" ", registry $(md span "$REG_NAME")," \
+    "pack $(md span "$PACK"), issues of $(md span "$GH_REPO") with the label $(md span "$LABEL")."
 }
 trap summary EXIT
 

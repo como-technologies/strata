@@ -129,6 +129,19 @@ pub const PACK_MACRO_UNDEFINED_CODE: &str = "PackMacroUndefined";
 /// gives it too, with HTTP 403: see [`ValidateRoute::ClusterCreate`].
 pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
 
+/// The code of the refusal of one pack name in two profiles of one workload scope of a cluster.
+///
+/// The cluster packs route and the cluster validate route answer it with HTTP 500. So does an update of
+/// the profiles of a cluster: the code of Palette shows it; no live run shows it yet.
+pub const DUPLICATE_CLUSTER_PACKS_CODE: &str = "DuplicateClusterPacksForbidden";
+
+/// The code of the refusal of a pack name that another profile of a cluster that runs the version
+/// holds.
+///
+/// The validate route of an update of a version answers it with HTTP 500. So does the edit in place,
+/// `PUT /v1/clusterprofiles/{uid}`: the code of Palette shows it; no live run shows it yet.
+pub const PACKS_IN_CONFLICT_CODE: &str = "ClusterProfilePacksInConflict";
+
 /// The codes of the other refusals of the body that the cluster validate route answers with HTTP
 /// 403, and not with 500.
 ///
@@ -223,7 +236,7 @@ const PACK_METADATA: Check = &[
 /// No pack name is in two profiles of one workload scope of the cluster.
 ///
 /// The cluster packs route and the cluster validate route run it.
-const CLUSTER_PACKS: Check = &["DuplicateClusterPacksForbidden"];
+const CLUSTER_PACKS: Check = &[DUPLICATE_CLUSTER_PACKS_CODE];
 
 /// The integration packs.
 ///
@@ -252,7 +265,7 @@ const SUB_RESOURCE_LIMIT: Check = &["SubResourceLimitValidationFailure"];
 /// scope.
 ///
 /// Only the route of an update of a version runs it.
-const PACKS_IN_CONFLICT: Check = &["ClusterProfilePacksInConflict"];
+const PACKS_IN_CONFLICT: Check = &[PACKS_IN_CONFLICT_CODE];
 
 /// The name is not empty, and the version parses as semver.
 ///

@@ -8,13 +8,16 @@ use std::process::{Command, Output};
 
 use common::*;
 use strata::api::codes::{
-    Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE,
-    PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
+    DUPLICATE_CLUSTER_PACKS_CODE, Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE,
+    OPERATION_FORBIDDEN_CODE, PACKS_IN_CONFLICT_CODE, PROFILE_EXISTS_CODE,
+    UPGRADE_NOT_SUPPORTED_CODE,
 };
 use strata::api::{MASKED, PROJECT_UID_HEADER};
+use strata::model::pack_state::PackState;
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
 use strata::model::validation::{PaletteRefusal, answer_lines};
+use strata::reference::CLUSTER_PREFIX;
 use strata::render::palette_line;
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -1001,7 +1004,7 @@ stage 1 "first" || echo "no heading for stage 1"
 stage 2 "second" || echo "no heading for stage 2"
 [ -z "${{2:-}}" ] || run_id=$2
 check demo-ok 0 'it passes' -- true
-write_summary "the demo" ", cluster \`c-1\`," "add-on \`a-1\`."
+write_summary "the demo" ", cluster $(md span "c\`1")," "add-on $(md span a-1)."
 cat summary.md
 echo "$addon_from -> $addon_to"
 "#,
@@ -1037,7 +1040,7 @@ fn lib_sh_prints_the_usage_and_the_heading_of_a_stage_and_writes_the_summary_of_
          PASS  {:<32} expected 0, got 0\n\
          # the demo\n\
          \n\
-         Run `20260101T000000Z` with `strata 9.9.9`, cluster `c-1`, add-on `a-1`.\n\
+         Run `20260101T000000Z` with `strata 9.9.9`, cluster ``c`1``, add-on `a-1`.\n\
          \n\
          | result | check | expected exit | got | what it shows |\n\
          |---|---|---|---|---|\n\
@@ -1052,11 +1055,12 @@ fn lib_sh_prints_the_usage_and_the_heading_of_a_stage_and_writes_the_summary_of_
         std::fs::read_to_string(dir.path().join("runs/20260101T000000Z/demo/steps.log")).unwrap();
     assert!(steps.contains("== stage 2: second\n"), "{steps}");
 
-    // a script that sets run_id names its own run, and a missing binary omits the version
-    let o = lib_demo(dir.path(), "/no/such/strata", &["1", "custom-run"]);
+    // a script that sets run_id names its own run, and a missing binary omits the version. The
+    // run id and a value of the note hold a backtick, so each code span has a longer fence
+    let o = lib_demo(dir.path(), "/no/such/strata", &["1", "custom`run"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert!(
-        text(&o.stdout).contains("\nRun `custom-run`, cluster `c-1`, add-on `a-1`.\n"),
+        text(&o.stdout).contains("\nRun ``custom`run``, cluster ``c`1``, add-on `a-1`.\n"),
         "{}",
         text(&o.stdout)
     );
@@ -1109,6 +1113,45 @@ summary_table"#,
     );
     common::assert_answer_marks_as_text(&table);
     common::assert_answer_mentions_as_text(&table);
+}
+
+/// The criterion of #894: each live script writes each value of the note of `write_summary` with
+/// `md span`, and writes no code span by hand. The note is in the call of `write_summary`, and in
+/// the function `summary` that calls it. The demo of lib.sh shows a value with a backtick.
+#[test]
+fn each_live_script_writes_each_value_of_the_note_of_its_summary_with_md_span() {
+    let mut callers = 0;
+    for path in walk(&Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/live")) {
+        if path.extension().is_none_or(|e| e != "sh") {
+            continue;
+        }
+        let script = std::fs::read_to_string(&path).unwrap();
+        let (mut note, mut in_summary, mut in_call) = (Vec::new(), false, false);
+        for line in script.lines() {
+            in_summary = in_summary || line == "summary() {";
+            in_call = in_call || line.trim_start().starts_with("write_summary \"");
+            if in_summary || in_call {
+                note.push(line);
+            }
+            in_call = in_call && line.ends_with('\\');
+            in_summary = in_summary && line != "}";
+        }
+        if !note
+            .iter()
+            .any(|l| l.trim_start().starts_with("write_summary \""))
+        {
+            continue;
+        }
+        callers += 1;
+        for line in note {
+            assert!(
+                !line.contains("\\`"),
+                "{} writes a code span by hand in its note: {line}",
+                path.display()
+            );
+        }
+    }
+    assert!(callers > 40, "{callers} scripts call write_summary");
 }
 
 #[test]
@@ -3919,6 +3962,14 @@ fn passed(steps: &str, ids: &[&str]) {
 fn failed(steps: &str, ids: &[&str]) {
     for id in ids {
         assert!(has_verdict(steps, "FAIL", id), "{id} failed:\n{steps}");
+    }
+}
+
+/// Each check of `ids` ran and judged nothing: its verdict is the last word of [`VERDICTS`].
+fn seen(steps: &str, ids: &[&str]) {
+    let [.., verdict] = VERDICTS;
+    for id in ids {
+        assert!(has_verdict(steps, verdict, id), "{id} seen:\n{steps}");
     }
 }
 
@@ -11085,7 +11136,7 @@ fn image_digest_stage(list_images: &str) -> Stage {
             "spec":{"clusterProfileTemplates":[{"uid":"ad-1"}]}}"#,
     );
     stage.route(
-        "/v1/spectroclusters/c-a/assets/kubeconfig",
+        &cluster_kubeconfig_route("c-a"),
         "apiVersion: v1 # fake-kubeconfig\n",
     );
     stage.route(&cluster_manifests_route("c-a"), r#"{"profiles":[]}"#);
@@ -15715,4 +15766,1018 @@ echo end >> "$order"
         record,
         format!("download 1: {refused}\ndownload 2: {refused}\n")
     );
+}
+
+// ---- the platform cluster wilma (#700) --------------------------------------------------------
+
+/// The teams of the profiles of wilma, with the packs of each, from the local `teams` of
+/// `terraform-platform/main.tf`.
+fn platform_teams() -> Vec<(String, Vec<String>)> {
+    let main = std::fs::read_to_string(live_script("terraform-platform/main.tf")).unwrap();
+    let block = main
+        .split("  teams = {\n")
+        .nth(1)
+        .expect("main.tf has the local teams")
+        .split("\n  }\n")
+        .next()
+        .unwrap();
+    block
+        .lines()
+        .map(|line| {
+            let (team, packs) = line.split_once('=').unwrap();
+            let packs = packs
+                .trim()
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .split(',')
+                .map(|p| p.trim().trim_matches('"').to_string())
+                .collect();
+            (team.trim().to_string(), packs)
+        })
+        .collect()
+}
+
+/// The teams whose profiles declare the variable `domain`: the local `domain_teams` of `main.tf`.
+fn platform_domain_teams() -> Vec<String> {
+    let main = std::fs::read_to_string(live_script("terraform-platform/main.tf")).unwrap();
+    let line = main
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("domain_teams = "))
+        .expect("main.tf has the local domain_teams");
+    serde_json::from_str(line).unwrap()
+}
+
+/// The packs that the tests of `platform.sh` give a registry of Bitnami. Each other pack is in
+/// `Public Repo`.
+const PLATFORM_BITNAMI: [&str; 2] = ["keycloak", "grafana"];
+
+/// The packs that the pins of the tests of `platform.sh` mark `# behind`.
+const PLATFORM_BEHIND: [&str; 2] = ["cert-manager", "argo-cd"];
+
+/// The OpenTofu outputs of wilma at its baseline. The profile of a team has the uid `t-<team>`.
+fn platform_outputs() -> serde_json::Value {
+    let teams = platform_teams();
+    let uids: serde_json::Map<String, serde_json::Value> = teams
+        .iter()
+        .map(|(team, _)| (team.clone(), serde_json::json!(format!("t-{team}"))))
+        .collect();
+    let packs: serde_json::Map<String, serde_json::Value> = teams
+        .iter()
+        .flat_map(|(_, packs)| packs)
+        .map(|pack| {
+            let registry = if PLATFORM_BITNAMI.contains(&pack.as_str()) {
+                "Bitnami"
+            } else {
+                "Public Repo"
+            };
+            (
+                pack.clone(),
+                serde_json::json!({"registry": registry, "version": "1.0.0", "type": "spectro"}),
+            )
+        })
+        .collect();
+    let by_team: serde_json::Map<String, serde_json::Value> = teams
+        .iter()
+        .map(|(team, packs)| (team.clone(), serde_json::json!(packs)))
+        .collect();
+    serde_json::json!({
+        "project_uid": "p-1", "cluster_uid": "w-1", "cluster_name": "wilma",
+        "release_profile_uid": "r-1", "profile_uids": uids, "on_cluster": uids,
+        "domain_teams": platform_domain_teams(), "domain": "wilma.strata-live.internal",
+        "network_next_uid": "nn-1", "moved_uids": {"observability": "mo-1", "logging": "lg-1"},
+        "packs": packs, "teams": by_team,
+        "profile_names": teams.iter().map(|(team, _)| format!("wilma-{team}"))
+            .chain(["wilma-logging".to_string()]).collect::<Vec<_>>(),
+    })
+}
+
+/// A `tofu` for `platform.sh`. It answers the outputs, a plan with no change, and the variables of
+/// `inventory.sh --platform`. It refuses the edit in place of case 2 as Palette does, unless
+/// `$FAKE_IN_PLACE_TAKEN` has a value. [`platform_tofu`] puts the code of the refusal in place of
+/// `CODE_IN_CONFLICT`.
+const PLATFORM_TOFU: &str = r#"#!/usr/bin/env bash
+echo "tofu $*" >> "$FAKE_TOFU_LOG"
+case "$*" in
+  *"output -json"*) cat "$FAKE_OUTPUTS" ;;
+  *console*)
+    printf '{\n  "a" = "wilma"\n  "domain" = "wilma.strata-live.internal"\n  "policy" = "strata-live-wilma-external-dns"\n'
+    printf '  "region" = "us-east-2"\n  "role" = "nodes.cluster-api-provider-aws.sigs.k8s.io"\n}\n' ;;
+  *plan*) echo "No changes." ;;
+  *network_cert_manager_in_place=true*)
+    if [ -n "${FAKE_IN_PLACE_TAKEN-}" ]; then echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed."; exit 0; fi
+    echo "Error: error updating cluster profile: Code:CODE_IN_CONFLICT Update of cluster profile will cause one or more pack conflicts in the spectroclusters wilma"
+    exit 1 ;;
+  *apply* | *destroy*) echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed." ;;
+esac
+"#;
+
+/// [`PLATFORM_TOFU`] with the code of the refusal of an edit in place.
+fn platform_tofu() -> String {
+    PLATFORM_TOFU.replace("CODE_IN_CONFLICT", PACKS_IN_CONFLICT_CODE)
+}
+
+/// A `kubectl` of wilma. It logs each call to `$FAKE_KUBECTL_LOG`. It answers from the files of
+/// `$FAKE_KUBE`: the pod of the observer, the summary of a node, and the pods.
+const PLATFORM_KUBECTL: &str = r#"#!/usr/bin/env bash
+echo "kubectl $*" >> "$FAKE_KUBECTL_LOG"
+case "$*" in
+  *port-forward*) exec fake-port-forward ;;
+  *"get pod -l app.kubernetes.io/name=strata-observer -o json"*) cat "$FAKE_KUBE/observer-pod.json" ;;
+  *"get --raw /api/v1/nodes/"*) cat "$FAKE_KUBE/summary.json" ;;
+  *"get pods -A -o json"*) cat "$FAKE_KUBE/pods.json" ;;
+  *"get pv -o json"*) echo '{"items":[]}' ;;
+  *"get crd"*) echo 'Error from server (NotFound): customresourcedefinitions "clusters.postgresql.cnpg.io" not found'; exit 1 ;;
+  *) echo "done: $*" ;;
+esac
+"#;
+
+/// The document of wilma: Running, with each pack of each team and its layer of glue. `condition`
+/// gives the condition of each pack.
+fn wilma_document(condition: impl Fn(&str) -> serde_json::Value) -> String {
+    let mut packs = Vec::new();
+    for (team, names) in platform_teams() {
+        for name in names.iter().cloned().chain([format!("wilma-{team}-glue")]) {
+            packs.push(serde_json::json!({
+                "name": name, "profileUid": format!("t-{team}"), "condition": condition(&name),
+            }));
+        }
+    }
+    let templates: Vec<serde_json::Value> = platform_teams()
+        .iter()
+        .map(|(team, _)| serde_json::json!({"uid": format!("t-{team}")}))
+        .collect();
+    serde_json::json!({
+        "metadata": {"name": "wilma", "uid": "w-1"},
+        "spec": {"clusterProfileTemplates": templates},
+        "status": {"state": "Running", "packs": packs},
+    })
+    .to_string()
+}
+
+/// The condition of a pack that is ready.
+fn pack_ready(_: &str) -> serde_json::Value {
+    serde_json::json!({"type": "Healthy", "status": "True", "reason": "WorkloadsReady"})
+}
+
+/// A stage of `platform.sh` at the baseline of wilma. It has the outputs, the pins, the profile of
+/// each team, and the document of wilma with each pack ready. It also has a kubeconfig and the
+/// stand-ins of `tofu`, `kubectl`, and `observer-up.sh`.
+fn platform_stage() -> Stage {
+    let mut stage = Stage::new(platform_outputs());
+    let live = stage.copy_live();
+    let dir = live.join("terraform-platform");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut pins = String::from("packs = {\n");
+    for (pack, pin) in platform_outputs()["packs"].as_object().unwrap() {
+        let mark = if PLATFORM_BEHIND.contains(&pack.as_str()) {
+            " # behind"
+        } else {
+            ""
+        };
+        pins.push_str(&format!(
+            "  {pack} = {{ registry = \"{}\", version = \"1.0.0\", type = \"spectro\" }}{mark}\n",
+            pin["registry"].as_str().unwrap()
+        ));
+    }
+    pins.push_str("}\n");
+    std::fs::write(dir.join("terraform.tfvars"), pins).unwrap();
+    executable(
+        &live.join("observer-up.sh"),
+        "#!/usr/bin/env bash\necho \"observer-up $*\" >> \"$FAKE_TOFU_LOG\"\n",
+    );
+    stage.command("tofu", &platform_tofu());
+    let bin = stage.path("platform-bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    executable(&bin.join("kubectl"), PLATFORM_KUBECTL);
+    let kube = stage.path("kube");
+    std::fs::create_dir_all(&kube).unwrap();
+    let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
+    stage.env("PATH", &path);
+    stage.env("FAKE_KUBE", kube.to_str().unwrap());
+    stage.route(&cluster_route("w-1"), &wilma_document(pack_ready));
+    stage.route(
+        &cluster_kubeconfig_route("w-1"),
+        "apiVersion: v1 # fake-kubeconfig\n",
+    );
+    for (team, packs) in platform_teams() {
+        let uid = format!("t-{team}");
+        let packs: Vec<serde_json::Value> = packs
+            .iter()
+            .cloned()
+            .chain([format!("wilma-{team}-glue")])
+            .map(|name| serde_json::json!({"name": name, "tag": "1.0.0", "type": "spectro", "values": ""}))
+            .collect();
+        stage.route(
+            &profile_route(&uid),
+            &serde_json::json!({"metadata": {"uid": uid, "name": format!("wilma-{team}")},
+                "spec": {"published": {"type": "add-on", "packs": packs}}})
+            .to_string(),
+        );
+        stage.route(&manifests_route(&uid), "{}");
+    }
+    stage
+}
+
+/// A version of the answer of `strata packs`: the version, whether strata marks it latest, and the
+/// state that Spectro Cloud gives it.
+type ListedVersion<'a> = (&'a str, bool, Option<PackState>);
+
+/// The answer of `strata packs NAME --json` in the registries `registries`. Each registry is a
+/// name and its versions, newest first, as `(version, latest, state)`.
+fn packs_answer(name: &str, registries: &[(&str, &[ListedVersion])]) -> String {
+    let registries: Vec<serde_json::Value> = registries
+        .iter()
+        .map(|(registry, versions)| {
+            let versions: Vec<serde_json::Value> = versions
+                .iter()
+                .map(|(version, latest, state)| {
+                    let mut v = serde_json::json!({"version": version, "type": "spectro", "latest": latest});
+                    if let Some(state) = state {
+                        v["state"] = serde_json::json!(state);
+                    }
+                    v
+                })
+                .collect();
+            serde_json::json!({"registry": registry, "versions": versions})
+        })
+        .collect();
+    serde_json::json!({"name": name, "registries": registries}).to_string()
+}
+
+/// #700: `platform.sh pins` writes a pin for each line of the example. It takes the version that
+/// strata marks latest, or the first version after it with no state for a line with `# behind`.
+/// A pre-release above the latest version and a deprecated version are no pin. A registry that
+/// does not hold the pack stops the run, names the registries that do, and leaves no file.
+#[test]
+fn platform_sh_pins_takes_the_newest_version_or_the_version_before_it_in_the_order_of_strata() {
+    let [behind, _] = PLATFORM_BEHIND;
+    let [bitnami, _] = PLATFORM_BITNAMI;
+    let width = behind.len();
+    let mut stage = Stage::new(serde_json::json!({}));
+    let live = stage.copy_live();
+    let dir = live.join("terraform-platform");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("terraform.tfvars.example"),
+        format!(
+            "# the pins\npacks = {{\n  {behind} = {{ registry = \"Public Repo\", version = \"\", type = \"\" }} # behind\n  \
+             {bitnami:<width$} = {{ registry = \"Bitnami\", version = \"\", type = \"\" }}\n}}\n"
+        ),
+    )
+    .unwrap();
+    stage.strata(
+        &format!("packs {behind} *"),
+        0,
+        &packs_answer(
+            behind,
+            &[
+                ("Bitnami", &[("9.0.0", true, None)]),
+                (
+                    "Public Repo",
+                    &[
+                        ("1.22.0-rc.1", false, None),
+                        ("1.21.1", true, None),
+                        ("1.21.0", false, Some(PackState::Deprecated)),
+                        ("1.20.3", false, None),
+                    ],
+                ),
+            ],
+        ),
+    );
+    stage.strata(
+        &format!("packs {bitnami} *"),
+        0,
+        &packs_answer(
+            bitnami,
+            &[(
+                "Bitnami",
+                &[("25.1.0", true, None), ("25.0.0", false, None)],
+            )],
+        ),
+    );
+    let (o, _) = stage.run("platform.sh", &["pins"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let pins = std::fs::read_to_string(dir.join("terraform.tfvars")).unwrap();
+    assert!(
+        pins.contains(&format!(
+            "  {behind} = {{ registry = \"Public Repo\", version = \"1.20.3\", type = \"spectro\" }} # behind\n"
+        )),
+        "{pins}"
+    );
+    assert!(
+        pins.contains(&format!(
+            "  {bitnami} = {{ registry = \"Bitnami\", version = \"25.1.0\", type = \"spectro\" }}\n"
+        )),
+        "{pins}"
+    );
+    assert!(pins.starts_with('#') && pins.ends_with("}\n"), "{pins}");
+
+    // a file of pins stays
+    let (o, _) = stage.run("platform.sh", &["pins"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(text(&o.stderr).contains("exists"), "{}", text(&o.stderr));
+
+    // a registry that does not hold the pack
+    std::fs::remove_file(dir.join("terraform.tfvars")).unwrap();
+    std::fs::write(
+        dir.join("terraform.tfvars.example"),
+        format!(
+            "packs = {{\n  {bitnami} = {{ registry = \"Public Repo\", version = \"\", type = \"\" }}\n}}\n"
+        ),
+    )
+    .unwrap();
+    let (o, _) = stage.run("platform.sh", &["pins"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains(&format!("the registries of {bitnami}: Bitnami")),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!dir.join("terraform.tfvars").exists());
+    assert!(!dir.join("terraform.tfvars.new").exists());
+}
+
+/// A strata for case 1. `verify` of the record of the security profile gives a finding while the
+/// last `PUT` of that profile holds the edit. Each other call goes to the answers of the stage.
+const PLATFORM_STRATA_EDIT: &str = r#"#!/usr/bin/env bash
+put="$FAKE_ROUTES/sent/PUT_v1_clusterprofiles_t-security"
+if [ "$*" = "verify records/security.json" ] && [ -f "$put" ] && grep -q cert-manager-edited "$put"; then
+  echo "DRIFT wilma-security"
+  exit 1
+fi
+exec fake-strata-rules "$@"
+"#;
+
+/// #700: case 1 edits a value of cert-manager in the security profile in place, and puts it back.
+/// `verify` gives a finding for the record of that profile, and each other record passes. A second
+/// record with a finding fails the check of the other records.
+#[test]
+fn platform_sh_case_1_finds_the_edit_in_the_record_of_the_security_profile_alone() {
+    let stage = platform_stage();
+    stage.published(
+        "t-security",
+        r#"[{"name":"cert-manager","tag":"1.21.1","type":"spectro","values":"pack:\n  releaseNameOverride: \"cert-manager\"\n"}]"#,
+        "{}",
+    );
+    stage.wrap_strata(PLATFORM_STRATA_EDIT);
+    let (o, steps) = stage.run("platform.sh", &["1"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "records",
+            "verify-before",
+            "edit-security",
+            "verify-security",
+            "verify-others",
+            "undo-security",
+            "verify-after",
+        ],
+    );
+    seen(&steps, &["verify-cluster"]);
+    assert!(!steps.contains("== stage 2"), "case 1 runs alone:\n{steps}");
+    let puts = stage.sent("PUT", &profile_route("t-security"));
+    assert_eq!(puts.len(), 2, "the edit and its undo");
+    assert!(puts[0].to_string().contains("cert-manager-edited"));
+    assert!(!puts[1].to_string().contains("cert-manager-edited"));
+
+    let mut stage = platform_stage();
+    stage.published(
+        "t-security",
+        r#"[{"name":"cert-manager","tag":"1.21.1","type":"spectro","values":"pack:\n  releaseNameOverride: \"cert-manager\"\n"}]"#,
+        "{}",
+    );
+    stage.strata("verify records/network.json", 1, "");
+    stage.wrap_strata(PLATFORM_STRATA_EDIT);
+    let (o, steps) = stage.run("platform.sh", &["1"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["verify-others"]);
+    let out = std::fs::read_to_string(stage.path("out/verify-others.out")).unwrap();
+    assert!(out.contains("network: verify exits 1"), "{out}");
+}
+
+/// The routes of case 2: version 1.1.0 `nn-1` of the network profile, and the manifests of wilma.
+/// Palette answers the move with `status` and `body`.
+fn platform_move_routes(stage: &Stage, status: u16, body: &str) {
+    let next = serde_json::json!({"metadata": {"uid": "nn-1", "name": "wilma-network"},
+        "spec": {"version": "1.1.0", "published": {"type": "add-on", "packs": [
+            {"name": "cert-manager", "tag": "1.21.1", "type": "spectro", "values": ""}]}}});
+    stage.route(&profile_route("nn-1"), &next.to_string());
+    stage.route(&manifests_route("nn-1"), "{}");
+    stage.route(&cluster_manifests_route("w-1"), "{}");
+    stage.route(&cluster_profiles_route("w-1"), body);
+    std::fs::write(
+        stage.path(&format!(
+            "routes/{}.status",
+            Stage::route_key(&cluster_profiles_route("w-1"))
+        )),
+        status.to_string(),
+    )
+    .unwrap();
+}
+
+/// #700: case 2 makes version 1.1.0 of the network profile with a second version of cert-manager.
+/// It expects each refusal that the code of Palette gives: `ClusterProfilePacksInConflict` for the
+/// edit in place, and `DuplicateClusterPacksForbidden` for the move. A Palette that takes the edit
+/// and the move fails both checks.
+#[test]
+fn platform_sh_case_2_expects_each_refusal_of_palette_for_one_pack_in_two_profiles() {
+    let [cert_manager, _] = PLATFORM_BEHIND;
+    let message = format!("Duplicate packs '{cert_manager}' in multiple profiles are forbidden");
+    let refusal =
+        serde_json::json!({"code": DUPLICATE_CLUSTER_PACKS_CODE, "message": message}).to_string();
+    let listing = packs_answer(
+        cert_manager,
+        &[(
+            "Public Repo",
+            &[("1.21.1", true, None), ("1.0.0", false, None)],
+        )],
+    );
+    let mut stage = platform_stage();
+    platform_move_routes(&stage, 500, &refusal);
+    stage.strata(&format!("packs {cert_manager} *"), 0, &listing);
+    stage.strata(
+        &format!("compare {CLUSTER_PREFIX}w-1 nn-1 --validate"),
+        1,
+        &format!("palette    refuses  {DUPLICATE_CLUSTER_PACKS_CODE}: {message}\n"),
+    );
+    let (o, steps) = stage.run("platform.sh", &["2"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "network-next",
+            "in-place-refused",
+            "in-place-unchanged",
+            "record-network-next",
+            "validate-names-duplicate",
+            "move-refused",
+            "network-next-gone",
+        ],
+    );
+    seen(&steps, &["validate-move", "behind-network"]);
+    let applies: Vec<String> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains(" apply "))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        applies[0].ends_with("-var network_cert_manager=1.21.1"),
+        "{applies:?}"
+    );
+    assert!(
+        applies[1]
+            .ends_with("-var network_cert_manager=1.21.1 -var network_cert_manager_in_place=true"),
+        "{applies:?}"
+    );
+    assert!(
+        applies
+            .last()
+            .unwrap()
+            .ends_with("-var immutable_profiles=false"),
+        "the last apply takes the defaults: {applies:?}"
+    );
+    let patch = stage.sent("PATCH", &cluster_profiles_route("w-1"));
+    assert_eq!(patch[0]["profiles"][0]["uid"], "nn-1");
+    assert_eq!(patch[0]["profiles"][0]["replaceWithProfile"], "t-network");
+
+    // a Palette that takes the edit in place and the move
+    let mut stage = platform_stage();
+    platform_move_routes(&stage, 200, "{}");
+    stage.strata(&format!("packs {cert_manager} *"), 0, &listing);
+    stage.env("FAKE_IN_PLACE_TAKEN", "1");
+    let (o, steps) = stage.run("platform.sh", &["2"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(
+        &steps,
+        &[
+            "in-place-refused",
+            "move-refused",
+            "validate-names-duplicate",
+        ],
+    );
+}
+
+/// #700: case 3 moves fluentbit to a profile of its own and back. It records the two new
+/// versions and wilma, and gives the roots and the node of fluentbit of each record.
+#[test]
+fn platform_sh_case_3_moves_fluentbit_and_gives_the_root_of_each_record() {
+    let mut stage = platform_stage();
+    stage.strata(
+        "snapshot *",
+        0,
+        r#"{"root":"aa11","packs":[{"key":"addon/fluentbit","version":"1.0.0","hash":{"node":"ff22"}}]}"#,
+    );
+    let (o, steps) = stage.run("platform.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(&steps, &["move-fluentbit", "record-moved", "move-back"]);
+    seen(
+        &steps,
+        &[
+            "move-ready",
+            "move-roots",
+            "move-same-release",
+            "move-compare-cluster",
+            "move-compare-records",
+        ],
+    );
+    let roots = std::fs::read_to_string(stage.path("out/move-roots.out")).unwrap();
+    assert!(
+        roots.contains("records/logging.json: root aa11\n  addon/fluentbit 1.0.0 node ff22\n"),
+        "{roots}"
+    );
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    for call in [
+        "snapshot mo-1 -o records/observability-moved.json -q",
+        "snapshot lg-1 -o records/logging.json -q",
+        "same-release records/observability.json records/observability-moved.json",
+    ] {
+        assert!(calls.contains(call), "{call}:\n{calls}");
+    }
+    assert!(stage.tofu_calls().contains("-var move_fluentbit=true"));
+}
+
+/// #700: case 4 gives the variable `domain` another value on wilma, through OpenTofu. The
+/// variables route must give the value to each of the four profiles. A route that gives it to
+/// three fails the check.
+#[test]
+fn platform_sh_case_4_gives_the_variable_domain_a_value_in_the_four_profiles() {
+    let value = "edited.wilma.strata-live.internal";
+    let variables = |teams: usize| {
+        let entries: Vec<serde_json::Value> = platform_domain_teams()
+            .iter()
+            .take(teams)
+            .map(|team| {
+                serde_json::json!({"profileUid": format!("t-{team}"),
+                    "variables": [{"name": "domain", "value": value}]})
+            })
+            .collect();
+        serde_json::json!({"variables": entries}).to_string()
+    };
+    let stage = platform_stage();
+    stage.route(&cluster_variables_route("w-1"), &variables(4));
+    stage.route("/v1/profiles", r#"{"profiles":[{"name":"wilma-network@1.0.0","status":"ok","clusterCopy":{"status":"same"}}]}"#);
+    stage.route("/v1/findings", r#"{"findings":[]}"#);
+    let (o, steps) = stage.run("platform.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "domain-observer-on",
+            "domain-set",
+            "domain-variables",
+            "domain-record",
+            "domain-back",
+            "domain-observer-off",
+        ],
+    );
+    seen(&steps, &["domain-observer"]);
+    let tofu = stage.tofu_calls();
+    assert!(
+        tofu.contains(&format!("-var cluster_domain={value}")),
+        "{tofu}"
+    );
+    assert!(
+        tofu.contains("observer-up up --cluster wilma"),
+        "the observer reads wilma: {tofu}"
+    );
+    assert!(
+        tofu.contains("observer-up down --cluster wilma"),
+        "the end removes the observer: {tofu}"
+    );
+
+    let stage = platform_stage();
+    stage.route(&cluster_variables_route("w-1"), &variables(3));
+    let (_, steps) = stage.run("platform.sh", &["4"]);
+    failed(&steps, &["domain-variables"]);
+}
+
+/// A `count-requests` for the folder of a run. It writes two requests to its log, and runs the
+/// command after `--`.
+const FAKE_COUNT_REQUESTS: &str = r#"#!/usr/bin/env bash
+while [ "$1" != -- ]; do
+  [ "$1" = -log ] && log=$2
+  shift
+done
+shift
+printf 'GET /v1/packs\nGET /v1/clusterprofiles/6a0000000000000000000001\n' > "$log"
+exec "$@"
+"#;
+
+/// #700: case 5 runs `behind` on the records of the seven profiles behind the counter. Each pin
+/// that the pins mark `# behind` must have a newer version. A marked pin with none fails.
+#[test]
+fn platform_sh_case_5_counts_the_requests_of_behind_and_finds_each_pin_behind() {
+    let [cert_manager, argo_cd] = PLATFORM_BEHIND;
+    let behind = |pins: &[(&str, bool)]| {
+        let pins: Vec<serde_json::Value> = pins
+            .iter()
+            .map(|(name, behind)| {
+                let newer = if *behind {
+                    serde_json::json!([{"version": "2.0.0"}])
+                } else {
+                    serde_json::json!([])
+                };
+                serde_json::json!({"name": name, "behind": behind, "newer": newer})
+            })
+            .collect();
+        serde_json::json!({"pins": pins}).to_string()
+    };
+    let mut stage = platform_stage();
+    std::fs::create_dir_all(stage.path("out")).unwrap();
+    executable(&stage.path("out/count-requests"), FAKE_COUNT_REQUESTS);
+    stage.strata(
+        "behind *",
+        1,
+        &behind(&[(cert_manager, true), (argo_cd, true), ("vault", false)]),
+    );
+    let (o, steps) = stage.run("platform.sh", &["5"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(&steps, &["behind-rows"]);
+    seen(&steps, &["behind-scale"]);
+    let out = std::fs::read_to_string(stage.path("out/behind-scale.out")).unwrap();
+    assert!(out.contains("with 2 requests"), "{out}");
+    assert!(out.contains("3 pins, 2 behind"), "{out}");
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    // the script reads the teams from the outputs, which OpenTofu sorts by name
+    let mut teams: Vec<String> = platform_teams()
+        .iter()
+        .map(|(team, _)| format!("records/{team}.json"))
+        .collect();
+    teams.sort();
+    assert!(
+        calls.contains(&format!("behind {} --json -q", teams.join(" "))),
+        "{calls}"
+    );
+
+    let mut stage = platform_stage();
+    std::fs::create_dir_all(stage.path("out")).unwrap();
+    executable(&stage.path("out/count-requests"), FAKE_COUNT_REQUESTS);
+    stage.strata(
+        "behind *",
+        1,
+        &behind(&[(cert_manager, true), (argo_cd, false)]),
+    );
+    let (_, steps) = stage.run("platform.sh", &["5"]);
+    failed(&steps, &["behind-rows"]);
+    let out = std::fs::read_to_string(stage.path("out/behind-rows.out")).unwrap();
+    assert!(
+        out.contains(&format!("{argo_cd}: no newer version")),
+        "{out}"
+    );
+}
+
+/// #700: case 6 removes the data profile from wilma, and then gives it back. The record of the
+/// identity profile must pass `verify`, because its content did not change. The CRD of a Cluster is
+/// gone.
+#[test]
+fn platform_sh_case_6_removes_the_data_profile_and_reads_the_identity_profile() {
+    let stage = platform_stage();
+    let (o, steps) = stage.run("platform.sh", &["6"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "data-off",
+            "data-identity-content",
+            "data-record",
+            "data-back",
+        ],
+    );
+    seen(&steps, &["data-crd", "data-compare", "data-pack-status"]);
+    let status = std::fs::read_to_string(stage.path("out/data-pack-status.out")).unwrap();
+    assert!(status.contains(r#""name":"keycloak""#), "{status}");
+    assert!(
+        stage.tofu_calls().contains("-var data_profile=false"),
+        "{}",
+        stage.tofu_calls()
+    );
+}
+
+/// #700: case 7 counts the requests of the cycles of the observer on wilma, and groups the images
+/// by the host of the registry. It reads the diff of prometheus-operator after an edit in place. A
+/// container that ended with `OOMKilled` fails the check of the memory.
+#[test]
+fn platform_sh_case_7_reads_the_observer_on_wilma_at_scale() {
+    let pod = |reason: Option<&str>| {
+        let last = match reason {
+            Some(r) => serde_json::json!({"terminated": {"reason": r}}),
+            None => serde_json::json!({}),
+        };
+        serde_json::json!({"items": [{"metadata": {"name": "strata-observer-1"},
+            "spec": {"nodeName": "node-1", "containers": [{"name": "observer", "resources": {"limits": {"memory": "512Mi"}}}]},
+            "status": {"containerStatuses": [{"name": "observer", "restartCount": if reason.is_some() { 1 } else { 0 }, "lastState": last}]}}]})
+        .to_string()
+    };
+    let observer_stage = |reason: Option<&str>| {
+        let mut stage = platform_stage();
+        stage.published(
+            "t-observability",
+            r#"[{"name":"prometheus-operator","tag":"1.0.0","type":"spectro","values":"retention: 10d\n"}]"#,
+            "{}",
+        );
+        // the count copies the records of the baseline
+        stage.strata("snapshot *", 0, "{}");
+        std::fs::create_dir_all(stage.path("out/cycles")).unwrap();
+        executable(
+            &stage.path("out/cycles/count-requests"),
+            FAKE_COUNT_REQUESTS,
+        );
+        std::fs::write(stage.path("kube/observer-pod.json"), pod(reason)).unwrap();
+        std::fs::write(
+            stage.path("kube/summary.json"),
+            r#"{"pods":[{"podRef":{"name":"strata-observer-1"},"containers":[{"name":"observer","memory":{"workingSetBytes":104857600}}]}]}"#,
+        )
+        .unwrap();
+        stage.route(
+            "/v1/images",
+            r#"{"pods":"read","readAt":"2026-11-22T00:00:00Z","counts":{"images":4},"images":[
+                {"ref":"quay.io/jetstack/cert-manager-controller:v1.21.1","match":"exact"},
+                {"ref":"bitnami/keycloak:26.0.0","match":"exact"},
+                {"ref":"nginx:1.27","match":"name-and-tag"},
+                {"ref":"registry.k8s.io/pause:3.10","match":"none"}]}"#,
+        );
+        stage.route(
+            "/v1/findings",
+            r#"{"findings":[{"kind":"published-changed","profile":"wilma-observability@1.0.0","packs":["addon/prometheus-operator"]}]}"#,
+        );
+        stage.route(
+            "/v1/packs/wilma-observability@1.0.0/addon/prometheus-operator/diff",
+            r#"{"textTooLarge":true,"values":{},"manifests":[]}"#,
+        );
+        stage.env("CYCLE_TRIES", "3");
+        stage
+    };
+    let stage = observer_stage(None);
+    let (o, steps) = stage.run("platform.sh", &["7"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "observer-pods",
+            "prometheus-edit",
+            "prometheus-undo",
+            "observer-no-oom",
+            "observer-off",
+        ],
+    );
+    seen(
+        &steps,
+        &[
+            "observer-requests",
+            "observer-images",
+            "text-limit",
+            "observer-memory",
+        ],
+    );
+    let images = std::fs::read_to_string(stage.path("out/observer-images.out")).unwrap();
+    for line in [
+        "docker.io: 2 images, 0 with no pack",
+        "quay.io: 1 images, 0 with no pack",
+        "registry.k8s.io: 1 images, 1 with no pack",
+        "no pack: registry.k8s.io/pause:3.10",
+    ] {
+        assert!(images.contains(line), "{line}:\n{images}");
+    }
+    let limit = std::fs::read_to_string(stage.path("out/text-limit.out")).unwrap();
+    assert!(limit.contains(r#""textTooLarge":true"#), "{limit}");
+    let memory = std::fs::read_to_string(stage.path("out/observer-memory.out")).unwrap();
+    assert!(
+        memory.contains("observer: working set 104857600 bytes"),
+        "{memory}"
+    );
+    assert!(memory.contains("observer: limit 512Mi"), "{memory}");
+    let requests = std::fs::read_to_string(stage.path("out/observer-requests.out")).unwrap();
+    let errors = std::fs::read_to_string(stage.path("out/observer-requests.err")).unwrap();
+    assert!(
+        requests.contains("content: 2 requests"),
+        "{requests}\n{errors}"
+    );
+    assert!(
+        stage
+            .tofu_calls()
+            .contains("observer-up up --cluster wilma --read-pods"),
+        "{}",
+        stage.tofu_calls()
+    );
+
+    let stage = observer_stage(Some("OOMKilled"));
+    let (_, steps) = stage.run("platform.sh", &["7"]);
+    failed(&steps, &["observer-no-oom"]);
+}
+
+/// #700: for each pack of a Bitnami registry, case 8 lists the lines of its values that name an
+/// image. It also lists the image and the state of each container of its pods.
+#[test]
+fn platform_sh_case_8_names_the_image_of_each_bitnami_chart_and_what_its_pods_run() {
+    let stage = platform_stage();
+    stage.route(
+        &profile_route("t-identity"),
+        r#"{"metadata":{"uid":"t-identity"},"spec":{"published":{"packs":[{"name":"keycloak","values":"image:\n  registry: docker.io\n  repository: bitnami/keycloak\n  tag: 26.0.0\n"}]}}}"#,
+    );
+    std::fs::write(
+        stage.path("kube/pods.json"),
+        r#"{"items":[{"metadata":{"namespace":"keycloak","labels":{"app.kubernetes.io/instance":"keycloak"}},
+            "status":{"containerStatuses":[{"image":"docker.io/bitnami/keycloak:26.0.0","ready":false,
+            "state":{"waiting":{"reason":"ImagePullBackOff"}}}]}}]}"#,
+    )
+    .unwrap();
+    let (o, steps) = stage.run("platform.sh", &["8"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    seen(&steps, &["bitnami-images"]);
+    let out = std::fs::read_to_string(stage.path("out/bitnami-images.out")).unwrap();
+    for line in [
+        "== keycloak, in wilma-identity",
+        "3:  repository: bitnami/keycloak",
+        "  keycloak docker.io/bitnami/keycloak:26.0.0 ready=false ImagePullBackOff",
+        "== grafana, in wilma-observability",
+    ] {
+        assert!(out.contains(line), "{line}:\n{out}");
+    }
+}
+
+/// #700: `platform.sh up` builds wilma and waits until each pack of each add-on profile is ready.
+/// A pack that waits, or that Palette reports no status for, fails the check, and its line says
+/// why. With no file of pins, `up` stops before it applies.
+#[test]
+fn platform_sh_up_waits_until_each_pack_is_ready_and_names_each_pack_that_is_not() {
+    let [cert_manager, _] = PLATFORM_BEHIND;
+    let [keycloak, _] = PLATFORM_BITNAMI;
+    let stage = platform_stage();
+    let (o, steps) = stage.run("platform.sh", &["up"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(&steps, &["packs-ready"]);
+    let ready = std::fs::read_to_string(stage.path("out/packs-ready.out")).unwrap();
+    assert!(
+        ready.contains(&format!("ready {cert_manager}: WorkloadsReady")),
+        "{ready}"
+    );
+    assert!(
+        ready.contains("ready wilma-security-glue: WorkloadsReady"),
+        "{ready}"
+    );
+    assert!(stage.tofu_calls().contains("init -input=false"));
+
+    let mut stage = platform_stage();
+    stage.route(
+        &cluster_route("w-1"),
+        &wilma_document(|name| {
+            if name == keycloak {
+                serde_json::json!({"type": "Healthy", "status": "False",
+                    "reason": "InstallingWorkloads", "message": "Back-off pulling image docker.io/bitnami/keycloak"})
+            } else {
+                pack_ready(name)
+            }
+        }),
+    );
+    stage.env("READY_TRIES", "2");
+    let (o, steps) = stage.run("platform.sh", &["up"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["packs-ready"]);
+    let ready = std::fs::read_to_string(stage.path("out/packs-ready.out")).unwrap();
+    assert!(
+        ready.contains(&format!(
+            "waiting {keycloak}: InstallingWorkloads Back-off pulling image docker.io/bitnami/keycloak"
+        )),
+        "{ready}"
+    );
+
+    let stage = platform_stage();
+    std::fs::remove_file(stage.path("live/terraform-platform/terraform.tfvars")).unwrap();
+    let (o, _) = stage.run("platform.sh", &["up"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("run examples/live/platform.sh pins first"),
+        "{}",
+        text(&o.stderr)
+    );
+    let tofu = std::fs::read_to_string(stage.path("tofu.log")).unwrap_or_default();
+    assert!(!tofu.contains(" apply"), "{tofu}");
+}
+
+/// #700: `platform.sh down` removes the add-on profiles from wilma first. Then it deletes each claim
+/// of a volume while the CSI driver runs, and then it destroys. It deletes each version of each
+/// profile name. The inventory counts the objects that the workloads, the zone, and the policy
+/// leave.
+#[test]
+fn platform_sh_down_removes_the_add_ons_and_deletes_the_claims_before_the_destroy() {
+    let mut stage = platform_stage();
+    stage.route(
+        &cluster_route("w-1"),
+        r#"{"metadata":{"name":"wilma"},"status":{"state":"Running","packs":[{"name":"ubuntu-aws","profileUid":"r-1"}]}}"#,
+    );
+    stage.route(
+        PROFILE_LISTING,
+        r#"{"items":[{"metadata":{"name":"wilma-security","uid":"t-security"}},
+            {"metadata":{"name":"wilma-logging","uid":"lg-1"}}]}"#,
+    );
+    stage.command("aws", FAKE_AWS);
+    let log = stage.path("tofu.log");
+    stage.env("FAKE_KUBECTL_LOG", log.to_str().unwrap());
+    let (o, steps) = stage.run("platform.sh", &["down"]);
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "{steps}\n{}\n{}",
+        text(&o.stdout),
+        text(&o.stderr)
+    );
+    let calls = stage.tofu_calls();
+    let at = |needle: &str| {
+        calls
+            .lines()
+            .position(|l| l.contains(needle))
+            .unwrap_or_else(|| panic!("{needle}:\n{calls}"))
+    };
+    assert!(at("-var addons=false") < at("delete pvc --all -A --wait=true"));
+    assert!(at("delete pvc --all -A --wait=true") < at(" destroy"));
+    let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    for delete in [
+        "DELETE /v1/clusterprofiles/t-security",
+        "DELETE /v1/clusterprofiles/lg-1",
+    ] {
+        assert!(curl.contains(delete), "{delete}:\n{curl}");
+    }
+    let aws = std::fs::read_to_string(stage.path("aws/calls.log")).unwrap();
+    for call in [
+        "resourcegroupstaggingapi get-resources --tag-filters Key=kubernetes.io/cluster/wilma",
+        "ec2 describe-volumes --filters Name=tag-key,Values=ebs.csi.aws.com/cluster",
+        "route53 list-hosted-zones-by-name --dns-name wilma.strata-live.internal",
+        "iam list-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io",
+        "Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/wilma",
+    ] {
+        assert!(aws.contains(call), "{call}:\n{aws}");
+    }
+    assert!(
+        aws.contains("PolicyNames[?@ == 'strata-live-wilma-external-dns']"),
+        "{aws}"
+    );
+}
+
+/// #700: the options of `aws-inventory.sh` count what a cluster with workloads leaves. Each count
+/// of an option has its own line, and a hosted zone that is left gives the exit 1.
+#[test]
+fn aws_inventory_counts_the_objects_of_each_option() {
+    let root = tempfile::tempdir().unwrap();
+    let bin = fake_bin(root.path(), &[("aws", FAKE_AWS)]);
+    let fake = root.path().join("aws");
+    std::fs::create_dir_all(&fake).unwrap();
+    std::fs::write(fake.join("list-hosted-zones-by-name"), "/hostedzone/Z1\n").unwrap();
+    let o = Command::new("bash")
+        .arg(live_script("aws-inventory.sh"))
+        .args([
+            "wilma",
+            "us-east-2",
+            "--kubernetes-tags",
+            "--csi-volumes",
+            "--zone",
+            "wilma.strata-live.internal.",
+            "--role-policy",
+            "nodes:strata-live-wilma-external-dns",
+        ])
+        .env("PATH", path_with(&bin))
+        .env("FAKE_AWS", &fake)
+        .output_locked()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let out = text(&o.stdout);
+    for line in ["kubernetes tags", "csi volumes", "role policies"] {
+        assert!(
+            out.lines()
+                .any(|l| l.starts_with(line) && l.trim_end().ends_with(" 0")),
+            "{line}: {out}"
+        );
+    }
+    assert!(
+        out.lines()
+            .any(|l| l.starts_with("hosted zones") && l.trim_end().ends_with(" 1")),
+        "{out}"
+    );
+    let calls = std::fs::read_to_string(fake.join("calls.log")).unwrap();
+    assert!(
+        calls.contains("--query HostedZones[?Name == 'wilma.strata-live.internal.'].Id"),
+        "the name loses its last dot, and the query gives it back: {calls}"
+    );
+
+    // an option that the script does not know
+    let o = Command::new("bash")
+        .arg(live_script("aws-inventory.sh"))
+        .args(["wilma", "us-east-2", "--zones"])
+        .env("PATH", path_with(&bin))
+        .env("FAKE_AWS", &fake)
+        .output_locked()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2));
+}
+
+/// #700: the section of `platform.sh` in `live-runs.md` names each check of the script, and no
+/// other check.
+#[test]
+fn the_page_of_live_runs_names_each_check_of_platform_sh() {
+    let mut in_script = script_check_ids("platform.sh");
+    let mut on_page = page_check_ids("platform.sh");
+    in_script.sort();
+    on_page.sort();
+    assert_eq!(in_script, on_page);
 }

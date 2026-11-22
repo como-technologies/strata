@@ -57,8 +57,8 @@ AD=$(out addon_profile_uid)
 NAME=$(out profile_name)
 
 summary() {
-  write_summary "the everyday loop" ", cluster \`$C\`," \
-    "release \`$REL\`, next \`$NEXT\`, add-on \`$AD\`."
+  write_summary "the everyday loop" ", cluster $(md span "$C")," \
+    "release $(md span "$REL"), next $(md span "$NEXT"), add-on $(md span "$AD")."
 }
 
 # undo: each change of this script back, when a step before failed

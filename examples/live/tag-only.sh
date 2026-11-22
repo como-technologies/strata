@@ -44,8 +44,8 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "tag-only test" ". Cluster A \`${C:-}\`, release 1.0.0 \`${P:-}\`," \
-    "1.0.2 (\`$exact\`) \`${EXACT:-}\`, 1.0.3 (\`$floating\`) \`${FLOATING:-}\`."
+  write_summary "tag-only test" ". Cluster A $(md span "${C:-}"), release 1.0.0 $(md span "${P:-}")," \
+    "1.0.2 ($(md span "$exact")) $(md span "${EXACT:-}"), 1.0.3 ($(md span "$floating")) $(md span "${FLOATING:-}")."
 }
 trap summary EXIT
 
