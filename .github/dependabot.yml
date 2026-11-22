@@ -3,7 +3,8 @@
 # repository, so an alert can also open a pull request.
 #
 # Each pull request goes to the milestone Backlog (number 1), so no wave counts it. riff does not
-# take it: it gets no riff/verify, so a maintainer merges it when its checks pass.
+# take it: it gets no riff/verify, so the merge queue removes it. An admin merges it past the queue
+# when its checks pass.
 #
 # Not read here: crates/strata-knurl, examples/live/terraform, deploy/session, examples/library, and
 # examples/library-preflight. The crate crates/strata-knurl needs knurl, a private repository. The

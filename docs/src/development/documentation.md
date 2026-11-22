@@ -250,7 +250,8 @@ language. Read each such comment of the change against
 
 The job `lint and test` of CI runs `just comment-words HEAD^1`, so each change
 keeps the rule. On a pull request, the first parent of the commit is the base
-branch. On a push to `main`, it is the commit before.
+branch. On a push to `main`, it is the commit before. On a merge group, it is the
+commit before the pull request in the queue.
 
 ## The theme
 
