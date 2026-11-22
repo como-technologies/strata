@@ -680,7 +680,7 @@ impl Repo {
 /// The Go module of the tests of the check: a package `names` of closed sets, a package `use`
 /// that imports it, and a package `low` that `names` imports.
 fn go_module(repo: &Repo) {
-    repo.write("go.mod", "module example.com/m\n\ngo 1.22\n");
+    repo.write(Lang::Go.root_file(), "module example.com/m\n\ngo 1.22\n");
     repo.write(
         "names/names.go",
         "package names\n\nimport \"example.com/m/low\"\n\n// Kind is a closed set.\ntype Kind string\n\n\
@@ -749,7 +749,7 @@ fn the_check_lists_each_value_of_go_that_an_added_line_copies_with_the_class_of_
 /// The Rust package of the tests of the check: closed sets of the three forms, a const, a route,
 /// and a helper.
 fn rust_package(repo: &Repo) {
-    repo.write("Cargo.toml", "[package]\nname = \"p\"\n");
+    repo.write(Lang::Rust.root_file(), "[package]\nname = \"p\"\n");
     repo.write(
         "src/lib.rs",
         "/// A closed set.\n#[derive(Serialize)]\n#[serde(rename_all = \"kebab-case\")]\npub enum Tier {\n    InPlace,\n}\n\n\
