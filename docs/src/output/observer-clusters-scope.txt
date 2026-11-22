@@ -1,0 +1,2 @@
+$ jq -c '.source | {name, version, uid, projectUid, scope}' releases/aws-stack_1.1.1.json
+{"name":"aws-stack","version":"1.1.1","uid":"64e4000000000000000000c3","projectUid":"64f20000000000000000a0d1","scope":"tenant"}

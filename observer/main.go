@@ -23,6 +23,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/kube"
+	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/web"
 )
@@ -248,11 +249,18 @@ func (w watcher) server() *api.Server {
 	return &api.Server{Source: w.obs}
 }
 
+// setOnce is what `once` prints with --clusters: the summary of the set, and each profile version that a cluster of the
+// set runs.
+type setOnce struct {
+	model.SetSummary
+	Shared []model.Shared `json:"shared"`
+}
+
 // once runs one content cycle and one versions cycle, and gives the summary and the number of findings.
 func (w watcher) once(ctx context.Context) (any, int, error) {
 	if w.set != nil {
 		sum, err := w.set.Once(ctx)
-		return sum, sum.Counts.Findings, err
+		return setOnce{SetSummary: sum, Shared: w.set.Shared()}, sum.Counts.Findings, err
 	}
 	sum, err := w.obs.Once(ctx)
 	return sum, sum.Counts.Findings, err

@@ -1,0 +1,8 @@
+$ strata-observer once --clusters tag:team=payments --clusters tag:team=search --keys keys \
+  --cluster-uid 64f1000000000000000000e1 --records records --work work --state state 2>/dev/null \
+  | jq -c '.page, .counts, (.clusters[] | {name, project: .project.name, status, profiles})'
+"ok"
+{"clusters":3,"drift":0,"newer":0,"notChecked":0,"findings":0}
+{"name":"payments","project":"dev","status":"ok","profiles":2}
+{"name":"payments","project":"prod","status":"ok","profiles":2}
+{"name":"search","project":"dev","status":"ok","profiles":1}

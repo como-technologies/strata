@@ -7,8 +7,12 @@
 //! playground script `scripts/observer-playground.sh` serves the page of the same tenant.
 
 use super::edits::RETAIN;
-use super::ids::{A100, A110, ADDONS_DEV, ADDONS_PACK, DEV, LEDGER, PAYMENTS};
+use super::ids::{
+    A100, A110, A111_TENANT, ADDONS_DEV, ADDONS_PACK, ADDONS_PROD, ADDONS_PROD_PACK, DEV, LEDGER,
+    PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
+};
 use crate::book::Runner;
+use serde_json::json;
 
 /// The Git revision that the records of the chapter name.
 const REVISION: &str = "3f9c2ab";
@@ -196,4 +200,119 @@ fn alerts(r: &mut Runner) {
         true,
         &format!("{} --alerts alerts.json", once(PAYMENTS, "state-alerts")),
     );
+}
+
+/// The environment of the chapter `observer-clusters`: the project of the key `api-key`, by its
+/// uid, and the revision of the records.
+const SET_ENV: &[(&str, &str)] = &[("PALETTE_PROJECT_UID", DEV), ("GIT_SHA", REVISION)];
+
+/// The command line of a run of `once` for the set of the chapter `observer-clusters`. Two
+/// selectors pick the clusters of the teams payments and search, and the observer runs on
+/// `payments` of `dev`.
+fn once_set(state: &str) -> String {
+    format!(
+        "strata-observer once --clusters tag:team=payments --clusters tag:team=search --keys keys \\\n  --cluster-uid {PAYMENTS} --records records --work work --state {state}"
+    )
+}
+
+/// The chapter `observer-clusters` (#702): one observer for a set of clusters in two projects.
+/// `dev` holds `payments` and `search`, and `prod` holds a second `payments`. Each cluster runs
+/// `aws-stack@1.1.1` of the tenant. The two clusters `payments` also run `platform-addons@1.0.0`
+/// of their own project: one name and version with two uids.
+pub(super) fn clusters(r: &mut Runner) {
+    r.chapter("observer-clusters", SET_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    r.tenant(|t| t.registries(DEV));
+    r.tenant(|t| t.registries(PROD));
+    r.tenant_profile(A111_TENANT, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.tenant(|t| t.addons(DEV, ADDONS_DEV, ADDONS_PACK, "restricted", "1.0.0"));
+    r.tenant(|t| t.addons(PROD, ADDONS_PROD, ADDONS_PROD_PACK, "restricted", "1.0.0"));
+    for (project, uid, name, profiles, team) in [
+        (
+            DEV,
+            PAYMENTS,
+            "payments",
+            &[A111_TENANT, ADDONS_DEV][..],
+            "payments",
+        ),
+        (DEV, SEARCH, "search", &[A111_TENANT][..], "search"),
+        (
+            PROD,
+            PAYMENTS_PROD,
+            "payments",
+            &[A111_TENANT, ADDONS_PROD][..],
+            "payments",
+        ),
+    ] {
+        r.tenant(|t| {
+            t.cluster(project, uid, name, profiles, &[]);
+            t.cluster_field(project, uid, "/metadata/labels", json!({"team": team}));
+        });
+    }
+    set_records(r);
+    r.serve_here(); // state 1: each copy matches its record
+    r.step(
+        "observer-clusters-once",
+        0,
+        false,
+        &format!(
+            "{} 2>/dev/null \\\n  | jq -c '.page, .counts, (.clusters[] | {{name, project: .project.name, status, profiles}})'",
+            once_set("state")
+        ),
+    );
+    r.step(
+        "observer-clusters-shared",
+        0,
+        false,
+        &format!(
+            "{} 2>/dev/null \\\n  | jq -c '.shared[] | {{name, version, scope, clusters, projects: (.projects | length), copies: \"\\(.copies.same) of \\(.copies.of) same\"}}'",
+            once_set("state")
+        ),
+    );
+    // a person changes the values of the copy of prod on the cluster
+    r.tenant(|t| t.on_cluster_reclaim(PROD, PAYMENTS_PROD, "Retain"));
+    r.step(
+        "observer-clusters-differs",
+        1,
+        false,
+        &format!(
+            "{} 2>/dev/null \\\n  | jq -c '(.clusters[] | {{name, project: .project.name, status}}), (.shared[] | select(.copies.differ != []) | {{name, version, differ: [.copies.differ[].name]}})'",
+            once_set("state")
+        ),
+    );
+}
+
+/// The records of the chapter `observer-clusters`: one for each profile version that a cluster of
+/// the set runs, by its uid. The record of the profile of the tenant names `dev`, the project of
+/// the request, and the scope `tenant`. The records script keys each record by its uid. A folder
+/// stands for the Secrets, and another folder stands for the Secret of the keys.
+fn set_records(r: &mut Runner) {
+    r.quiet("mkdir -p releases work state keys");
+    for (uid, project, file) in [
+        (A111_TENANT, "dev", "aws-stack_1.1.1"),
+        (ADDONS_DEV, "dev", "platform-addons_1.0.0_dev"),
+        (ADDONS_PROD, "prod", "platform-addons_1.0.0_prod"),
+    ] {
+        r.quiet(&format!(
+            "strata snapshot {uid} --project-name {project} -o releases/{file}.json"
+        ));
+    }
+    r.step(
+        "observer-clusters-scope",
+        0,
+        false,
+        "jq -c '.source | {name, version, uid, projectUid, scope}' releases/aws-stack_1.1.1.json",
+    );
+    r.step(
+        "observer-clusters-records",
+        0,
+        false,
+        "scripts/ci/observer-records.sh --set --revision \"$GIT_SHA\" releases/*.json \\\n  | grep -E '^  [a-z]+[-_.0-9a-z]*[.]json(.gz)?:' | sed -E 's/^(  [^ :]+[.]json(.gz)?):.*/\\1/'",
+    );
+    r.quiet(&format!(
+        "mkdir records && for f in releases/*.json; do gzip -c \"$f\" > \"records/$(basename \"$f\").gz\"; done && echo '{{\"baseline\":\"approved\",\"revision\":\"{REVISION}\"}}' > records/meta.json"
+    ));
+    r.quiet(&format!(
+        "printf %s \"$PALETTE_API_KEY\" > keys/api-key && printf %s \"$PALETTE_API_KEY\" > keys/{PROD}"
+    ));
 }

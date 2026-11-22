@@ -37,19 +37,37 @@ fn places() -> Vec<(String, String)> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut out = Vec::new();
     for path in walk(&root.join("docs/src")) {
-        let rel = path.strip_prefix(root).unwrap().to_string_lossy().to_string();
+        let rel = path
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
         if rel.starts_with("docs/src/output/") || path.extension().is_none_or(|e| e != "md") {
             continue;
         }
-        out.push((rel.clone(), without_code(&outside_code_blocks(&repo_file(&rel)))));
+        out.push((
+            rel.clone(),
+            without_code(&outside_code_blocks(&repo_file(&rel))),
+        ));
     }
     for path in walk(&root.join("observer/internal/web/assets")) {
-        let rel = path.strip_prefix(root).unwrap().to_string_lossy().to_string();
-        if path.extension().is_some_and(|e| e == "js" || e == "html" || e == "css") {
+        let rel = path
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        if path
+            .extension()
+            .is_some_and(|e| e == "js" || e == "html" || e == "css")
+        {
             out.push((rel.clone(), repo_file(&rel)));
         }
     }
-    for rel in ["observer/main.go", "observer/internal/api/api.go", "src/cli/args.rs"] {
+    for rel in [
+        "observer/main.go",
+        "observer/internal/api/api.go",
+        "src/cli/args.rs",
+    ] {
         out.push((rel.to_string(), repo_file(rel)));
     }
     out
