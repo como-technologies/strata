@@ -10,8 +10,9 @@
 #
 # It creates and publishes a copy of the release profile in the second project. The copy has the
 # name, the version, the packs, the values, and the manifests of the release. It records the
-# version in each project, and asks same-release and compare with a project for each side. Then it
-# deletes the copy. It deletes only the profile that it makes, and never a project.
+# version in each project, and asks same-release and compare with a project for each side. It
+# asks them again with a ref that names its project (#703). Then it deletes the copy. It deletes
+# only the profile that it makes, and never a project.
 #
 # Needs the profiles (just live-profiles), a second project, and no cluster: no cost. It leaves
 # the tenant as it found it. Needs the strata release binary, jq, and the key as verify.sh needs
@@ -90,6 +91,28 @@ check compare-projects 0 '#486: compare with a project for each side names each 
       '.a.projectUid == \$a and .b.projectUid == \$b and .a.uid == \$r and .b.uid == \$t and .sameContent'"
 check records-same 0 '#486: same-release of the two records passes, with no request' -- \
   "$strata" same-release a.json b.json
+
+echo "== a ref that names its project (#703)" | tee -a steps.log
+refs=("project:$A_NAME/$NAME@$VERSION" "project:$B_NAME/$NAME@$VERSION")
+check ref-same-release 0 "#703: same-release of the ref in the lab project and in the second project passes" -- \
+  "$strata" same-release "${refs[@]}" --json
+check ref-same-release-projects 0 '#703: the chain names the lab project, then the second project' -- \
+  jq -e --arg a "$A" --arg b "$B" '.same and .records[0].projectUid == $a and .records[1].projectUid == $b' ref-same-release.out
+check ref-compare 0 '#703: compare of the two refs names each project and each uid, and the content is the same' -- \
+  bash -c "\"$strata\" compare '${refs[0]}' '${refs[1]}' --json \
+    | jq -e --arg a '$A' --arg b '$B' --arg r '$R' --arg t '$T' \
+      '.a.projectUid == \$a and .b.projectUid == \$b and .a.uid == \$r and .b.uid == \$t and .sameContent'"
+check ref-record 0 "#703: snapshot of the ref with the uid of the second project" -- \
+  "$strata" snapshot "project:$B/$NAME@$VERSION" -o ref-b.json
+check ref-record-project 0 '#703: the record names the copy, the second project, and the ref as typed' -- \
+  jq -e --arg t "$T" --arg b "$B" --arg ref "project:$B/$NAME@$VERSION" \
+    '.source.uid == $t and .source.projectUid == $b and .source.ref == $ref' ref-b.json
+check ref-consumers 0 '#703: consumers of the ref in the second project: no cluster runs the copy' -- \
+  "$strata" consumers "${refs[1]}" --list-only
+check ref-no-project 2 '#703: a ref in a project that the key cannot see stops before a read of the ref' -- \
+  "$strata" snapshot "project:strata-live-no-project/$NAME@$VERSION" --json
+check ref-no-project-kind 0 '#703: the error is project-not-found, and it lists the lab project' -- \
+  jq -e --arg a "$A_NAME" '.error.kind == "project-not-found" and (.error.available | index($a))' ref-no-project.err
 
 echo "== what Palette answers in the other project" | tee -a steps.log
 # the status and the error code of the answer go to other-project-read.out; the check records them

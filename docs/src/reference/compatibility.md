@@ -15,10 +15,11 @@ The package is `strata-palette`, and Rust code names the crate `strata`. A
 dependency names the tag and the package: see
 [The library](../automation/library.md#add-the-dependency).
 
-Eight sections list the changes that need action:
+Nine sections list the changes that need action. The newest are
+[Release 0.36.0](#release-0360-changes-that-need-action),
 [Release 0.35.0](#release-0350-changes-that-need-action),
-[Release 0.34.0](#release-0340-changes-that-need-action),
-[Release 0.33.0](#release-0330-changes-that-need-action),
+[Release 0.34.0](#release-0340-changes-that-need-action), and
+[Release 0.33.0](#release-0330-changes-that-need-action). The older are
 [Release 0.28.0](#release-0280-changes-that-need-action),
 [Release 0.27.0](#release-0270-changes-that-need-action),
 [Release 0.26.0](#release-0260-changes-that-need-action),
@@ -1166,6 +1167,33 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.36.0: changes that need action
+
+Release 0.36.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **A ref that starts with `project:` and holds a `/` names its project.**
+  `project:<project>/<ref>` reads the ref in that project. Before, strata read
+  such a text as the path of a record file, and gave the error `io` when no file
+  was there. A file at that path stays a file. A refusal of the key in that
+  project is the new kind `project-denied`, which names the project. See
+  [Refs](./refs.md) and [Errors](./errors.md).
+
+### For a user of the library of strata
+
+- `reference::Ref` has the new variant `InProject`, for
+  `project:<project>/<ref>`. `Ref` has no `#[non_exhaustive]`, so a `match` on
+  `Ref` with no wildcard arm must name it. `Ref::project` gives the project, and
+  `Ref::without_project` gives the ref to read. For such a ref, the `connect` of
+  `ops::snapshot_for`, `ops::snapshot_pair`, and `ops::consumers_with` gives a
+  client of that project. `api::project_uid_of` finds the uid of the project.
+- `error::Error` has the new variant `ProjectDenied`. A `match` on `Error` with
+  no wildcard arm must name it.
 
 ## Release 0.35.0: changes that need action
 

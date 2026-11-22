@@ -8,7 +8,7 @@ use strata::ops;
 use strata::reference::Ref;
 
 use super::args::CompareArgs;
-use super::{connect_in, connect_to, exit_for, now_utc};
+use super::{connect_for, connect_in, exit_for, now_utc};
 
 pub(crate) fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
@@ -16,10 +16,14 @@ pub(crate) fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
     let (ra, rb) = (Ref::parse(&a.a), Ref::parse(&a.b));
     a.questions().check(&ra, &rb)?;
     let sides = a.sides.projects(&a.project);
+    let named = |side| match side {
+        Side::A => ra.project(),
+        Side::B => rb.project(),
+    };
     let (sa, sb) = ops::snapshot_pair(
         &ra,
         &rb,
-        |side| connect_to(progress, sides.of(side)),
+        |side| connect_for(progress, named(side), sides.of(side)),
         &now,
         &progress,
     )?;

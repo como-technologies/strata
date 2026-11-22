@@ -290,7 +290,7 @@ fn candidate_files() -> Vec<Vec<u8>> {
 // ---- refs and versions ----------------------------------------------------------------------
 
 /// One ref of each shape that `Ref::parse` knows, and the texts that sit near a shape.
-const REF_CASES: [&str; 42] = [
+const REF_CASES: [&str; 48] = [
     "aws-stack@1.1.1",
     "aws-stack@latest",
     "64e2000000000000000000a1",
@@ -320,6 +320,12 @@ const REF_CASES: [&str; 42] = [
     "tag:",
     "filter:prod-clusters",
     "filter:",
+    "project:dev/aws-stack@1.1.1",
+    "project:dev/cluster:64f1000000000000000000e1/aws-stack@pending",
+    "project:dev/project:prod/aws-stack@1.1.1",
+    "project:/aws-stack@1.1.1",
+    "project:dev/",
+    "project:dev",
     "releases/1.1.1/dev.json",
     "./record.json",
     "../../etc/passwd",

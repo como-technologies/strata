@@ -15,6 +15,7 @@ use strata::api::{MASKED, PROJECT_UID_HEADER};
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
 use strata::model::validation::{PaletteRefusal, answer_lines};
+use strata::reference::PROJECT_PREFIX;
 use strata::render::palette_line;
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -7820,6 +7821,33 @@ fn projects_stage(chain: [&str; 2]) -> Stage {
         0,
         r#"{"a":{"uid":"r-1","projectUid":"p-1"},"b":{"uid":"c-1","projectUid":"p-2"},"sameContent":true}"#,
     );
+    let refs = format!("{PROJECT_PREFIX}lab/{version} {PROJECT_PREFIX}prod/{version}");
+    stage.strata(
+        &format!("same-release {refs} --json"),
+        0,
+        &format!(r#"{{"same":true,"records":[{{"projectUid":"{a}"}},{{"projectUid":"{b}"}}]}}"#),
+    );
+    stage.strata(
+        &format!("compare {refs} --json"),
+        0,
+        r#"{"a":{"uid":"r-1","projectUid":"p-1"},"b":{"uid":"c-1","projectUid":"p-2"},"sameContent":true}"#,
+    );
+    let by_uid = format!("{PROJECT_PREFIX}p-2/{version}");
+    stage.strata(
+        &format!("snapshot {by_uid} -o ref-b.json"),
+        0,
+        &format!(r#"{{"source":{{"uid":"c-1","projectUid":"p-2","ref":"{by_uid}"}}}}"#),
+    );
+    stage.strata(
+        &format!("consumers {PROJECT_PREFIX}prod/{version} --list-only"),
+        0,
+        "",
+    );
+    stage.strata_err(
+        &format!("snapshot {PROJECT_PREFIX}strata-live-no-project/{version} --json"),
+        2,
+        r#"{"error":{"kind":"project-not-found","available":["lab","prod"]}}"#,
+    );
     stage
 }
 
@@ -7841,6 +7869,14 @@ fn projects_sh_copies_the_release_into_the_second_project_and_checks_each_side()
             "same-release-line",
             "compare-projects",
             "records-same",
+            "ref-same-release",
+            "ref-same-release-projects",
+            "ref-compare",
+            "ref-record",
+            "ref-record-project",
+            "ref-consumers",
+            "ref-no-project",
+            "ref-no-project-kind",
             "copy-delete",
         ],
     );
@@ -7893,7 +7929,14 @@ fn projects_sh_copies_the_release_into_the_second_project_and_checks_each_side()
 fn projects_sh_fails_the_checks_of_the_sides_when_the_chain_names_one_project_twice() {
     let stage = projects_stage(["p-1", "p-1"]);
     let (o, steps) = stage.run("projects.sh", &[]);
-    failed(&steps, &["same-release-projects", "same-release-line"]);
+    failed(
+        &steps,
+        &[
+            "same-release-projects",
+            "same-release-line",
+            "ref-same-release-projects",
+        ],
+    );
     passed(&steps, &["same-release", "compare-projects"]);
     assert_ne!(o.status.code(), Some(0));
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();

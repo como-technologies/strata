@@ -54,14 +54,27 @@ impl<A: PaletteApi> Palette<A> {
     /// [`Error::ProjectNotFound`] when no project has the name. Each error of the request.
     pub fn project_uid_named(&self, name: &str) -> Result<String> {
         let listing = self.project_listing()?;
+        uid_of_project_named(&named_entries(&listing), name)
+    }
+
+    /// The uid of the project that `text` names, from [`Palette::project_listing`]. Call it at
+    /// tenant scope.
+    ///
+    /// It is the project with the uid `text`, else the project with the name `text`, as
+    /// [`Palette::project_uid_named`] finds it. A ref `project:<project>/<ref>` names its project
+    /// with such a text.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ProjectNotFound`] when no project has the uid or the name. Each error of the
+    /// request.
+    pub fn project_uid_of(&self, text: &str) -> Result<String> {
+        let listing = self.project_listing()?;
         let projects = named_entries(&listing);
-        match projects.iter().find(|(n, _)| n == name) {
-            Some((_, uid)) => Ok(uid.clone()),
-            None => Err(Error::ProjectNotFound {
-                name: name.to_string(),
-                available: sorted_names(&projects),
-            }),
+        if projects.iter().any(|(_, uid)| uid == text) {
+            return Ok(text.to_string());
         }
+        uid_of_project_named(&projects, text)
     }
 
     /// The uid of the one cluster named `name` in the scope.
@@ -367,5 +380,21 @@ impl<A: PaletteApi> Palette<A> {
     pub(crate) fn registry_summary(&self, kind: RegistryKind) -> Result<Value> {
         self.api
             .get_json(&route(REGISTRIES, &[kind.as_str(), "summary"]))
+    }
+}
+
+/// The uid of the project with the name `name`, from `projects`, the name and the uid of each
+/// project of the listing.
+///
+/// # Errors
+///
+/// [`Error::ProjectNotFound`] when no project has the name. It lists the names of `projects`.
+fn uid_of_project_named(projects: &[(String, String)], name: &str) -> Result<String> {
+    match projects.iter().find(|(n, _)| n == name) {
+        Some((_, uid)) => Ok(uid.clone()),
+        None => Err(Error::ProjectNotFound {
+            name: name.to_string(),
+            available: sorted_names(projects),
+        }),
     }
 }

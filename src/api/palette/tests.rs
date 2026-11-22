@@ -873,3 +873,27 @@ fn a_uid_that_palette_does_not_have_and_that_is_a_profile_name_gives_its_version
     assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
     assert_eq!(api.calls(PROFILE_LISTING), 3);
 }
+
+#[test]
+fn the_project_of_a_text_is_the_project_with_that_uid_else_the_project_with_that_name() {
+    // a name can be the uid of another project: the uid has priority
+    let api = MemoryApi::new().with(
+        PROJECT_LISTING,
+        json!({"items": [
+            {"metadata": {"name": "prod", "uid": "p-prod"}},
+            {"metadata": {"name": "p-prod", "uid": "p-other"}},
+        ]}),
+    );
+    let palette = Palette::new(api);
+    assert_eq!(palette.project_uid_of("p-prod").unwrap(), "p-prod");
+    assert_eq!(palette.project_uid_of("prod").unwrap(), "p-prod");
+    assert_eq!(palette.project_uid_of("p-other").unwrap(), "p-other");
+    let err = palette.project_uid_of("staging").unwrap_err();
+    assert!(
+        matches!(&err, Error::ProjectNotFound { name, available }
+            if name == "staging" && available == &["p-prod", "prod"]),
+        "{err}"
+    );
+    // a name of the listing is no uid for --project-name
+    assert!(palette.project_uid_named("p-other").is_err());
+}

@@ -21,7 +21,7 @@ the promotion gate: see
 
 </div>
 
-## The flags
+## The flags and the refs
 
 Each command that reads Palette takes `--project <uid>` or `--project-name
 <name>`. The flag replaces `PALETTE_PROJECT_UID` and `PALETTE_PROJECT` for one
@@ -31,6 +31,11 @@ command. `--project ''` is tenant scope. See [The project](../configure.md#the-p
 first ref: `--project-a <uid>` or `--project-name-a <name>`. Side B is the
 second ref: `--project-b <uid>` or `--project-name-b <name>`. The flag of a side
 has priority over `--project`.
+
+A ref can also name its project: `project:<project>/<ref>`, such as
+`project:prod/aws-stack@1.1.0`. The project is a uid or a name. It has priority
+over each flag. `snapshot`, `compare`, `same-release`, and `consumers` take the
+form: see [Refs](../reference/refs.md).
 
 ## 1. Do dev and prod have the same release?
 
@@ -49,6 +54,12 @@ The copy of `1.1.1` in prod is not the release of dev:
 ```
 
 Exit `1`. The reason names the pack and the value path.
+
+Each ref can name its project in place of the flags:
+
+```text
+{{#include ../output/projects-ref-same.txt}}
+```
 
 ## 2. What changed between two versions?
 
@@ -89,6 +100,16 @@ project that the record names.
 
 The record is a file, so strata reads it with no request. `--project-name prod`
 gives the project of the cluster side.
+
+With no record, each ref names its project. The cluster `payments` of prod runs
+`1.1.0`, and not the `1.1.1` of dev:
+
+```text
+{{#include ../output/projects-ref-cluster.txt}}
+```
+
+Exit `1`. Beside a profile version, the cluster side holds only the profile that
+the version replaces, as for a ref with no project.
 
 ## 6. Does the registry have newer versions of what we pin?
 
@@ -138,6 +159,8 @@ clusters. A label also selects them: see [Find the fleet from Palette](./fleet.m
 
 - Give the project of each side with `--project-name-a` and `--project-name-b`.
   A job then answers in one run, and needs no record first.
+- Give each ref its project, such as `project:prod/aws-stack@1.1.0`, for a
+  chain of three projects or for one ref of `snapshot` and `consumers`.
 - Record each project when the release reaches it. Keep each record in the
   repository, because a gate reads the records: see
   [Promote a release to another project](./promote.md).
@@ -146,4 +169,5 @@ clusters. A label also selects them: see [Find the fleet from Palette](./fleet.m
 - When a name means two objects, give the uid: see
   [The same names in two projects](./same-names.md).
 - [What the live example verifies](../development/live-runs.md#projectssh)
-  holds the live check of the flags in two projects of one tenant.
+  holds the live check of the flags and of the refs in two projects of one
+  tenant.

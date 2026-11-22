@@ -455,3 +455,118 @@ fn cluster_group_forms() {
         "no uid, no cluster group"
     );
 }
+
+/// `project:<project>/<ref>`, with `inner` as the ref.
+fn in_project(project: &str, inner: Ref) -> Ref {
+    Ref::InProject {
+        project: project.into(),
+        reference: Box::new(inner),
+    }
+}
+
+#[test]
+fn a_ref_in_a_project_ends_the_project_at_the_first_slash_and_reads_the_rest_as_a_ref() {
+    let no_files = |_: &Path| false;
+    let cases = [
+        (
+            "project:dev/barney@1.5.0",
+            in_project(
+                "dev",
+                Ref::NameVersion {
+                    name: "barney".into(),
+                    version: "1.5.0".into(),
+                },
+            ),
+        ),
+        (
+            "project:prod/cluster:pebbles/aws-stack",
+            in_project(
+                "prod",
+                Ref::Cluster {
+                    uid: "pebbles".into(),
+                    profile: Some("aws-stack".into()),
+                    pending: false,
+                },
+            ),
+        ),
+        (
+            "project:64e0000000000000000000c3/64e2000000000000000000a1",
+            in_project(
+                "64e0000000000000000000c3",
+                Ref::Uid("64e2000000000000000000a1".into()),
+            ),
+        ),
+        (
+            "project:dev/pack:Public Repo/kubernetes@1.36.2",
+            in_project(
+                "dev",
+                Ref::pack(Some("Public Repo"), "kubernetes", "1.36.2"),
+            ),
+        ),
+        // the ref after the slash reads as any ref: these are the refs that a command refuses
+        (
+            "project:dev/releases/dev.json",
+            in_project("dev", Ref::Snapshot("releases/dev.json".into())),
+        ),
+        (
+            "project:dev/project:prod/barney@latest",
+            in_project(
+                "dev",
+                in_project(
+                    "prod",
+                    Ref::NameVersion {
+                        name: "barney".into(),
+                        version: LATEST.into(),
+                    },
+                ),
+            ),
+        ),
+    ];
+    for (text, expected) in cases {
+        let parsed = Ref::parse_with(text, no_files);
+        assert_eq!(parsed, expected, "{text}");
+        assert_eq!(parsed.to_string(), text, "{text} prints as it reads");
+    }
+}
+
+#[test]
+fn a_ref_in_a_project_names_the_project_and_gives_the_ref_with_no_project() {
+    let no_files = |_: &Path| false;
+    let parsed = Ref::parse_with("project:prod/cluster:pebbles", no_files);
+    assert_eq!(parsed.project(), Some("prod"));
+    assert_eq!(parsed.without_project(), &Ref::cluster("pebbles"));
+    // each other ref reads in the configured project
+    let plain = Ref::parse_with("cluster:pebbles", no_files);
+    assert_eq!(plain.project(), None);
+    assert_eq!(plain.without_project(), &plain);
+}
+
+#[test]
+fn a_project_prefix_with_no_project_or_no_ref_is_no_ref_in_a_project() {
+    let no_files = |_: &Path| false;
+    // a text with a slash is shaped like a path, so it is a file
+    for text in ["project:/barney@1.5.0", "project:dev/"] {
+        assert_eq!(
+            Ref::parse_with(text, no_files),
+            Ref::Snapshot(text.into()),
+            "{text}"
+        );
+    }
+    assert_eq!(
+        Ref::parse_with("project:dev", no_files),
+        Ref::Uid("project:dev".into()),
+        "no slash, so no ref after the project"
+    );
+}
+
+#[test]
+fn a_file_with_the_text_of_a_ref_in_a_project_is_the_file() {
+    let text = "project:dev/barney@1.5.0";
+    assert_eq!(Ref::parse_with(text, |_| true), Ref::Snapshot(text.into()));
+    // the check of a file reads the ref after the project too
+    let inner_is_file = |p: &Path| p == Path::new("barney@1.5.0");
+    assert_eq!(
+        Ref::parse_with(text, inner_is_file),
+        in_project("dev", Ref::Snapshot("barney@1.5.0".into()))
+    );
+}

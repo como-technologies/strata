@@ -157,6 +157,25 @@ fn connect_to(
     connect(progress, uid.as_deref())
 }
 
+/// A client for a ref that names `named`, the uid or the name of its project, as
+/// [`strata::reference::Ref::project`] gives it. A ref that names no project gets the client of
+/// [`connect_to`] for `project`. The ref has priority over the flags.
+///
+/// Strata finds the uid of the project here, at the connect, as for `--project-name`.
+fn connect_for(
+    progress: Progress,
+    named: Option<&str>,
+    project: Option<&ProjectArgs>,
+) -> Result<Palette<Retry<HttpApi>>> {
+    match named {
+        Some(text) => {
+            let uid = api::project_uid_of(&Config::from_env()?, text, progress)?;
+            connect(progress, Some(&uid))
+        }
+        None => connect_to(progress, project),
+    }
+}
+
 /// A client for `scope`, the scope that an operation asks for. `None` is the scope of the
 /// command: the project of `project`, else the configured project.
 fn connect_in(

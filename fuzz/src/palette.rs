@@ -49,6 +49,10 @@ fn refs() -> Vec<Ref> {
             tags: vec!["env=prod".to_string()],
             filter: None,
         },
+        Ref::InProject {
+            project: "demo".to_string(),
+            reference: Box::new(Ref::cluster(UID)),
+        },
     ]
 }
 
@@ -92,6 +96,7 @@ fn read_all(api: &Everywhere) -> bool {
     answer(palette.edge_hosts());
     answer(palette.cluster_groups());
     answer(palette.project_uid_named("demo"));
+    answer(palette.project_uid_of("demo"));
     answer(palette.cluster_uid_named("demo"));
     answer(palette.resolve("demo", "1.0.0"));
     answer(palette.resolve_latest("demo"));

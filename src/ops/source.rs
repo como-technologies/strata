@@ -62,6 +62,17 @@ pub enum ObjectSource<'a> {
     Ref(Ref),
 }
 
+impl ObjectSource<'_> {
+    /// The uid or the name of the project that the ref names, as [`Ref::project`] gives it. The
+    /// caller connects in that project.
+    pub fn project(&self) -> Option<&str> {
+        match self {
+            ObjectSource::Ref(r) => r.project(),
+            _ => None,
+        }
+    }
+}
+
 impl<'a> SnapshotRequest<'a> {
     /// What the arguments say that `snapshot` reads.
     ///
@@ -70,6 +81,7 @@ impl<'a> SnapshotRequest<'a> {
     /// - `Usage` for `validate` with `from_raw` or `dir`.
     /// - `Usage` for `dir` with a ref that does not name a set of clusters.
     /// - `Usage` for no ref, no `from_raw`, and no `from_candidate`.
+    /// - `Usage` for a ref in a project that belongs to no project, such as a file or a pack.
     /// - `RecordNotASource` for a ref to a record file: `snapshot` writes a record and reads none.
     pub fn source(&self) -> Result<SnapshotSource<'a>> {
         if self.options.validate && (self.from_raw.is_some() || self.dir.is_some()) {
@@ -80,6 +92,9 @@ impl<'a> SnapshotRequest<'a> {
             });
         }
         let reference = self.reference.map(Ref::parse);
+        if let Some(r) = &reference {
+            super::in_project::checked(r)?;
+        }
         // a set of clusters is one record for each, in a directory
         match (&reference, self.dir) {
             (Some(Ref::ClusterSet { tags, filter }), Some(dir)) => {
@@ -367,8 +382,9 @@ pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Resul
 /// The record of the answers that `--raw-dir` saved in `dir`: see [`snapshot_from_dir`].
 fn saved_snapshot(dir: &Path, reference: &str, fetched_at: &str) -> Result<Snapshot> {
     if dir.join(RawCluster::MARKER).is_file() {
-        let profile = match Ref::parse_with(reference, |_| false) {
-            Ref::Cluster { profile, .. } => profile,
+        let parsed = Ref::parse_with(reference, |_| false);
+        let profile = match parsed.without_project() {
+            Ref::Cluster { profile, .. } => profile.clone(),
             _ => None,
         };
         let raw = RawCluster::load_dir(dir)?;

@@ -95,10 +95,16 @@ pub fn serve_tenants(tenants: BTreeMap<String, BTreeMap<String, Value>>) -> Stri
 fn serve_answers(
     answer: impl Fn(&Request) -> Option<Value> + Send + 'static,
 ) -> (String, Arc<Mutex<Vec<Request>>>) {
-    serve(move |request, _| match answer(request) {
-        Some(doc) => Some((200, doc.to_string())),
-        None => Some((404, "{}".to_string())),
-    })
+    serve(move |request, _| Some(found_or_404(answer(request))))
+}
+
+/// The status and the body of the answer with the document `doc`: HTTP 200 with it, or 404 when
+/// there is no document.
+fn found_or_404(doc: Option<Value>) -> (u16, String) {
+    match doc {
+        Some(doc) => (200, doc.to_string()),
+        None => (404, "{}".to_string()),
+    }
 }
 
 /// Serve on a free port of this machine. `answer` gives the status and the JSON body of the
@@ -153,7 +159,33 @@ pub struct Stand {
 impl Stand {
     /// Serve `routes`. Each run has `project` in `PALETTE_PROJECT_UID`.
     pub fn new(routes: BTreeMap<String, Value>, project: &str) -> Stand {
-        let (api, requests) = serve_recorded(routes);
+        Stand::of(serve_recorded(routes), project)
+    }
+
+    /// [`Stand::new`], where Palette refuses the key in the project `denied`. Each request that
+    /// names that project gets HTTP `status` with `body`, as Palette answers a key with no role
+    /// there.
+    pub fn denying(
+        routes: BTreeMap<String, Value>,
+        project: &str,
+        denied: &str,
+        status: u16,
+        body: String,
+    ) -> Stand {
+        let denied = denied.to_string();
+        let server = serve(move |request, _| {
+            Some(if request.project.as_deref() == Some(denied.as_str()) {
+                (status, body.clone())
+            } else {
+                found_or_404(routes.get(&request.path).cloned())
+            })
+        });
+        Stand::of(server, project)
+    }
+
+    /// The stand-in of `server`, its address and its requests. Each run has `project` in
+    /// `PALETTE_PROJECT_UID`.
+    fn of((api, requests): (String, Arc<Mutex<Vec<Request>>>), project: &str) -> Stand {
         Stand {
             api,
             requests,
