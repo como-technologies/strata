@@ -890,6 +890,9 @@ Dependabot reads no other package:
 - `examples/live/terraform` pins the provider of Spectro Cloud. A new provider
   needs a live run, and the contract run watches its releases.
 - `deploy/session` is the image of the riff sessions, and it follows riff.
+  When a Go update changes the `go` line of a module, its pull request must
+  also change `GO_VERSION` of the image. If not, its checks fail. See
+  [The session image](./changes.md#the-session-image).
 - `examples/library` and `examples/library-preflight` depend on the root
   package by its path. For them, Dependabot edits the manifests of the root, so
   each update opens a second pull request. `just library-example` builds them in

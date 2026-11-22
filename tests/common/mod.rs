@@ -772,6 +772,11 @@ pub fn version_of(manifest: &str) -> String {
         .unwrap_or_else(|| panic!("{manifest} has a version line"))
 }
 
+/// The version of Go that a module needs: the `go` line of `go_mod`, the text of a `go.mod`.
+pub fn go_line(go_mod: &str) -> Option<&str> {
+    go_mod.lines().find_map(|l| l.strip_prefix("go "))
+}
+
 pub fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }

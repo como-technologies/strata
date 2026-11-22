@@ -69,29 +69,15 @@ jq -e '.summary.packsAdded == 0 and .summary.packsRemoved == 0' report.json
 
 ## Read an error
 
-With `--json --quiet`, an error is one JSON line on standard error, and the exit
-status is `2`. `--quiet` is what keeps the progress notes off standard error; a
-script that omits it gets the notes and the JSON line together:
-
-```text
-{{#include ../output/auto-error.txt}}
-```
-
-Without `--json`, the line is the message after `strata: error:`:
-
-```text
-{{#include ../output/auto-error-text.txt}}
-```
-
-`kind` is stable. [Errors](../reference/errors.md) lists each kind and its
+[Errors](../reference/errors.md) shows the line that strata writes to standard
+error for an error, as text and as JSON. It also lists each `kind` and its
 fields.
 
 ## Progress messages
 
-Strata writes progress messages to standard error. Each one starts with
-`strata:`, a warning with `strata: warning:`, and an error with `strata: error:`:
-see [The look of each line](../reference/formats.md#the-look-of-each-line).
-`--quiet` stops the messages and the warnings.
+Strata writes progress messages, warnings, and errors to standard error.
+[The look of each line](../reference/formats.md#the-look-of-each-line) shows
+the start of each one. `--quiet` stops the messages and the warnings.
 [Settings](../reference/settings.md) names the variable that does the same.
 
 ## Send the report of a new value
