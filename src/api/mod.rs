@@ -32,6 +32,7 @@ use crate::error::{Error, Result};
 pub use audit::AuditKind;
 pub use connect::{connect_from_env, connect_with, project_uid_named, project_uid_of};
 pub use download::{DownloadedPack, PackArchive, PackFile, ProfileDownload};
+pub(crate) use http::JSON_TYPE;
 pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
 pub use mask::MASKED;
 pub use memory::MemoryApi;

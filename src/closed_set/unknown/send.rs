@@ -22,6 +22,7 @@ use serde_json::Value;
 
 use super::report::Report;
 use crate::BOOK_URL;
+use crate::api::JSON_TYPE;
 use crate::closed_set::impl_texts;
 use crate::config::{in_ci, setting, state_dir};
 use crate::content::canon::sha256_hex;
@@ -241,7 +242,7 @@ pub fn post(endpoint: &str, report: &Report, position: usize) -> Result<Vec<usiz
         .post(endpoint)
         .header("User-Agent", concat!("strata/", env!("CARGO_PKG_VERSION")))
         .header(KEY_HEADER, &key)
-        .content_type("application/json")
+        .content_type(JSON_TYPE)
         .send(body)
         .map_err(|e| failed(e.to_string()))?;
     let status = answer.status().as_u16();

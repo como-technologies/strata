@@ -18,6 +18,7 @@ use strata::api::{MASKED, MemoryApi};
 use strata::closed_set::ClosedSet;
 use strata::diff::{ChangeFlag, Status};
 use strata::model::input_type::InputType;
+use strata::model::layer::Layer;
 use strata::model::scope::ProfileScope;
 use strata::ops;
 use strata::reference::Ref;
@@ -26,8 +27,8 @@ use strata::snapshot::{AppliedProfile, ClusterSource, ClusterTier, PackSource, S
 
 use crate::common::{
     self, PROFILE_LISTING, PUBLIC_REGISTRY, PackFixture, REGISTRY_LISTING, WITH_IMPACT, behind_of,
-    manifests_answer, manifests_route, no_manifests, no_variables, profile_document, profile_route,
-    serve_profile, serve_registry_pack, snapshot_of, template,
+    layer_entity_answer, manifests_answer, manifests_route, no_manifests, no_variables,
+    profile_document, profile_route, serve_profile, serve_registry_pack, snapshot_of, template,
 };
 
 /// The uid of `barney-addons@1.3.1`, the version that the records hold.
@@ -918,15 +919,11 @@ fn serve_fred(api: MemoryApi) -> MemoryApi {
         json!({"items": [{"name": "Public Repo", "uid": PUBLIC_REGISTRY, "kind": "pack"}]}),
     );
     let summaries = FRED.iter().map(|(v, _)| fred(v).summary(&[])).collect();
-    let tags: Vec<Value> = FRED
-        .iter()
-        .map(|(v, uid)| json!({"tag": v, "packUid": uid}))
-        .collect();
     serve_registry_pack(
         api,
         "fred-compositions",
         Value::Array(summaries),
-        json!({"layer": "addon", "tags": tags}),
+        layer_entity_answer(Layer::Addon, FRED),
         PUBLIC_REGISTRY,
     )
 }

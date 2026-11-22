@@ -95,6 +95,10 @@ pub struct HttpAnswer {
 
 impl HttpAnswer {
     /// An answer with `status` and the JSON text `body`.
+    ///
+    /// The type is the text of `JSON_TYPE` of `src/api/http.rs`, which is not public. The
+    /// integration tests of strata, `strata-preflight`, and `xtask` include this file. They can name
+    /// only a public item of strata, so this file keeps its own copy.
     pub fn json(status: u16, body: impl Into<Vec<u8>>) -> HttpAnswer {
         HttpAnswer {
             status,
@@ -205,6 +209,10 @@ pub fn serve(
 
 /// Serve `answers` with [`serve`], one for each request in turn. A request after the last answer
 /// gets no answer.
+///
+/// # Panics
+///
+/// When no port of this machine is free.
 pub fn serve_each(answers: Vec<HttpAnswer>) -> (String, Arc<Mutex<Vec<Request>>>) {
     serve(move |_, before| answers.get(before).cloned())
 }

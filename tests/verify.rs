@@ -21,6 +21,7 @@ use strata::diff::{ChangeFlag, Side, VerifyStatus, VersionMove};
 use strata::error::{Error, FailureClass};
 use strata::json::str_at;
 use strata::model::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
+use strata::model::layer::Layer;
 use strata::model::profile_type::ProfileType;
 use strata::model::update::MinorSkip;
 use strata::ops;
@@ -37,14 +38,15 @@ use common::{
     cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
     cluster_resolved_values_route, cluster_route, cluster_validate_packs_route,
     cluster_validate_repave_route, cluster_variables_route, clusters_denied, edge_host_route,
-    error_body, fetch_examples, filters_denied, group_resolved_values_route, group_route, listing,
-    manifest_route, manifests_route, no_manifests, no_pack_results, no_repave, no_roles_message,
-    no_template, no_variables, operation_forbidden_message, pack_entity_answer, pack_entity_route,
-    pack_listing_route, post, profile_document, profile_route, project_listing, rbacs_answer,
-    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
-    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
-    strata_command, system_rbacs, template, template_validate_repave_route,
-    update_validate_packs_route, validate_name_route, variables_route, write_record, write_yaml,
+    error_body, fetch_examples, filters_denied, group_resolved_values_route, group_route,
+    layer_entity_answer, listing, manifest_route, manifests_route, no_manifests, no_pack_results,
+    no_repave, no_roles_message, no_template, no_variables, operation_forbidden_message,
+    pack_entity_answer, pack_entity_route, pack_listing_route, pin_bump, post, profile_document,
+    profile_route, project_listing, rbacs_answer, read_json, resolved_values_route, serve_cluster,
+    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
+    snapshot_of_at, snapshot_of_ref, strata_command, system_rbacs, tag_row, template,
+    template_validate_repave_route, update_validate_packs_route, validate_name_route,
+    variables_route, with_parent_tags, write_record, write_yaml,
 };
 
 #[test]
@@ -7383,17 +7385,20 @@ fn with_tag(mut entity: Value, version: &str, uid: &str) -> Value {
     entity["tags"]
         .as_array_mut()
         .unwrap()
-        .push(serde_json::json!({"tag": version, "packUid": uid}));
+        .push(tag_row(version, uid));
     entity
 }
 
 fn public_entity() -> Value {
-    serde_json::json!({"layer": "csi", "tags": [
-        {"tag": "1.63.1", "packUid": "pk-63"},
-        {"tag": "1.63.x", "packUid": "pk-63"},
-        {"tag": "1.x", "packUid": "pk-65"},
-        {"tag": "1.65.0", "packUid": "pk-65"},
-    ]})
+    layer_entity_answer(
+        Layer::Csi,
+        &[
+            ("1.63.1", "pk-63"),
+            ("1.63.x", "pk-63"),
+            ("1.x", "pk-65"),
+            ("1.65.0", "pk-65"),
+        ],
+    )
 }
 
 #[test]
@@ -7424,11 +7429,18 @@ fn packs_of(
 /// row names every tag above it, so the exact tag names the most and the top floating tag names
 /// none.
 fn tagged_entity() -> Value {
-    serde_json::json!({"layer": "csi", "tags": [
-        {"tag": "LTS__24.x", "packUid": "pk-65", "parentTags": null},
-        {"tag": "LTS__24.04", "packUid": "pk-65", "parentTags": ["LTS__24.4.x", "LTS__24.x"]},
-        {"tag": "LTS__24.4.x", "packUid": "pk-65", "parentTags": ["LTS__24.x"]},
-    ]})
+    let tags = [
+        ("LTS__24.x", "pk-65"),
+        ("LTS__24.04", "pk-65"),
+        ("LTS__24.4.x", "pk-65"),
+    ];
+    with_parent_tags(
+        layer_entity_answer(Layer::Csi, &tags),
+        &[
+            ("LTS__24.04", &["LTS__24.4.x", "LTS__24.x"]),
+            ("LTS__24.4.x", &["LTS__24.x"]),
+        ],
+    )
 }
 
 #[test]
@@ -7668,7 +7680,7 @@ fn packs_gives_the_state_disabled_to_a_version_with_the_mark_and_reads_its_tags_
             ("reg-public", public_entity()),
             (
                 "reg-mirror",
-                serde_json::json!({"layer": "csi", "tags": [{"tag": "1.64.0", "packUid": "pk-m"}]}),
+                layer_entity_answer(Layer::Csi, &[("1.64.0", "pk-m")]),
             ),
         ],
     );
@@ -7974,8 +7986,7 @@ fn comparing_two_pack_versions_says_what_changed_between_them() {
 #[test]
 fn a_pack_in_several_registries_needs_the_registry_named() {
     let mirrored = csi_summary("pk-65-mirror", "1.65.0", "reg-mirror", "sha256:ccc", CSI_65);
-    let mirror_entity =
-        serde_json::json!({"layer": "csi", "tags": [{"tag": "1.65.0", "packUid": "pk-65-mirror"}]});
+    let mirror_entity = layer_entity_answer(Layer::Csi, &[("1.65.0", "pk-65-mirror")]);
     let api = serve_registry(
         vec![mirrored],
         &[
@@ -8043,8 +8054,7 @@ fn a_pack_in_several_registries_needs_the_registry_named() {
 #[test]
 fn the_refusal_names_a_registry_with_a_slash_in_its_name_by_its_uid_and_that_ref_parses() {
     let mirrored = csi_summary("pk-65-mirror", "1.65.0", "reg-mirror", "sha256:ccc", CSI_65);
-    let mirror_entity =
-        serde_json::json!({"layer": "csi", "tags": [{"tag": "1.65.0", "packUid": "pk-65-mirror"}]});
+    let mirror_entity = layer_entity_answer(Layer::Csi, &[("1.65.0", "pk-65-mirror")]);
     // Palette takes a `/` in the name of a registry
     let api = serve_registry(
         vec![mirrored],
@@ -8109,8 +8119,7 @@ fn verify_of_an_oci_pack_record_reads_the_oci_listing_one_time() {
     let mirror_api = || {
         let mut oci = csi_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63);
         oci["spec"]["type"] = serde_json::json!("oci");
-        let mirror =
-            serde_json::json!({"layer": "csi", "tags": [{"tag": "1.64.0", "packUid": "pk-m"}]});
+        let mirror = layer_entity_answer(Layer::Csi, &[("1.64.0", "pk-m")]);
         serve_registry(
             vec![oci],
             &[("reg-public", public_entity()), ("reg-mirror", mirror)],
@@ -11653,8 +11662,7 @@ fn a_record_of_a_pack_from_an_oci_registry_names_its_provider_type() {
     // the pack listing does not name the provider type: the listing of the OCI registries does
     let mut oci = csi_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63);
     oci["spec"]["type"] = serde_json::json!("oci");
-    let mirror =
-        serde_json::json!({"layer": "csi", "tags": [{"tag": "1.64.0", "packUid": "pk-m"}]});
+    let mirror = layer_entity_answer(Layer::Csi, &[("1.64.0", "pk-m")]);
     let api = serve_registry(
         vec![oci],
         &[("reg-public", public_entity()), ("reg-mirror", mirror)],
@@ -14960,14 +14968,13 @@ fn serve_two_packs_of_the_oci_registry() -> MemoryApi {
         s
     };
     let serve_pack = |api: MemoryApi, name: &str, builds: Vec<Value>| {
-        let tags: Vec<Value> = builds
+        let tags: Vec<(&str, &str)> = builds
             .iter()
-            .map(|b| serde_json::json!({"tag": b["spec"]["version"], "packUid": b["metadata"]["uid"]}))
+            .map(|b| (str_at(b, "/spec/version"), str_at(b, "/metadata/uid")))
             .collect();
-        serve_pack_listing(api, name, Value::Array(builds)).with(
-            pack_entity_route(name, "reg-mirror"),
-            serde_json::json!({"layer": "csi", "tags": tags}),
-        )
+        let entity = layer_entity_answer(Layer::Csi, &tags);
+        serve_pack_listing(api, name, Value::Array(builds))
+            .with(pack_entity_route(name, "reg-mirror"), entity)
     };
     let api = serve_registry(vec![], &[("reg-public", public_entity())]).with(
         OCI_REGISTRY_SUMMARY,
@@ -15225,10 +15232,7 @@ fn a_pack_at_latest_is_the_version_that_packs_marks_when_the_highest_version_has
         ],
         &[
             ("reg-public", public_entity()),
-            (
-                "reg-mirror",
-                serde_json::json!({"layer": "csi", "tags": []}),
-            ),
+            ("reg-mirror", layer_entity_answer(Layer::Csi, &[])),
         ],
     );
     let listing = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
@@ -15639,7 +15643,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
         pin.newer[0].listed, "",
         "the listing gives no time for 1.65.0"
     );
-    let bump = pin.bump.as_ref().unwrap();
+    let bump = pin_bump(pin);
     assert_eq!(bump.to, "1.65.0");
     assert!(
         bump.flags.iter().any(|f| *f == ChangeFlag::Identity),
@@ -15816,7 +15820,7 @@ fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_wi
     assert_ne!(target.packs[0].pack_uid, record.packs[0].pack_uid);
 
     // the document of the profile names the clusters, and the message names one of them
-    let validation = r.pins[0].bump.as_ref().unwrap();
+    let validation = pin_bump(&r.pins[0]);
     let answer = validation.palette_validation.as_ref().unwrap();
     assert!(!answer.accepts());
     assert_eq!(answer.errors()[0].code, UPGRADE_NOT_SUPPORTED_CODE);
@@ -15871,7 +15875,7 @@ fn behind_prints_that_palette_accepts_when_it_gives_no_error_for_the_bump() {
     let csi = dir.path().join("csi.json");
     common::write_snapshot(&csi, &record, false);
     let r = behind_of(&api, &[csi], &WITH_IMPACT);
-    let answer = r.pins[0].bump.as_ref().unwrap().palette_validation.as_ref();
+    let answer = pin_bump(&r.pins[0]).palette_validation.as_ref();
     assert!(answer.unwrap().accepts());
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(text.contains("      palette accepts\n"), "{text}");
@@ -15898,10 +15902,9 @@ fn serve_kubernetes() -> MemoryApi {
         .zip(uids.iter().zip(&values))
         .map(|(v, (uid, values))| PackFixture::public("kubernetes", "k8s", v, uid, "", values))
         .collect();
-    let tags: Vec<Value> = KUBERNETES_VERSIONS
-        .iter()
-        .zip(&uids)
-        .map(|(v, uid)| serde_json::json!({"tag": v, "packUid": uid}))
+    let tags: Vec<(&str, &str)> = KUBERNETES_VERSIONS
+        .into_iter()
+        .zip(uids.iter().map(String::as_str))
         .collect();
     let api = MemoryApi::new().with(
         REGISTRY_LISTING,
@@ -15911,7 +15914,7 @@ fn serve_kubernetes() -> MemoryApi {
         api,
         "kubernetes",
         fixtures.iter().map(|f| f.summary(&["aws"])).collect(),
-        serde_json::json!({"layer": "k8s", "tags": tags}),
+        layer_entity_answer(Layer::K8s, &tags),
         "reg-public",
     )
 }
@@ -15945,7 +15948,7 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
 
     // Palette accepts the packs of each move. The move from 1.34.9 to 1.36.2 skips 1.35, and
     // strata names it. The next step is the newest version of 1.35 in the registry
-    let bump = skip.bump.as_ref().unwrap();
+    let bump = pin_bump(skip);
     assert!(bump.palette_validation.as_ref().unwrap().accepts());
     assert_eq!(
         bump.update_checks.skipped_minor,
@@ -15959,7 +15962,7 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
     );
     assert!(bump.update_checks.required_variables.is_none());
     // the move from 1.35.2 to 1.36.2 goes one minor version
-    let next = step.bump.as_ref().unwrap();
+    let next = pin_bump(step);
     assert!(next.update_checks.is_empty(), "{:?}", next.update_checks);
 
     // a check of strata: the line names the rule of Kubernetes, and no code of Palette
@@ -15995,10 +15998,7 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
     );
     assert!(json["pins"][1]["bump"].get("updateChecks").is_none());
     let back: ops::BehindReport = serde_json::from_value(json).unwrap();
-    assert_eq!(
-        back.pins[0].bump.as_ref().unwrap().update_checks,
-        bump.update_checks
-    );
+    assert_eq!(pin_bump(&back.pins[0]).update_checks, bump.update_checks);
     // the check sends no request: the run asks the route of each version one time
     assert_eq!(api.posted().len(), 2, "{:?}", api.posted());
 }
@@ -16047,9 +16047,10 @@ fn serve_behind_two_packs() -> MemoryApi {
         s["spec"]["name"] = Value::from("csi-extra");
         s
     };
-    let entity = serde_json::json!({"layer": "csi", "tags": [
-        {"tag": "1.0.0", "packUid": "pk-extra-1.0.0"},
-        {"tag": "1.1.0", "packUid": "pk-extra-1.1.0"}]});
+    let entity = layer_entity_answer(
+        Layer::Csi,
+        &[("1.0.0", "pk-extra-1.0.0"), ("1.1.0", "pk-extra-1.1.0")],
+    );
     common::serve_registry_pack(
         serve_behind(),
         "csi-extra",
@@ -16094,7 +16095,7 @@ fn behind_with_a_pin_compares_and_asks_palette_about_that_pack_only() {
     let r = behind_of(&one, &[path], &options);
     assert_eq!(r.pins.len(), 1);
     assert_eq!(r.pins[0].name, "csi-extra");
-    assert_eq!(r.pins[0].bump.as_ref().unwrap().to, "1.1.0");
+    assert_eq!(pin_bump(&r.pins[0]).to, "1.1.0");
     assert_eq!(one.posted().len(), 1, "{:?}", one.posted());
     assert_eq!(
         (r.summary.pins, r.summary.behind, r.summary.errors),
@@ -16182,10 +16183,7 @@ fn behind_asks_the_route_of_the_profile_version_that_a_cluster_runs_about_the_bu
     // a 200 with no error: Palette accepts, and strata reads no document of the profile
     let r = behind_of(&accepting, &[cluster_file], &WITH_IMPACT);
     assert!(
-        r.pins[0]
-            .bump
-            .as_ref()
-            .unwrap()
+        pin_bump(&r.pins[0])
             .palette_validation
             .as_ref()
             .unwrap()
@@ -16311,13 +16309,7 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
             update_validate_packs_route(other)
         ]
     );
-    let answer = r.pins[0]
-        .bump
-        .as_ref()
-        .unwrap()
-        .palette_validation
-        .as_ref()
-        .unwrap();
+    let answer = pin_bump(&r.pins[0]).palette_validation.as_ref().unwrap();
     assert_eq!(answer.errors().len(), 1);
 
     // both accept: Palette accepts
@@ -16327,10 +16319,7 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
         .with(cluster_route_packs.clone(), serde_json::json!({}));
     let r = behind_of(&accepting, &records, &WITH_IMPACT);
     assert!(
-        r.pins[0]
-            .bump
-            .as_ref()
-            .unwrap()
+        pin_bump(&r.pins[0])
             .palette_validation
             .as_ref()
             .unwrap()
@@ -16344,7 +16333,7 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
         .failing(profile_route_packs.clone(), 403, "no access")
         .with(cluster_route_packs.clone(), serde_json::json!({}));
     let r = behind_of(&failing, &records, &WITH_IMPACT);
-    let bump = r.pins[0].bump.as_ref().unwrap();
+    let bump = pin_bump(&r.pins[0]);
     assert!(bump.palette_validation.is_none());
     assert!(
         bump.palette_validation_error
@@ -16365,7 +16354,7 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
         .failing(profile_route_packs, 403, "no access")
         .with(cluster_route_packs, upgrade_refusal(UPGRADE_REFUSAL));
     let r = behind_of(&refusing, &records, &WITH_IMPACT);
-    let bump = r.pins[0].bump.as_ref().unwrap();
+    let bump = pin_bump(&r.pins[0]);
     assert!(!bump.palette_validation.as_ref().unwrap().accepts());
     assert!(bump.palette_validation_error.is_some());
 }
@@ -16390,13 +16379,7 @@ fn behind_gives_one_error_for_a_record_of_a_profile_and_a_record_of_a_cluster_th
     let r = behind_of(&api, &records, &WITH_IMPACT);
     // each record sends its request, and Palette answers both with one error
     assert_eq!(api.posted().len(), 2, "{:?}", api.posted());
-    let answer = r.pins[0]
-        .bump
-        .as_ref()
-        .unwrap()
-        .palette_validation
-        .as_ref()
-        .unwrap();
+    let answer = pin_bump(&r.pins[0]).palette_validation.as_ref().unwrap();
     assert_eq!(answer.errors().len(), 1, "{answer:?}");
     assert_eq!(answer.errors()[0].clusters, [BUMP_CLUSTER]);
 }
@@ -16428,7 +16411,7 @@ fn behind_gives_the_message_of_palette_when_an_error_names_no_cluster_that_runs_
     // the document of the profile is not readable: the refusal stands, with the message
     let unread = api.failing(profile_route(BUMP_PROFILE_UID), 500, "boom");
     let r = behind_of(&unread, &[csi], &WITH_IMPACT);
-    let bump = r.pins[0].bump.as_ref().unwrap();
+    let bump = pin_bump(&r.pins[0]);
     assert!(!bump.palette_validation.as_ref().unwrap().accepts());
     assert!(bump.palette_validation_error.is_none());
 }
@@ -16461,7 +16444,7 @@ fn behind_does_not_ask_about_a_record_that_no_cluster_runs() {
     }
     let r = behind_of(&api, &records, &WITH_IMPACT);
     assert!(api.posted().is_empty(), "{:?}", api.posted());
-    let bump = r.pins[0].bump.as_ref().unwrap();
+    let bump = pin_bump(&r.pins[0]);
     assert!(bump.palette_validation.is_none() && bump.palette_validation_error.is_none());
     let json = serde_json::to_value(&r).unwrap();
     assert!(json["pins"][0]["bump"].get("paletteValidation").is_none());
@@ -16500,7 +16483,7 @@ fn behind_does_not_say_that_palette_accepts_when_it_did_not_ask_a_record_of_anot
     let posted = api.posted();
     assert_eq!(posted.len(), 1, "{posted:?}");
     assert_eq!(posted[0].0, update_validate_packs_route(BUMP_PROFILE_UID));
-    let bump = r.pins[0].bump.as_ref().unwrap();
+    let bump = pin_bump(&r.pins[0]);
     assert!(
         bump.palette_validation.is_none(),
         "Palette did not check the record of prod"
@@ -16543,12 +16526,7 @@ fn behind_does_not_say_that_palette_accepts_when_it_did_not_ask_a_record_of_anot
     }
     let r = behind_of(&api, &files, &WITH_IMPACT);
     assert_eq!(
-        r.pins[0]
-            .bump
-            .as_ref()
-            .unwrap()
-            .palette_validation_error
-            .as_deref(),
+        pin_bump(&r.pins[0]).palette_validation_error.as_deref(),
         Some(
             "1 record of the tenant scope was not asked; 2 records of project prod were not asked"
         )
@@ -16557,7 +16535,7 @@ fn behind_does_not_say_that_palette_accepts_when_it_did_not_ask_a_record_of_anot
     // only a pack record is in another project: Palette checked each record that it can check
     let files = ["dev.json", "pack.json"].map(|name| dir.path().join(name));
     let r = behind_of(&api, &files, &WITH_IMPACT);
-    let bump = r.pins[0].bump.as_ref().unwrap();
+    let bump = pin_bump(&r.pins[0]);
     assert!(bump.palette_validation.as_ref().unwrap().accepts());
     assert!(bump.palette_validation_error.is_none());
 }
@@ -16580,7 +16558,7 @@ fn behind_keeps_the_refusal_of_palette_and_says_that_it_did_not_ask_a_record_of_
     let r = behind_of(&api, &files, &WITH_IMPACT);
 
     // the refusal stands: it is an error that Palette gave for a record that strata asked
-    let bump = r.pins[0].bump.as_ref().unwrap();
+    let bump = pin_bump(&r.pins[0]);
     let answer = bump.palette_validation.as_ref().unwrap();
     assert!(!answer.accepts());
     assert_eq!(answer.errors()[0].clusters, [BUMP_CLUSTER]);
@@ -16730,12 +16708,15 @@ fn behind_does_not_offer_a_version_with_the_mark_and_says_so_of_a_pinned_one() {
         ],
         &[(
             "reg-public",
-            serde_json::json!({"layer": "csi", "tags": [
-                {"tag": "1.63.1", "packUid": "pk-63"},
-                {"tag": "1.65.0", "packUid": "pk-65"},
-                {"tag": "1.66.0", "packUid": "pk-1.66.0"},
-                {"tag": "1.67.0", "packUid": "pk-1.67.0"},
-            ]}),
+            layer_entity_answer(
+                Layer::Csi,
+                &[
+                    ("1.63.1", "pk-63"),
+                    ("1.65.0", "pk-65"),
+                    ("1.66.0", "pk-1.66.0"),
+                    ("1.67.0", "pk-1.67.0"),
+                ],
+            ),
         )],
     );
     let write = |name: &str, snap: &Snapshot| {
@@ -18849,7 +18830,7 @@ fn a_behind_report_with_values_of_a_later_release_reads_with_no_error_and_writes
         report.tool.implementation.as_ref().map(|i| i.as_str()),
         Some("go")
     );
-    let bump = report.pins[0].bump.as_ref().unwrap();
+    let bump = pin_bump(&report.pins[0]);
     assert_eq!(bump.impact.known(), None);
     assert_eq!(bump.impact.as_str(), "fleet-wide");
     assert_eq!(bump.flags[0], ChangeFlag::Identity);

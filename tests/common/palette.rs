@@ -352,14 +352,37 @@ pub fn pack_entity_route(name: &str, registry: &str) -> String {
     format!("/v1/packs/{name}/registries/{registry}")
 }
 
-/// The answer of [`pack_entity_route`], with one row of its list `tags` for each pair of `tags`. A
-/// pair holds a tag and the uid of the pack that the tag points at.
+/// One row of the list `tags` of the answer of [`pack_entity_route`]: the tag `tag`, and the uid
+/// `pack` of the pack that the tag points at.
+pub fn tag_row(tag: &str, pack: &str) -> Value {
+    json!({"tag": tag, "packUid": pack})
+}
+
+/// The answer of [`pack_entity_route`], with one [`tag_row`] of its list `tags` for each pair of
+/// `tags`. A pair holds a tag and the uid of the pack that the tag points at.
 pub fn pack_entity_answer(tags: &[(&str, &str)]) -> Value {
-    let rows: Vec<Value> = tags
-        .iter()
-        .map(|(tag, pack)| json!({"tag": tag, "packUid": pack}))
-        .collect();
+    let rows: Vec<Value> = tags.iter().map(|(tag, pack)| tag_row(tag, pack)).collect();
     json!({ "tags": rows })
+}
+
+/// The [`pack_entity_answer`] of `tags`, for a pack of the layer `layer`. The route gives one layer
+/// for all the versions of the pack.
+pub fn layer_entity_answer(layer: strata::model::layer::Layer, tags: &[(&str, &str)]) -> Value {
+    let mut answer = pack_entity_answer(tags);
+    answer["layer"] = json!(layer.to_string());
+    answer
+}
+
+/// `answer`, an answer of [`pack_entity_route`], where the row of each tag of `parents` names the
+/// tags above it in its list `parentTags`. Palette names there each floating tag above the tag.
+pub fn with_parent_tags(mut answer: Value, parents: &[(&str, &[&str])]) -> Value {
+    let rows = answer.get_mut("tags").and_then(Value::as_array_mut);
+    for row in rows.into_iter().flatten() {
+        if let Some((_, above)) = parents.iter().find(|(tag, _)| row["tag"] == *tag) {
+            row["parentTags"] = json!(above);
+        }
+    }
+    answer
 }
 
 /// The registry listing, `GET /v1/registries/metadata`.
