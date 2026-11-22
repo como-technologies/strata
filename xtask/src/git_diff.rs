@@ -146,8 +146,8 @@ rename to new.go
         assert_eq!(added["new.go"], BTreeSet::from([4]));
     }
 
-    /// The criterion of #944: git writes a tab after a name with a space, and a name with a mark
-    /// or a character that is not ASCII in quotes. A name that is not UTF-8 is an error.
+    /// The criterion of #944. git writes a tab after a name with a space. It writes a name with a
+    /// mark or a character that is not ASCII in quotes. A name that is not UTF-8 is an error.
     #[test]
     fn the_added_lines_of_a_diff_name_a_file_with_a_space_a_mark_or_a_character_that_is_not_ascii()
     {

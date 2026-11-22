@@ -185,7 +185,7 @@ mod tests {
         format!("{}.", vec!["word"; count].join(" "))
     }
 
-    /// The criteria of #903 and #944: a sentence of more than 25 words fails, in a line comment `//`
+    /// The criteria of #903 and #944. A sentence of more than 25 words fails in a line comment `//`
     /// and `#`, in a block comment, and in a query of CodeQL.
     #[test]
     fn a_comment_sentence_of_more_than_25_words_is_a_fault_in_each_form_of_comment() {
@@ -238,7 +238,7 @@ mod tests {
         );
     }
 
-    /// The criterion of #944: a comment after code on its line is not in the count, as
+    /// The criterion of #944. A comment after code on its line is not in the count, as
     /// "The check of the comment sentences" in `documentation.md` states.
     #[test]
     fn a_comment_after_code_on_its_line_is_not_in_the_count() {
@@ -304,7 +304,7 @@ mod tests {
         assert!(check(repo, "no-such-ref").is_err());
     }
 
-    /// The criterion of #944: git writes a tab after a name with a space, and a name that is not
+    /// The criterion of #944. git writes a tab after a name with a space, and a name that is not
     /// ASCII in quotes. The check reads each such file, and names it as the tree names it.
     #[test]
     fn the_check_reads_a_file_with_a_space_or_a_character_that_is_not_ascii_in_its_name() {
