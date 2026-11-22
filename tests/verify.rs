@@ -19012,12 +19012,9 @@ fn the_diff_of_full_shows_each_line_of_the_diff_on_its_own_line_after_a_lone_car
     });
     let d = ops::compare(&a, &b, "t1");
     let lines = concat!(r"+# \u{1b}[31mred\u{1b}[0m over\r", "\n+back\n+next\n");
-    for (form, renderer) in [
-        ("terminal", common::terminal()),
-        ("markdown", common::markdown()),
-    ] {
+    for renderer in [common::terminal(), common::markdown()] {
         let text = renderer.render(&d, &a, &b, true).unwrap();
-        assert!(text.contains(lines), "{form}: {lines:?} in\n{text}");
+        assert!(text.contains(lines), "{lines:?} in\n{text}");
     }
 }
 
