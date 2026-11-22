@@ -67,9 +67,10 @@ enum Parsed {
 
 /// Read each Rust and Go file of the tree of the commit `head`.
 pub fn read_tree(repo: &Path, head: &str) -> Result<Tree, String> {
-    let paths = git(repo, &["ls-tree", "-r", "--name-only", head])?;
+    let listing = git(repo, &["ls-tree", "-r", "-z", "--name-only", head])?;
+    let paths: Vec<&str> = listing.split('\0').filter(|p| !p.is_empty()).collect();
     let mut roots: BTreeMap<Lang, Vec<String>> = BTreeMap::new();
-    for path in paths.lines() {
+    for path in &paths {
         for (lang, _, file) in LANGS {
             if let Some(dir) = path
                 .strip_suffix(file)
@@ -81,14 +82,14 @@ pub fn read_tree(repo: &Path, head: &str) -> Result<Tree, String> {
     }
     let mut parsed = Vec::new();
     let sources: Vec<&str> = paths
-        .lines()
-        .filter(|path| Lang::of(path).is_some())
+        .into_iter()
+        .filter(|p| Lang::of(p).is_some())
         .collect();
     for (path, text) in archive(repo, head, &sources)? {
         let Some(lang) = Lang::of(&path) else {
             continue;
         };
-        let Some(root) = root_of(&path, roots.get(&lang).map_or(&[][..], Vec::as_slice)) else {
+        let Some(root) = root_of(&path, roots_of(&roots, lang)) else {
             continue;
         };
         let file = match lang {
@@ -100,11 +101,7 @@ pub fn read_tree(repo: &Path, head: &str) -> Result<Tree, String> {
         .map_err(|e| format!("{path}: {e}"))?;
         parsed.push((path, root, file));
     }
-    let modules = go_modules(
-        repo,
-        head,
-        roots.get(&Lang::Go).map_or(&[][..], Vec::as_slice),
-    )?;
+    let modules = go_modules(repo, head, roots_of(&roots, Lang::Go))?;
     Ok(build(parsed, &roots, &modules))
 }
 
@@ -113,7 +110,8 @@ fn archive(repo: &Path, head: &str, paths: &[&str]) -> Result<Vec<(String, Strin
     if paths.is_empty() {
         return Ok(Vec::new());
     }
-    let mut args = vec!["archive", "--format=tar", head, "--"];
+    // a path is a path, and no pattern of git
+    let mut args = vec!["--literal-pathspecs", "archive", "--format=tar", head, "--"];
     args.extend(paths);
     let bytes = git_bytes(repo, &args)?;
     let mut out = Vec::new();
@@ -135,6 +133,11 @@ fn archive(repo: &Path, head: &str, paths: &[&str]) -> Result<Vec<(String, Strin
         out.push((path, text));
     }
     Ok(out)
+}
+
+/// The roots of the package trees of `lang`. A language with no tree has none.
+fn roots_of(roots: &BTreeMap<Lang, Vec<String>>, lang: Lang) -> &[String] {
+    roots.get(&lang).map_or(&[], Vec::as_slice)
 }
 
 /// The deepest root of `roots` that holds `path`.
@@ -184,6 +187,8 @@ struct GoPackages {
     structs: BTreeMap<String, BTreeMap<String, Vec<String>>>,
 }
 
+/// Read the Go packages of `parsed`: what each one imports, the packages that only tests import,
+/// the packages `main`, and the fields of each struct type. `modules` gives the path of each module.
 fn go_packages(
     parsed: &[(String, String, Parsed)],
     modules: &BTreeMap<String, String>,
@@ -204,10 +209,17 @@ fn go_packages(
             let Some(module) = modules.get(root) else {
                 continue;
             };
-            let Some(rest) = import.strip_prefix(module.as_str()) else {
+            // an import of the module is its path, or its path and a `/`
+            let Some(rest) = import
+                .strip_prefix(module.as_str())
+                .filter(|rest| rest.is_empty() || rest.starts_with('/'))
+            else {
                 continue;
             };
-            let target = format!("{root}{}/", rest.trim_start_matches('/'));
+            let target = match rest.trim_start_matches('/') {
+                "" => root.clone(),
+                package => format!("{root}{package}/"),
+            };
             importers.entry(target.clone()).or_default().insert(test);
             if !test {
                 direct.entry(dir.clone()).or_default().insert(target);
@@ -273,7 +285,7 @@ fn build(
     modules: &BTreeMap<String, String>,
 ) -> Tree {
     let packages = go_packages(&parsed, modules);
-    let rust_roots = roots.get(&Lang::Rust).map_or(&[][..], Vec::as_slice);
+    let rust_roots = roots_of(roots, Lang::Rust);
     let mut tree = Tree::default();
     for (path, root, file) in &parsed {
         match file {
@@ -467,7 +479,7 @@ fn go_holders(path: &str, root: &str, file: &GoFile, packages: &GoPackages) -> V
                 (None, _) => Kind::Const,
             },
             lang: Lang::Go,
-            reach: go_reach(path, root, c.name.starts_with(char::is_uppercase), packages),
+            reach: go_reach(path, root, go::exported(&c.name), packages),
         })
         .collect()
 }

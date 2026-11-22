@@ -10,7 +10,7 @@ use super::{ByValue, Hit, Holder, Place, shown};
 /// A shorter value is in too many texts.
 const SHORTEST: usize = 3;
 
-/// The least count of letters of a value that is one plain word, such as `ok`.
+/// The least count of letters of a plain value, such as `ok`.
 const SHORTEST_WORD: usize = 2;
 
 /// The lines that the change adds to a file, by its path.
@@ -54,10 +54,10 @@ fn holds_word(text: &str, value: &str) -> bool {
 }
 
 /// The values of `values` that the literal `text` holds. A value with a mark, a capital, or a
-/// digit counts at any place of the literal. A plain value counts when it is the whole literal
-/// with no space at its ends, such as `"newer "`. A plain word also counts beside one word that
-/// is a value and no plain word, such as `"drift DriftFound "`. So a phrase of plain words, such
-/// as `"newer version"`, is no copy.
+/// digit counts at any place of the literal. A plain value counts when the literal holds it alone,
+/// with no more than spaces at its ends, such as `"newer "`. A plain word also counts beside one
+/// word that is a value and no plain word, such as `"drift DriftFound "`. So a phrase of plain
+/// words, such as `"newer version"`, is no copy.
 pub fn held<'a>(text: &str, values: &ByValue<'a>) -> BTreeSet<&'a str> {
     let alone = text.trim();
     let mut out: BTreeSet<&'a str> = values
@@ -82,7 +82,8 @@ pub fn held<'a>(text: &str, values: &ByValue<'a>) -> BTreeSet<&'a str> {
     out
 }
 
-/// The holders of each value that the file `path` reaches, in test code or in other code.
+/// The holders of each value that `file` reaches: in its test code when `test` is true, and in
+/// its other code when it is false.
 fn reached<'a>(tree: &'a Tree, file: &Source, test: bool) -> ByValue<'a> {
     let mut out: ByValue<'a> = BTreeMap::new();
     for holder in &tree.holders {

@@ -1,8 +1,8 @@
 //! What a Rust file declares, for the scan, and the tokens of the file.
 //!
-//! The values of a closed set come from three places: the serde names of an enum, the table of
-//! `impl_closed_set!` or `impl_texts!`, and a function whose body matches each variant to a text,
-//! such as `Error::kind`.
+//! The texts of a closed set come from four places: the serde names of an enum, the table of
+//! `impl_closed_set!` or `impl_texts!`, a function whose body matches each variant to a text, and
+//! the strings of a const array. `Error::kind` and the `fmt` of a `Display` are such functions.
 
 use std::str::FromStr;
 
@@ -123,8 +123,14 @@ fn convert(trees: Vec<TokenTree>) -> Vec<Token> {
 /// The count of the trees of an attribute at the start of `trees`: `#` and `[...]`, or `#`, `!`,
 /// and `[...]`. Another start gives 0.
 fn attribute_length(trees: &[TokenTree]) -> usize {
-    let bracket = |tree: Option<&TokenTree>| matches!(tree, Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket);
-    let punct = |tree: Option<&TokenTree>, c: char| matches!(tree, Some(TokenTree::Punct(p)) if p.as_char() == c);
+    let bracket = |tree: Option<&TokenTree>| match tree {
+        Some(TokenTree::Group(group)) => group.delimiter() == Delimiter::Bracket,
+        _ => false,
+    };
+    let punct = |tree: Option<&TokenTree>, c: char| match tree {
+        Some(TokenTree::Punct(p)) => p.as_char() == c,
+        _ => false,
+    };
     if !punct(trees.first(), '#') {
         0
     } else if bracket(trees.get(1)) {
@@ -210,6 +216,8 @@ impl Reader<'_> {
             })
             .collect();
         let range = block.span().byte_range();
+        // the file parsed, so its block gives tokens. A body with no tokens is too small for the
+        // rule of the helpers.
         let body = self
             .text
             .get(range)

@@ -5,7 +5,7 @@ use std::fmt;
 
 use super::go::struct_fields;
 use super::go_lex::STRUCT;
-use super::token::{Delim, Token};
+use super::token::{Delim, Token, split};
 use super::{Lang, holds_line};
 
 /// The names of a field or of a parameter that holds the name of a case of a test.
@@ -82,13 +82,13 @@ fn after_keyword(word: &str) -> Option<Class> {
 /// failure, and the tag of a field. A value of a closed set there is no copy.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Class {
-    /// A JSON or a JS input of a test.
+    /// A JSON or a JS input of a test, or a key of a map literal of a test.
     Json,
     /// A YAML file of rules of a test.
     Rules,
     /// A shell script of a test, such as a stand-in for a command.
     Script,
-    /// The name of a case: an argument of `t.Run`, or a field `name` of a row.
+    /// The name of a case: an argument of `t.Run`, or a field such as `name` of a row.
     Case,
     /// The label of a failure: an argument of `t.Errorf` or of `panic!`, the message of
     /// `assert!`, or an argument for a parameter such as `where`.
@@ -264,8 +264,8 @@ fn is_rules(value: &str) -> bool {
         })
 }
 
-/// True for a part of a shell script: a first line `#!`, or a mark of the end of an `if` or of
-/// a `case`.
+/// True for a part of a shell script: a first line `#!`, the `then` of an `if`, or the end of an
+/// `if` or of a `case`.
 fn is_script(value: &str) -> bool {
     value.starts_with("#!")
         || ["; then", "\nfi", "esac"]
@@ -305,6 +305,14 @@ fn callee(before: &[Token]) -> Option<String> {
     }
 }
 
+/// The function or the macro that the group `frames[k]` gives its arguments to. A group of
+/// another bracket is a call only of a macro: `Type{...}` of Go is no call.
+fn call_of(frames: &[Frame], k: usize) -> Option<String> {
+    let before = &frames.get(k.checked_sub(1)?)?.tokens[..frames.get(k)?.at];
+    let name = callee(before)?;
+    (frames[k].delim == Some(Delim::Paren) || name.ends_with('!')).then_some(name)
+}
+
 /// The word before the `.` of a method call, such as `t` of `t.Errorf(`.
 fn receiver(before: &[Token]) -> Option<&str> {
     match before {
@@ -327,14 +335,10 @@ fn around(frames: &[Frame], at: usize, context: &Context, test: bool) -> Option<
         } else {
             frames[k + 1].at
         };
-        let before = &frames[k - 1].tokens[..frames[k].at];
-        let Some(name) = callee(before) else {
+        let Some(name) = call_of(frames, k) else {
             continue;
         };
-        // a group of arguments, or the group of a macro: `Type{...}` of Go is no call
-        if frames[k].delim != Some(Delim::Paren) && !name.ends_with('!') {
-            continue;
-        }
+        let before = &frames[k - 1].tokens[..frames[k].at];
         let arg = argument(frames[k].tokens, inside);
         if test && name == "json!" {
             return Some(Class::Json);
@@ -393,11 +397,12 @@ fn near(frames: &[Frame], at: usize, context: &Context) -> Class {
     if mark(left, &["=", ":="]) {
         return Class::Value;
     }
-    let call = frame.delim.and_then(|delim| {
-        let parent = frames.get(frames.len().checked_sub(2)?)?;
-        let name = callee(&parent.tokens[..frame.at])?;
-        (delim == Delim::Paren || name.ends_with('!')).then_some(name)
-    });
+    // a pattern of a `match`, such as `Some("x") =>`
+    let parent = frames.len().checked_sub(2).and_then(|k| frames.get(k));
+    if parent.is_some_and(|p| p.tokens.get(frame.at + 1).is_some_and(|t| t.is_mark("=>"))) {
+        return Class::Switch;
+    }
+    let call = call_of(frames, frames.len() - 1);
     let arg = argument(tokens, at);
     let rust_block = context.lang == Lang::Rust && frame.delim == Some(Delim::Brace);
     match call.as_deref() {
@@ -541,9 +546,7 @@ fn rust_names(frames: &[Frame], index: usize) -> Option<String> {
     }
     let last_word = |part: &[Token]| part.iter().rev().find_map(Token::word).map(str::to_string);
     match (pattern.group(Delim::Paren), tuple) {
-        (Some(parts), true) => super::token::split(parts, ",")
-            .get(index)
-            .and_then(|p| last_word(p)),
+        (Some(parts), true) => split(parts, ",").get(index).and_then(|p| last_word(p)),
         (None, false) => pattern.word().map(str::to_string),
         _ => None,
     }

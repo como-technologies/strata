@@ -40,8 +40,9 @@ pub struct GoFile {
     pub imports: Vec<String>,
     /// Each const of the top level whose value is one string literal.
     pub consts: Vec<GoConst>,
-    /// Each text of a row of a table of the top level, such as `eventKinds = map[Kind]eventKind{...}`:
-    /// its name is `eventKinds[Key]`, and its type is the name of the table.
+    /// Each text of a row of a map table of the top level, such as
+    /// `eventKinds = map[Kind]eventKind{...}`. Its name is `eventKinds[Key]`, and its type is the
+    /// name of the table.
     pub tables: Vec<GoConst>,
     /// Each function of the top level, with its methods.
     pub funcs: Vec<Func>,
@@ -62,12 +63,12 @@ pub fn read(text: &str) -> Result<GoFile, String> {
         let Some(first) = declaration.first() else {
             continue;
         };
-        let read = DECLARATIONS
+        let reader = DECLARATIONS
             .iter()
             .find(|(keyword, _, _)| first.is_word(keyword));
-        if let Some((_, read, code)) = read {
-            read(&mut file, first.line(), &declaration[1..]);
-            if !code {
+        if let Some((_, read_one, keep)) = reader {
+            read_one(&mut file, first.line(), &declaration[1..]);
+            if !keep {
                 continue;
             }
         }
@@ -202,6 +203,11 @@ fn func(line: usize, rest: &[Token]) -> Option<Func> {
         None => (false, rest),
     };
     let name = rest.first()?.word()?.to_string();
+    let scope = if exported(&name) {
+        Scope::Package
+    } else {
+        Scope::Module
+    };
     let params = rest
         .iter()
         .skip(1)
@@ -223,20 +229,15 @@ fn func(line: usize, rest: &[Token]) -> Option<Func> {
         size: leaves(body),
         params,
         method,
-        scope: if name_exported(&rest[0]) {
-            Scope::Package
-        } else {
-            Scope::Module
-        },
+        scope,
         line,
         last: *last,
     })
 }
 
 /// True for a Go name that starts with a capital letter: other packages can name it.
-fn name_exported(name: &Token) -> bool {
-    name.word()
-        .is_some_and(|w| w.starts_with(char::is_uppercase))
+pub fn exported(name: &str) -> bool {
+    name.starts_with(char::is_uppercase)
 }
 
 /// The names of the parameters of a function, in order: the first word of each part between two
@@ -293,7 +294,10 @@ fn table(spec: &[Token]) -> Vec<GoConst> {
             _ => vec![value],
         };
         for element in elements {
-            if let [Token::Text { value, line, .. }] = element {
+            // an element `"text"`, or a field `reason: "text"`
+            if let [Token::Text { value, line, .. }] | [_, _, Token::Text { value, line, .. }] =
+                element
+            {
                 out.push(GoConst {
                     name: format!("{name}[{key}]"),
                     typ: Some(name.to_string()),

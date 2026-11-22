@@ -898,3 +898,9 @@ fn a_new_go_const_and_helper_with_a_copy_are_findings_and_an_alias_keeps_the_lab
         ]
     );
 }
+
+#[test]
+fn a_literal_in_the_pattern_of_an_arm_is_a_case_of_a_switch() {
+    let code = "fn f(k: Option<&str>) {\n    match k {\n        Some(\"mark\") => {}\n        _ => {}\n    }\n}\n";
+    assert_eq!(class_of_mark(Lang::Rust, code, false), Class::Switch);
+}

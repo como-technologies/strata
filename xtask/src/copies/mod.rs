@@ -1,8 +1,8 @@
 //! The check of the copies of a change: `xtask copies BASE [HEAD]`.
 //!
-//! Rule 4b of the waves judges each type, const, helper, route, and test value in the lines that a
-//! pull request adds. The fix session and the verify run this check, so they find the same copies.
-//! "Functions and repetition" of `docs/src/development/code.md` states what a finding is.
+//! A change must not copy a value of a closed set, a const, a route, or a helper. The fix session
+//! and the verify of a pull request run this check, so they find the same copies. "The check of
+//! the copies" in `docs/src/development/code.md` states what a finding is.
 //!
 //! The check reads the tree of `HEAD` and the lines that `git diff BASE...HEAD` adds in the Rust
 //! and Go files. It lists the values of the closed sets and the string consts of each package
@@ -113,6 +113,7 @@ pub struct Func {
     pub size: usize,
     /// True for a method of Go, or a function of an `impl Trait for Type` of Rust.
     pub method: bool,
+    /// The part of its package that can call it.
     pub scope: Scope,
     /// The line of the keyword `fn` or `func`, and the last line of the body.
     pub line: usize,
@@ -124,7 +125,7 @@ pub struct Func {
 pub enum Kind {
     /// A string const that is in no closed set.
     Const,
-    /// A Go const of the named type that it holds: a value of the closed set of that type.
+    /// A Go const of a named type, by the name of the type: a value of the closed set of the type.
     Typed(String),
     /// A text of the closed set that it names, and no const: the serde name of a variant, the text
     /// of a variant in a table or in a `match`, or a text of a row of a Go table.
@@ -253,7 +254,7 @@ pub fn check(repo: &Path, base: &str, head: &str) -> Result<Found, String> {
 fn shown(value: &str) -> String {
     let cut: String = value.chars().take(SHOWN).collect();
     if cut.len() < value.len() {
-        format!("{:?}…", cut)
+        format!("{cut:?}…")
     } else {
         format!("{cut:?}")
     }

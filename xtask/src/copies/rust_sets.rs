@@ -73,8 +73,8 @@ fn derives_serde(attrs: &[Attribute]) -> bool {
     serde
 }
 
-/// The serde names of each variant of an enum that derives serde, with its aliases. An enum with
-/// another serde attribute that does not parse gives the names that it read before it.
+/// The serde names of each variant of an enum that derives serde, with its aliases. An enum whose
+/// serde attribute does not parse gives no name, and so does such a variant.
 pub fn serde_names(item: &ItemEnum) -> Vec<SetText> {
     if !derives_serde(&item.attrs) {
         return Vec::new();
