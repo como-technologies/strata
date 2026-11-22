@@ -500,6 +500,22 @@ them in this way:
 - A new release has one issue, "Prove the facts again on" the repository and the tag. A person
   closes it.
 
+Each body ends with the criteria of the issue: the line `Done when:` and its items. Each issue of
+strata has such a line: see [The issue](./changes.md#the-issue). The items are these:
+
+- The issue of a fact that differs gives an item for step 1 of
+  [What to do with an issue](#what-to-do-with-an-issue). It gives an item for step 2 when a
+  difference is a `name`. Steps 3 and 4 are two choices, so they share one item.
+- The issue of a new value gives one item for each step of
+  [What to do with a new value](#what-to-do-with-a-new-value).
+- The issue of a new release gives three items. They are the last contract run with its open
+  issues, the live runs, and the change of the stand-in and the page.
+
+A later run writes the body again up to the line `Done when:`, and keeps the criteria of the open
+issue. So a person can tick an item, or change the items. The line can also be a heading or bold,
+as for [the endpoint of the report](./report-endpoint.md#the-issue-of-a-value). A body with no
+such line, as an older run wrote, gets the items of a new issue.
+
 The script reads the count of each outcome from `summary` and counts no entry again. The exit code
 follows `summary`.
 
@@ -662,10 +678,12 @@ set, such as `PackState`, and the log has the route. The fact for that route nam
 
 A user of strata can report a value too. The endpoint of the report then opens an issue with the
 label `unknown-value`: see [The issue of a value](./report-endpoint.md#the-issue-of-a-value). Do the
-same steps: the `Done when:` line of the issue gives an item for each step. The weekly run can have
-opened its own issue for the same value, so close both together. When a release of strata names the
-value, remove the label `unknown-value` from the issue and close it. A closed issue with the label
-still counts toward the limit of the endpoint.
+same steps: the `Done when:` line of the issue gives one item for each step, in the order of the
+steps. A test of the endpoint fails when the count of the items is not the count of the steps.
+
+The weekly run can have opened its own issue for the same value, so close both together. When a
+release of strata names the value, remove the label `unknown-value` from the issue and close it. A
+closed issue with the label still counts toward the limit of the endpoint.
 
 ## The facts of the clouds
 
@@ -799,6 +817,11 @@ The report opens an issue with the label `cloud-drift` for a cloud fact that dif
 milestone `Backlog`. The marker of the fact is on the first line, as it is for a request. The
 report updates the issue while the fact differs, and closes it when the fact is the same again. The
 report creates the label when the repository has none. `--cloud-label` gives another name.
+
+The criteria of the issue give an item for steps 1 and 2 of
+[What to do with an issue of the clouds](#what-to-do-with-an-issue-of-the-clouds). They give an
+item for step 3 when a difference is a `table`. A later run keeps the criteria, as for an issue of
+a request.
 
 ### What to do with an issue of the clouds
 

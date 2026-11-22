@@ -412,11 +412,81 @@ fn a_new_issue_ends_with_the_line_done_when_and_an_item_for_each_step_of_a_new_v
     );
     assert_eq!(count_done_when(text), 1, "{text}");
     let items: Vec<&str> = ITEMS.lines().collect();
-    assert_eq!(items.len(), 3, "{ITEMS}");
+    assert_eq!(items.len(), steps_of_a_new_value(), "{ITEMS}");
     assert!(
         items.iter().all(|item| item.starts_with("- [ ] ")),
         "{ITEMS}"
     );
+}
+
+/// The count of the numbered steps of the section "What to do with a new value" of the page of the
+/// facts. The body of an issue links that section.
+fn steps_of_a_new_value() -> usize {
+    let page = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/src/development/facts.md"
+    ))
+    .unwrap();
+    let (_, section) = page
+        .split_once("\n### What to do with a new value\n")
+        .expect("the page has the section");
+    let section = section.split("\n#").next().unwrap_or_default();
+    section
+        .lines()
+        .filter(|line| {
+            line.split_once(". ")
+                .is_some_and(|(number, _)| number.parse::<u8>().is_ok())
+        })
+        .count()
+}
+
+#[test]
+fn the_criteria_start_at_the_line_done_when_as_a_heading_or_in_bold_and_at_no_other_line() {
+    for line in [
+        DONE_WHEN.to_string(),
+        "## Done when".to_string(),
+        format!("### {DONE_WHEN}"),
+        format!("**{DONE_WHEN}**"),
+        "**Done when**:".to_string(),
+        "## **Done when**".to_string(),
+        "  Done when :  ".to_string(),
+    ] {
+        assert!(starts_criteria(&line), "{line:?}");
+    }
+    for line in [
+        format!("- [ ] {DONE_WHEN}"),
+        format!("> {DONE_WHEN}"),
+        "Done when the run passes:".to_string(),
+        "Done".to_string(),
+        String::new(),
+    ] {
+        assert!(!starts_criteria(&line), "{line:?}");
+    }
+}
+
+#[test]
+fn a_report_keeps_the_criteria_from_a_line_done_when_that_a_person_made_a_heading_or_bold() {
+    for line in ["## Done when".to_string(), format!("**{DONE_WHEN}**")] {
+        let mut tracker = Memory::default();
+        merge(
+            &mut tracker,
+            &report(&[entry("ProfileType", "later", "0.26.0", 1)]),
+        )
+        .unwrap();
+        let text = tracker.issues[0].1.clone();
+        let at = text.find(&format!("\n{DONE_WHEN}\n")).unwrap();
+        let tail = format!("\n{line}\n\n- [x] Mine.\n");
+        tracker.issues[0].1 = format!("{}{tail}", &text[..at]);
+        merge(
+            &mut tracker,
+            &report(&[entry("ProfileType", "later", "0.27.0", 2)]),
+        )
+        .unwrap();
+        let text = &tracker.issues[0].1;
+        assert!(text.contains("| Lines | 3 |"), "{line}: {text}");
+        assert!(text.ends_with(&tail), "{line}: {text}");
+        assert_eq!(count_done_when(text), 0, "{line}: no second line: {text}");
+    }
 }
 
 #[test]

@@ -31,6 +31,10 @@
 # <!-- strata-contract: release <repo> <tag> -->. The issue asks to prove the facts again on the
 # new release. A person closes it.
 #
+# Each body ends with the criteria of the issue: the line "Done when:" and its items. A later run
+# writes the body again up to that line, and keeps the criteria of the open issue. So a tick or an
+# item of a person stays. The line can also be a heading or bold, such as "## Done when".
+#
 # The script creates each label when the repository has none. --dry-run prints each issue body and
 # what the script does, and calls no host.
 #
@@ -154,6 +158,31 @@ ensure_label() {
   labels_ready="$labels_ready$label "
 }
 
+# ---- the criteria ------------------------------------------------------------------------------
+# The line that starts the criteria of an issue. The endpoint of the report writes the same line.
+done_when="Done when:"
+rewrite_note="Each later run writes the text above again. It keeps the text from the line \`$done_when\` to the end, so you can tick the items and change them. Write your notes in a comment."
+
+# The jq function `criteria` gives the criteria of the body of an issue, from the line that starts
+# them to the end, or nothing. The rule of the endpoint of the report finds the line. It removes each
+# `*`, the `#` marks at the start, and the colon at the end, and then reads "Done when". The program
+# needs --arg done_when.
+criteria_jq='def criteria: ((.body // "") | split("\n") | map(rtrimstr("\r"))) as $lines
+  | ("^\\s*#*\\s*" + ($done_when | rtrimstr(":")) + "[\\s:]*$") as $start
+  | first(range($lines | length) | select($lines[.] | gsub("\\*"; "") | test($start)))
+  | $lines[.:] | join("\n");'
+
+# keep_criteria NUMBER BODYFILE: BODYFILE gets the criteria of the open issue NUMBER in place of its
+# own. A body with no criteria, as an older run wrote, keeps the new ones.
+keep_criteria() {
+  local kept
+  kept=$(jq -r --argjson n "$1" --arg done_when "$done_when" \
+    "$criteria_jq"'first(.[] | select(.number == $n)) | criteria' "$work/issues.json")
+  [ -n "$kept" ] || return 0
+  { sed "/^$done_when\$/,\$d" "$2"; printf '%s\n' "$kept"; } > "$work/kept.md"
+  mv "$work/kept.md" "$2"
+}
+
 actions=()
 # open_or_update MARKER TITLE BODYFILE WHAT: the issue of MARKER gets the title and the body. When
 # the issue does not exist, the script opens it in the milestone
@@ -167,6 +196,7 @@ open_or_update() {
   fi
   number=$(issue_for "$marker")
   if [ -n "$number" ]; then
+    keep_criteria "$number" "$body"
     host update_issue "$number" "$title" "$body"
     actions+=("updated #$number for $what")
   else
@@ -193,7 +223,8 @@ values_issues() {
       echo "$prefix$field -->"
       jq -r --arg checked "$checked" --arg target "$target" --arg page "$values_page" --arg id "$id" \
         --arg request "$(jq -r .request <<<"$entry")" --argjson live "$(jq -c .live <<<"$entry")" \
-        --argjson pages "$(jq -c .pages <<<"$entry")" '
+        --argjson pages "$(jq -c .pages <<<"$entry")" --arg note "$rewrite_note" \
+        --arg done_when "$done_when" '
         "The contract run of \($checked) found that the tenant `\($target)` gives new values for `\(.set)` in the answer to `\($request)`. Neither the fact `\($id)` nor the stand-in names them.",
         "",
         "| New value |",
@@ -206,7 +237,16 @@ values_issues() {
         "Prove the fact again with its live checks: \(if ($live | length) > 0 then ($live | map("`\(.)`") | join(", ")) else "the fact has none" end).",
         "The pages of the book that state the fact: \($pages | map("`docs/src/\(.)`") | join(", ")).",
         "",
-        "Then add each value to the closed set of strata, or write why not. [What to do with a new value](\($page)) says how."
+        "Then add each value to the closed set of strata, or write why not. [What to do with a new value](\($page)) says how.",
+        "",
+        $note,
+        "",
+        $done_when,
+        "",
+        "- [ ] A comment names the object of the lab tenant that holds each new value, from a read of the request or a live check.",
+        "- [ ] A comment names the closed set of strata that reads `\(.set)`, from the files in `code` of the fact `\($id)`.",
+        "- [ ] The closed set names each new value, and `tests/closed_set.rs` holds its text. Or the page of the fact says why the set stays as it is. In both cases, `reads.values` of the fact names each new value.",
+        "- [ ] `cargo xtask facts --check` and `just docs-check` pass."
       ' <<<"$set_entry"
     } > "$work/body.md"
     open_or_update "$prefix$field -->" "Palette has a new value of \`$field\` in \`$id\`" "$work/body.md" "$id $field"
@@ -228,7 +268,8 @@ values_issues() {
 # ---- the facts ---------------------------------------------------------------------------------
 # palette_body ENTRY, cloud_body ENTRY: the body of the issue of a fact that differs, after its marker
 palette_body() {
-  jq -r --arg checked "$checked" --arg target "$target" --arg page "$page" '
+  jq -r --arg checked "$checked" --arg target "$target" --arg page "$page" \
+    --arg note "$rewrite_note" --arg done_when "$done_when" '
     "The contract run of \($checked) found that the tenant `\($target)` answers `\(.request)` in another way than the stand-in.",
     "",
     "| Difference | Field | Expected | Found |",
@@ -240,11 +281,21 @@ palette_body() {
     "Prove the fact again with its live checks: \(if (.live | length) > 0 then (.live | map("`\(.)`") | join(", ")) else "the fact has none" end).",
     "The pages of the book that state the fact: \(.pages | map("`docs/src/\(.)`") | join(", ")).",
     "",
-    "Then change the stand-in and the page, or record a fault of Palette in the local findings log. [The weekly contract run](\($page)) says how."
+    "Then change the stand-in and the page, or record a fault of Palette in the local findings log. [The weekly contract run](\($page)) says how.",
+    "",
+    $note,
+    "",
+    $done_when,
+    "",
+    "- [ ] A comment gives the result of the live checks of the fact, or of a read by hand. It says if each difference comes from Palette or from the tenant.",
+    (select(any(.differences[]; .kind == "name"))
+      | "- [ ] For each `name` difference, a comment says why the answer lacks the name: Palette renamed it, or the tenant has no object with it."),
+    "- [ ] The stand-in, the fact, and the page state what Palette answers, and `cargo xtask facts --check` and `just docs-check` pass. Or a comment says that the lead recorded a fault of Palette."
   ' <<<"$1"
 }
 cloud_body() {
-  jq -r --arg checked "$checked" --arg page "$page" '
+  jq -r --arg checked "$checked" --arg page "$page" \
+    --arg note "$rewrite_note" --arg done_when "$done_when" '
     "The contract run of \($checked) sent the call `\(.request)` in the lab account. The answer differs from the answers that the fixtures of the rules hold, or lacks a value that a rule holds in a table.",
     "",
     "| Difference | Field | The rules expect | The cloud answers with |",
@@ -254,7 +305,16 @@ cloud_body() {
     "Send the call by hand in the lab account, and read the answer. The rules of the cloud tier that read the fact: \((.rules // []) | map("`\(.)`") | join(", ")).",
     "The pages of the book that state the fact: \(.pages | map("`docs/src/\(.)`") | join(", ")).",
     "",
-    "Then change the rules, the fixtures, the table, and the page together, so that they agree with the cloud. [The weekly contract run](\($page)) says how."
+    "Then change the rules, the fixtures, the table, and the page together, so that they agree with the cloud. [The weekly contract run](\($page)) says how.",
+    "",
+    $note,
+    "",
+    $done_when,
+    "",
+    "- [ ] A comment gives the answer of the call, sent by hand in the lab account. It says if the difference comes from the cloud or from the account.",
+    "- [ ] The rules that read the fact, their fixtures, the fact, and the book agree with the cloud. `cargo xtask facts --check` and `cargo test -p strata-preflight --test catalog` pass.",
+    (select(any(.differences[]; .kind == "table"))
+      | "- [ ] Each table that lost a value holds the values of its source again, with a new date.")
   ' <<<"$1"
 }
 
@@ -305,13 +365,13 @@ while IFS= read -r release <&3; do
 $marker
 The latest release of \`$repository\` is \`$tag\`. The last contract run saw \`$seen\`. The contract run of $checked found the new tag.
 
-A new release can change what Palette does. Prove the facts of Palette again on this release:
+A new release can change what Palette does. Prove the facts of Palette again on this release. [The weekly contract run]($page) says how. Close this issue when the facts hold on the release.
 
-1. Read the last contract run, and the issues of the label \`$label\`.
-2. Run the live example, and the live scripts that the facts name.
-3. Change the stand-in and the page for each fact that Palette changed.
+$done_when
 
-[The weekly contract run]($page) says how. Close this issue when the facts hold on the release.
+- [ ] A comment gives the result of the last contract run, and names each open issue of the label \`$label\`.
+- [ ] A comment gives the result of the live example, and of the live scripts that the facts name, on this release.
+- [ ] The stand-in and the page state each fact that Palette changed on this release.
 EOF
   open_or_update "$marker" "Prove the facts again on $repository $tag" "$work/body.md" "release $repository $tag"
 done 3< <(jq -c '.releases[]? | select(.new == true)' "$document")

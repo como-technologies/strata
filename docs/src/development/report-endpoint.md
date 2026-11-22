@@ -137,13 +137,16 @@ list holds 20 items at most. The state of an older service can hold the lists `p
 `refusals`. The service reads such a state and ignores those lists.
 
 - The body ends with the criteria of the issue: the line `Done when:` and its items. The items are
-  the steps of [What to do with a new value](./facts.md#what-to-do-with-a-new-value). Each issue of
-  strata has such a line: see [The issue](./changes.md#the-issue).
+  the steps of [What to do with a new value](./facts.md#what-to-do-with-a-new-value), one item for
+  each step. Each issue of strata has such a line: see [The issue](./changes.md#the-issue).
 - A later report of the value changes the body of the issue. It writes no comment, so it sends no
   notification.
 - A later report writes the body again up to the line `Done when:`, and keeps the text from that
   line to the end. So a person can tick an item, or change the items, and the next report keeps
   them. A body with no such line, as an older service wrote, gets the items of a new issue.
+- A person can make the line a heading or bold, such as `## Done when` or `**Done when:**`. The
+  service reads the line without each `*`, without the `#` marks at the start, and without the
+  colon at the end. So each of these forms also starts the criteria that a later report keeps.
 - A closed issue gets the new count too, and stays closed. Users of an older release send the
   value until they update.
 - The issue has the label `unknown-value` and the milestone `Backlog`. The weekly contract run has
