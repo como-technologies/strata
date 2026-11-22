@@ -5,10 +5,11 @@
 use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
+use strata::Error;
 use strata::api::codes::Denial;
-use strata::api::project_uid_named;
+use strata::api::{Method, project_uid_named};
 use strata::config::Config;
-use strata::reference::PROJECT_PREFIX;
+use strata::reference::{FILTER_PREFIX, PACK_PREFIX, PROJECT_PREFIX, TAG_PREFIX};
 use strata::term::progress::Progress;
 
 use crate::common::{
@@ -414,13 +415,14 @@ fn the_project_of_a_ref_is_a_uid_or_a_name_and_the_record_names_its_uid_and_the_
 fn a_ref_in_a_project_that_no_visible_project_has_is_project_not_found_with_the_projects() {
     let stand = tenant_stand();
     let missing = in_project("staging", UID_A);
+    let not_found = Error::ProjectNotFound {
+        name: "staging".into(),
+        available: vec!["dev".into(), "prod".into()],
+    };
     for args in ref_commands(&missing, UID_B) {
         let r = stand.run(&[&args[..], &["--json"]].concat());
         assert_eq!(r.code, 2, "{args:?}");
-        let e = error_of(&r);
-        assert_eq!(e["kind"], "project-not-found", "{args:?}: {e}");
-        assert_eq!(e["name"], "staging", "{args:?}");
-        assert_eq!(e["available"], json!(["dev", "prod"]), "{args:?}");
+        assert_eq!(error_of(&r), not_found.to_json(), "{args:?}");
         assert_eq!(
             stand.asked(),
             [(PROJECT_LISTING.to_string(), None)],
@@ -433,22 +435,33 @@ fn a_ref_in_a_project_that_no_visible_project_has_is_project_not_found_with_the_
 fn a_ref_in_a_project_refuses_a_file_a_pack_a_tag_a_filter_and_a_second_project_before_any_request()
 {
     let stand = tenant_stand();
-    let second = in_project("prod", UID_A);
     let refused = [
-        ("record.json", "a file belongs to no project"),
-        ("pack:cert-manager@1.14.0", "a pack belongs to no project"),
-        ("tag:env=prod", "already search each project"),
-        ("filter:production", "already search each project"),
-        (second.as_str(), "a ref names one project"),
+        ("record.json".to_string(), "a file belongs to no project"),
+        (
+            format!("{PACK_PREFIX}cert-manager@1.14.0"),
+            "a pack belongs to no project",
+        ),
+        (
+            format!("{TAG_PREFIX}env=prod"),
+            "already search each project",
+        ),
+        (
+            format!("{FILTER_PREFIX}production"),
+            "already search each project",
+        ),
+        (in_project("prod", UID_A), "a ref names one project"),
     ];
     for (inner, why) in refused {
-        let reference = in_project("dev", inner);
+        let reference = in_project("dev", &inner);
         for args in ref_commands(&reference, UID_B) {
             let r = stand.run(&[&args[..], &["--json"]].concat());
             assert_eq!(r.code, 2, "{args:?}");
             let e = error_of(&r);
-            assert_eq!(e["kind"], "usage", "{args:?}: {e}");
             let message = e["message"].as_str().unwrap();
+            let usage = Error::Usage {
+                message: message.into(),
+            };
+            assert_eq!(e, usage.to_json(), "{args:?}");
             assert!(message.contains(why), "{args:?}: {message}");
             assert!(message.contains(&reference), "{args:?}: {message}");
             assert!(stand.asked().is_empty(), "{args:?}: {:?}", stand.asked());
@@ -460,6 +473,20 @@ fn a_ref_in_a_project_refuses_a_file_a_pack_a_tag_a_filter_and_a_second_project_
 fn a_ref_in_a_project_that_refuses_the_key_gives_an_error_that_names_the_project() {
     let denied = error_body(Denial::Project.as_str(), &project_denied_message(PROD));
     let stand = Stand::denying(tenant(), ENV_PROJECT, PROD, 500, denied);
+    // the kind of the answer of Palette, and of the error that names the project of the ref
+    let answer = Error::Api {
+        method: Method::Get,
+        path: String::new(),
+        status: 500,
+        body: String::new(),
+        retry_after: None,
+        key_proved: true,
+    };
+    let api = answer.kind();
+    let refused = Error::ProjectDenied {
+        project: "prod".into(),
+        source: Box::new(answer),
+    };
     let (a, b) = (in_project("dev", UID_A), in_project("prod", UID_B));
     let commands = [
         vec!["snapshot", b.as_str()],
@@ -471,14 +498,14 @@ fn a_ref_in_a_project_that_refuses_the_key_gives_an_error_that_names_the_project
         let r = stand.run(&[&args[..], &["--json"]].concat());
         assert_eq!(r.code, 2, "{args:?}");
         let e = error_of(&r);
-        assert_eq!(e["kind"], "project-denied", "{args:?}: {e}");
+        assert_eq!(e["kind"], refused.kind(), "{args:?}: {e}");
         assert_eq!(e["project"], "prod", "{args:?}");
-        assert_eq!(e["error"]["kind"], "api", "{args:?}");
+        assert_eq!(e["error"]["kind"], api, "{args:?}");
         assert_eq!(e["error"]["status"], 500, "{args:?}");
         let message = e["message"].as_str().unwrap();
         assert!(message.contains("project 'prod'"), "{args:?}: {message}");
     }
     // a ref with no project gets the answer of Palette as it is
     let r = stand.run(&["snapshot", UID_B, "--project", PROD, "--json"]);
-    assert_eq!(error_of(&r)["kind"], "api");
+    assert_eq!(error_of(&r)["kind"], api);
 }

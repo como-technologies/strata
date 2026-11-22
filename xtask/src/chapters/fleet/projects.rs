@@ -1,6 +1,7 @@
 //! The chapter `projects`: one tenant with a project for each environment, and each question of
 //! the table of the introduction across the two projects.
 
+use super::super::DEV_PROJECT;
 use super::super::edits::RETAIN;
 use super::super::ids::{A110, A110_PROD, A111, A111_PROD, DEV, PAYMENTS, PAYMENTS_PROD, PROD};
 use crate::book::Runner;
@@ -9,7 +10,7 @@ use crate::book::Runner;
 /// two projects, for each question of the table of the introduction (#486).
 pub(super) fn projects(r: &mut Runner) {
     r.chapter("projects", &[]);
-    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    r.tenant(|t| t.projects(&[(DEV_PROJECT, DEV), ("prod", PROD)]));
     r.tenant(|t| t.registries(DEV));
     r.tenant(|t| t.registries(PROD));
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
@@ -79,7 +80,7 @@ fn projects_refs(r: &mut Runner) {
 
 /// The part of the chapter `projects` that records each project, and asks about the records.
 fn projects_records(r: &mut Runner) {
-    for project in ["dev", "prod"] {
+    for project in [DEV_PROJECT, "prod"] {
         r.step(
             "projects-record",
             0,

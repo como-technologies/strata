@@ -2,7 +2,7 @@
 //! project, and the record names the ref as typed.
 
 use crate::error::{Error, Result};
-use crate::reference::{self, Ref};
+use crate::reference::{self, FILTER_PREFIX, Ref, TAG_PREFIX};
 use crate::snapshot::Snapshot;
 
 /// `Usage` when `project:<project>/<ref>` holds a ref that belongs to no project, or that already
@@ -16,13 +16,15 @@ use crate::snapshot::Snapshot;
 ///
 /// [`Error::Usage`] for each such ref.
 pub(super) fn check(project: &str, inner: &Ref) -> Result<()> {
-    let why = match inner {
-        Ref::Snapshot(_) => "a file belongs to no project, because a record names its own project",
-        Ref::Pack { .. } => "a pack belongs to no project, because a registry serves it",
-        Ref::ClusterSet { .. } => {
-            "tag: and filter: already search each project that the key can read"
+    let why: String = match inner {
+        Ref::Snapshot(_) => {
+            "a file belongs to no project, because a record names its own project".into()
         }
-        Ref::InProject { .. } => "a ref names one project",
+        Ref::Pack { .. } => "a pack belongs to no project, because a registry serves it".into(),
+        Ref::ClusterSet { .. } => format!(
+            "{TAG_PREFIX} and {FILTER_PREFIX} already search each project that the key can read"
+        ),
+        Ref::InProject { .. } => "a ref names one project".into(),
         _ => return Ok(()),
     };
     Err(Error::Usage {
@@ -98,12 +100,13 @@ mod tests {
     use super::*;
     use crate::api::Method;
     use crate::api::codes::Denial;
+    use crate::api::routes::PROFILE_LISTING;
 
     /// An answer of Palette with `status` and the code `code`.
     fn answer(status: u16, code: &str) -> Error {
         Error::Api {
             method: Method::Get,
-            path: "/v1/dashboard/clusterprofiles/metadata".into(),
+            path: PROFILE_LISTING.into(),
             status,
             body: serde_json::json!({"code": code, "message": "m"}).to_string(),
             retry_after: None,
@@ -113,16 +116,15 @@ mod tests {
 
     #[test]
     fn only_a_denial_of_a_read_of_a_ref_in_a_project_names_the_project() {
-        let in_prod = Ref::parse_with("project:prod/aws-stack@1.0.0", |_| false);
+        let in_prod = Ref::parse_with(&reference::in_project("prod", "aws-stack@1.0.0"), |_| false);
         let denial = || answer(500, Denial::Project.as_str());
         let e = denied(&in_prod, denial());
-        assert_eq!(e.kind(), "project-denied");
+        assert!(matches!(e, Error::ProjectDenied { .. }), "{e:?}");
         assert!(e.to_string().contains("project 'prod'"), "{e}");
         // the same denial for a ref with no project, and another answer, stay as they are
-        assert_eq!(denied(in_prod.without_project(), denial()).kind(), "api");
-        assert_eq!(
-            denied(&in_prod, answer(404, "ResourceNotFound")).kind(),
-            "api"
-        );
+        let e = denied(in_prod.without_project(), denial());
+        assert!(matches!(e, Error::Api { .. }), "{e:?}");
+        let e = denied(&in_prod, answer(404, "ResourceNotFound"));
+        assert!(matches!(e, Error::Api { .. }), "{e:?}");
     }
 }

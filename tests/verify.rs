@@ -24,7 +24,7 @@ use strata::model::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::model::profile_type::ProfileType;
 use strata::model::update::MinorSkip;
 use strata::ops;
-use strata::reference::{PROJECT_PREFIX, Ref};
+use strata::reference::{CLUSTER_PREFIX, PROJECT_PREFIX, Ref};
 use strata::term::progress::Progress;
 
 use common::CommandExt;
@@ -13849,7 +13849,7 @@ fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_re
         &Progress::silent(),
     )
     .unwrap();
-    let reference = in_dev(&format!("cluster:{CLUSTER_UID}/lab-addons"));
+    let reference = in_dev(&format!("{CLUSTER_PREFIX}{CLUSTER_UID}/lab-addons"));
     assert_eq!(covered(&in_project), (vec![addon.clone()], reference));
     // the update that waits for the cluster keeps the same selection
     let waits = serve_pending(api.clone(), dir.path(), "cluster-merged", |_| {});
