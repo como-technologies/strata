@@ -219,7 +219,7 @@ A finding is one of these:
    test is a copy only of a route of the code, or of a helper that the tests
    share.
 3. A const that the change adds has the value of another declaration or of a
-   literal of its tree.
+   literal of its tree. Each string of a `const` array is such a const.
 4. A function that the change adds has the same body as another function of its
    tree, apart from the names of its arguments.
 
