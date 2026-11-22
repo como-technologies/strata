@@ -38,7 +38,7 @@ isolate_git live
 
 summary() {
   write_summary "merge gate test" ", profile" \
-    "\`$profile\` at \`$older\` and \`$newer\`, add-on \`$addon@1.0.0\` (\`${AD:-}\`)."
+    "$(md span "$profile") at $(md span "$older") and $(md span "$newer"), add-on $(md span "$addon@1.0.0") ($(md span "${AD:-}"))."
 }
 trap summary EXIT
 

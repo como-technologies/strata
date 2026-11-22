@@ -717,7 +717,7 @@ profile_gone() {
 secret_in_run() { grep -rIlF -f <(printf %s "$palette_key") .; }
 
 summary() {
-  write_summary "the observer on cluster A, ${fred:-fred}" ", cluster \`$C\`, image \`$image\`, revision \`$revision\`."
+  write_summary "the observer on cluster A, ${fred:-fred}" ", cluster $(md span "$C"), image $(md span "$image"), revision $(md span "$revision")."
 }
 # the port-forward, the kubeconfig, and the changes of the run go at the end, also when a check stops
 # the script

@@ -35,8 +35,8 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "registry move of a running cluster" ", cluster \`${C:-}\`," \
-    "release \`${R:-}\`."
+  write_summary "registry move of a running cluster" ", cluster $(md span "${C:-}")," \
+    "release $(md span "${R:-}")."
 }
 trap summary EXIT
 

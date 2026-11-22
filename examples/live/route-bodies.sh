@@ -88,7 +88,7 @@ cleanup() {
 }
 
 summary() {
-  write_summary "case bodies of the cluster validate route" ": bodies in \`$bodies\`."
+  write_summary "case bodies of the cluster validate route" ": bodies in $(md span "$bodies")."
 }
 finish() { cleanup; summary; }
 trap finish EXIT

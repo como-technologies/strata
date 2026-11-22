@@ -42,8 +42,8 @@ export STRATA_QUIET=1
 newest=$("$strata" packs "$pack" --registry "$reg" --latest --json | jq -r '.registries[0].versions[0].version')
 
 summary() {
-  write_summary "pack ref test" ", pack \`$pack\`," \
-    "versions \`$old\` and \`$new\`, registry \`$reg\`."
+  write_summary "pack ref test" ", pack $(md span "$pack")," \
+    "versions $(md span "$old") and $(md span "$new"), registry $(md span "$reg")."
 }
 trap summary EXIT
 

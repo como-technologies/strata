@@ -41,7 +41,7 @@ gcp_region=$(var gcp_region)
 gcp_region=${gcp_region:-us-east1}
 
 summary() {
-  write_summary "managed engine test: GKE" ", cluster \`$C\`, release \`$R\`."
+  write_summary "managed engine test: GKE" ", cluster $(md span "$C"), release $(md span "$R")."
 }
 trap summary EXIT
 

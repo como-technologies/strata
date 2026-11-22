@@ -37,7 +37,7 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "the checks of the lab: $cloud" ", cloud \`$cloud\`, region \`$region\`."
+  write_summary "the checks of the lab: $cloud" ", cloud $(md span "$cloud"), region $(md span "$region")."
 }
 trap summary EXIT
 

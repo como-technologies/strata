@@ -51,7 +51,7 @@ PINNED=""
 cluster_var=()
 
 summary() {
-  write_summary "registry kinds test" ", host \`${H:-}\`."
+  write_summary "registry kinds test" ", host $(md span "${H:-}")."
 }
 # cleanup: the objects of the API first, then the host and the registries of OpenTofu
 cleanup() {

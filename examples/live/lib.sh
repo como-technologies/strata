@@ -248,14 +248,17 @@ summary_table() {
 # run id is $run_id, or the name of the directory above $run. The line omits the version when no
 # strata binary exists. A script calls this function in the `summary` that its EXIT trap runs, so
 # NOTE holds the values that the run found.
+#
+# The line writes the run id and the version with `md span`. Each script writes each value of NOTE,
+# such as a uid, in the same way. So a backtick in a value cannot end its code span.
 write_summary() {
   local title=$1 with=""
   shift
-  [ ! -x "$strata" ] || with=" with \`$("$strata" --version)\`"
+  [ ! -x "$strata" ] || with=" with $(md span "$("$strata" --version)")"
   {
     echo "# $title"
     echo
-    echo "Run \`${run_id:-$(basename "$(dirname "$run")")}\`$with$*"
+    echo "Run $(md span "${run_id:-$(basename "$(dirname "$run")")}")$with$*"
     echo
     summary_table
   } > summary.md
@@ -264,21 +267,27 @@ write_summary() {
 # ---- markdown ----------------------------------------------------------------------------------------
 
 # The jq functions that write a text into markdown, as strata writes it. `html` is
-# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
-# `text::markdown_cell`, and `quoted` writes each word of it. `marks` puts a `\` before each mark
-# of markdown, and `mentions` puts a zero width space after each `@` that can start a mention of
-# GitHub. So a link, an emphasis, a code span, or a `@name` of the text shows as text. A run of `_`
-# with a letter or a digit on each side starts no emphasis, so `marks` keeps it as it is.
+# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `line`
+# is `text::markdown_line`, and `quoted` writes each word of it. `cell` is `text::markdown_cell`,
+# a `line` that `table` gives an escape before each `|`. `ends` writes each line break and each
+# carriage return as a space.
+#
+# `marks` puts a `\` before each mark of markdown. A run of `_` with a letter or a digit on each
+# side starts no emphasis, so `marks` keeps it as it is. `references` is `text::reference_text`:
+# it puts a zero width space in each mention and in each reference to an issue of GitHub. So a
+# link, an emphasis, a code span, a `@name`, or a `#12` of the text shows as text.
+#
 # `address` is `text::bare_address`: a bare address that GitHub surely links stays as it is.
-# `link_end` is `text::link_end`, where GitHub ends the link. `table` escapes each `|` and writes
-# a line break as a space. `span` is `text::code_span`: its fence is longer than each run of
-# backticks in the text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is
-# the fence of `text::code_block`, so that no line of the text ends the block.
+# `link_end` is `text::link_end`, where GitHub ends the link. `span` is `text::code_span`: its
+# fence is longer than each run of backticks in the text. `code` is `text::code_cell`, a `span` in
+# a cell of a table. `fence` is the fence of `text::code_block`, so that no line of the text ends
+# the block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
   def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
-  def table: split("|") | join("\\|") | split("\n") | join(" ");
-  def mentions: gsub("(?<![A-Za-z0-9])@(?=[A-Za-z0-9])"; "@&#8203;");
-  def quoted: marks | html | mentions;
+  def ends: split("\n") | join(" ") | split("\r") | join(" ");
+  def table: split("|") | join("\\|") | ends;
+  def references: gsub("(?<r>(?<![A-Za-z0-9])@(?=[A-Za-z0-9])|#(?=[0-9])|(?<![A-Za-z0-9])[Gg][Hh]-(?=[0-9]))"; "\(.r)&#8203;");
+  def quoted: marks | html | references;
   def link_end: . as $t | ([scan("[(]")] | length) as $open
     | def cut($end; $close): $t[$end - 1:$end] as $c
         | if $c == ")" and $close > $open then cut($end - 1; $close - 1)
@@ -294,8 +303,9 @@ markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | 
       then null else [.[:$s], $rest[:$e], $rest[$e:]] end;
   def word($first): address($first) as $a
     | if $a then ($a[0] | quoted) + $a[1] + ($a[2] | gsub("[*]"; "&ast;") | gsub("_"; "&lowbar;")) else quoted end;
-  def cell: [scan("[^ \t\n\f\r]+|[ \t\n\f\r]+")] | to_entries
-    | map(.key as $k | .value | if test("^[ \t\n\f\r]") then . else word($k == 0) end) | join("") | table;
+  def line: [scan("[^ \t\n\f\r]+|[ \t\n\f\r]+")] | to_entries
+    | map(.key as $k | .value | if test("^[ \t\n\f\r]") then ends else word($k == 0) end) | join("");
+  def cell: line | table;
   def backticks($n): [range($n)] | map("`") | join("");
   def ticks: [scan("`+") | length] | max // 0;
   def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p

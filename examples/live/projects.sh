@@ -46,7 +46,7 @@ T=""
 
 summary() {
   write_summary "projects test" ": the release" \
-    "\`$NAME@$VERSION\` (\`$R\`) of the lab project, and its copy (\`${T:-none}\`) in the second project."
+    "$(md span "$NAME@$VERSION") ($(md span "$R")) of the lab project, and its copy ($(md span "${T:-none}")) in the second project."
 }
 # the copy goes at the end, also when a check stops the script
 cleanup() {

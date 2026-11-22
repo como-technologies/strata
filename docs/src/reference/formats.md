@@ -234,6 +234,22 @@ starts no mention, as in an address of mail or in `kubernetes@1.30.1`. Such a
 `@` stays as it is. A value in a code span shows no mention, so it stays as it
 is too.
 
+GitHub reads a `#12` or an `owner/repo#12` in a text as a link to an issue. A
+link to an issue of another repository also adds an event to that issue. So the
+markdown writes the entity of a zero width space after each `#` that has a
+digit after it: `#&#8203;12`. GitHub also reads `GH-12` as a link, in each case
+of the letters, so a `GH-` with a digit after it gets the same entity. A `GH-`
+after a letter or a digit of ASCII stays as it is, as in `high-12`.
+
+GitHub shows the same text, and the text links to no issue. A value in a code
+span shows no link to an issue, so it stays as it is.
+
+The `<summary>` of the fold of a pack is a block of HTML, and GitHub reads no
+markdown in it. But GitHub reads a mention and a link to an issue there too. So
+the words of the `<summary>` get each entity and each zero width space of a
+text, and no `\` before a mark. A blank line ends the block, so each line end
+in the words is a space.
+
 GitHub makes a link of a bare address from its text as it is. So an escape in
 the address shows in the link, and the link goes to another target. The
 markdown keeps an address that GitHub surely links as it is, with each `&`,
@@ -254,6 +270,17 @@ GitHub ends the link before the marks at the end of an address, such as the
 markdown writes a `*` there as `&ast;`, and a `_` as `&lowbar;`. A `~` there
 stays as it is. Each other address, such as `https://localhost/`, keeps its
 escapes, and GitHub shows them in its link.
+
+A `|` ends a cell of a table. So a cell writes each `|` of a text as `\|`, also
+in an address. The table reads `\|` as `|` before it makes the link, so the link
+keeps its target. A line, such as a heading or the `Note:` line, keeps each `|`
+as it is. Outside a table, GitHub keeps the `\` of `\|` in the link of an
+address, and the link goes to another target.
+
+A line end in a text starts a new line of markdown, and it ends the row of a
+table. Markdown reads a carriage return with no line break after it as a line
+end too. So the markdown writes each line break and each carriage return of a
+text as a space, in a line and in a cell.
 
 Each fenced block has a fence of three backticks. When its text holds a run of
 three or more backticks, the fence is longer than each run. So a line of the

@@ -9,6 +9,7 @@ use std::time::Instant;
 
 use serde_json::Value;
 use strata::json::{flag, set_at, text_or};
+use strata::text::LINE_ENDS;
 
 use crate::jq::Jq;
 use crate::rule::{Check, Rule};
@@ -120,8 +121,8 @@ fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> O
 /// A message on one line. The report prints each message under its rule, and a line break inside
 /// one, such as the output of a tool, leaves the column.
 pub(crate) fn one_line(s: String) -> String {
-    if s.contains(['\n', '\r']) {
-        s.split(['\n', '\r'])
+    if s.contains(LINE_ENDS) {
+        s.split(LINE_ENDS)
             .map(str::trim)
             .filter(|p| !p.is_empty())
             .collect::<Vec<_>>()

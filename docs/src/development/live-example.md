@@ -733,7 +733,9 @@ the kubeconfig in `~/.kube/`.
 - `summary.md` has the table of results and the digest table. Each text in a
   cell, such as the name of a pack, shows a `|`, a tag, and a mark of markdown as
   text, as [the markdown comment](../reference/formats.md#the-markdown-comment)
-  does.
+  does. The run id, the version, and each value of the note of the line `Run`,
+  such as a uid, are in code spans. The fence of each span is longer than each
+  run of backticks in its value.
 - `<check>.out` and `<check>.err` hold the output of each command. A failed
   comparison names the layer and the value in its `.out`.
 - `raw/cluster`, `raw/addon`, `raw/release`, `raw/next`, and `raw/registries`

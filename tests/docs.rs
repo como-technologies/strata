@@ -3327,10 +3327,11 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
     assert!(
-        one_line(opening).contains("Eight sections list the changes that need action"),
-        "the opening does not name eight sections"
+        one_line(opening).contains("Nine sections list the changes that need action"),
+        "the opening does not name nine sections"
     );
     for anchor in [
+        "(#release-0360-changes-that-need-action)",
         "(#release-0350-changes-that-need-action)",
         "(#release-0340-changes-that-need-action)",
         "(#release-0330-changes-that-need-action)",
@@ -3420,6 +3421,27 @@ fn only_the_compatibility_page_names_the_old_names_packs_and_applied_of_list() {
             .contains("[Release 0.35.0](#release-0350-changes-that-need-action) removes them"),
         "the line of release 0.34.0 on the old names does not link to release 0.35.0"
     );
+}
+
+/// The criteria of #894 change the markdown form, the CI drop-ins, and the library of strata. The
+/// section of release 0.36.0 sits above the one of release 0.35.0, and it names each change.
+#[test]
+fn the_section_of_release_0_36_0_names_each_change_of_the_markdown_of_a_quoted_text() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    assert_release_above(&page, "0.36.0", "0.35.0");
+    let release = release_section(&page, "0.36.0");
+    for needed in [
+        "`#&#8203;12`",
+        "`GH-12`",
+        "`<summary>`",
+        "`\\|`",
+        "carriage return",
+        "`verify-report.sh`",
+        "`text::markdown_line`",
+        "`text::LINE_ENDS`",
+    ] {
+        assert!(release.contains(needed), "the section lacks {needed:?}");
+    }
 }
 
 /// Release 0.27.0 removed the old paths of the modules that moved to `model/`, and the deprecated

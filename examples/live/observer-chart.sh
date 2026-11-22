@@ -73,7 +73,7 @@ registry_gone() {
 }
 
 summary() {
-  write_summary "the chart of the observer with no login" ", registry \`$name\` for \`$endpoint\` and \`$base_path\`."
+  write_summary "the chart of the observer with no login" ", registry $(md span "$name") for $(md span "$endpoint") and $(md span "$base_path")."
 }
 # the registry goes at the end, also when a check stops the script
 finish() {

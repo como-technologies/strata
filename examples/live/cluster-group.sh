@@ -32,8 +32,8 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  write_summary "cluster group test" ", group \`${G:-}\`," \
-    "member \`${M:-}\`, add-on \`${AD:-}\`."
+  write_summary "cluster group test" ", group $(md span "${G:-}")," \
+    "member $(md span "${M:-}"), add-on $(md span "${AD:-}")."
 }
 trap summary EXIT
 

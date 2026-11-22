@@ -9,6 +9,7 @@ use super::mask::mask_secret;
 use super::{Method, PaletteApi};
 use crate::config::Config;
 use crate::error::{Error, Result};
+use crate::text::LINE_ENDS;
 
 /// The header that carries the API key.
 pub const API_KEY_HEADER: &str = "ApiKey";
@@ -142,7 +143,7 @@ impl HttpApi {
                 path: path.to_string(),
                 status,
                 body: mask_secret(&String::from_utf8_lossy(&body), &self.config.api_key)
-                    .replace(['\n', '\r'], " "),
+                    .replace(LINE_ENDS, " "),
                 retry_after,
                 key_proved: self.proof.proved(),
             });

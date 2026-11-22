@@ -29,7 +29,7 @@ export STRATA_QUIET=1
 
 summary() {
   write_summary "draft test" ", add-on" \
-    "\`$addon@1.0.0\` (\`${AD:-}\`)."
+    "$(md span "$addon@1.0.0") ($(md span "${AD:-}"))."
 }
 trap summary EXIT
 

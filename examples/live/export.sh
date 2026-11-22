@@ -36,7 +36,7 @@ run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/export}
 mkdir -p "$run" && cd "$run" || exit 2
 
 summary() {
-  write_summary "profile export test" ": \`$profiles\`."
+  write_summary "profile export test" ": $(md span "$profiles")."
 }
 trap summary EXIT
 

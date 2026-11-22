@@ -79,8 +79,8 @@ profile_cloud=$(jq -r .source.cloudType release.json)
 [ "$profile_cloud" = "$engine" ] || die "the release profile is of cloud type $profile_cloud, not $engine: apply with -var cloud=$engine"
 
 summary() {
-  write_summary "the test plan of #91: $engine" ", preflight \`$("$strata" preflight --version)\`," \
-    "release profile \`$R\`, Palette release \`${release:-not given}\`."
+  write_summary "the test plan of #91: $engine" ", preflight $(md span "$("$strata" preflight --version)")," \
+    "release profile $(md span "$R"), Palette release $(md span "${release:-not given}")."
   # a note of the entry can quote a message, so no line of the entry can end the block
   local fence
   fence=$(cat ledger-entry.yaml 2> /dev/null | jq -Rrs "$markdown_jq fence")

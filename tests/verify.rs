@@ -18964,6 +18964,52 @@ fn the_markdown_of_a_note_and_of_a_verdict_holds_no_mention_of_github_from_a_mes
     }
 }
 
+/// The criterion of #894: a `#12`, an `owner/repo#12`, and a `GH-12` in a message of Palette link
+/// to no issue. This holds in a note and in a verdict. So a comment that quotes the message adds no
+/// event to an issue of another repository.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_links_to_no_issue_of_github_from_a_message() {
+    for md in markdown_that_quotes(common::ANSWER_ISSUES, "see #&#8203;12,") {
+        common::assert_answer_issues_as_text(&md);
+    }
+}
+
+/// The criterion of #894: a note and a verdict are lines, not cells of a table. So the `|` of a
+/// bare address in a message stays as it is, and the link of the address keeps its target.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_keeps_the_bar_of_a_bare_address_of_a_message() {
+    let message = "see https://example.com/a|b";
+    for md in markdown_that_quotes(message, message) {
+        assert!(!md.contains("https://example.com/a\\|b"), "{md}");
+    }
+}
+
+/// The criterion of #894: a tag of the answer puts no mention and no link to an issue in the fold
+/// of a pack. GitHub reads no markdown in its `<summary>`, so the words get no `\` before a mark.
+#[test]
+fn the_fold_of_a_pack_holds_no_mention_and_no_link_to_an_issue_from_a_tag_of_the_answer() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let tag = format!("{} {} *a*", common::ANSWER_MENTIONS, common::ANSWER_ISSUES);
+    // the values of side B do not parse, so the fold of the pack names the change flags
+    let b = with_os_pack(dir.path(), "retag-mentions", |p| {
+        p["tag"] = Value::from(tag.as_str());
+        p["values"] = Value::from("kubeadmconfig: [\n");
+    });
+    let d = ops::compare(&a, &b, "t1");
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
+    let summary = md
+        .lines()
+        .find(|l| l.starts_with("<details><summary><code>ubuntu-aws</code> tag 22.04 -&gt; "))
+        .unwrap_or_else(|| panic!("the fold of the pack in\n{md}"));
+    common::assert_answer_mentions_as_text(summary);
+    common::assert_answer_issues_as_text(summary);
+    assert!(summary.ends_with(" *a* AUTHORED</summary>"), "{summary}");
+    common::assert_answer_mentions_as_text(&md);
+    common::assert_answer_issues_as_text(&md);
+}
+
 /// The criterion of #832: the error of a search of the edge hosts shows each tag of HTML as text
 /// in the markdown of `consumers`.
 #[test]

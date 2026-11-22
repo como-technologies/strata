@@ -32,7 +32,7 @@ N=strata-live-app
 
 summary() {
   write_summary "app profile test" ", app profile" \
-    "\`$N\` \`${U:-}\`."
+    "$(md span "$N") $(md span "${U:-}")."
 }
 trap summary EXIT
 

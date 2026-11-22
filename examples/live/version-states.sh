@@ -39,7 +39,7 @@ NAME=strata-live-versions
 vtf() { TF_DIR=$live/terraform-version "$live/tf.sh" "$@"; }
 
 summary() {
-  write_summary "one state per version" ", profile \`$NAME\`, cluster \`$C\`."
+  write_summary "one state per version" ", profile $(md span "$NAME"), cluster $(md span "$C")."
 }
 
 # state VERSION: select the workspace of the version, and make it on first use

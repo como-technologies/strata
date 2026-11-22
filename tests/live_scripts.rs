@@ -1001,7 +1001,7 @@ stage 1 "first" || echo "no heading for stage 1"
 stage 2 "second" || echo "no heading for stage 2"
 [ -z "${{2:-}}" ] || run_id=$2
 check demo-ok 0 'it passes' -- true
-write_summary "the demo" ", cluster \`c-1\`," "add-on \`a-1\`."
+write_summary "the demo" ", cluster $(md span "c\`1")," "add-on $(md span a-1)."
 cat summary.md
 echo "$addon_from -> $addon_to"
 "#,
@@ -1037,7 +1037,7 @@ fn lib_sh_prints_the_usage_and_the_heading_of_a_stage_and_writes_the_summary_of_
          PASS  {:<32} expected 0, got 0\n\
          # the demo\n\
          \n\
-         Run `20260101T000000Z` with `strata 9.9.9`, cluster `c-1`, add-on `a-1`.\n\
+         Run `20260101T000000Z` with `strata 9.9.9`, cluster ``c`1``, add-on `a-1`.\n\
          \n\
          | result | check | expected exit | got | what it shows |\n\
          |---|---|---|---|---|\n\
@@ -1052,11 +1052,12 @@ fn lib_sh_prints_the_usage_and_the_heading_of_a_stage_and_writes_the_summary_of_
         std::fs::read_to_string(dir.path().join("runs/20260101T000000Z/demo/steps.log")).unwrap();
     assert!(steps.contains("== stage 2: second\n"), "{steps}");
 
-    // a script that sets run_id names its own run, and a missing binary omits the version
-    let o = lib_demo(dir.path(), "/no/such/strata", &["1", "custom-run"]);
+    // a script that sets run_id names its own run, and a missing binary omits the version. The
+    // run id and a value of the note hold a backtick, so each code span has a longer fence
+    let o = lib_demo(dir.path(), "/no/such/strata", &["1", "custom`run"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert!(
-        text(&o.stdout).contains("\nRun `custom-run`, cluster `c-1`, add-on `a-1`.\n"),
+        text(&o.stdout).contains("\nRun ``custom`run``, cluster ``c`1``, add-on `a-1`.\n"),
         "{}",
         text(&o.stdout)
     );
@@ -1109,6 +1110,45 @@ summary_table"#,
     );
     common::assert_answer_marks_as_text(&table);
     common::assert_answer_mentions_as_text(&table);
+}
+
+/// The criterion of #894: each live script writes each value of the note of `write_summary` with
+/// `md span`, and writes no code span by hand. The note is in the call of `write_summary`, and in
+/// the function `summary` that calls it. The demo of lib.sh shows a value with a backtick.
+#[test]
+fn each_live_script_writes_each_value_of_the_note_of_its_summary_with_md_span() {
+    let mut callers = 0;
+    for path in walk(&Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/live")) {
+        if path.extension().is_none_or(|e| e != "sh") {
+            continue;
+        }
+        let script = std::fs::read_to_string(&path).unwrap();
+        let (mut note, mut in_summary, mut in_call) = (Vec::new(), false, false);
+        for line in script.lines() {
+            in_summary = in_summary || line == "summary() {";
+            in_call = in_call || line.trim_start().starts_with("write_summary \"");
+            if in_summary || in_call {
+                note.push(line);
+            }
+            in_call = in_call && line.ends_with('\\');
+            in_summary = in_summary && line != "}";
+        }
+        if !note
+            .iter()
+            .any(|l| l.trim_start().starts_with("write_summary \""))
+        {
+            continue;
+        }
+        callers += 1;
+        for line in note {
+            assert!(
+                !line.contains("\\`"),
+                "{} writes a code span by hand in its note: {line}",
+                path.display()
+            );
+        }
+    }
+    assert!(callers > 40, "{callers} scripts call write_summary");
 }
 
 #[test]

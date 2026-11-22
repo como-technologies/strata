@@ -5396,13 +5396,14 @@ fn each_script_that_writes_markdown_has_the_jq_functions_of_the_report_scripts()
     }
 }
 
-/// The criteria of #872 and #890: the jq functions of the scripts write each text as the helpers of
-/// `strata::text` do. So `cell` shows each mark of markdown of a quoted text as text, also two
-/// backticks. It keeps a run of `_` inside a word as it is. A `@name` of the text notifies nobody.
-/// It keeps each bare address that GitHub surely links as it is.
+/// The criteria of #872, #890, and #894: the jq functions of the scripts write each text as the
+/// helpers of `strata::text` do. So `cell` shows each mark of markdown of a quoted text as text,
+/// also two backticks. It keeps a run of `_` inside a word as it is. A `@name` of the text notifies
+/// nobody, and a `#12` links to no issue. It keeps each bare address that GitHub surely links as it
+/// is. `line` keeps each `|`, and `cell` writes a lone carriage return as a space.
 #[test]
 fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
-    use strata::text::{code_cell, code_span, html_text, markdown_cell};
+    use strata::text::{code_cell, code_span, html_text, markdown_cell, markdown_line};
     let script = repo_file("scripts/ci/verify-report.sh");
     let program = script
         .split_once("markdown_jq='")
@@ -5411,6 +5412,7 @@ fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
         .expect("the script holds markdown_jq");
     let helpers = [
         ("html", html_text as fn(&str) -> String),
+        ("line", markdown_line),
         ("cell", markdown_cell),
         ("span", code_span),
         ("code", code_cell),
@@ -5421,6 +5423,9 @@ fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
         "``a`` ~~gone~~ ![i](x) a\\*b\\|c",
         common::ANSWER_MENTIONS,
         "(@a) @@b é@c _@d *@e\n@f|@g &@a <@b a@-b @",
+        common::ANSWER_ISSUES,
+        "a#1 é#2 (#3) gh-4 Gh-5 éGH-6 €gH-7 _GH-8 #a # GH- GH-x G-1 H-1 high-1 1GH-2 @a &#12;",
+        "https://a.example/#12 #12 x\ry x\r\ny\r a|https://a.example/b|c",
         common::ANSWER_ADDRESSES,
         "www.a.example/@b x (www.a.example/@b) \"www.a.example/@b\" 'https://a.example/@b'",
         "https://a.example/x_(y)) https://a.example/x_*~.\" http://A.b-c.example:8080/x?y=@z#`f`[g](h)",
@@ -5448,6 +5453,7 @@ fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
     }
     common::assert_answer_marks_as_text(&markdown_cell(common::ANSWER_MARKS));
     common::assert_answer_mentions_as_text(&markdown_cell(common::ANSWER_MENTIONS));
+    common::assert_answer_issues_as_text(&markdown_cell(common::ANSWER_ISSUES));
     common::assert_answer_addresses_as_they_are(&markdown_cell(common::ANSWER_ADDRESSES));
 }
 
