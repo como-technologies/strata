@@ -12,14 +12,15 @@ use std::path::{Path, PathBuf};
 
 use common::{
     CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, MOST_WORDS, block_sentences, cells, code_of,
-    code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in, marks_of, one_line,
-    recipe, repo_file, schema, script, sentences, table_rows, toml_entries, toml_table, toml_value,
-    version_of, walk, without_code, without_link_targets, word_faults,
+    code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in, go_line, marks_of,
+    one_line, recipe, repo_file, schema, script, sentences, table_rows, toml_entries, toml_table,
+    toml_value, version_of, walk, without_code, without_link_targets, word_faults,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute};
 use strata::content::canonical_json;
 use strata::ops::ConsumerKind;
+use strata::reference::version::compare;
 use strata::reference::{
     APP_PROFILE_PREFIX, CLUSTER_GROUP_PREFIX, CLUSTER_PREFIX, EDGE_HOST_PREFIX, PACK_PREFIX,
 };
@@ -56,15 +57,25 @@ fn linked(text: &str, prefix: &str) -> Vec<String> {
     out
 }
 
+/// The part of `text` from the first `from` up to the first `to` after it, or up to the end. The
+/// search for `to` starts after `from`, so `from` can start with `to`, as `"\n## A\n"` does.
 fn section<'a>(text: &'a str, from: &str, to: Option<&str>) -> &'a str {
     let start = text
         .find(from)
         .unwrap_or_else(|| panic!("the page has no {from:?} heading"));
     let rest = &text[start..];
-    match to.and_then(|t| rest.find(t)) {
-        Some(end) => &rest[..end],
+    match to.and_then(|t| rest[from.len()..].find(t)) {
+        Some(end) => &rest[..from.len() + end],
         None => rest,
     }
+}
+
+#[test]
+fn a_section_ends_at_the_first_end_after_its_heading_also_when_the_heading_starts_with_the_end() {
+    let page = "# Page\n\n## One\ntext\n## Two\nmore\n";
+    assert_eq!(section(page, "\n## One\n", Some("\n## ")), "\n## One\ntext");
+    assert_eq!(section(page, "## One", Some("\n## ")), "## One\ntext");
+    assert_eq!(section(page, "## Two", Some("\n## ")), "## Two\nmore\n");
 }
 
 #[test]
@@ -1113,7 +1124,7 @@ const WAVE_8_PAGES: [&str; 31] = [
     "commands/verify.md",
     "development/build-test.md",
     "development/changes.md",
-    "development/code.md",
+    CODE_PAGE,
     "development/documentation.md",
     "development/live-runs.md",
     "install.md",
@@ -1948,6 +1959,9 @@ fn files_of_tests_common_that_another_package_includes() -> BTreeSet<String> {
         .collect()
 }
 
+/// The page of the rules of the Rust code and of the Go code.
+const CODE_PAGE: &str = "development/code.md";
+
 /// A helper of `tests/common/` that another package includes is in a file of its own. The rule of
 /// "Tests" in `code.md` names each such file, and no other. The table "Where the code goes" of
 /// `build-test.md` has a row for each. The verify of #711 and of #721 found a file that each page
@@ -1959,7 +1973,7 @@ fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
         included.contains("git.rs") && included.contains("palette.rs"),
         "the scan finds the includes: {included:?}"
     );
-    let code = one_line(&read(&docs().join("development/code.md")));
+    let code = one_line(&read(&docs().join(CODE_PAGE)));
     let rule = code
         .split(". ")
         .find(|s| s.ends_with(" have such users"))
@@ -1981,6 +1995,63 @@ fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
             "the table Where the code goes of build-test.md has no row of {cell}"
         );
     }
+}
+
+/// The names of the functions of `src/json.rs`, from the code before its tests.
+fn functions_of_src_json() -> BTreeSet<String> {
+    let source = repo_file("src/json.rs");
+    let code = source.split("#[cfg(test)]").next().unwrap_or(&source);
+    code.lines()
+        .filter_map(|line| {
+            let head = ["pub ", "pub(crate) "]
+                .iter()
+                .find_map(|vis| line.strip_prefix(vis))
+                .unwrap_or(line);
+            let rest = head.strip_prefix("fn ")?;
+            rest.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .next()
+                .map(String::from)
+        })
+        .collect()
+}
+
+/// The rule of "Types and data" in `code.md` names each function of `src/json.rs`. Each name of
+/// its list of the reads is a function of that file.
+#[test]
+fn the_rule_of_the_reads_in_code_md_names_each_function_of_src_json() {
+    let functions = functions_of_src_json();
+    assert!(
+        functions.contains("take_array") && functions.contains("opt_set"),
+        "the scan finds the functions: {functions:?}"
+    );
+    let page = read(&docs().join(CODE_PAGE));
+    let types = one_line(section(&page, "\n## Types and data\n", Some("\n## ")));
+    let rule = section(
+        &types,
+        "Read them with the helpers of `src/json.rs`.",
+        Some(" - "),
+    );
+    let named: BTreeSet<&str> = code_spans(rule).into_iter().collect();
+    let left_out: Vec<&String> = functions
+        .iter()
+        .filter(|f| !named.contains(f.as_str()))
+        .collect();
+    assert!(
+        left_out.is_empty(),
+        "code.md does not name {left_out:?}: {rule}"
+    );
+    let reads = rule
+        .split(". ")
+        .find(|s| s.starts_with("They are "))
+        .expect("the rule lists the reads");
+    let unknown: Vec<&str> = code_spans(reads)
+        .into_iter()
+        .filter(|s| !functions.contains(*s))
+        .collect();
+    assert!(
+        unknown.is_empty(),
+        "src/json.rs has no function {unknown:?}"
+    );
 }
 
 /// The public items show their comments to each user of the library. So each sentence of the
@@ -2397,6 +2468,56 @@ fn each_cache_and_the_state_of_a_session_are_in_a_folder_that_the_session_can_wr
         "A session sets no `GOCACHE`, no `GOPATH`, and no `XDG_STATE_HOME`.".to_string(),
     ] {
         assert!(page.contains(&needle), "changes.md lacks {needle:?}");
+    }
+}
+
+/// The value of the build argument `name` of `dockerfile`: the text after `ARG name=`.
+fn build_arg<'a>(dockerfile: &'a str, name: &str) -> &'a str {
+    let line = format!("ARG {name}=");
+    dockerfile
+        .lines()
+        .find_map(|l| l.strip_prefix(line.as_str()))
+        .unwrap_or_else(|| panic!("the Dockerfile sets no {name}"))
+}
+
+/// The session image sets `GOTOOLCHAIN=local`, so its Go stops at a module whose `go` line names a
+/// newer Go (#945). The test compares `GO_VERSION` with the `go` line of each `go.mod` that Git
+/// tracks. It also reads the step of the book that changes the two together.
+#[test]
+fn the_go_of_the_session_image_is_not_older_than_the_go_line_of_each_module() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let image = code_of("deploy/session/Dockerfile");
+    let go = build_arg(&image, "GO_VERSION");
+    assert!(
+        image.contains("GOTOOLCHAIN=local"),
+        "the session image downloads the Go that a module needs"
+    );
+
+    // the observer and the counter of the live example
+    let modules = tracked_files(root, &[":(glob)**/go.mod"]);
+    assert!(modules.len() >= 2, "{modules:?}");
+    let mut newer = Vec::new();
+    for module in &modules {
+        let path = module.strip_prefix(root).unwrap().display();
+        let text = read(module);
+        let needs = go_line(&text).unwrap_or_else(|| panic!("{path} has no go line"));
+        if compare(go, needs).is_lt() {
+            newer.push(format!("{path} needs go >= {needs}"));
+        }
+    }
+    assert!(
+        newer.is_empty(),
+        "the session image has Go {go}, and {newer:?}: change GO_VERSION and GO_SHA256 of its \
+         Dockerfile"
+    );
+
+    let changes = read(&docs().join("development/changes.md"));
+    let page = one_line(section(&changes, "\n## The session image\n", Some("\n## ")));
+    for needle in [
+        "When a pull request changes the `go` line of a `go.mod`, change `GO_VERSION` and `GO_SHA256` in the same pull request.",
+        "The test fails when `GO_VERSION` is older than the `go` line of a module that Git tracks.",
+    ] {
+        assert!(page.contains(needle), "changes.md lacks {needle:?}");
     }
 }
 
@@ -4795,11 +4916,11 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
             "So `--pre-release` names it as newer than `1.65.0`.",
         ),
         (
-            "development/code.md",
+            CODE_PAGE,
             "`tests/version_order.rs` compares the order with the crate, row by row.",
         ),
         (
-            "development/code.md",
+            CODE_PAGE,
             "Each difference needs a rule that names it, and the test holds the count of differences for each rule.",
         ),
     ] {
@@ -5063,6 +5184,7 @@ fn each_line_of_a_comment_block_keeps_its_number_in_the_file() {
 fn each_kind_of_file_has_the_marks_of_its_comments() {
     for (path, marks) in [
         ("src/main.rs", Some((Some("//"), true))),
+        ("codeql/rust/CleartextLogging.ql", Some((Some("//"), true))),
         ("observer/internal/web/assets/app.css", Some((None, true))),
         ("examples/live/lib.sh", Some((Some("#"), false))),
         (".github/workflows/ci.yml", Some((Some("#"), false))),

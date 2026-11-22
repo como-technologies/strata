@@ -230,13 +230,23 @@ just comment-words v0.33.0   # the comments that the change adds after another b
 The recipe reads the diff of the work tree against the merge base of the base
 and `HEAD`. It counts the words of each comment sentence that holds an added
 line. It reads the line comments, `//` and `#`, and the block comments,
-`/* ... */`, of the code, the scripts, and the configuration files. It names the
-file and the line of each sentence of more than 25 words, and then exits 1.
+`/* ... */`, of the code, the CodeQL queries, the scripts, and the configuration
+files. It names the file and the line of each sentence of more than 25 words,
+and then exits 1.
 
 The recipe counts a word and a sentence as the tests of the book do. A sentence
 that the change does not touch is not in the count. A line of a file that git
 finds as moved is not an added line. A file that git does not track is not in
 the diff. The theme files of [The theme](#the-theme) are not in the count.
+
+The recipe reads a file with a space or a character that is not ASCII in its
+name. A file name that is not UTF-8 stops the recipe with exit 2, and the
+message names the file.
+
+A comment after code on its line is not in the count. A `//`, a `#`, or a `/*`
+after code can also be in a string, and the recipe reads no string of a
+language. Read each such comment of the change against
+[The style rules](#the-style-rules).
 
 The job `lint and test` of CI runs `just comment-words HEAD^1`, so each change
 keeps the rule. On a pull request, the first parent of the commit is the base

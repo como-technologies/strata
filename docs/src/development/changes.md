@@ -130,6 +130,14 @@ The image has the latest stable Go. When Go releases a new stable version, chang
 `GOTOOLCHAIN=local` and `GOPROXY=off`. A build then fails when code needs another
 Go, or a module outside the standard library.
 
+When a pull request changes the `go` line of a `go.mod`, change `GO_VERSION` and
+`GO_SHA256` in the same pull request. A Go update of Dependabot can be such a
+change. `GO_VERSION` is then the version of that line, or a newer one. If it is
+older, `go vet` stops in each session, because the image does not download
+another Go. CI installs the Go of `observer/go.mod`, so only a test finds the
+fault there. The test fails when `GO_VERSION` is older than the `go` line of a
+module that Git tracks.
+
 ### Where the caches and the state go
 
 `riff.toml` puts each cache of a session, and the state of strata, in a folder

@@ -49,6 +49,9 @@ mod git;
 mod palette;
 mod process;
 mod sentences;
+// The stand-in of this package serves with `serve`, and no test of the package calls `serve_each`.
+#[allow(dead_code)]
+mod server;
 mod stand_in;
 mod table;
 mod toml;
@@ -60,7 +63,7 @@ pub use closed_set::schema_values;
 pub use code_block::*;
 pub use code_span::*;
 pub use download::*;
-pub use git::isolate_git;
+pub use git::{git, isolate_git};
 pub use palette::*;
 pub use process::*;
 pub use sentences::*;
@@ -772,6 +775,11 @@ pub fn version_of(manifest: &str) -> String {
         .unwrap_or_else(|| panic!("{manifest} has a version line"))
 }
 
+/// The version of Go that a module needs: the `go` line of `go_mod`, the text of a `go.mod`.
+pub fn go_line(go_mod: &str) -> Option<&str> {
+    go_mod.lines().find_map(|l| l.strip_prefix("go "))
+}
+
 pub fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
@@ -809,20 +817,6 @@ pub const MACHINE_GIT_USER: [&[(&str, &str)]; 2] = [
     ],
     &[("GIT_CONFIG_PARAMETERS", "'user.name'='other'")],
 ];
-
-/// Run git in `dir` with no setting of the machine: see [`isolate_git`].
-pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
-    let mut c = Command::new("git");
-    c.args(args).current_dir(dir);
-    let o = isolate_git(&mut c).output_locked().unwrap();
-    assert!(
-        o.status.success(),
-        "git {args:?}: {}{}",
-        text(&o.stderr),
-        text(&o.stdout)
-    );
-    o
-}
 
 // ---- the workflow helpers ----------------------------------------------------------------------
 

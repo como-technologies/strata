@@ -1250,6 +1250,22 @@ facts:
       - src/model/update.rs
       - src/api/codes.rs
 
+  # At the update, Palette takes the default value that the profile holds, and not the mask that
+  # the variables route gives. So a move reads the mask as a default value (#912).
+  - id: update-takes-a-masked-default
+    kind: behavior
+    reads:
+      fields:
+        - variables[].defaultValue
+        - variables[].isSensitive
+        - variables[].required
+    live: []
+    unchecked: The code of Palette shows it. No run gives a profile a sensitive variable.
+    pages:
+      - internals/palette/profiles.md#the-checks-of-an-update
+    code:
+      - src/model/update.rs
+
   # No route says that a newer version of a profile exists. Palette lists the published versions
   # of the profile in no order, and strata orders them (#707).
   - id: gap-newer-profile-version

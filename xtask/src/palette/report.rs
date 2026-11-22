@@ -49,8 +49,7 @@ mod tests {
         let report = json!({"schema": strata::closed_set::unknown::report::SCHEMA, "unknown": [{
             "strata": "0.26.0", "set": "ProfileType", "value": "later",
             "route": "/v1/clusterprofiles/{uid}", "count": 1}]})
-        .to_string()
-        .into_bytes();
+        .to_string();
         let real = Service::new(NoIssue).handle(
             &Post {
                 method: "POST",
@@ -58,17 +57,11 @@ mod tests {
                 content_type: Some("application/json"),
                 key: None,
                 sender: "127.0.0.1",
-                body: &report,
+                body: report.as_bytes(),
             },
             Instant::now(),
         );
-        let request = Request {
-            target: REPORT_ENDPOINT.to_string(),
-            project: None,
-            key: None,
-            accept: None,
-            body: report.clone(),
-        };
+        let request = Request::new("POST", REPORT_ENDPOINT, &[], &report);
         let (status, body) = served(Path::new("/r"), &request).unwrap();
         assert_eq!(status, real.status);
         assert_eq!(serde_json::from_slice::<Value>(&body).unwrap(), real.body);

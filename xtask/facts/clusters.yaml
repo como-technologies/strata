@@ -76,6 +76,20 @@ facts:
       fields:
         - "[].profileUid"
         - "[].variables[].name"
+        - "[].variables[].defaultValue"
+        - "[].variables[].description"
+        - "[].variables[].displayName"
+        - "[].variables[].format"
+        - "[].variables[].hidden"
+        - "[].variables[].immutable"
+        - "[].variables[].inputType"
+        - "[].variables[].isSensitive"
+        - "[].variables[].options[].default"
+        - "[].variables[].options[].description"
+        - "[].variables[].options[].label"
+        - "[].variables[].options[].value"
+        - "[].variables[].regex"
+        - "[].variables[].required"
         - "[].variables[].value"
     stand_in:
       - v1/spectroclusters/{uid}/variables

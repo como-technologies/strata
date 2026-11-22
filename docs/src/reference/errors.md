@@ -1,9 +1,16 @@
 # Errors
 
-An error exits `2`. Without `--json`, standard error gets one line that starts
-with `strata: error:`, in red on a terminal. With `--json --quiet`, standard
-error gets one JSON line. Use `--quiet`, or `STRATA_QUIET`, so that no progress
-note shares the stream:
+[Branch on the exit status](../automation/scripts.md#branch-on-the-exit-status)
+gives the exit status of an error. Without `--json`, standard error gets one
+error line. [The look of each line](./formats.md#the-look-of-each-line) gives
+its look:
+
+```text
+{{#include ../output/auto-error-text.txt}}
+```
+
+With `--json --quiet`, standard error gets one JSON line. Use `--quiet`, or
+`STRATA_QUIET`, so that no progress note shares the stream:
 
 ```text
 {{#include ../output/auto-error.txt}}

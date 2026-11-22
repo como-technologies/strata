@@ -208,10 +208,10 @@ check slash-listing 0 "the registry listing" -- "$live/api.sh" get /v1/registrie
 check slash-listed 0 "#853: the registry listing names $SLASH_NAME" -- \
   jq -e --arg n "$SLASH_NAME" --arg u "$SLASH_REG" '.items | any(.name == $n and .uid == $u)' slash-listing.out
 check slash-sync 0 "Palette reads the registry $SLASH_NAME" -- "$live/api.sh" sync pack "$SLASH_REG"
-# compare --json --quiet writes the error as one line of JSON on standard error, and check keeps it
+# snapshot --json --quiet writes the error as one line of JSON on standard error, and check keeps it
 # in slash-several.err.
 check slash-several 2 "#853: a ref of $PACK@1.0.0 with no registry: several registries have the version" -- \
-  "$strata" compare "pack:$PACK@1.0.0" "pack:$PACK@1.0.0" --json -q
+  "$strata" snapshot "pack:$PACK@1.0.0" --json -q
 check slash-several-uid 0 "#853: the error is pack-in-several-registries, and names $SLASH_NAME by its uid, not by its name" -- \
   jq -e --arg n "$SLASH_NAME" --arg u "$SLASH_REG" '.error.kind == "pack-in-several-registries"
     and any(.error.registries[]; . == $u) and all(.error.registries[]; . != $n)' slash-several.err

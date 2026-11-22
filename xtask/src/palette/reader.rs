@@ -19,8 +19,7 @@ const FILE_FOR_JSON: &[u8] = br#"{"Reader":{}}"#;
 /// True when `request` has the header `Accept: application/json`.
 pub(super) fn accepts_json(request: &Request) -> bool {
     request
-        .accept
-        .as_deref()
+        .header("Accept")
         .is_some_and(|accept| accept.trim().eq_ignore_ascii_case("application/json"))
 }
 
@@ -37,7 +36,7 @@ pub(super) fn file_reader(root: &Path, request: &Request) -> Option<Vec<u8>> {
         .map_or(request.target.as_str(), |(path, _)| path)
         .trim_start_matches('/');
     let profile = exported_profile(path).or_else(|| downloaded_profile(path))?;
-    file_for(root, request.project.as_deref(), profile)?
+    file_for(root, request.project(), profile)?
         .is_file()
         .then(|| FILE_FOR_JSON.to_vec())
 }
@@ -45,6 +44,8 @@ pub(super) fn file_reader(root: &Path, request: &Request) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use std::fs;
+
+    use strata::api::PROJECT_UID_HEADER;
 
     use super::*;
     use crate::palette::served;
@@ -65,13 +66,8 @@ mod tests {
         )
         .unwrap();
         let answer = |target: &str, accept: Option<&str>| {
-            let request = Request {
-                target: target.to_string(),
-                project: Some("p1".to_string()),
-                key: None,
-                accept: accept.map(str::to_string),
-                body: Vec::new(),
-            };
+            let headers = [(PROJECT_UID_HEADER, Some("p1")), ("Accept", accept)];
+            let request = Request::new("GET", target, &headers, "");
             let (status, body) = served(dir, &request).unwrap();
             (status, String::from_utf8(body).unwrap())
         };

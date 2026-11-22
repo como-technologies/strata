@@ -16,6 +16,8 @@
 //! xtask harvest DIR              write the tenant of every chapter to DIR, for xtask contract --stand-in
 //! xtask comment-words BASE       exit 1 when a comment sentence that the change since BASE adds has
 //!                                more than 25 words
+//! xtask copies BASE [HEAD]       exit 1 when a line that BASE...HEAD adds copies a value of a closed
+//!                                set, a const, a route, or a helper
 //! ```
 
 mod book;
@@ -43,14 +45,17 @@ mod code_span;
 // tests serve the variables of a profile with the masks and `profile_route_variable`.
 //
 // The tests of the contract and of the facts use `TAG_FILTER_LISTING`, the route of the saved tag
-// filters. The stand-in, the test of its download route, and the chapter `fields` build the answer
-// of the pack listing with `pack_listing_answer`.
+// filters. The tests of the contract also use `CLUSTER_LISTING`, the route of the cluster listing.
+// The stand-in, the test of its download route, and the chapter `fields` build the answer of the
+// pack listing with `pack_listing_answer`.
 #[path = "../../tests/common/palette.rs"]
 #[allow(dead_code)]
 mod common_palette;
 mod contract;
+mod copies;
 mod facts;
 mod files;
+mod git_diff;
 // The git settings of the tests of strata. The runner of the book gives them to each step, so the
 // tests and the chapters keep one copy of the settings.
 #[path = "../../tests/common/git.rs"]
@@ -72,6 +77,12 @@ mod route;
 #[path = "../../tests/common/sentences.rs"]
 #[allow(dead_code)]
 mod sentences;
+// The read of a request and the write of an answer of the tests of strata. The stand-in reads each
+// request with `read_request` and writes each answer with `write_answer`. So the tests and the
+// stand-in read the head of a request in one way. The stand-in does not use the server of the tests.
+#[path = "../../tests/common/server.rs"]
+#[allow(dead_code)]
+mod server;
 #[cfg(test)]
 mod size;
 // The read of a table of the book. The check of the facts reads a row with it, and so do the
@@ -108,6 +119,8 @@ fn main() -> ExitCode {
         ["contract", rest @ ..] => contract::command(rest),
         ["harvest", dir] => contract::harvest_command(dir),
         ["comment-words", base] => comment_words(base),
+        ["copies", base] => copies(base, "HEAD"),
+        ["copies", base, head] => copies(base, head),
         ["docs-examples"] => examples(book::Mode::Write),
         ["docs-examples", "--check"] => examples(book::Mode::Check),
         ["playground", name] => {
@@ -118,7 +131,7 @@ fn main() -> ExitCode {
             })
         }
         _ => fail(
-            "usage: xtask [docs-examples [--check] | facts [--check] | contract [OPTIONS] | harvest DIR | comment-words BASE | playground CHAPTER[-N] | serve ROOT PORT_FILE]",
+            "usage: xtask [docs-examples [--check] | facts [--check] | contract [OPTIONS] | harvest DIR | comment-words BASE | copies BASE [HEAD] | playground CHAPTER[-N] | serve ROOT PORT_FILE]",
         ),
     }
 }
@@ -168,6 +181,31 @@ fn comment_words(base: &str) -> ExitCode {
         sentences::MOST_WORDS
     );
     ExitCode::from(u8::from(!found.faults.is_empty()))
+}
+
+/// Print each copy that the lines of `base...head` add, then the places that are no copy, with
+/// the class of each place. Exit 1 when the change adds a copy.
+fn copies(base: &str, head: &str) -> ExitCode {
+    let found = match copies::check(&repository(), base, head) {
+        Ok(found) => found,
+        Err(e) => return fail(&format!("copies: {e}")),
+    };
+    println!("The copies that the lines of {base}...{head} add:");
+    for hit in &found.findings {
+        println!("{hit}");
+    }
+    println!("The values on these lines in a place that is no copy:");
+    for hit in &found.skipped {
+        println!("{hit}");
+    }
+    eprintln!(
+        "xtask: copies: {base}...{head} adds {} lines of Rust and Go in {} files: {} copies, and {} places that are no copy",
+        found.lines,
+        found.files,
+        found.findings.len(),
+        found.skipped.len()
+    );
+    ExitCode::from(found.exit_code())
 }
 
 /// Run every chapter, and write or check `docs/src/output/`.

@@ -8,7 +8,7 @@ use std::process::Command;
 use serde_yaml::Value;
 
 use crate::common::{
-    CommandExt, block_with, fake_bin, kubectl_args, kubectl_input, on_path, page_section,
+    CommandExt, block_with, fake_bin, go_line, kubectl_args, kubectl_input, on_path, page_section,
     path_with, recipe, repo_file, run_with_kubectl, script, steps, strings, text, toml_value, walk,
     workflow, workflow_text,
 };
@@ -506,10 +506,7 @@ fn the_dockerfile_pins_each_base_and_copies_the_binary_that_the_workflow_puts_in
         );
     }
     let go_mod = repo_file("observer/go.mod");
-    let go = go_mod
-        .lines()
-        .find_map(|l| l.strip_prefix("go "))
-        .expect("go.mod names the version of Go");
+    let go = go_line(&go_mod).expect("go.mod names the version of Go");
     assert!(
         bases[0].contains(&format!("golang:{go}@")),
         "the build stage runs the Go of the module: {}",

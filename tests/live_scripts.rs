@@ -5715,10 +5715,7 @@ fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_re
 #[test]
 fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_its_registry() {
     let mut stage = Stage::new(serde_json::json!({}));
-    stage.route(
-        "/v1/clusterprofiles/validate/packs",
-        r#"{"packs":{"results":[]}}"#,
-    );
+    stage.route(PROFILE_VALIDATE_PACKS, r#"{"packs":{"results":[]}}"#);
     let pack = PackFixture::new("cert-manager", "addon", "1.21.1", "pk-1", "reg-pub", "", "");
     stage.route(
         "/v1/packs",
@@ -5764,7 +5761,7 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
     );
     let wilma = std::fs::read_to_string(stage.path("out/strata-validate-wilma.yaml")).unwrap();
     assert!(wilma.contains("    layer: csi\n"), "{wilma}");
-    let validate = &stage.sent("POST", "/v1/clusterprofiles/validate/packs")[0];
+    let validate = &stage.sent("POST", PROFILE_VALIDATE_PACKS)[0];
     assert_eq!(validate["packs"][0]["layer"], "csi", "{validate}");
     let create = &stage.sent("POST", "/v1/clusterprofiles")[0]["spec"]["template"]["packs"][0];
     assert_eq!(
@@ -8092,7 +8089,7 @@ fn registry_kinds_slash_stage() -> Stage {
 /// `several` on standard error.
 fn registry_kinds_slash(several: &str) -> (Stage, String) {
     let mut stage = registry_kinds_slash_stage();
-    stage.strata_err("compare pack:strata-live-pack@1.0.0 *", 2, several);
+    stage.strata_err("snapshot pack:strata-live-pack@1.0.0 *", 2, several);
     let (_, steps) = stage.run("registry-kinds.sh", &[]);
     (stage, steps)
 }
@@ -8145,6 +8142,8 @@ esac
 exec "$(dirname "$0")/fake-strata-rules" "$@"
 "#;
 
+/// Issue #940: the step `slash-several` runs `snapshot <ref> --json -q`. The binary of the tests
+/// runs that command line against a stand-in Palette with two registries that have the version.
 #[test]
 fn registry_kinds_sh_gets_the_error_of_several_registries_as_json_from_a_command_line_that_strata_takes()
  {

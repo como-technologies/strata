@@ -13,8 +13,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
-use strata::api::MemoryApi;
 use strata::api::codes::INVALID_VARIABLE_CODE;
+use strata::api::{MASKED, MemoryApi};
 use strata::closed_set::ClosedSet;
 use strata::diff::{ChangeFlag, Status};
 use strata::model::input_type::InputType;
@@ -485,9 +485,15 @@ fn serve_packs_with(
 /// [`serve_versions`] of [`BARNEY`], where 1.3.1 holds [`packs_held`] and 1.4.0 holds
 /// [`packs_newest`].
 fn serve_move() -> MemoryApi {
+    serve_move_with(no_variables())
+}
+
+/// [`serve_move`], where the answer of the variables of 1.4.0 is `variables`. 1.3.1 has no
+/// variable.
+fn serve_move_with(variables: Value) -> MemoryApi {
     let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
     let api = serve_packs(api, (HELD, "1.3.1"), BARNEY, &packs_held());
-    serve_packs(api, (NEWEST, "1.4.0"), BARNEY, &packs_newest())
+    serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &packs_newest(), variables)
 }
 
 #[test]
@@ -633,12 +639,18 @@ fn serve_checked_move() -> MemoryApi {
     serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &newest, variables)
 }
 
-/// The line of the required variable of [`serve_checked_move`].
-fn owner_line() -> String {
+/// The line of a move that adds the one required variable `name` with no default value, such as
+/// owner of [`serve_checked_move`].
+fn required_line(name: &str) -> String {
     format!(
-        "the move adds the required variable owner with no default value: give it a value at the \
+        "the move adds the required variable {name} with no default value: give it a value at the \
          update, or Palette refuses the update with {INVALID_VARIABLE_CODE}"
     )
+}
+
+/// The move of the record of 1.3.1, the first profile of the report `r`, to 1.4.0.
+fn held_bump(r: &ops::BehindReport) -> &ops::Bump {
+    r.profiles[0].bump.as_ref().expect("1.3.1 is behind 1.4.0")
 }
 
 /// The line of the skip of [`serve_checked_move`]. The skip is a check of strata, so its line names
@@ -652,7 +664,7 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
     let api = serve_checked_move();
     let record = record_of(&api, HELD, dir.path(), "barney.json");
     let r = behind_of(&api, &[record], &WITH_IMPACT);
-    let bump = r.profiles[0].bump.as_ref().expect("1.3.1 is behind 1.4.0");
+    let bump = held_bump(&r);
     assert_eq!(
         bump.update_checks
             .required_variables
@@ -682,7 +694,7 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
         text.contains(&format!(
             "{} IDENTITY UPSTREAM\n      {}\n      {SKIP_LINE}\n",
             bump.impact,
-            owner_line()
+            required_line("owner")
         )),
         "{text}"
     );
@@ -691,7 +703,7 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
     assert!(
         markdown.contains(&format!(
             "<br>{}<br>{} |",
-            owner_line(),
+            required_line("owner"),
             strata::text::html_text(SKIP_LINE)
         )),
         "{markdown}"
@@ -737,7 +749,7 @@ fn compare_of_two_versions_of_one_profile_gives_the_checks_of_the_bump_and_no_ot
     let text = common::terminal()
         .render(&compared, &held, &newest, false)
         .unwrap();
-    for line in [owner_line().as_str(), SKIP_LINE] {
+    for line in [required_line("owner").as_str(), SKIP_LINE] {
         let note = |l: &str| l.starts_with("note ") && l.ends_with(line);
         assert!(text.lines().any(note), "{text}");
     }
@@ -773,14 +785,6 @@ fn compare_of_two_versions_of_one_profile_gives_the_checks_of_the_bump_and_no_ot
 fn the_move_names_a_required_dropdown_variable_with_no_default_option_and_not_one_with_a_default_option()
  {
     let dir = tempfile::tempdir().unwrap();
-    let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
-    let api = serve_packs_with(
-        api,
-        (HELD, "1.3.1"),
-        BARNEY,
-        &packs_held(),
-        json!({"variables": []}),
-    );
     // 1.4.0 adds two required dropdown variables with no default value. Palette gives the mark
     // `default` on each option, and only zone has an option with the mark
     let dropdown = |name: &str, default: bool| {
@@ -793,10 +797,10 @@ fn the_move_names_a_required_dropdown_variable_with_no_default_option_and_not_on
         v
     };
     let variables = json!({"variables": [dropdown("size", false), dropdown("zone", true)]});
-    let api = serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &packs_newest(), variables);
+    let api = serve_move_with(variables);
     let record = record_of(&api, HELD, dir.path(), "barney.json");
     let r = behind_of(&api, &[record], &WITH_IMPACT);
-    let bump = r.profiles[0].bump.as_ref().expect("1.3.1 is behind 1.4.0");
+    let bump = held_bump(&r);
     let required = bump.update_checks.required_variables.as_ref();
     assert_eq!(required.map(|r| r.names.clone()), Some(vec!["size".into()]));
 
@@ -819,6 +823,43 @@ fn the_move_names_a_required_dropdown_variable_with_no_default_option_and_not_on
     };
     assert_eq!(marks("zone"), [Value::Null, json!(true)]);
     assert_eq!(marks("size"), [Value::Null, Value::Null]);
+}
+
+/// The profile route serves `********` in place of a default value that is not empty of a
+/// sensitive variable, and `""` for no default value: see [`common::profile_route_variable`]. At
+/// the update, Palette takes the default value that the profile holds (#912).
+#[test]
+fn the_move_names_a_required_sensitive_variable_with_no_default_value_and_not_one_with_the_mask() {
+    let dir = tempfile::tempdir().unwrap();
+    // 1.4.0 adds two required sensitive variables, and only the token has a default value
+    let (token, password) = ("api_token", "db_password");
+    let stored = [
+        common::variable(token, token, "a-token-of-the-profile", true),
+        common::variable(password, password, "", true),
+    ];
+    let served: Vec<Value> = stored.iter().map(common::profile_route_variable).collect();
+    let defaults: Vec<Value> = served.iter().map(|v| v["defaultValue"].clone()).collect();
+    assert_eq!(defaults, [json!(MASKED), json!("")]);
+    let api = serve_move_with(json!({"variables": served}));
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let r = behind_of(&api, &[record], &WITH_IMPACT);
+    let bump = held_bump(&r);
+    let required = bump.update_checks.required_variables.as_ref();
+    assert_eq!(
+        required.map(|r| r.names.clone()),
+        Some(vec![password.into()])
+    );
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    assert!(text.contains(&required_line(password)), "{text}");
+    assert!(!text.contains(token), "{text}");
+
+    // compare of the two versions gives the same checks
+    let (held, newest) = (
+        snapshot_of(&api, HELD).unwrap(),
+        snapshot_of(&api, NEWEST).unwrap(),
+    );
+    let compared = ops::compare(&held, &newest, CREATED);
+    assert_eq!(compared.update_checks, bump.update_checks);
 }
 
 #[test]

@@ -217,55 +217,65 @@ fn retry_after_seconds(header: Option<&str>) -> Option<u64> {
 #[path = "../../tests/common/palette.rs"]
 pub(crate) mod routes;
 
+// The small HTTP server of the tests of strata, in the file that they use. The crate loads the file
+// here alone, and the other unit tests read it as `api::server`. The unit tests use some of its
+// items, and the other items are dead code.
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../../tests/common/server.rs"]
+pub(crate) mod server;
+
 #[cfg(test)]
 mod tests {
     use super::routes::DOWNLOAD_LIMIT_REFUSAL;
+    use super::server::{HttpAnswer, serve_each};
     use super::*;
     use crate::api::download_path;
+    use crate::closed_set::ClosedSet;
     use crate::config::KEY_VARS;
 
-    /// One answer from a server on this machine, so the reading of a body needs no network.
-    fn serve_once(status_line: &str, body: &str) -> String {
-        serve_each(&[(status_line, body.as_bytes())]).0
+    /// The address of a server on this machine that gives one answer with `status` and the JSON
+    /// text `body`. So the read of a body needs no network.
+    fn serve_once(status: u16, body: &str) -> String {
+        serve_each(vec![HttpAnswer::json(status, body)]).0
     }
 
-    /// The answers `answers`, each a status line and the bytes of a body, one for each request in
-    /// turn, from a server on this machine. The receiver gives the head of each request that the
-    /// server read, in the same order.
-    fn serve_each(answers: &[(&str, &[u8])]) -> (String, std::sync::mpsc::Receiver<String>) {
+    /// The server of the tests gets the head of a request in one write and its body in a second
+    /// write. The name of the header `ProjectUid` is in small letters.
+    #[test]
+    fn the_server_of_the_tests_reads_a_body_after_the_head_and_the_name_of_a_header_with_no_case() {
         use std::io::{Read, Write};
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
-        let answers: Vec<Vec<u8>> = answers
-            .iter()
-            .map(|(status_line, body)| {
-                let mut answer = format!(
-                    "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                )
-                .into_bytes();
-                answer.extend_from_slice(body);
-                answer
-            })
-            .collect();
-        let (sent, request) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            for answer in answers {
-                let (mut s, _) = listener.accept().unwrap();
-                let mut buf = [0u8; 4096];
-                let n = s.read(&mut buf).unwrap_or(0);
-                let _ = sent.send(String::from_utf8_lossy(&buf[..n]).to_string());
-                s.write_all(&answer).unwrap();
-            }
-        });
-        (format!("http://{addr}"), request)
+        let (url, requests) = serve_each(vec![HttpAnswer::json(201, "{}")]);
+        let mut stream = std::net::TcpStream::connect(url.trim_start_matches("http://")).unwrap();
+        stream
+            .write_all(b"POST /v1/x?y=1 HTTP/1.1\r\nprojectuid: p1\r\nContent-Length: 7\r\n\r\n")
+            .unwrap();
+        stream.flush().unwrap();
+        // a gap between the two writes, so that the body is not in the first read of the server
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        stream.write_all(br#"{"a":1}"#).unwrap();
+        let mut answer = String::new();
+        stream.read_to_string(&mut answer).unwrap();
+        assert!(answer.starts_with("HTTP/1.1 201 "), "{answer}");
+        assert!(answer.ends_with("\r\n\r\n{}"), "{answer}");
+        let request = requests.lock().unwrap()[0].clone();
+        assert_eq!(
+            (request.method.as_str(), request.target.as_str()),
+            (Method::Post.as_str(), "/v1/x?y=1")
+        );
+        assert_eq!(request.project(), Some("p1"), "{request:?}");
+        assert_eq!(request.json(), serde_json::json!({"a": 1}));
     }
 
     #[test]
     fn the_proof_of_a_key_belongs_to_the_key_so_a_second_client_with_another_key_names_the_key() {
-        let denied = routes::filters_denied();
-        let forbidden = ("403 Forbidden", denied.as_bytes());
-        let (url, _) = serve_each(&[("200 OK", "{}".as_bytes()), forbidden, forbidden, forbidden]);
+        let forbidden = HttpAnswer::json(403, routes::filters_denied());
+        let (url, _) = serve_each(vec![
+            HttpAnswer::json(200, "{}"),
+            forbidden.clone(),
+            forbidden.clone(),
+            forbidden,
+        ]);
         // the first client: an answer with a 2xx status proves its key, so its denial is the role
         let first_key = "first-key";
         let first = HttpApi::new(Config::new(url.as_str(), first_key));
@@ -289,17 +299,24 @@ mod tests {
     #[test]
     fn a_file_is_the_bytes_of_the_body_of_a_request_that_accepts_a_file() {
         let file = [0x1f, 0x8b, 0x08, 0x00, 0xff, 0x00];
-        let (url, request) = serve_each(&[("200 OK", &file)]);
+        let (url, requests) = serve_each(vec![HttpAnswer {
+            status: 200,
+            kind: FILE_TYPE,
+            body: file.to_vec(),
+        }]);
         let api = HttpApi::new(Config::new(url, "k"));
         assert_eq!(api.get_file(&download_path("u1")).unwrap(), file);
-        let head = request.recv().unwrap().to_ascii_lowercase();
-        assert!(head.contains("accept: application/octet-stream"), "{head}");
-        assert!(!head.contains("application/json"), "{head}");
+        let request = requests.lock().unwrap()[0].clone();
+        assert_eq!(request.header("Accept"), Some(FILE_TYPE), "{request:?}");
+        assert!(
+            request.headers.iter().all(|(_, v)| !v.contains(JSON_TYPE)),
+            "{request:?}"
+        );
     }
 
     #[test]
     fn a_file_that_palette_refuses_carries_its_status_and_body() {
-        let (url, _) = serve_each(&[("429 Too Many Requests", DOWNLOAD_LIMIT_REFUSAL.as_bytes())]);
+        let (url, _) = serve_each(vec![HttpAnswer::json(429, DOWNLOAD_LIMIT_REFUSAL)]);
         let api = HttpApi::new(Config::new(url, "k"));
         match api.get_file(&download_path("u1")) {
             Err(Error::Api { status, body, .. }) => {
@@ -312,7 +329,7 @@ mod tests {
 
     #[test]
     fn a_204_with_no_body_is_null_and_not_a_body_that_is_not_json() {
-        let url = serve_once("204 No Content", "");
+        let url = serve_once(204, "");
         let api = HttpApi::new(Config::new(url, "k"));
         let v = api
             .post_json("/v1/clouds/aws/account/validate", &serde_json::json!({}))
@@ -322,7 +339,7 @@ mod tests {
 
     #[test]
     fn a_200_with_no_body_is_not_an_answer() {
-        let url = serve_once("200 OK", "");
+        let url = serve_once(200, "");
         let api = HttpApi::new(Config::new(url, "k"));
         let err = api.get_json("/v1/spectroclusters").unwrap_err().to_string();
         assert!(err.contains("/v1/spectroclusters"), "{err}");
@@ -331,7 +348,7 @@ mod tests {
     #[test]
     fn a_4xx_carries_its_status_and_body() {
         let url = serve_once(
-            "400 Bad Request",
+            400,
             r#"{"code":"InvalidParam","message":"Node pool size should be multiple of 3"}"#,
         );
         let api = HttpApi::new(Config::new(url, "k"));
@@ -354,7 +371,7 @@ mod tests {
         let body = format!(
             r#"{{"code":"ResourceNotFound","message":"API Key '{key}' is not found","details":"{key} {key}"}}"#
         );
-        let url = serve_once("401 Unauthorized", &body);
+        let url = serve_once(401, &body);
         let api = HttpApi::new(Config::new(url, key.as_str()));
         let err = api.get_json(routes::PROJECT_LISTING).unwrap_err();
         match &err {

@@ -93,6 +93,13 @@ impl RequiredVariables {
 /// when it is the label of an option. When it is not, Palette accepts a default option. A record
 /// of strata 0.33 and before holds no default mark, so a dropdown variable of such a record has no
 /// default option here.
+///
+/// [`MASKED`](crate::api::MASKED) is a default value here. The target of a move is a profile
+/// version that Palette holds, and its variables come from the variables route of the profile.
+/// That route gives the mask only in place of a default value that is not empty. At the update,
+/// Palette takes the default value that the profile holds. The code of Palette shows it; no live
+/// run shows it yet. The variables hash reads the mask as empty, because the variables route of a
+/// cluster gives it also for no default value: see [`Variable::to_value`].
 fn takes_a_default(v: &Variable) -> bool {
     if !v.is_dropdown() {
         return !v.default_value.is_empty();

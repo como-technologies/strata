@@ -118,6 +118,22 @@ pub fn profile_route(uid: &str) -> String {
     format!("/v1/clusterprofiles/{uid}")
 }
 
+/// The route of the check of the name `name` and the version `version` of a new profile.
+pub fn validate_name_route(name: &str, version: &str) -> String {
+    format!("/v1/clusterprofiles/validate/name?name={name}&version={version}")
+}
+
+/// The import validate route.
+pub const IMPORT_ROUTE: &str = "/v1/clusterprofiles/import/validate";
+
+/// The route that asks Palette if it takes the packs of a new profile.
+pub const PROFILE_VALIDATE_PACKS: &str = "/v1/clusterprofiles/validate/packs";
+
+/// The route that asks Palette if it takes the packs of an update of the profile version `uid`.
+pub fn update_validate_packs_route(uid: &str) -> String {
+    format!("{}/validate/packs", profile_route(uid))
+}
+
 /// The template of the route of a profile version, with the text `{uid}` for the segment that varies.
 /// The log of the unknown values names a read by this template, and never by a real uid.
 pub const PROFILE_TEMPLATE: &str = "/v1/clusterprofiles/{uid}";
@@ -312,6 +328,16 @@ pub fn pack_listing_route(name: &str) -> String {
 /// tags.
 pub fn pack_entity_route(name: &str, registry: &str) -> String {
     format!("/v1/packs/{name}/registries/{registry}")
+}
+
+/// The answer of [`pack_entity_route`], with one row of its list `tags` for each pair of `tags`. A
+/// pair holds a tag and the uid of the pack that the tag points at.
+pub fn pack_entity_answer(tags: &[(&str, &str)]) -> Value {
+    let rows: Vec<Value> = tags
+        .iter()
+        .map(|(tag, pack)| json!({"tag": tag, "packUid": pack}))
+        .collect();
+    json!({ "tags": rows })
 }
 
 /// The registry listing, `GET /v1/registries/metadata`.

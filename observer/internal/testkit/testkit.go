@@ -122,11 +122,8 @@ const (
 	// the JSON of the route. The list is empty, and not null.
 	AsksRoute = "/v1/asks"
 	NoAnswers = `"asks":[]`
-	// NoErrorVerdict, RefusesVerdict, and NoAnswerVerdict are the verdicts of an answer of the kind no-error, refuses, and
-	// no-answer, in the JSON of an answer.
-	NoErrorVerdict  = `"verdict":"no-error"`
-	RefusesVerdict  = `"verdict":"refuses"`
-	NoAnswerVerdict = `"verdict":"no-answer"`
+	// NoErrorVerdict is the verdict of an answer of the kind no-error, in the JSON of an answer.
+	NoErrorVerdict = `"verdict":"no-error"`
 	// KubeHost and KubePort are the variables of the address of the API server that the kubelet gives a pod.
 	KubeHost = "KUBERNETES_SERVICE_HOST"
 	KubePort = "KUBERNETES_SERVICE_PORT"
@@ -141,10 +138,10 @@ const (
 	FaviconDark  = "favicon-dark.svg"
 	// JSONType is the Content-Type of a document of JSON.
 	JSONType = "application/json"
-	// LoopbackHost is the Host of a request to the server of the page through a port-forward. FetchSite is the header
-	// that a browser sets on a fetch, and SameOrigin is its value on a fetch of the page itself. The server refuses a
-	// POST with no SameOrigin.
-	LoopbackHost = "127.0.0.1:8080"
+	// LoopbackHost is the Host of a request to the server of the page through the port-forward of `just observer-open`,
+	// on port 18080. FetchSite is the header that a browser sets on a fetch, and SameOrigin is its value on a fetch of the
+	// page itself. The server refuses a POST with no SameOrigin.
+	LoopbackHost = "127.0.0.1:18080"
 	FetchSite    = "Sec-Fetch-Site"
 	SameOrigin   = "same-origin"
 	// HeaderPolicy and HeaderNoSniff are two headers that the server sets on each answer.
@@ -158,9 +155,8 @@ const (
 	// is the key of the move of dex from 2.42.0 to 2.44.0.
 	KubernetesMove = "/" + KubernetesFrom + "->1.36.2"
 	DexMove        = "/" + DexFrom + "->2.44.0"
-	// KubernetesKey is the key of the pack kubernetes, and KubernetesDiff ends the route of its diff in a profile.
-	KubernetesKey  = "k8s/kubernetes"
-	KubernetesDiff = "/" + KubernetesKey + "/diff"
+	// KubernetesKey is the key of the pack kubernetes.
+	KubernetesKey = "k8s/kubernetes"
 	// DexValuesHead is the head of the diff of the values of dex in the dev data. NoEOL is the note of a diff for a side
 	// with no newline at its end.
 	DexValuesHead = "--- a: " + DexKey + " values\n+++ b: " + DexKey + " values\n"
@@ -289,9 +285,24 @@ func Get(h http.Handler, path string) *httptest.ResponseRecorder {
 	return Serve(h, http.MethodGet, path, LoopbackHost, "")
 }
 
+// packRoute gives the route of the pack key of the profile. The routes of its question and of its diff start with it.
+func packRoute(profile, key string) string {
+	return "/v1/packs/" + profile + "/" + key
+}
+
 // AskPath gives the route of the question to Palette for the move of the pack key of the profile.
 func AskPath(profile, key string) string {
-	return "/v1/packs/" + profile + "/" + key + "/ask"
+	return packRoute(profile, key) + "/ask"
+}
+
+// DiffPath gives the route of the diff of the pack key of the profile on the side, such as cluster. An empty side gives
+// the route with no side.
+func DiffPath(profile, key, side string) string {
+	path := packRoute(profile, key) + "/diff"
+	if side == "" {
+		return path
+	}
+	return path + "?side=" + side
 }
 
 // DexAsk is the route of the question to Palette for the move of dex in the dev data.
