@@ -1,0 +1,6 @@
+{
+  "notChecked": [
+    {"cause":"no-upstream-digest","profiles":["wilma-gateway@3.0.4"],"packs":["addon/traefik"],"registry":""}
+  ],
+  "limits": {"imagesNamedByATag":3,"helmPacks":1,"maskedPaths":0}
+}

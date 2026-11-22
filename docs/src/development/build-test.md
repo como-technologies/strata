@@ -82,9 +82,11 @@ newer versions. `observer-1` is the tenant before the edit, with no finding.
 `images`, `images-split`, `images-off`, and `images-unread` show the read of the pods.
 Its sets `asks` and `text-too-large` show the answers of Palette and the cap of the text.
 Its sets `alerts` and `alerts-unset` show the Alerts screen with rules and with no alert.
-Its set `moved-drift` shows a finding on a version that the cluster no longer runs, and
-`update-checks` and `profile-checks` show the checks of strata.
-[Try each state](./observer-api.md#try-each-state) lists every set.
+Its set `moved-drift` shows a finding on a version that the cluster no longer runs. Its
+set `moved-unchecked` shows a cause of "Not checked" on such a version.
+
+The sets `update-checks` and `profile-checks` of `just observer-dev` show the checks of
+strata. [Try each state](./observer-api.md#try-each-state) lists every set.
 
 `scripts/observer-lib.sh` holds the functions that start and stop the stand-in.
 It also holds `cluster_uid`, which gives the uid of a cluster by its name. The

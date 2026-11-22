@@ -38,7 +38,9 @@
 //
 // The set ok holds the record of wilma-gateway@3.0.4, a version that the cluster no longer runs. The set
 // moved-drift holds that record with a finding: a person edited the published version after the move. A
-// finding wins, so the record is a drift. It still has no newer version, and no pack of it is current.
+// finding wins, so the record is a drift. It still has no newer version, and no pack of it is current. The set
+// moved-unchecked names moved-drift in a file base. It holds that record with no finding and with a cause of Not
+// checked: strata could not read the upstream digest of traefik.
 package devdata
 
 import (
@@ -98,8 +100,10 @@ const (
 	StateAlerts      State = "alerts"
 	StateAlertsUnset State = "alerts-unset"
 
-	// The state of a move. Moved-drift holds a record with a finding of a version that the cluster no longer runs.
-	StateMovedDrift State = "moved-drift"
+	// The states of a move. Moved-drift holds a record with a finding of a version that the cluster no longer runs.
+	// Moved-unchecked holds that record with no finding and with a cause of Not checked.
+	StateMovedDrift     State = "moved-drift"
+	StateMovedUnchecked State = "moved-unchecked"
 
 	// The states of the checks of strata. Update-checks holds answers of Palette with the checks of the update that strata gives
 	// beside them. The checks are for a move of Kubernetes that skips a minor version, and for moves that add required
@@ -112,7 +116,8 @@ const (
 // States lists the sets, in the order that the recipe `observer-dev` names them.
 var States = []State{StateOK, StateQuiet, StateFirstLoad, StateNoRecords, StateStale, StateLost, StateFirstSeen,
 	StateStaleUnchecked, StateLostUnchecked, StateReadError, StateImages, StateImagesSplit, StateImagesOff, StateImagesUnread,
-	StateAsks, StateTextTooLarge, StateAlerts, StateAlertsUnset, StateMovedDrift, StateUpdateChecks, StateProfileChecks}
+	StateAsks, StateTextTooLarge, StateAlerts, StateAlertsUnset, StateMovedDrift, StateMovedUnchecked, StateUpdateChecks,
+	StateProfileChecks}
 
 // Reference is the time that the data is written for. Load moves each time of a set by the
 // difference between now and Reference, so that the ages on the page are those of the data.

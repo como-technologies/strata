@@ -1206,6 +1206,12 @@ field, a value, an input, or an option is in the sections above.
   was there. A file at that path stays a file. A refusal of the key in that
   project is the new kind `project-denied`, which names the project. See
   [Refs](./refs.md) and [Errors](./errors.md).
+- **The filter "Not checked" of the observer shows more profiles.** It shows each profile that a
+  cause of "Not checked" names. Before, it showed a profile only when the profile was
+  `not-checked` or `no-record`, or when a pack of it was `not-checked`. It did not show a record
+  that the cluster does not run, or a profile `newer` with a cause `pin-error`. The tile and the
+  screen "Not checked" counted these causes. A check that reads the count of the filter must
+  read the new count. See [Not checked](../development/observer.md#not-checked).
 
 ### For a user of the CI drop-ins
 

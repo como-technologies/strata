@@ -323,7 +323,6 @@ const podsOff = () => D.images.pods === PODS.OFF;
 const versionsRead = () => !!D.cluster.versions.readAt;
 const podsRead = () => D.images.pods === PODS.READ;
 const imageNum = n => podsRead() ? n : "-";
-const asCount = st => st === STATUS.NO_RECORD ? STATUS.NOT_CHECKED : st;
 const packName = key => key.slice(key.indexOf("/") + 1);
 const profileOf = subject => D.profiles.find(p => subjectOf(p) === subject);
 const impactOf = i => IMPACT[i] || ["y", i];
@@ -523,8 +522,9 @@ function newerStateOf(x, p) {
 const movePackOf = (x, key) => x.newerVersion && x.newerVersion.move ? x.newerVersion.move.packs.find(q => q.key === key) : undefined;
 // packOfRow finds the pack of a profile that a row of /v1/newer moves. A profile that is not known gives null.
 const packOfRow = (profile, r) => profile ? profile.packs.find(q => q.name === r.name && q.version === r.version) : null;
-// causeNames says that a row of Not checked with the cause names the profile, and the pack too when a key is given.
-const causeNames = (cause, subject, key) => D.notChecked.some(r => r.cause === cause && r.profiles.includes(subject) && (key === undefined || r.packs.includes(key)));
+// causeNames says that a row of Not checked names the profile. The row has the cause when a cause is given, and it names the pack too
+// when a key is given.
+const causeNames = (cause, subject, key) => D.notChecked.some(r => (cause === undefined || r.cause === cause) && r.profiles.includes(subject) && (key === undefined || r.packs.includes(key)));
 // moveUnread says that strata could not compare the two versions of a pack. The row has no counts, and Not checked names the pack.
 const moveUnread = (subject, p) => !!p && causeNames(CAUSE.PIN_ERROR, subject, p.key);
 const impactCell = (subject, p, row) => moveUnread(subject, p) ? badge("y", "Not read") : impactBadge(row.impact);
