@@ -36,6 +36,10 @@ type Content struct {
 	Unreadable []string
 	// Pods is what the read of the pods gave. It is empty when the observer does not read pods.
 	Pods PodRead
+	// Member is the uid of the cluster when the cluster is a member of a set of clusters, and empty with no
+	// --clusters. In a set, the cluster runs the records of its profiles by uid, and the id of a finding holds the uid
+	// of the cluster.
+	Member string
 }
 
 // Versions is what one good versions cycle read. Moves holds a Move for each pin that is behind,

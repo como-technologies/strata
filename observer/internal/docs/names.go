@@ -13,6 +13,7 @@ const (
 	VerifySummarySchema = "strata-verify-summary/1"
 	DiffSchema          = "strata-diff/1"
 	BehindSchema        = "strata-behind/1"
+	ListSchema          = "strata-list/1"
 )
 
 // The kinds of an error that the observer names. The first four come from strata. The others come
@@ -108,6 +109,9 @@ func (d Behind) SchemaID() string { return d.Schema }
 
 // SchemaID gives the id that the document states.
 func (d ClusterRead) SchemaID() string { return d.Schema }
+
+// SchemaID gives the id that the document states.
+func (d ClusterList) SchemaID() string { return d.Schema }
 
 // statusPrefix matches the start of a reason that strata gives for a request that failed:
 // `HTTP <status>: <body>`. The other reasons are the message of a request that did not complete.

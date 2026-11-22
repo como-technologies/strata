@@ -104,3 +104,17 @@ func (st *Store) Settle(queue []Queued, done []bool, now time.Time) {
 	}
 	st.Outbox = kept
 }
+
+// Leave drops each item of a cluster that left a set, and each message that opens only such an item. It sends
+// no message: no check showed that a finding of the cluster is fixed. It gives the number of items that it dropped.
+func (st *Store) Leave(clusterUID string) int {
+	n := 0
+	for id, it := range st.Items {
+		if it.ClusterUID == clusterUID {
+			delete(st.Items, id)
+			st.cancel(id)
+			n++
+		}
+	}
+	return n
+}

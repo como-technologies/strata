@@ -218,13 +218,6 @@ func (o *Observer) readCluster(ctx context.Context, dir string) (docs.ClusterRea
 	return decode[docs.ClusterRead](raw, docs.SnapshotSchema)
 }
 
-// runsProfile says that the cluster runs the version of the profile of a record.
-func runsProfile(read docs.ClusterRead, r docs.Record) bool {
-	return slices.ContainsFunc(read.Source.Cluster.Profiles, func(p docs.ClusterProfile) bool {
-		return p.Name == r.Source.Name && p.Version == r.Source.Version
-	})
-}
-
 // compareRecords gives each record its `verify` row and, when the cluster runs it, its `compare` with
 // the cluster side. The side comes from the raw answers, so it makes no request. The records compare
 // at the same time, as many as the pool of processes lets, and keep their order. When a side or a
@@ -239,7 +232,7 @@ func (o *Observer) compareRecords(ctx context.Context, dir string, entries []bas
 		if row, ok := rows[names[i]]; ok {
 			out[i].Row = &row
 		}
-		if out[i].Cluster.Runs = runsProfile(read, e.Record); out[i].Cluster.Runs {
+		if out[i].Cluster.Runs = o.runs(read, e.Record); out[i].Cluster.Runs {
 			o.expect(ctx, 2) // the side, and its compare
 			wg.Add(1)
 			go func() {

@@ -304,12 +304,16 @@ type Error struct {
 	Status int    `json:"status"`
 }
 
-// Record is the part of a strata-snapshot/1 profile record that the observer reads.
+// Record is the part of a strata-snapshot/1 profile record that the observer reads. In a set of clusters, the
+// observer knows a record by its UID: two projects can hold one name and version with two uids. Scope is the scope of
+// the profile, which a record of strata 0.35.0 and before does not give.
 type Record struct {
 	Schema string `json:"schema"`
 	Tool   Tool   `json:"tool"`
 	Source struct {
+		UID        string `json:"uid"`
 		ProjectUID string `json:"projectUid"`
+		Scope      string `json:"scope"`
 		Name       string `json:"name"`
 		Version    string `json:"version"`
 		Type       string `json:"type"`
@@ -358,8 +362,9 @@ type ClusterRead struct {
 	} `json:"source"`
 }
 
-// ClusterProfile is one profile that a cluster runs.
+// ClusterProfile is one profile that a cluster runs. A set of clusters finds the record of a profile by its UID.
 type ClusterProfile struct {
+	UID     string `json:"uid"`
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	Type    string `json:"type"`
@@ -385,4 +390,19 @@ func (d *Diff) CapText(limit int) {
 		p.Manifests = manifests
 		p.TextTooLarge = true
 	}
+}
+
+// ClusterList is the part of strata-list/1 that the search of a set of clusters reads: the clusters of a label or of
+// a saved tag filter. It holds no label and no profile.
+type ClusterList struct {
+	Schema   string          `json:"schema"`
+	Clusters []ListedCluster `json:"clusters"`
+}
+
+// ListedCluster is one cluster that a search selects, with its project.
+type ListedCluster struct {
+	UID         string `json:"uid"`
+	Name        string `json:"name"`
+	ProjectUID  string `json:"projectUid"`
+	ProjectName string `json:"projectName"`
 }

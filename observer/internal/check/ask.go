@@ -51,7 +51,7 @@ func (o *Observer) Ask(ctx context.Context, subject, key string) (model.Answer, 
 	if a, ok := o.cachedAsk(k); ok && a.Answered() {
 		return a, true, nil
 	}
-	answer, found, err := o.askPalette(ctx, subject, key, pin)
+	answer, found, err := o.askPalette(o.keyed(ctx, subject), subject, key, pin)
 	if err != nil || !found {
 		return model.Answer{}, false, err
 	}
@@ -69,7 +69,11 @@ func (o *Observer) askPalette(ctx context.Context, subject, key string, pin docs
 	if err != nil {
 		return model.Answer{}, false, failure(docs.KindIO)
 	}
+	uid := o.memberRecord(subject)
 	i := slices.IndexFunc(set.Entries, func(e baseline.Entry) bool {
+		if uid != "" {
+			return e.Record.Source.UID == uid
+		}
 		return model.Subject(e.Record.Source.Name, e.Record.Source.Version) == subject
 	})
 	if i < 0 {

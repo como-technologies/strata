@@ -87,6 +87,7 @@ func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
 		{"behind", Behind{}},
 		{"snapshot", Record{}},
 		{"snapshot", ClusterRead{}},
+		{"list", ClusterList{}},
 	} {
 		out, err := exec.Command(bin, "schema", c.kind).Output()
 		if err != nil {

@@ -72,7 +72,6 @@ func TestAFileThatCannotBeUsedStopsWithTheLineOfTheFault(t *testing.T) {
 		{"a level that is not in the list", testkit.OneChannel(platformOncall, "f", `{"level": "node", "news": "drift", "send": "now", "to": "platform-oncall"}`), 4, "level must be"},
 		{"news that is not in the list", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "news": "health", "send": "now", "to": "platform-oncall"}`), 4, "news must be"},
 		{"a profile rule with no match", testkit.OneChannel(platformOncall, "f", `{"level": "profile", "news": "drift", "send": "now", "to": "platform-oncall"}`), 4, "needs match"},
-		{"a cluster rule with a match", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "match": "x", "news": "drift", "send": "now", "to": "platform-oncall"}`), 4, "no match"},
 		{"lost below the cluster", testkit.OneChannel(platformOncall, "f", `{"level": "profile", "match": "x", "news": "lost", "send": "now", "to": "platform-oncall"}`), 4, "about the cluster"},
 		{"a way to send that is not in the list", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "news": "drift", "send": "soon", "to": "platform-oncall"}`), 4, "send must be"},
 		{"a rule for a channel that the file lacks", testkit.OneChannel(platformOncall, "f", `{"level": "cluster", "news": "drift", "send": "now", "to": "nobody"}`), 4, "name a channel"},
@@ -167,6 +166,18 @@ func TestAProfileRuleNamesTheProfileOrNameAndVersion(t *testing.T) {
 	p := Rule{Level: LevelPack, Match: testkit.DexKey}
 	if !p.covers(Subject{Packs: []string{testkit.DexKey}}) || p.covers(Subject{Packs: []string{"os/dex"}}) {
 		t.Error("a pack rule with a key covers that key only")
+	}
+}
+
+// A cluster rule of a set can name one cluster in match. With no match, it covers each cluster.
+func TestAClusterRuleWithAMatchCoversThatClusterOfASetOnly(t *testing.T) {
+	r := Rule{Level: LevelCluster, Match: testkit.PaymentsName}
+	if !r.covers(Subject{Cluster: testkit.PaymentsName}) || r.covers(Subject{Cluster: "ledger"}) || r.covers(Subject{}) {
+		t.Error("a cluster rule with a match covers that cluster only")
+	}
+	r.Match = ""
+	if !r.covers(Subject{Cluster: "ledger"}) || !r.covers(Subject{}) {
+		t.Error("a cluster rule with no match covers each cluster")
 	}
 }
 

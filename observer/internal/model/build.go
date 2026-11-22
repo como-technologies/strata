@@ -127,11 +127,14 @@ type view struct {
 	findingPacks     map[string]bool
 	packlessProfiles map[string]bool
 	findings         []Finding
+	// member says that the cluster is a member of a set, so a profile row names its uid.
+	member bool
 }
 
 func newView(in Input, c *causes) *view {
 	v := &view{causes: c, registries: map[string]string{}, newest: map[string]string{}, carried: map[string]Carried{}, newerProfiles: map[string]bool{},
 		newerVersions: map[string]NewerVersion{}, findingProfiles: map[string]bool{}, findingPacks: map[string]bool{}, packlessProfiles: map[string]bool{}}
+	v.member = in.Content != nil && in.Content.Member != ""
 	if in.Content != nil {
 		v.nameRegistries(in.Content.Records)
 	}
@@ -237,7 +240,11 @@ func (s *Summary) fromContent(in Input, v *view) {
 		s.Profiles = append(s.Profiles, profileRow(r, v))
 	}
 	for _, p := range noRecordProfiles(c) {
-		s.Profiles = append(s.Profiles, Profile{Name: p.Name, Version: p.Version, Type: p.Type, Status: StatusNoRecord, Packs: []Pack{}})
+		row := Profile{Name: p.Name, Version: p.Version, Type: p.Type, Status: StatusNoRecord, Packs: []Pack{}}
+		if v.member {
+			row.UID = p.UID
+		}
+		s.Profiles = append(s.Profiles, row)
 	}
 	s.Limits = limitsOf(c)
 }
@@ -247,6 +254,14 @@ func profileRow(r Record, v *view) Profile {
 	p := Profile{Name: r.Doc.Source.Name, Version: r.Doc.Source.Version, Type: r.Doc.Source.Type, Scope: ScopeTenant, Packs: []Pack{}}
 	if r.Doc.Source.ProjectUID != "" {
 		p.Scope = ScopeProject
+	}
+	// a record of strata 0.36.0 and later names the scope of its profile. A profile of the tenant that a project
+	// records has the uid of the project too
+	if r.Doc.Source.Scope != "" {
+		p.Scope = r.Doc.Source.Scope
+	}
+	if v.member {
+		p.UID = r.Doc.Source.UID
 	}
 	if r.Row != nil {
 		p.Published = &Published{Status: r.Row.Status, RootRecorded: r.Row.RootRecorded, RootLive: r.Row.RootLive}

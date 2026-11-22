@@ -115,7 +115,7 @@ func (o *Observer) newerPack(ctx context.Context, subject, key string) (docs.Pac
 	var pack docs.Pack
 	var found bool
 	err := o.withCycleDir(func(dir string) error {
-		diff, err := o.compareMove(ctx, dir, pin)
+		diff, err := o.compareMove(o.keyed(ctx, subject), dir, pin)
 		if err != nil {
 			return err
 		}

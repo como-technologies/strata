@@ -56,6 +56,21 @@ type Source interface {
 	StartCycle(name string) (model.Start, bool)
 }
 
+// Set is what the server serves for a set of clusters, with --clusters. Each cluster of the set is a Source of its
+// own, under /v1/clusters/{uid}. The alerts and the cycles belong to the whole set.
+type Set interface {
+	// Clusters gives the summary of the set: a row for each cluster, the projects, and the selectors.
+	Clusters() model.SetSummary
+	// Shared gives each profile version that a cluster of the set runs, with its copies.
+	Shared() []model.Shared
+	// Member gives the Source of one cluster. The second result is false for a cluster that is not in the set.
+	Member(uid string) (Source, bool)
+	// Alerts gives the rules of the alerts of the set with their states.
+	Alerts() alert.View
+	// StartCycle starts a cycle of the set: see Source.StartCycle.
+	StartCycle(name string) (model.Start, bool)
+}
+
 // Tier says what the answer of a route carries.
 type Tier string
 
@@ -93,6 +108,10 @@ const (
 	patternAsks       = "/v1/asks"
 	patternAsk        = "/v1/packs/{profile}/{layer}/{name}/ask"
 	patternCycle      = "/v1/cycles/{cycle}"
+	// The routes of a set of clusters. Each route of one cluster, but the health, is also under patternMember.
+	patternClusters = "/v1/clusters"
+	patternShared   = "/v1/shared"
+	patternMember   = "/v1/clusters/{uid}"
 )
 
 // The header that a browser sets on a request, and the value of a request from the page itself. A
@@ -102,10 +121,12 @@ const (
 	sameOrigin      = "same-origin"
 )
 
-// Server serves a Source. Page is the handler of the route `/` and of each path that no route owns.
-// With a nil Page, these paths get 404.
+// Server serves a Source, or a Set. Page is the handler of the route `/` and of each path that no route owns.
+// With a nil Page, these paths get 404. With a Set, the server serves the routes of the set, and each route of one
+// cluster under /v1/clusters/{uid}. With no Set, it serves the routes of the Source, as with no --clusters.
 type Server struct {
 	Source Source
+	Set    Set
 	Page   http.Handler
 }
 
@@ -114,26 +135,82 @@ type entry struct {
 	handler http.HandlerFunc
 }
 
-// table lists every route. The server registers no other route. A test fails when a summary route
-// has no line in the table of the sentinel test.
-func (s *Server) table() []entry {
-	return []entry{
-		{Route{patternHealth, http.MethodGet, TierHealth}, s.health},
-		{Route{patternCluster, http.MethodGet, TierSummary}, s.cluster},
-		{Route{patternFindings, http.MethodGet, TierSummary}, s.findings},
-		{Route{patternProfiles, http.MethodGet, TierSummary}, s.profiles},
-		{Route{patternProfile, http.MethodGet, TierSummary}, s.profile},
-		{Route{patternNewer, http.MethodGet, TierSummary}, s.newer},
-		{Route{patternNotChecked, http.MethodGet, TierSummary}, s.notChecked},
-		{Route{patternEvents, http.MethodGet, TierSummary}, s.events},
-		{Route{patternImages, http.MethodGet, TierSummary}, s.images},
-		{Route{patternImage, http.MethodGet, TierSummary}, s.image},
-		{Route{patternAlerts, http.MethodGet, TierSummary}, s.alerts},
-		{Route{patternPackDiff, http.MethodGet, TierDetail}, s.packDiff},
-		{Route{patternAsks, http.MethodGet, TierDetail}, s.asks},
-		{Route{patternAsk, http.MethodPost, TierDetail}, s.ask},
-		{Route{patternCycle, http.MethodPost, TierCycle}, s.startCycle},
+// sourced is the handler of a route of one cluster. src is the Source of that cluster.
+type sourced func(w http.ResponseWriter, r *http.Request, src Source)
+
+// clusterEntry is a route of one cluster, before the server knows which Source serves it.
+type clusterEntry struct {
+	Route
+	handler sourced
+}
+
+// clusterTable lists the routes of one cluster, with the patterns of an observer of one cluster.
+func clusterTable() []clusterEntry {
+	return []clusterEntry{
+		{Route{patternCluster, http.MethodGet, TierSummary}, cluster},
+		{Route{patternFindings, http.MethodGet, TierSummary}, findings},
+		{Route{patternProfiles, http.MethodGet, TierSummary}, profiles},
+		{Route{patternProfile, http.MethodGet, TierSummary}, profile},
+		{Route{patternNewer, http.MethodGet, TierSummary}, newer},
+		{Route{patternNotChecked, http.MethodGet, TierSummary}, notChecked},
+		{Route{patternEvents, http.MethodGet, TierSummary}, events},
+		{Route{patternImages, http.MethodGet, TierSummary}, images},
+		{Route{patternImage, http.MethodGet, TierSummary}, image},
+		{Route{patternAlerts, http.MethodGet, TierSummary}, alerts},
+		{Route{patternPackDiff, http.MethodGet, TierDetail}, packDiff},
+		{Route{patternAsks, http.MethodGet, TierDetail}, asks},
+		{Route{patternAsk, http.MethodPost, TierDetail}, ask},
+		{Route{patternCycle, http.MethodPost, TierCycle}, func(w http.ResponseWriter, r *http.Request, src Source) { startCycle(w, r, src) }},
 	}
+}
+
+// table lists every route. The server registers no other route. With no Set, the routes are the routes of one
+// cluster, as with no --clusters. With a Set, the set has its routes, and each route of one cluster is under
+// patternMember. A test fails when a summary route has no line in the table of the sentinel test.
+func (s *Server) table() []entry {
+	out := []entry{{Route{patternHealth, http.MethodGet, TierHealth}, s.health}}
+	if s.Set == nil {
+		for _, e := range clusterTable() {
+			out = append(out, entry{e.Route, func(w http.ResponseWriter, r *http.Request) { e.handler(w, r, s.Source) }})
+		}
+		return out
+	}
+	out = append(out,
+		entry{Route{patternClusters, http.MethodGet, TierSummary}, s.clusters},
+		entry{Route{patternShared, http.MethodGet, TierSummary}, s.shared},
+		entry{Route{patternAlerts, http.MethodGet, TierSummary}, func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, s.Set.Alerts()) }},
+		entry{Route{patternCycle, http.MethodPost, TierCycle}, func(w http.ResponseWriter, r *http.Request) { startCycle(w, r, s.Set) }})
+	for _, e := range clusterTable() {
+		route := e.Route
+		route.Pattern = patternMember + strings.TrimPrefix(e.Pattern, routePrefix)
+		out = append(out, entry{route, func(w http.ResponseWriter, r *http.Request) {
+			src, ok := s.Set.Member(r.PathValue("uid"))
+			if !ok {
+				notFound(w, r)
+				return
+			}
+			e.handler(w, r, src)
+		}})
+	}
+	return out
+}
+
+// starter starts a cycle: the Source of one cluster, or a Set.
+type starter interface {
+	StartCycle(name string) (model.Start, bool)
+}
+
+// routePrefix starts each route of the API. A route of one cluster of a set takes patternMember in its place.
+const routePrefix = "/v1"
+
+// clusters serves the summary of the set: a row for each cluster, the projects, and the selectors.
+func (s *Server) clusters(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.Set.Clusters())
+}
+
+// shared serves each profile version that a cluster of the set runs.
+func (s *Server) shared(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, SharedView{Shared: nonNil(s.Set.Shared())})
 }
 
 // Routes lists the routes of the API, not counting the route of the page.
@@ -246,20 +323,20 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("ok\n"))
 }
 
-func (s *Server) cluster(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, ClusterOf(s.Source.Summary()))
+func cluster(w http.ResponseWriter, _ *http.Request, src Source) {
+	writeJSON(w, http.StatusOK, ClusterOf(src.Summary()))
 }
 
-func (s *Server) findings(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, FindingsView{Findings: s.Source.Summary().Findings})
+func findings(w http.ResponseWriter, _ *http.Request, src Source) {
+	writeJSON(w, http.StatusOK, FindingsView{Findings: src.Summary().Findings})
 }
 
-func (s *Server) profiles(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, ProfilesOf(s.Source.Summary()))
+func profiles(w http.ResponseWriter, _ *http.Request, src Source) {
+	writeJSON(w, http.StatusOK, ProfilesOf(src.Summary()))
 }
 
-func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
-	sum := s.Source.Summary()
+func profile(w http.ResponseWriter, r *http.Request, src Source) {
+	sum := src.Summary()
 	p, ok := findProfile(sum.Profiles, r.PathValue("name"))
 	if !ok {
 		notFound(w, r)
@@ -268,34 +345,34 @@ func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, profileView(p, sum.Findings))
 }
 
-func (s *Server) newer(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, NewerView{Newer: s.Source.Summary().Newer})
+func newer(w http.ResponseWriter, _ *http.Request, src Source) {
+	writeJSON(w, http.StatusOK, NewerView{Newer: src.Summary().Newer})
 }
 
-func (s *Server) notChecked(w http.ResponseWriter, _ *http.Request) {
-	sum := s.Source.Summary()
+func notChecked(w http.ResponseWriter, _ *http.Request, src Source) {
+	sum := src.Summary()
 	writeJSON(w, http.StatusOK, NotCheckedView{NotChecked: sum.NotChecked, Limits: sum.Limits})
 }
 
-func (s *Server) events(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, EventsView{Events: s.Source.Summary().Events})
+func events(w http.ResponseWriter, _ *http.Request, src Source) {
+	writeJSON(w, http.StatusOK, EventsView{Events: src.Summary().Events})
 }
 
 // images serves strata-observed/1. With the read of the pods off, it says so and lists no image.
-func (s *Server) images(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.Source.Observed())
+func images(w http.ResponseWriter, _ *http.Request, src Source) {
+	writeJSON(w, http.StatusOK, src.Observed())
 }
 
 // alerts serves the rules of the alerts with their states. With no --alerts, it says so and lists no rule.
 // It names the channels and holds no address.
-func (s *Server) alerts(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.Source.Alerts())
+func alerts(w http.ResponseWriter, _ *http.Request, src Source) {
+	writeJSON(w, http.StatusOK, src.Alerts())
 }
 
 // image serves one row of the document. The reference of the image is one escaped segment of the path.
 // An image that no pod runs gets 404, and the answer does not name the input.
-func (s *Server) image(w http.ResponseWriter, r *http.Request) {
-	view, ok := s.Source.Observed().ImageOf(r.PathValue("ref"))
+func image(w http.ResponseWriter, r *http.Request, src Source) {
+	view, ok := src.Observed().ImageOf(r.PathValue("ref"))
 	if !ok {
 		notFound(w, r)
 		return
@@ -305,20 +382,20 @@ func (s *Server) image(w http.ResponseWriter, r *http.Request) {
 
 // packDiff serves the comparison of a pack in the detail tier. A profile, a pack, or a side that is
 // unknown gets 404, and a side that is no side gets 400. Neither answer names the input.
-func (s *Server) packDiff(w http.ResponseWriter, r *http.Request) {
+func packDiff(w http.ResponseWriter, r *http.Request, src Source) {
 	side, ok := model.ParseSide(r.URL.Query().Get("side"))
 	if !ok {
 		fail(w, http.StatusBadRequest)
 		return
 	}
-	subject, key, ok := s.moveOf(r)
+	subject, key, ok := moveOf(r, src)
 	if !ok {
 		notFound(w, r)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), detailTimeout)
 	defer cancel()
-	pack, found, err := s.Source.PackDiff(ctx, subject, key, side)
+	pack, found, err := src.PackDiff(ctx, subject, key, side)
 	if detailFailed(w, err) {
 		return
 	}
@@ -332,15 +409,15 @@ func (s *Server) packDiff(w http.ResponseWriter, r *http.Request) {
 // ask serves the click "Ask Palette" on one move: the one POST of the server. It reads no body. A
 // profile, a pack, or a move that is not known gets 404. The answer is the verdict of Palette, also
 // when the request to Palette failed: then the verdict says so, with the status.
-func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
-	subject, key, ok := s.moveOf(r)
+func ask(w http.ResponseWriter, r *http.Request, src Source) {
+	subject, key, ok := moveOf(r, src)
 	if !ok {
 		notFound(w, r)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), detailTimeout)
 	defer cancel()
-	answer, found, err := s.Source.Ask(ctx, subject, key)
+	answer, found, err := src.Ask(ctx, subject, key)
 	if detailFailed(w, err) {
 		return
 	}
@@ -354,8 +431,8 @@ func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
 // startCycle serves the click "Check now" on one cycle: content or versions. It reads no body. A cycle
 // that starts, or one that runs already, gets 202. A cycle that ended less than a minute ago gets 429,
 // with the seconds to wait in the header Retry-After. Another name gets 404.
-func (s *Server) startCycle(w http.ResponseWriter, r *http.Request) {
-	start, ok := s.Source.StartCycle(r.PathValue("cycle"))
+func startCycle(w http.ResponseWriter, r *http.Request, src starter) {
+	start, ok := src.StartCycle(r.PathValue("cycle"))
 	if !ok {
 		notFound(w, r)
 		return
@@ -369,14 +446,14 @@ func (s *Server) startCycle(w http.ResponseWriter, r *http.Request) {
 }
 
 // asks serves the answers that the observer holds, so that the page shows them after a reload.
-func (s *Server) asks(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, AsksView{Asks: nonNil(s.Source.Answers())})
+func asks(w http.ResponseWriter, _ *http.Request, src Source) {
+	writeJSON(w, http.StatusOK, AsksView{Asks: nonNil(src.Answers())})
 }
 
 // moveOf reads the profile and the pack of a request of the detail tier. The profile is name@version,
 // and the key is <layer>/<name>. It is false when the profile is not known.
-func (s *Server) moveOf(r *http.Request) (subject, key string, ok bool) {
-	profile, ok := findProfile(s.Source.Summary().Profiles, r.PathValue("profile"))
+func moveOf(r *http.Request, src Source) (subject, key string, ok bool) {
+	profile, ok := findProfile(src.Summary().Profiles, r.PathValue("profile"))
 	if !ok {
 		return "", "", false
 	}

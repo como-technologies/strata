@@ -122,6 +122,7 @@ const (
 const (
 	ScopeTenant  = "tenant"
 	ScopeProject = "project"
+	ScopeSystem  = "system"
 )
 
 // causeOrder is the order of the rows of "Not checked": the order of the table of the causes.

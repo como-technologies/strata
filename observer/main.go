@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -39,7 +40,7 @@ func main() {
 	os.Exit(code)
 }
 
-const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR] | seed --cluster-uid UID --work DIR [--namespace NS] [--strata FILE] [--kube-dir DIR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--alerts FILE [--digest-every DURATION]]"
+const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR] | seed --cluster-uid UID --work DIR [--namespace NS] [--strata FILE] [--kube-dir DIR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR [--clusters SELECTOR... --keys DIR] [--read-pods [--kube-dir DIR]] [--alerts FILE [--digest-every DURATION]]"
 
 // runContext gives the exit code. The codes have the meaning that they have in strata: 1 says that a
 // finding exists, and 2 is an error. For `health`, 1 says that the server is not healthy. ctx stops
@@ -75,12 +76,22 @@ type options struct {
 	digestEvery time.Duration
 	// rules is the file of the alert rules, after the checks. It is nil when the flag --alerts is not set.
 	rules *alert.Rules
+	// clusters holds each value of the flag --clusters, and selectors the selectors that they hold. keys is the
+	// directory of the keys of a set.
+	clusters  []string
+	selectors []check.Selector
+	keys      string
 	check.Config
 }
 
 func (o *options) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.strata, "strata", "strata", "the strata binary; the default is the one on PATH")
-	fs.StringVar(&o.ClusterUID, "cluster-uid", "", "the cluster to watch (required)")
+	fs.StringVar(&o.ClusterUID, "cluster-uid", "", "the cluster to watch, and with --clusters the cluster where the observer runs (required with no --clusters)")
+	fs.Func("clusters", "a set of clusters: tag:KEY=VALUE, tag:KEY, tag:A=B+C=D, or filter:NAME, one on each line; give it again for each selector", func(v string) error {
+		o.clusters = append(o.clusters, v)
+		return nil
+	})
+	fs.StringVar(&o.keys, "keys", "", "with --clusters, the directory of the keys: api-key for the project of PALETTE_PROJECT_UID, and one file for each other project, by its uid")
 	fs.StringVar(&o.Records, "records", "", "the directory of *.json.gz and meta.json (required)")
 	fs.StringVar(&o.Work, "work", "", "a volume in memory for the files of a cycle (required)")
 	fs.StringVar(&o.State, "state", "", "a directory for state.json (required)")
@@ -105,7 +116,10 @@ func (o *options) parse(name string, args []string, stderr io.Writer, extra ...f
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	for _, f := range []struct{ name, value string }{{"cluster-uid", o.ClusterUID}, {"records", o.Records}, {"work", o.Work}, {"state", o.State}} {
+	if err := o.checkSet(); err != nil {
+		return err
+	}
+	for _, f := range []struct{ name, value string }{{"records", o.Records}, {"work", o.Work}, {"state", o.State}} {
 		if f.value == "" {
 			return fmt.Errorf("the flag --%s is required", f.name)
 		}
@@ -128,7 +142,41 @@ func (o *options) loadRules() error {
 	if err != nil {
 		return fmt.Errorf("the flag --alerts: %w", err)
 	}
+	// with no set, the one cluster is the cluster of each rule, so a rule that names a cluster names nothing
+	if len(o.selectors) == 0 && slices.ContainsFunc(rules.List, func(r alert.Rule) bool { return r.Level == alert.LevelCluster && r.Match != "" }) {
+		return errors.New("the flag --alerts: a cluster rule names a cluster in match only with --clusters")
+	}
 	o.rules = &rules
+	return nil
+}
+
+// envHome names the variable of the project of the key api-key: the project of the ConfigMap.
+const envHome = "PALETTE_PROJECT_UID"
+
+// checkSet reads the selectors of --clusters, and refuses the flags that do not fit them. With no --clusters, the
+// observer watches one cluster, so --cluster-uid is required. With --clusters, --cluster-uid is optional, so the
+// observer can run on a cluster that Palette does not manage, and --keys and the project of api-key are required.
+// --read-pods reads the pods of the cluster where the observer runs, so it needs --cluster-uid.
+func (o *options) checkSet() error {
+	selectors, err := check.ParseSelectors(o.clusters)
+	if err != nil {
+		return fmt.Errorf("the flag --clusters: %w", err)
+	}
+	o.selectors = selectors
+	switch {
+	case len(o.clusters) > 0 && len(selectors) == 0:
+		return errors.New("the flag --clusters holds no selector")
+	case len(selectors) == 0 && o.ClusterUID == "":
+		return errors.New("the flag --cluster-uid is required")
+	case len(selectors) == 0 && o.keys != "":
+		return errors.New("the flag --keys is for a set of clusters: give --clusters")
+	case len(selectors) > 0 && o.keys == "":
+		return errors.New("the flag --clusters needs --keys")
+	case len(selectors) > 0 && os.Getenv(envHome) == "":
+		return errors.New("the flag --clusters needs " + envHome + ", the project of the key api-key")
+	case o.readPods && o.ClusterUID == "":
+		return errors.New("the flag --read-pods needs --cluster-uid")
+	}
 	return nil
 }
 
@@ -147,20 +195,67 @@ func (o *options) absoluteStrata() error {
 	return nil
 }
 
+// watcher is the observer of the flags. obs runs the cycles and sends the alerts. With --clusters, set is the
+// observer of the set, and obs is the observer inside it. With no --clusters, set is nil.
+type watcher struct {
+	obs *check.Observer
+	set *check.Set
+}
+
 // observer makes the observer of the flags. It runs the strata binary of the flags. With --read-pods it
 // reads the pods too, and it fails when the variables of the API server are not set. Without the flag, the
-// observer makes no call to Kubernetes.
-func (o *options) observer(log *slog.Logger) (*check.Observer, error) {
+// observer makes no call to Kubernetes. With --clusters, it observes the set of the selectors.
+func (o *options) observer(log *slog.Logger) (watcher, error) {
 	strata := check.InDir{Runner: runner.Runner{Binary: o.strata, Timeout: processTimeout}}
+	var pods check.Pods
+	if o.readPods {
+		cfg, err := kube.InCluster(os.Getenv, o.kubeDir)
+		if err != nil {
+			return watcher{}, errors.New("--read-pods needs the variables KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT")
+		}
+		pods = kube.New(cfg)
+	}
+	if len(o.selectors) > 0 {
+		set := check.NewSet(check.SetConfig{Config: o.Config, Selectors: o.selectors, Keys: o.keys, Home: os.Getenv(envHome)}, strata, pods, log)
+		return watcher{obs: set.Observer, set: set}, nil
+	}
 	obs := check.New(o.Config, strata, log)
-	if !o.readPods {
-		return obs, nil
+	if pods != nil {
+		obs.WithPods(pods)
 	}
-	cfg, err := kube.InCluster(os.Getenv, o.kubeDir)
-	if err != nil {
-		return nil, errors.New("--read-pods needs the variables KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT")
+	return watcher{obs: obs}, nil
+}
+
+// setSource gives a set to the server: each cluster of the set is a Source of its own.
+type setSource struct {
+	*check.Set
+}
+
+// Member gives the Source of one cluster of the set.
+func (s setSource) Member(uid string) (api.Source, bool) {
+	v, ok := s.Set.Member(uid)
+	if !ok {
+		return nil, false
 	}
-	return obs.WithPods(kube.New(cfg)), nil
+	return v, true
+}
+
+// server gives the server of the watcher, with no page: the routes of one cluster, or of the set.
+func (w watcher) server() *api.Server {
+	if w.set != nil {
+		return &api.Server{Set: setSource{w.set}}
+	}
+	return &api.Server{Source: w.obs}
+}
+
+// once runs one content cycle and one versions cycle, and gives the summary and the number of findings.
+func (w watcher) once(ctx context.Context) (any, int, error) {
+	if w.set != nil {
+		sum, err := w.set.Once(ctx)
+		return sum, sum.Counts.Findings, err
+	}
+	sum, err := w.obs.Once(ctx)
+	return sum, sum.Counts.Findings, err
 }
 
 // alerting lets the observer send the alerts of the file, when the flag names one. It reads the address of
@@ -187,12 +282,12 @@ func once(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
-	obs, err := o.observer(log)
+	w, err := o.observer(log)
 	if err != nil {
 		fmt.Fprintln(stderr, "strata-observer:", err)
 		return 2
 	}
-	summary, err := obs.Once(ctx)
+	summary, findings, err := w.once(ctx)
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
@@ -202,7 +297,7 @@ func once(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	// A finding is a change, so it wins over a failed cycle: the exit 2 never says "no change".
 	switch {
-	case summary.Counts.Findings > 0:
+	case findings > 0:
 		return 1
 	case err != nil:
 		return 2
@@ -234,12 +329,12 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		return 2
 	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
-	obs, err := o.observer(log)
+	w, err := o.observer(log)
 	if err != nil {
 		fmt.Fprintln(stderr, "strata-observer:", err)
 		return 2
 	}
-	if err := o.alerting(obs, log); err != nil {
+	if err := o.alerting(w.obs, log); err != nil {
 		fmt.Fprintln(stderr, "strata-observer: --alerts:", err)
 		return 2
 	}
@@ -249,9 +344,11 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	worker.Add(1)
 	go func() {
 		defer worker.Done()
-		obs.Run(ctx)
+		w.obs.Run(ctx)
 	}()
-	err = (&api.Server{Source: obs, Page: api.Page(files)}).Serve(ctx, ln, log)
+	srv := w.server()
+	srv.Page = api.Page(files)
+	err = srv.Serve(ctx, ln, log)
 	stop()
 	worker.Wait()
 	if err != nil {

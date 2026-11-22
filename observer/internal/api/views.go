@@ -66,8 +66,12 @@ func profileView(p model.Profile, findings []model.Finding) ProfileView {
 }
 
 // findProfile finds a profile by name@version. A name with no version finds the profile when only one
-// profile has the name.
+// profile has the name. A profile of a cluster of a set has a uid, and its uid finds it too: two projects can
+// hold one name and version.
 func findProfile(profiles []model.Profile, word string) (model.Profile, bool) {
+	if i := slices.IndexFunc(profiles, func(p model.Profile) bool { return p.UID != "" && p.UID == word }); i >= 0 {
+		return profiles[i], true
+	}
 	if i := slices.IndexFunc(profiles, func(p model.Profile) bool { return model.Subject(p.Name, p.Version) == word }); i >= 0 {
 		return profiles[i], true
 	}
@@ -185,4 +189,9 @@ func nonNil[T any](s []T) []T {
 // the observer started. It is a detail route, because a refusal holds the message of Palette.
 type AsksView struct {
 	Asks []model.Answer `json:"asks"`
+}
+
+// SharedView is the answer of /v1/shared: each profile version that a cluster of a set runs, with its copies.
+type SharedView struct {
+	Shared []model.Shared `json:"shared"`
 }

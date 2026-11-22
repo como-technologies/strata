@@ -28,6 +28,15 @@ type State struct {
 	Versions  ClockState                   `json:"versions"`
 	Images    ImagesState                  `json:"images"`
 	Alerts    alert.Store                  `json:"alerts"`
+	// Member names the cluster of a member of a set, with its project, so that a restart lists the clusters of the
+	// set before its first search. It is absent with no --clusters.
+	Member *MemberState `json:"member,omitempty"`
+}
+
+// MemberState is what the state of a member of a set keeps of its cluster: its name and its project.
+type MemberState struct {
+	Name    string           `json:"name"`
+	Project model.ProjectRef `json:"project"`
 }
 
 // ImagesState is what the observer keeps of the pods. First maps the id of an image, ImageKey, to the

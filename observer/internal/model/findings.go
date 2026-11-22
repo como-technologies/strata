@@ -39,8 +39,27 @@ func FindingsOf(c Content, first map[string]string) []Finding {
 	}
 	// A finding of the pods says nothing about a record, so a new version of strata does not move it.
 	out = append(out, imageFindings(c, first)...)
+	if c.Member != "" {
+		for i := range out {
+			out[i].ID = c.findingID(out[i].Kind, out[i].Profile)
+		}
+	}
 	sortFindings(out)
 	return out
+}
+
+// findingID gives the id of a finding of a profile of the content. With no set, it is the id of the kind and the
+// profile, name@version. In a set, two projects can hold one name and version with two uids, and two clusters can run
+// one profile version. So the id holds the uid of the cluster and the uid of the record of the profile.
+func (c Content) findingID(kind Kind, subject string) string {
+	if c.Member == "" {
+		return FindingID(kind, subject)
+	}
+	uid := subject
+	if r, ok := c.recordOf(subject); ok && r.Doc.Source.UID != "" {
+		uid = r.Doc.Source.UID
+	}
+	return FindingID(kind, c.Member+"/"+uid)
 }
 
 // sortFindings puts the findings in the order of the profile and the kind.
@@ -76,14 +95,16 @@ func Keep(f Finding, first, at time.Time) KeptFinding {
 
 // keptFindings gives the findings that the state keeps, for a process that has no good content cycle yet.
 // No check of this process read them, so each one is unread, and none clears until a check proves it. A
-// finding with no kind, from an older state, is not here.
+// finding with no kind, from an older state, is not here. Each finding keeps its id of the state, which holds the
+// uid of the cluster in a set.
 func keptFindings(kept map[string]KeptFinding) []Finding {
 	out := []Finding{}
-	for _, k := range kept {
+	for id, k := range kept {
 		if k.Kind == "" {
 			continue
 		}
 		f := newFinding(k.Kind, k.Profile, slices.Clone(k.Packs), "")
+		f.ID = id
 		f.FirstSeen, f.LastSeen, f.Unread = utc(k.FirstSeen), utc(k.LastSeen), true
 		out = append(out, f)
 	}
