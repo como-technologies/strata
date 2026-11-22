@@ -577,6 +577,9 @@ pf_start() {
 }
 # page PATH: the answer of the observer through the port-forward
 page() { curl -fsS --max-time 20 "http://127.0.0.1:$port$1"; }
+# detail_page PATH: the answer of a route of the detail tier, through the port-forward. A request of that tier can
+# wait for a cycle and then run one compare, so the limit is 60 seconds.
+detail_page() { curl -fsS --max-time 60 "http://127.0.0.1:$port$1"; }
 # images_read: /v1/images says that the observer read the pods and found images. images.json keeps the answer.
 images_read() {
   page /v1/images > images.json 2> /dev/null \
@@ -610,11 +613,13 @@ observer_image() {
 # as --server-side. The namespace has the label of the restricted standard. The ConfigMap and the
 # Secret of the key go into it.
 observer_namespace() { kc apply "$@" -f "$root/deploy/observer/namespace.yaml"; }
+# observer_pod: the pod of the observer in the namespace $ns, as JSON
+observer_pod() { kj -n "$ns" get pod -l app.kubernetes.io/name=strata-observer -o json; }
 # no_pull_secret: the pod of the observer runs the image of the run, and it names no pull Secret. So a
 # node pulled the image from the public package with no login. pull.json keeps the pod, and the output
 # shows the image, the image id, and the pull Secrets.
 no_pull_secret() {
-  kj -n "$ns" get pod -l app.kubernetes.io/name=strata-observer -o json > pull.json || return 1
+  observer_pod > pull.json || return 1
   jq '.items[0] | {image: .spec.containers[0].image, imageID: .status.containerStatuses[0].imageID,
     imagePullSecrets: (.spec.imagePullSecrets // [])}' pull.json
   jq -e --arg i "$image" '.items[0] | (.spec.imagePullSecrets // [] | length == 0)
@@ -652,3 +657,71 @@ observer_overlay_pods() {
 observer_render() { kubectl kustomize . > observer.yaml && [ -s observer.yaml ]; }
 # observer_ready: the Deployment of the observer is Available in 3 minutes
 observer_ready() { KUBE_TIMEOUT=200 kc -n "$ns" rollout status deploy/strata-observer --timeout=180s; }
+
+# ---- the cycles of the observer ----------------------------------------------------------------------
+
+# The commands of the two cycles of the observer, run on the machine of the script, and the count of
+# their requests. observer.sh and platform.sh use them. A script sets $C to the cluster and exports
+# strata and C, because the counter runs each cycle in `bash -c`. The records of the cluster are the
+# files record-*.json of the current folder. palette_settings and palette_target come first.
+
+# palette_target: set $target to the address of Palette with its scheme and with no / at the end. The
+# counter sends each request on to it.
+palette_target() {
+  target=$API
+  case "$target" in http://*|https://*) ;; *) target="https://$target" ;; esac
+  target=${target%/}
+}
+# content_cycle: the strata commands of one content cycle of the observer. The counter runs it in a
+# directory of its own, which holds the raw answers with the values of the variables, and removes it.
+content_cycle() {
+  local dir rec n=0
+  dir=$(mktemp -d) || return 1
+  trap 'rm -rf "$dir"' RETURN
+  cp record-*.json "$dir" && cd "$dir" || return 1
+  "$strata" verify record-*.json --summary --who --json --compact -q > /dev/null
+  [ $? -le 2 ] || return 1
+  "$strata" snapshot "cluster:$C" --raw-dir raw -o cluster.json -q || return 1
+  for rec in record-*.json; do
+    n=$((n + 1))
+    "$strata" snapshot "cluster:$C/$(jq -r .source.name "$rec")" --from-raw raw -o "side-$n.json" -q || return 1
+    "$strata" compare "$rec" "side-$n.json" --json --compact -q > /dev/null
+    [ $? -le 1 ] || return 1
+  done
+}
+# versions_behind: the first command of a versions cycle. behind.json keeps its answer.
+versions_behind() {
+  "$strata" behind record-*.json --no-impact --json --compact -q > behind.json
+  [ $? -le 2 ]
+}
+# versions_moves: the second command of a versions cycle, for each pin that is behind. The first cycle
+# of a pod runs it for each such pin, and a later cycle runs it for a new move only.
+versions_moves() {
+  local a b
+  while read -r a b; do
+    "$strata" compare "$a" "$b" --json --compact -q > /dev/null
+    [ $? -le 1 ] || return 1
+  done < <(jq -r '.pins[] | select(.behind and .error == null and (.newer | length) > 0)
+    | "pack:\(.registryUid)/\(.name)@\(.version) pack:\(.registryUid)/\(.name)@\(.newer[0].version)"' behind.json)
+}
+export -f content_cycle versions_behind versions_moves
+# requests_of NAME FUNCTION: run FUNCTION behind the counter. NAME.log holds one line for each request
+# that Palette got, with the method and the path, and no query and no key.
+requests_of() { ./count-requests -target "$target" -log "$1.log" -- bash -c "$2" > "$1.run" 2>&1; }
+# counter_built: the counter, built once in the directory of the run
+counter_built() { [ -x ./count-requests ] || go -C "$live/count-requests" build -o "$PWD/count-requests" .; }
+# count_requests: the requests of a content cycle, of the first command of a versions cycle, and of
+# its moves. The routes that took most follow the count of each.
+count_requests() {
+  local name
+  counter_built || return 1
+  requests_of content content_cycle && requests_of behind versions_behind && requests_of moves versions_moves \
+    || return 1
+  for name in content behind moves; do
+    printf '%s: %s requests\n' "$name" "$(wc -l < "$name.log" | tr -d ' ')"
+  done
+  for name in content behind moves; do
+    echo "-- the routes of $name"
+    sed -E 's#/[0-9a-f]{24}#/{uid}#g' "$name.log" | sort | uniq -c | sort -rn | head -n 12
+  done
+}

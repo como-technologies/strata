@@ -88,9 +88,7 @@ profile_name=strata-observer-live
 reader_user=strata-observer-reader
 nobody_user=strata-observer-nobody
 wrong_key=strata-observer-wrong-key
-target=$API
-case "$target" in http://*|https://*) ;; *) target="https://$target" ;; esac
-target=${target%/}
+palette_target
 
 # What the run changes. ids.env keeps it, so that a resumed run knows it.
 OP= edited= attached=
@@ -135,7 +133,7 @@ render() { observer_overlay --content-every=1m --versions-every=5m && observer_r
 
 # ---- the checks of way 1 -----------------------------------------------------------------------------
 
-pod_exists() { kj -n "$ns" get pod -l "$selector" -o json | jq -e '.items | length > 0' > /dev/null; }
+pod_exists() { observer_pod | jq -e '.items | length > 0' > /dev/null; }
 # apply_admitted: the namespace enforces the restricted standard, and the standard admits the pod
 apply_admitted() {
   kj get namespace "$ns" -o json | jq -e '.metadata.labels["pod-security.kubernetes.io/enforce"] == "restricted"' > /dev/null || return 1
@@ -151,7 +149,7 @@ pod_ready() {
 }
 # pod_hardened: the spec of the pod, as the cluster holds it. pod.json keeps it.
 pod_hardened() {
-  kj -n "$ns" get pod -l "$selector" -o json > pod.json || return 1
+  observer_pod > pod.json || return 1
   jq -e '.items[0].spec | .securityContext.runAsNonRoot == true and .automountServiceAccountToken == false
     and .containers[0].securityContext.readOnlyRootFilesystem == true
     and .containers[0].securityContext.allowPrivilegeEscalation == false
@@ -211,59 +209,6 @@ probe_refused() { KUBE_TIMEOUT=180 other_pod_refused; }
 
 # ---- the checks of a real change ---------------------------------------------------------------------
 
-# content_cycle: the strata commands of one content cycle of the observer. The counter runs it in a
-# directory of its own, which holds the raw answers with the values of the variables, and removes it.
-content_cycle() {
-  local dir rec n=0
-  dir=$(mktemp -d) || return 1
-  trap 'rm -rf "$dir"' RETURN
-  cp record-*.json "$dir" && cd "$dir" || return 1
-  "$strata" verify record-*.json --summary --who --json --compact -q > /dev/null
-  [ $? -le 2 ] || return 1
-  "$strata" snapshot "cluster:$C" --raw-dir raw -o cluster.json -q || return 1
-  for rec in record-*.json; do
-    n=$((n + 1))
-    "$strata" snapshot "cluster:$C/$(jq -r .source.name "$rec")" --from-raw raw -o "side-$n.json" -q || return 1
-    "$strata" compare "$rec" "side-$n.json" --json --compact -q > /dev/null
-    [ $? -le 1 ] || return 1
-  done
-}
-# versions_behind: the first command of a versions cycle. behind.json keeps its answer.
-versions_behind() {
-  "$strata" behind record-*.json --no-impact --json --compact -q > behind.json
-  [ $? -le 2 ]
-}
-# versions_moves: the second command of a versions cycle, for each pin that is behind. The first cycle
-# of a pod runs it for each such pin, and a later cycle runs it for a new move only.
-versions_moves() {
-  local a b
-  while read -r a b; do
-    "$strata" compare "$a" "$b" --json --compact -q > /dev/null
-    [ $? -le 1 ] || return 1
-  done < <(jq -r '.pins[] | select(.behind and .error == null and (.newer | length) > 0)
-    | "pack:\(.registryUid)/\(.name)@\(.version) pack:\(.registryUid)/\(.name)@\(.newer[0].version)"' behind.json)
-}
-export -f content_cycle versions_behind versions_moves
-# requests_of NAME FUNCTION: run FUNCTION behind the counter. NAME.log holds one line for each request
-# that Palette got, with the method and the path, and no query and no key.
-requests_of() { ./count-requests -target "$target" -log "$1.log" -- bash -c "$2" > "$1.run" 2>&1; }
-# counter_built: the counter, built once in the directory of the run
-counter_built() { [ -x ./count-requests ] || go -C "$live/count-requests" build -o "$PWD/count-requests" .; }
-# count_requests: the requests of a content cycle, of the first command of a versions cycle, and of
-# its moves. The routes that took most follow the count of each.
-count_requests() {
-  local name
-  counter_built || return 1
-  requests_of content content_cycle && requests_of behind versions_behind && requests_of moves versions_moves \
-    || return 1
-  for name in content behind moves; do
-    printf '%s: %s requests\n' "$name" "$(wc -l < "$name.log" | tr -d ' ')"
-  done
-  for name in content behind moves; do
-    echo "-- the routes of $name"
-    sed -E 's#/[0-9a-f]{24}#/{uid}#g' "$name.log" | sort | uniq -c | sort -rn | head -n 12
-  done
-}
 # drift_edit: an edit in place of the published add-on version. The flag comes first, so that the undo
 # knows of the edit also when the call fails.
 drift_edit() {
@@ -516,9 +461,6 @@ ask_words() {
   no_accepts "${answers[@]}" asks-pod.json || bad=1
   return "$bad"
 }
-# detail_page PATH: the answer of a route of the detail tier, through the port-forward. A request of that tier can
-# wait for a cycle and then run one compare, so the limit is 60 seconds.
-detail_page() { curl -fsS --max-time 60 "http://127.0.0.1:$port$1"; }
 # diff_text: the detail route holds the text of the edit, and no summary route holds it. The marker is the line
 # that the edit wrote. It is in the raw text of the answer and in its JSON form, with the quotes escaped.
 diff_text() {
