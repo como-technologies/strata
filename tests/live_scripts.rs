@@ -8052,7 +8052,7 @@ fn registry_kinds_slash_stage() -> Stage {
 /// `several` on standard error.
 fn registry_kinds_slash(several: &str) -> (Stage, String) {
     let mut stage = registry_kinds_slash_stage();
-    stage.strata_err("compare pack:strata-live-pack@1.0.0 *", 2, several);
+    stage.strata_err("snapshot pack:strata-live-pack@1.0.0 *", 2, several);
     let (_, steps) = stage.run("registry-kinds.sh", &[]);
     (stage, steps)
 }
@@ -8105,6 +8105,8 @@ esac
 exec "$(dirname "$0")/fake-strata-rules" "$@"
 "#;
 
+/// Issue #940: the step `slash-several` runs `snapshot <ref> --json -q`. The binary of the tests
+/// runs that command line against a stand-in Palette with two registries that have the version.
 #[test]
 fn registry_kinds_sh_gets_the_error_of_several_registries_as_json_from_a_command_line_that_strata_takes()
  {

@@ -95,9 +95,10 @@ too.
 | A warning, on standard error | yellow | It starts with `strata: warning:`. |
 | An error, on standard error | red | It starts with `strata: error:`. |
 
-`--json` does not change: the document has no color, and an error is one JSON
-object on standard error. Here the notes come first, and the answer of Palette
-is the last line:
+`--json` does not change: the document has no color. For the error of `--json`,
+see [Errors](./errors.md).
+
+Here the notes come first, and the answer of Palette is the last line:
 
 ```text
 {{#include ../output/candidate-validate-accepts.txt:1:5}}
