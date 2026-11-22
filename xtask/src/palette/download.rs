@@ -66,7 +66,7 @@ pub(super) fn download(root: &Path, request: &Request) -> Option<(u16, Vec<u8>)>
         .map_or(request.target.as_str(), |(path, _)| path);
     let profile_path = downloaded_profile(path.trim_start_matches('/'))?;
     let read = |route: &str| -> Option<Value> {
-        let file = file_for(root, request.project.as_deref(), route)?;
+        let file = file_for(root, request.project(), route)?;
         serde_json::from_slice(&std::fs::read(file).ok()?).ok()
     };
     let profile = read(profile_path)?;
@@ -210,7 +210,7 @@ mod tests {
     use std::fs;
 
     use serde_json::json;
-    use strata::api::{MemoryApi, PackFile, Palette};
+    use strata::api::{MemoryApi, PROJECT_UID_HEADER, PackFile, Palette};
 
     use super::*;
     use crate::common_palette::pack_listing_answer;
@@ -220,13 +220,8 @@ mod tests {
     /// The download of the version `u1` of the project `p1`, as the stand-in serves it to a
     /// request that accepts `accept`.
     fn answer(dir: &Path, uid: &str, accept: Option<&str>) -> (u16, Vec<u8>) {
-        let request = Request {
-            target: format!("/{}", download_route(uid)),
-            project: Some("p1".to_string()),
-            key: None,
-            accept: accept.map(str::to_string),
-            body: Vec::new(),
-        };
+        let headers = [(PROJECT_UID_HEADER, Some("p1")), ("Accept", accept)];
+        let request = Request::new("GET", &format!("/{}", download_route(uid)), &headers, "");
         served(dir, &request).unwrap()
     }
 

@@ -45,8 +45,9 @@ mod code_span;
 // tests serve the variables of a profile with the masks and `profile_route_variable`.
 //
 // The tests of the contract and of the facts use `TAG_FILTER_LISTING`, the route of the saved tag
-// filters. The stand-in, the test of its download route, and the chapter `fields` build the answer
-// of the pack listing with `pack_listing_answer`.
+// filters. The tests of the contract also use `CLUSTER_LISTING`, the route of the cluster listing.
+// The stand-in, the test of its download route, and the chapter `fields` build the answer of the
+// pack listing with `pack_listing_answer`.
 #[path = "../../tests/common/palette.rs"]
 #[allow(dead_code)]
 mod common_palette;
@@ -76,6 +77,12 @@ mod route;
 #[path = "../../tests/common/sentences.rs"]
 #[allow(dead_code)]
 mod sentences;
+// The read of a request and the write of an answer of the tests of strata. The stand-in reads each
+// request with `read_request` and writes each answer with `write_answer`. So the tests and the
+// stand-in read the head of a request in one way. The stand-in does not use the server of the tests.
+#[path = "../../tests/common/server.rs"]
+#[allow(dead_code)]
+mod server;
 #[cfg(test)]
 mod size;
 // The read of a table of the book. The check of the facts reads a row with it, and so do the

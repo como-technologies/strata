@@ -2,18 +2,17 @@
 //! records each request.
 
 use std::collections::BTreeMap;
-use std::io::{Read, Write};
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use serde_json::{Value, json};
 use strata::TOOL_VERSION;
 use strata::closed_set::unknown::log::{FILE, Line, SCHEMA};
 use strata::closed_set::unknown::sighting::Sighting;
 
+pub use super::server::Request;
+use super::server::{HttpAnswer, serve};
 use super::{
     CommandExt, PROFILE_LISTING, Run, UID_A, UID_B, isolate_palette, profile_document,
     profile_route, strata_command, template,
@@ -74,20 +73,14 @@ pub fn serve_routes(routes: BTreeMap<String, Value>) -> String {
 
 /// [`serve_routes`], and each request that the stand-in took, in the order of arrival.
 pub fn serve_recorded(routes: BTreeMap<String, Value>) -> (String, Arc<Mutex<Vec<Request>>>) {
-    serve_answers(move |request| routes.get(&request.path).cloned())
+    serve_answers(move |request| routes.get(&request.target).cloned())
 }
 
 /// Serve the routes of the tenant of each key on one address, as Palette gives each key the
 /// documents of its own tenant. `tenants` holds the routes of each API key. A key that `tenants`
 /// does not hold gets 404 for each route.
 pub fn serve_tenants(tenants: BTreeMap<String, BTreeMap<String, Value>>) -> String {
-    serve_answers(move |request| {
-        tenants
-            .get(request.key.as_deref()?)?
-            .get(&request.path)
-            .cloned()
-    })
-    .0
+    serve_answers(move |request| tenants.get(request.key()?)?.get(&request.target).cloned()).0
 }
 
 /// Serve the document that `answer` gives for each request, or 404 when it gives none. It gives
@@ -96,47 +89,9 @@ fn serve_answers(
     answer: impl Fn(&Request) -> Option<Value> + Send + 'static,
 ) -> (String, Arc<Mutex<Vec<Request>>>) {
     serve(move |request, _| match answer(request) {
-        Some(doc) => Some((200, doc.to_string())),
-        None => Some((404, "{}".to_string())),
+        Some(doc) => Some(HttpAnswer::json(200, doc.to_string())),
+        None => Some(HttpAnswer::json(404, "{}")),
     })
-}
-
-/// Serve on a free port of this machine. `answer` gives the status and the JSON body of the
-/// answer to a request, with the count of the requests before it. `None` gives no answer, so the
-/// sender waits until its timeout. It gives the address, and each request that the server took,
-/// in the order of arrival.
-fn serve(
-    answer: impl Fn(&Request, usize) -> Option<(u16, String)> + Send + 'static,
-) -> (String, Arc<Mutex<Vec<Request>>>) {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = format!("http://{}", listener.local_addr().unwrap());
-    let requests = Arc::new(Mutex::new(Vec::new()));
-    let seen = Arc::clone(&requests);
-    std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let Ok(mut stream) = stream else { continue };
-            let Some(request) = read_request(&mut stream) else {
-                continue;
-            };
-            let answered = {
-                let mut seen = seen.lock().unwrap();
-                let answered = answer(&request, seen.len());
-                seen.push(request);
-                answered
-            };
-            match answered {
-                Some((status, body)) => {
-                    let _ = write!(
-                        stream,
-                        "HTTP/1.1 {status} Stand-in\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                        body.len()
-                    );
-                }
-                None => std::thread::sleep(Duration::from_secs(20)),
-            }
-        }
-    });
-    (address, requests)
 }
 
 /// The stand-in of [`serve_recorded`] for some routes, and a home for the runs of strata against
@@ -212,7 +167,7 @@ impl Stand {
     pub fn asked(&self) -> Vec<(String, Option<String>)> {
         self.requests()
             .into_iter()
-            .map(|r| (r.path, r.project))
+            .map(|r| (r.target.clone(), r.project().map(str::to_string)))
             .collect()
     }
 }
@@ -289,25 +244,6 @@ pub fn write_log(home: &Path, lines: &[String]) -> PathBuf {
     file
 }
 
-/// One request that a stand-in took.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Request {
-    pub method: String,
-    pub path: String,
-    pub body: String,
-    /// The header `ProjectUid`: the project of the request, or `None` for the tenant scope.
-    pub project: Option<String>,
-    /// The header `ApiKey`: the key of the request, or `None` when the request has no key.
-    pub key: Option<String>,
-}
-
-impl Request {
-    /// The body, read as JSON.
-    pub fn json(&self) -> Value {
-        serde_json::from_str(&self.body).unwrap_or_else(|e| panic!("{e}: {}", self.body))
-    }
-}
-
 /// The body of an answer that holds no list `waiting`: the endpoint took the whole report.
 const TAKEN: &str = r#"{"ok":true}"#;
 
@@ -343,7 +279,7 @@ impl Endpoint {
                 Answer::Body(status, body) => (Some(status), body),
                 Answer::Silence => (None, TAKEN),
             };
-            status.map(|status| (status, body.to_string()))
+            status.map(|status| HttpAnswer::json(status, body))
         });
         Endpoint {
             url: format!("{address}/"),
@@ -367,46 +303,4 @@ pub fn through_proxy<'a>(command: &'a mut Command, proxy: &Endpoint) -> &'a mut 
     command
         .env("ALL_PROXY", &proxy.url)
         .env("NO_PROXY", "127.0.0.1")
-}
-
-/// The request on `stream`: the line, the headers, and the body that `Content-Length` names.
-fn read_request(stream: &mut std::net::TcpStream) -> Option<Request> {
-    let mut data = Vec::new();
-    let mut chunk = [0u8; 4096];
-    let head_end = loop {
-        if let Some(at) = data.windows(4).position(|w| w == b"\r\n\r\n") {
-            break at + 4;
-        }
-        match stream.read(&mut chunk) {
-            Ok(0) | Err(_) => return None,
-            Ok(n) => data.extend_from_slice(&chunk[..n]),
-        }
-    };
-    let head = String::from_utf8_lossy(&data[..head_end]).into_owned();
-    let length = header(&head, "Content-Length")
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(0);
-    while data.len() < head_end + length {
-        match stream.read(&mut chunk) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => data.extend_from_slice(&chunk[..n]),
-        }
-    }
-    let mut first = head.lines().next()?.split_whitespace();
-    Some(Request {
-        method: first.next()?.to_string(),
-        path: first.next()?.to_string(),
-        body: String::from_utf8_lossy(&data[head_end..]).into_owned(),
-        project: header(&head, strata::api::PROJECT_UID_HEADER),
-        key: header(&head, strata::api::API_KEY_HEADER),
-    })
-}
-
-/// The value of the header `name` in the head of a request. The name of a header has no case.
-fn header(head: &str, name: &str) -> Option<String> {
-    head.lines().find_map(|l| {
-        let (n, value) = l.split_once(':')?;
-        n.eq_ignore_ascii_case(name)
-            .then(|| value.trim().to_string())
-    })
 }

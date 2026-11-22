@@ -46,15 +46,15 @@
 //! server reads each file at each request. So the runner can change the tenant between two
 //! commands. A page can show what Palette does after an edit in place.
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::Read;
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::{fs, thread};
 
 use strata::api::codes::PROJECT_SCOPE_CODE;
-use strata::api::{API_KEY_HEADER, PROJECT_UID_HEADER};
 
 use crate::common_palette::error_body;
+use crate::server::{HttpAnswer, Request, read_request, write_answer};
 use crate::tenant::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, empty_audit_log, profile_route,
     validated_cloud,
@@ -100,38 +100,20 @@ pub fn serve_on(root: &Path, listener: &TcpListener) -> std::io::Result<()> {
     Ok(())
 }
 
-fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
-    let Some(request) = read_request(&mut stream)? else {
+fn answer(root: &Path, stream: TcpStream) -> std::io::Result<()> {
+    let Some(request) = read_request(&stream)? else {
         return Ok(());
     };
     let (status, body) = match profile_cloud_refusal(root, &request) {
         Some(body) => (500, body),
         None => served(root, &request)?,
     };
-    let reason = match status {
-        200 => "OK",
-        204 => "No Content",
-        403 => "Forbidden",
-        409 => "Conflict",
-        422 => "Unprocessable Entity",
-        500 => "Internal Server Error",
-        _ => "Not Found",
-    };
+    let mut answer = HttpAnswer::json(status, body);
     // the file of a download is no JSON
-    let kind = if status == 200 && download::is_download(&request.target) && !accepts_json(&request)
-    {
-        download::FILE_TYPE
-    } else {
-        "application/json"
-    };
-    write!(
-        stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: {kind}\r\n\
-         Content-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    )?;
-    stream.write_all(&body)?;
-    stream.flush()
+    if status == 200 && download::is_download(&request.target) && !accepts_json(&request) {
+        answer.kind = download::FILE_TYPE;
+    }
+    write_answer(&stream, &answer)
 }
 
 /// The routes that belong to the tenant: each path under them is not an operation of the project
@@ -141,10 +123,7 @@ pub(crate) const TENANT_ROUTES: &[&str] = &["/v1/filters"];
 /// The refusal of a request that names a project on a route of [`TENANT_ROUTES`]: HTTP 403 and the
 /// code [`PROJECT_SCOPE_CODE`], with each query. `None` for another request.
 fn project_refusal(request: &Request) -> Option<Vec<u8>> {
-    request
-        .project
-        .as_deref()
-        .filter(|project| !project.is_empty())?;
+    request.project().filter(|project| !project.is_empty())?;
     let path = request
         .target
         .split_once('?')
@@ -176,15 +155,16 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
     if let Some(answer) = download::download(root, request) {
         return Ok(answer);
     }
-    let path = file_for(root, request.project.as_deref(), &request.target);
+    let path = file_for(root, request.project(), &request.target);
     let refusal = path.as_deref().and_then(refusal_of);
     Ok(match (path, refusal) {
         (Some(path), _) if path.is_file() && with_query(&request.target, CLUSTER_SEARCH_PATH) => {
-            (200, searched(&fs::read(path)?, &request.body))
+            (200, searched(&fs::read(path)?, request.body.as_bytes()))
         }
-        (Some(path), _) if path.is_file() && with_query(&request.target, PROFILE_SEARCH_PATH) => {
-            (200, profiles_searched(&fs::read(path)?, &request.body))
-        }
+        (Some(path), _) if path.is_file() && with_query(&request.target, PROFILE_SEARCH_PATH) => (
+            200,
+            profiles_searched(&fs::read(path)?, request.body.as_bytes()),
+        ),
         (Some(path), _) if path.is_file() => match fs::read(path)? {
             body if body.is_empty() => (204, body),
             body => (200, rbacs::answered(root, request, body)?),
@@ -215,18 +195,18 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
 fn profile_cloud_refusal(root: &Path, request: &Request) -> Option<Vec<u8>> {
     let cloud = validated_cloud(request.target.trim_start_matches('/'))?;
     // Palette checks `cluster.create` before it reads the body: a key that it refuses gets the 403
-    let route = file_for(root, request.project.as_deref(), &request.target);
+    let route = file_for(root, request.project(), &request.target);
     if route.as_deref().and_then(refusal_of) == Some(403) {
         return None;
     }
-    let entity: serde_json::Value = serde_json::from_slice(&request.body).ok()?;
+    let entity: serde_json::Value = serde_json::from_str(&request.body).ok()?;
     let names: Vec<String> = entity["spec"]["profiles"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|p| {
             let route = profile_route(p["uid"].as_str()?);
-            let file = file_for(root, request.project.as_deref(), &route)?;
+            let file = file_for(root, request.project(), &route)?;
             let profile: serde_json::Value = serde_json::from_slice(&fs::read(file).ok()?).ok()?;
             let kind = profile["spec"]["published"]["cloudType"].as_str()?;
             if kind == "all" || kind.eq_ignore_ascii_case(cloud) {
@@ -275,16 +255,6 @@ fn refusal_of(path: &Path) -> Option<u16> {
     REFUSALS
         .into_iter()
         .find(|status| refused(path, *status).is_file())
-}
-
-struct Request {
-    target: String,
-    project: Option<String>,
-    /// The `ApiKey` header, when the request has one.
-    key: Option<String>,
-    /// The `Accept` header, when the request has one.
-    accept: Option<String>,
-    body: Vec<u8>,
 }
 
 /// The clusters of the search file that the body of a search selects, as Palette reads it: each
@@ -372,51 +342,6 @@ fn profiles_searched(file: &[u8], body: &[u8]) -> Vec<u8> {
     doc.to_string().into_bytes()
 }
 
-/// The request line, the headers this server reads, and the body: a search is a POST, and its
-/// body selects the clusters. The headers are `ProjectUid`, `ApiKey`, `Accept`, and
-/// `Content-Length`. Every other header is skipped.
-fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
-    let mut reader = BufReader::new(stream.try_clone()?);
-    let mut line = String::new();
-    if reader.read_line(&mut line)? == 0 {
-        return Ok(None);
-    }
-    let Some(target) = line.split_whitespace().nth(1) else {
-        return Ok(None);
-    };
-    let mut request = Request {
-        target: target.to_string(),
-        project: None,
-        key: None,
-        accept: None,
-        body: Vec::new(),
-    };
-    let mut length = 0usize;
-    loop {
-        let mut header = String::new();
-        if reader.read_line(&mut header)? == 0 || header.trim().is_empty() {
-            break;
-        }
-        if let Some((name, value)) = header.split_once(':') {
-            if name.eq_ignore_ascii_case(PROJECT_UID_HEADER) {
-                request.project = Some(value.trim().to_string());
-            } else if name.eq_ignore_ascii_case(API_KEY_HEADER) {
-                request.key = Some(value.trim().to_string());
-            } else if name.eq_ignore_ascii_case("Accept") {
-                request.accept = Some(value.trim().to_string());
-            } else if name.eq_ignore_ascii_case("Content-Length") {
-                length = value.trim().parse().unwrap_or(0);
-            }
-        }
-    }
-    if length > 0 {
-        let mut body = vec![0; length];
-        reader.read_exact(&mut body)?;
-        request.body = body;
-    }
-    Ok(Some(request))
-}
-
 /// The file that answers `target` in `project`, or at tenant scope when there is no project.
 /// A path that leaves the root answers nothing.
 fn file_for(root: &Path, project: Option<&str>, target: &str) -> Option<PathBuf> {
@@ -497,6 +422,8 @@ fn percent_decode(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use strata::api::PROJECT_UID_HEADER;
+
     use super::*;
     use crate::tenant::PROJECT_LISTING;
 
@@ -662,15 +589,8 @@ mod tests {
         }
         let refusal = |target: &str, uids: &[&str]| {
             let profiles: Vec<_> = uids.iter().map(|u| serde_json::json!({"uid": u})).collect();
-            let request = Request {
-                target: target.to_string(),
-                project: Some("p1".to_string()),
-                key: None,
-                accept: None,
-                body: serde_json::json!({"spec": {"profiles": profiles}})
-                    .to_string()
-                    .into_bytes(),
-            };
+            let body = serde_json::json!({"spec": {"profiles": profiles}}).to_string();
+            let request = Request::new("POST", target, &[(PROJECT_UID_HEADER, Some("p1"))], &body);
             profile_cloud_refusal(dir, &request)
                 .map(|body| serde_json::from_slice::<serde_json::Value>(&body).unwrap())
         };

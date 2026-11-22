@@ -49,6 +49,9 @@ mod git;
 mod palette;
 mod process;
 mod sentences;
+// The stand-in of this package serves with `serve`, and no test of the package calls `serve_each`.
+#[allow(dead_code)]
+mod server;
 mod stand_in;
 mod table;
 mod toml;

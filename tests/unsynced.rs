@@ -16,7 +16,8 @@ use strata::term::progress::Progress;
 use crate::common;
 use common::{
     OCI_REGISTRY_SUMMARY, PackFixture, REGISTRY_LISTING, candidate_snapshot, no_variables,
-    profile_document, serve_pack_listing, serve_registry_pack, snapshot_of, template, write_yaml,
+    pack_entity_answer, profile_document, serve_pack_listing, serve_registry_pack, snapshot_of,
+    template, write_yaml,
 };
 
 const CHART: &str = "strata-live-chart";
@@ -122,7 +123,7 @@ fn a_version_that_the_listing_has_goes_through_the_listing_also_in_a_private_reg
         tenant(),
         CHART,
         json!([minted]),
-        json!({"tags": [{"tag": "1.0.0", "packUid": "pk-minted", "version": "1.0.0"}]}),
+        pack_entity_answer(&[("1.0.0", "pk-minted")]),
         PRIVATE,
     );
     let file = candidate(dir.path(), "charts-auth", json!({}));
@@ -359,7 +360,7 @@ fn a_resolve_reads_the_registry_listing_and_the_oci_summary_one_time() {
         tenant(),
         "listed-chart",
         json!([listed]),
-        json!({"tags": [{"tag": "1.0.0", "packUid": "pack-listed-1"}]}),
+        pack_entity_answer(&[("1.0.0", "pack-listed-1")]),
         ZARF,
     );
     let api = serve_pack_listing(api, "other-chart", json!([]));
