@@ -940,7 +940,7 @@ fn the_request_of_each_fact_holds_the_query_that_its_rules_send() {
 /// them (#920).
 #[test]
 fn the_facts_that_the_live_window_of_wave_17_shows_name_its_checks_under_live() {
-    const SHOWN: &[(&str, &[&str])] = &[
+    let shown: &[(&str, &[&str])] = &[
         (
             "listing-access-denied",
             &[
@@ -977,8 +977,50 @@ fn the_facts_that_the_live_window_of_wave_17_shows_name_its_checks_under_live() 
             ],
         ),
     ];
+    name_under_live(shown);
+}
+
+/// The first live window of Wave 18 ran the checks of #702, #928, #940, and #919. Each fact that
+/// one of them shows names it under `live`, and gives no `unchecked` reason. No reason of another
+/// fact names one of them (#1005).
+#[test]
+fn the_facts_that_the_first_live_window_of_wave_18_shows_name_its_checks_under_live() {
+    let shown: &[(&str, &[&str])] = &[
+        (
+            "search-reach-of-the-key",
+            &[
+                "observer-clusters.sh:search-role-tenant-says",
+                "observer-clusters.sh:search-role-project-says",
+            ],
+        ),
+        (
+            "tag-filter-listing",
+            &["observer-clusters.sh:filters-role-says"],
+        ),
+        ("tag-filter", &["observer-clusters.sh:filter-role-says"]),
+        ("registry-sync-fields", &["packs.sh:bitnami-no-status"]),
+        ("helm-registry-summary", &["packs.sh:bitnami-no-status"]),
+        (
+            "registry-name-takes-a-slash",
+            &["registry-kinds.sh:slash-several-uid"],
+        ),
+        (
+            "validate-version-upgrade-dependency",
+            &["validate-packs.sh:bump-text-says"],
+        ),
+        (
+            "gap-kubernetes-minor-step",
+            &["validate-packs.sh:bump-text-skip"],
+        ),
+    ];
+    name_under_live(shown);
+}
+
+/// Each fact of `shown` names each of its checks under `live`, and gives no `unchecked` reason. No
+/// `unchecked` reason of a fact names one of the checks.
+fn name_under_live(shown: &[(&str, &[&str])]) {
     let facts = super::load(&crate::repository()).expect("the list of the facts");
-    for (id, checks) in SHOWN {
+    for (id, checks) in shown {
         let fact = facts.iter().find(|f| f.id == *id).expect(id);
         assert!(fact.unchecked.is_none(), "{id}: {:?}", fact.unchecked);
         for check in *checks {
@@ -987,7 +1029,7 @@ fn the_facts_that_the_live_window_of_wave_17_shows_name_its_checks_under_live() 
     }
     for fact in &facts {
         let reason = fact.unchecked.as_deref().unwrap_or_default();
-        for (_, checks) in SHOWN {
+        for (_, checks) in shown {
             for check in *checks {
                 let (_, name) = check.split_once(':').unwrap();
                 assert!(!reason.contains(name), "{} still waits for {name}", fact.id);

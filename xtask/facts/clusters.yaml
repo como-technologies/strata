@@ -444,6 +444,7 @@ facts:
       - fleet.sh:filters
       - fleet.sh:by-filter
       - fleet.sh:filters-project-says
+      - observer-clusters.sh:filters-role-says
     pages:
       - reference/palette-api.md#the-fleet
       - internals/palette/clusters.md#an-imported-cluster
@@ -466,6 +467,7 @@ facts:
       - fleet.sh:by-filter
       - fleet.sh:set
       - fleet.sh:filter-project-says
+      - observer-clusters.sh:filter-role-says
     pages:
       - reference/palette-api.md#the-fleet
       - internals/palette/clusters.md#an-imported-cluster
@@ -1436,6 +1438,8 @@ facts:
       - scope.sh:tenant-consumers
       - scope.sh:tenant-consumers-projects
       - scope.sh:release-consumers-edge-hosts
+      - observer-clusters.sh:search-role-tenant-says
+      - observer-clusters.sh:search-role-project-says
     pages:
       - internals/palette/clusters.md#the-reach-of-a-search
       - internals/palette/limits.md#what-no-run-covers
