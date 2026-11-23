@@ -533,7 +533,9 @@ them:
   sideways.
 - At 760 pixels and below, the compact layout starts. A table drops its columns
   with the class `narrow-hide`. In the events table, the object moves under the
-  message.
+  message. On the screen "Not checked", the profiles move under the packs, and the
+  column "Why" keeps a minimum width. So at 420 pixels the table fits its card, and
+  a ref stays on one line.
 - The nav, the tiles, and the facts of a calm splash keep one order: findings,
   images, newer versions, not checked, and profiles. `ORDER` in `frame.js` holds it.
 - The heads of the columns of Profiles, Newer versions, Images, and Recent events sort

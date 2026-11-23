@@ -117,7 +117,7 @@ const currentPacks = () => D.profiles.reduce((n, x) => n + x.packs.filter(p => n
 function viewNotChecked() {
   return withChecks("notchecked", crumbs("Not checked"), () => {
     const rows = D.notChecked;
-    const body = rows.length ? h`<div class="tw"><table><thead><tr><th>What</th><th>Profile</th><th>Why</th></tr></thead><tbody>${rows.map(r => {
+    const body = rows.length ? h`<div class="tw"><table><thead><tr><th>What</th><th class="narrow-hide">Profile</th><th>Why</th></tr></thead><tbody>${rows.map(r => {
       const first = r.profiles[0];
       const p = first ? profileOf(first) : null;
       const names = r.packs.map(k => {
@@ -126,10 +126,12 @@ function viewNotChecked() {
       });
       // A ref does not break at a hyphen of its name. A line breaks only after the comma between two refs.
       const what = [...new Set(names)];
+      // At 760 pixels and below, the profiles move under the packs. Then the table fits a phone, and each ref stays on one line.
+      const profiles = r.profiles.length ? spanList("nw", r.profiles) : null;
       const why = r.cause === CAUSE.OLD_COPY && r.registry ? `Current against an older copy of ${r.registry}. A newer version can be missing here.`
         : r.cause === CAUSE.NO_RECORD && D.cluster.records.baseline === BASELINE.FIRST_SEEN ? NO_RECORD_FIRST_SEEN : (CAUSE_TEXT[r.cause] || r.cause);
       const pods = r.cause === CAUSE.PODS_NOT_READ;
-      return h`<tr class="link" data-go="${pods ? link("images") : p ? profileHash(first) : link("profiles")}"><td class="m">${what.length ? spanList("nw", what) : mut(pods ? "The pods" : "The profile")}</td><td class="m">${r.profiles.length ? spanList("nw", r.profiles) : mut("-")}</td><td>${why}</td></tr>`;
+      return h`<tr class="link" data-go="${pods ? link("images") : p ? profileHash(first) : link("profiles")}"><td class="m">${what.length ? spanList("nw", what) : mut(pods ? "The pods" : "The profile")}${profiles && h`<div class="mut narrow-show">${profiles}</div>`}</td><td class="m narrow-hide">${profiles || mut("-")}</td><td class="why">${why}</td></tr>`;
     })}</tbody></table></div>` : noCauses();
     return h`<section class="card"><div class="chead"><h2>Not checked on this run <span class="sub">${rows.length}. This never raises a severity, and it stops the page from saying "No change".</span></h2></div>${body}</section>${coverageCard()}`;
   });
