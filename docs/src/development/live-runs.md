@@ -2723,6 +2723,8 @@ These facts depend on what the provider sends, plans, or keeps in its state:
   apply with a warning and success. The code of the provider shows it; no live
   run shows it yet.
 - The platform cluster: `platform.sh`, with the module `terraform-platform/`.
+  It reads the release profile of the example, so it runs before a step that
+  destroys the example, such as `preflight-plan.sh --down`.
 
 The window does not run the checks of two facts, because their result does not
 depend on the provider. For `cluster-profile-order-append`, `order.sh 4` sends
