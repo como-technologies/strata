@@ -33,6 +33,7 @@ show.
 | `macros.sh` | What a new value of a project macro does to a version, to the copy of a cluster, and to a record (#72). It needs cluster A. |
 | `masked-default.sh` | What Palette takes at a move of cluster A to a version with a required sensitive variable with a default value, and what the cluster then holds (#997). The variables route gives a mask in place of that default value. It needs cluster A. |
 | `image-digest.sh` | What cluster A pulls when a digest sits in the image list of a pack alone, and when it sits in the manifest that the workload reads (#630). It needs cluster A. |
+| `hand-edit.sh` | What Palette does with the Deployment of a manifest layer when `kubectl` changes it, and then deletes it, on cluster A (#691). It needs cluster A and `kubectl`, and it removes the profile and the Deployment that it makes. |
 | `macro-repave.sh` | Whether a new macro value in an infrastructure layer replaces the nodes of a cluster (#72). It needs cluster A, and it leaves a repave that waits for approval: run `just live-down` after it. |
 | `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73), and `compare --validate` (#134). Stage 8 asks about a profile variable in a repave key of a version that the cluster does not run (#132). It needs cluster A. Stage 9 reads the console address that Palette can save at `validate/repave` for the VM Orchestrator pack (#717). It needs `VMO_CLUSTER`. |
 | `registry-move-nodes.sh` | Whether a move of the OS pack to another registry, at the same version, replaces the nodes of a cluster, and what the impact table and Palette say (#135). It needs cluster A, and it can repave it two times. |
@@ -156,6 +157,7 @@ its end.
 | `macros.sh` | The macro test (#72): what a project macro does to a version, to the copy that cluster A runs, and to a record, when the macro gets another value. |
 | `masked-default.sh` | The masked default test (#997): a version of the add-on profile with a required sensitive variable with a default value, the move of cluster A to it, and what the cluster then holds. |
 | `image-digest.sh` | The image digest test (#630): a digest in the image list of a pack alone, and a digest in the manifest that the workload reads, and the image that cluster A runs for each. |
+| `hand-edit.sh` | The hand edit test (#691): the add-on profile `barney-config` with a Deployment in a manifest layer on cluster A, a change and a delete of the Deployment with `kubectl`, and a read each 5 minutes for 70 minutes after each. |
 | `macro-repave.sh` | The macro repave test (#72): a macro in a field that repaves cluster A, and what a change of its value alone does. It ends with a repave that waits for approval; `live-down` follows it. |
 | `repave.sh` | The repave test (#73): `compare --repave` asks Palette if a change repaves cluster A, and prints its answer beside the impact level. `compare --validate` asks Palette if it accepts the packs (#134). Stage 9 moves the console address of the VM Orchestrator pack of `VMO_CLUSTER` to a mark, and back (#717). |
 | `registry-move-nodes.sh` | The registry move of a running cluster (#135): the OS pack of the release version from `move_registry_name`, and what cluster A does when it takes it. |
@@ -195,6 +197,7 @@ Its stage 4 makes one profile, and deletes it.
 `pending.sh` checks the baseline before it starts, and puts each change back.
 `macros.sh` does the same, and deletes the macro it makes.
 `image-digest.sh` checks the baseline before it starts, and puts each change back.
+`hand-edit.sh` checks the baseline before it starts, and removes the profile and the Deployment that it makes.
 `masked-default.sh` checks the baseline before it starts, moves cluster A back, and deletes the version that it makes.
 `repave.sh` checks the baseline before it starts, puts each change back, and takes no update on cluster A.
 Its stage 9 moves the console address of `VMO_CLUSTER` to a mark, and back.
@@ -232,6 +235,7 @@ gone, and stages 1 to 3 of `order.sh` leave two versions edited: run
 | `pending.sh` | a manifest of the add-on version, a value and a kubeadm command of the release version, and the add-on version number, each in place and put back; the updates that cluster A accepts | the clusters, the flag (off), the baseline |
 | `macros.sh` | a project macro, and the manifest of the add-on version that reads it; the update that cluster A accepts; all put back | the clusters, the flag (off), the baseline |
 | `image-digest.sh` | the values and the manifest of the add-on version, in place and put back; a Deployment of one pod, and the updates that cluster A accepts | the clusters, the flag (off), the baseline |
+| `hand-edit.sh` | an add-on profile with a Deployment of one replica on cluster A; the replicas of the Deployment, and then the Deployment, with `kubectl`; it removes the profile and the Deployment | the content of the profile, the clusters, the baseline |
 | `masked-default.sh` | a new version of the add-on profile with a required sensitive variable, through the API; the move of cluster A to it, and back; it deletes the version | the add-on version, the flag (off), the baseline |
 | `macro-repave.sh` | a project macro in the Kubernetes pack of the release version, and then its value alone; it leaves a repave that waits for approval | the flag (off); it ends with the removal of the example |
 | `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; a profile variable on version 1.0.1, through OpenTofu, and back; no update is accepted. Stage 9: the address that the console of the VM Orchestrator pack of `VMO_CLUSTER` forwards to, moved to a mark and back | the clusters, the flag (off), the baseline |
@@ -682,6 +686,7 @@ just live-route-bodies BODIES                                                  #
 just live-pending                                                              # #70, #276, needs just live-up
 just live-macros                                                               # #72, needs just live-up
 just live-image-digest                                                         # #630, needs just live-up, kubectl, and crane
+just live-hand-edit                                                            # #691, needs just live-up and kubectl; about 2.5 hours; removes the profile and the Deployment it makes
 just live-masked-default                                                       # #997, needs just live-up and kubectl
 just live-macro-repave                                                         # #72, needs just live-up; leaves a repave that waits, so live-down follows
 just live-repave                                                               # #73, needs just live-up

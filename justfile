@@ -661,6 +661,11 @@ live-masked-default: build
 live-image-digest: build
     examples/live/image-digest.sh
 
+# The hand edit test: what Palette does with a Deployment of a manifest layer that kubectl changes, and then deletes, on cluster A (#691). Needs live-up and kubectl; takes about 2.5 hours, and removes the profile and the Deployment that it makes.
+[group('live checks')]
+live-hand-edit: build
+    examples/live/hand-edit.sh
+
 # The macro repave test: a macro in a field that repaves cluster A, and what a change of its value alone does (#72). Needs live-up; ends with a repave that waits for approval, so live-down follows it.
 [group('live checks')]
 live-macro-repave: build
