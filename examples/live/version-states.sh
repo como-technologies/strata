@@ -114,8 +114,7 @@ check destroy-1 0 '#81: the destroy of the state of 1.0.0 removes the version' -
 check old-gone 1 '#81: the record of 1.0.0 reports the version gone' -- "$strata" verify v1.json
 check old-gone-says 0 '#81: the verdict says that the version no longer exists' -- grep -q 'no longer exists: uid' old-gone.out
 check destroy-2 0 'destroy the state of 1.0.1' -- tv 1.0.1 two destroy -auto-approve
-check none-left 0 "no version of $NAME is left" -- \
-  bash -c "\"$strata\" list profiles --json | jq -e --arg n $NAME '[.profiles[] | select(.name == \$n)] | length == 0'"
+check none-left 0 "no version of $NAME is left" -- no_profile_named "$NAME"
 
 echo "== 6. the version number that Palette stores" | tee -a steps.log
 check apply-short 0 "#81: apply $NAME with the version 1.2" -- tv 1.2 short apply -auto-approve

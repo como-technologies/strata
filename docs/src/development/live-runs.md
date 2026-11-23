@@ -800,6 +800,40 @@ manifest that the workload reads pins the image. The checks `list-spec` and
 | `undo-delete`, `undo-clean` | 0 | #630: `kubectl` deletes the Deployment, and cluster A runs no Deployment of the example. The run leaves the cluster clean |
 | `undo-baseline` | 0 | the example is at its baseline |
 
+## hand-edit.sh
+
+Read-write. It needs the example at its baseline with cluster A, and `kubectl`.
+It makes the add-on profile `barney-config`, with one manifest layer: the
+Deployment `barney-app` of one replica. Cluster A runs it. Stage 2 scales the
+Deployment to 2 replicas with `kubectl`, and stage 3 deletes it with `kubectl`.
+Stage 4 removes the profile from cluster A, and deletes it.
+
+After each change, the script reads the Deployment each 5 minutes for 70
+minutes. The reads stop at the first read that shows the result. A run takes
+about 2.5 hours when Palette restores nothing. `READ_EVERY` and `READ_MINUTES`
+give other times, in minutes.
+
+The cleanup also runs after a failed check or a signal, so the run leaves no
+profile and no Deployment. The script keeps the kubeconfig in a temporary file.
+A check with `?` records its result without judging it, because the run finds
+the result. The run checks an open item of
+[What no run covers](../internals/palette/limits.md#what-no-run-covers): a
+change and a delete with `kubectl`.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `profile`, `record` | 0 | #691: Palette makes `barney-config`, and a record of it. No result yet: no live window ran hand-edit.sh. |
+| `attach`, `applied` | 0 | #691: cluster A runs `barney-config`, and the Deployment runs there with 1 replica within 20 minutes. No result yet: no live window ran hand-edit.sh. |
+| `edit` | 0 | #691: `kubectl scale` gives the Deployment 2 replicas. No result yet: no live window ran hand-edit.sh. |
+| `edit-reads` | ? | #691: `0` when the field is 1 again, and the line of the last read gives the minute. `1` when the field stays 2 for 70 minutes. The code of Palette shows `0`: a reconcile applies each object of the layer again, with the values of the manifest. No result yet: no live window ran hand-edit.sh. |
+| `edit-compare` | 0 | #691: `compare` of the record with `cluster:<uid>/barney-config` finds no change. Strata compares what Palette holds, and not the objects in the cluster. No result yet: no live window ran hand-edit.sh. |
+| `edit-pack-status`, `delete-pack-status` | ? | #691: the condition that Palette reports for the pack of `barney-config` after the reads of each stage. The code of Palette shows no condition that names a change or a delete with `kubectl`. No result yet: no live window ran hand-edit.sh. |
+| `delete-uid`, `delete` | 0 | #691: the uid of the Deployment, and the delete with `kubectl`. No result yet: no live window ran hand-edit.sh. |
+| `delete-reads` | ? | #691: `0` when Palette makes the Deployment again with a new uid, and the line of the last read gives the minute. `1` when it stays gone for 70 minutes. The code of Palette shows `0`. No result yet: no live window ran hand-edit.sh. |
+| `events` | ? | #691: the reason and the message of each event of cluster A after the change with `kubectl`. The code of Palette shows no event for the change or for the delete. No result yet: no live window ran hand-edit.sh. |
+| `detach`, `removed` | 0 | `barney-config` leaves cluster A, and the Deployment goes within 20 minutes. [observer.sh](#observersh) shows that Palette deletes the Deployment of a layer that leaves the cluster. No result yet: no live window ran hand-edit.sh. |
+| `profile-delete`, `clean`, `baseline` | 0 | Palette deletes `barney-config`. No Deployment and no profile of the run stay, and the example is at its baseline. No result yet: no live window ran hand-edit.sh. |
+
 ## macro-repave.sh
 
 Read-write, and it replaces the nodes of cluster A. It needs the example at its

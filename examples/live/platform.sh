@@ -321,11 +321,7 @@ behind_rows() {
 }
 
 # identity_status: what Palette reports for the packs of wilma-identity, 10 minutes after the change
-identity_status() {
-  sleep 600
-  "$live/api.sh" get "/v1/spectroclusters/$W" | jq -c --arg u "$(team_uid identity)" \
-    '.status.packs[]? | select(.profileUid == $u) | {name, condition}'
-}
+identity_status() { sleep 600; pack_status "$W" "$(team_uid identity)"; }
 
 # cycles_counted: the requests of the cycles of the observer on wilma, with the records of the
 # baseline, in the folder cycles/

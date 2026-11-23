@@ -3799,6 +3799,12 @@ fi
         self.env.push((key.to_string(), value.to_string()));
     }
 
+    /// The script finds each command of `bin` before the stand-ins of the stage.
+    fn bin_first(&mut self, bin: &Path) {
+        let path = format!("{}:{}", bin.display(), path_with(&self.path("bin")));
+        self.env("PATH", &path);
+    }
+
     /// A file that the stage reads, under the root.
     fn path(&self, rel: &str) -> PathBuf {
         self.root.path().join(rel)
@@ -3844,6 +3850,13 @@ fi
         // of each step that failed
         print!("{}", failed_outputs(&root.join("out"), &steps));
         (o, steps)
+    }
+
+    /// Run `script` of the tree of its own of the stage, `tree/examples/live`, with `args`. Gives the
+    /// output and steps.log, as [`Stage::run`] does.
+    fn run_in_tree(&self, script: &str, args: &[&str]) -> (Output, String) {
+        let path = self.path("tree/examples/live").join(script);
+        self.run(path.to_str().unwrap(), args)
     }
 
     /// Each body of `METHOD path` that the script sent, in order. The list is empty when the
@@ -11421,6 +11434,395 @@ fn image_digest_sh_stops_before_it_changes_anything_when_crane_cannot_read_the_d
     assert!(!stage.path("routes/sent").exists(), "no request to Palette");
 }
 
+// ---- the hand edit test (#691) ---------------------------------------------------------------------
+
+/// The uid of the profile that the `api.sh` of the tree of hand-edit.sh makes.
+const HAND_PROFILE: &str = "hp-1";
+
+/// The name of that profile.
+const HAND_PROFILE_NAME: &str = "barney-config";
+
+/// The Deployment of the manifest layer of that profile.
+const HAND_DEPLOYMENT: &str = "barney-app";
+
+/// Each check of hand-edit.sh, in the order that it runs.
+const HAND_EDIT_CHECKS: [&str; 18] = [
+    "profile",
+    "record",
+    "attach",
+    "applied",
+    "edit",
+    "edit-reads",
+    "edit-compare",
+    "edit-pack-status",
+    "delete-uid",
+    "delete",
+    "delete-reads",
+    "delete-pack-status",
+    "events",
+    "detach",
+    "removed",
+    "profile-delete",
+    "clean",
+    "baseline",
+];
+
+/// The checks of hand-edit.sh that record a result and judge none.
+const HAND_EDIT_SEEN: [&str; 5] = [
+    "edit-reads",
+    "edit-pack-status",
+    "delete-reads",
+    "delete-pack-status",
+    "events",
+];
+
+/// The `api.sh` of the tree of hand-edit.sh. It logs each call to `$FAKE_OBS/api.log`, and keeps the
+/// state of Palette in files of `$FAKE_OBS`.
+///
+/// `manifest-profile` keeps the manifest and makes the profile `hp-1`. `attach` puts the profile on
+/// cluster A, and the cluster runs the Deployment of the manifest with the uid `uid-1`. `detach`
+/// removes the profile from the cluster, and Palette deletes the Deployment. The document of the
+/// cluster gives the pack of each profile as ready. Cluster A has an event from before the run and
+/// an event after it.
+const FAKE_API_BARNEY: &str = r##"#!/usr/bin/env bash
+obs=$FAKE_OBS
+echo "$*" >> "$obs/api.log"
+case "$1" in
+  get-kubeconfig) echo "apiVersion: v1 # fake-kubeconfig" ;;
+  delete-named) echo "$2: no versions" ;;
+  manifest-profile) cp "$4" "$obs/manifest.yaml"; touch "$obs/profile"; echo hp-1 ;;
+  attach)
+    touch "$obs/attached"
+    sed -n 's/^  replicas: //p' "$obs/manifest.yaml" > "$obs/replicas"
+    echo uid-1 > "$obs/uid" ;;
+  detach) rm -f "$obs/attached" "$obs/replicas" "$obs/uid" ;;
+  delete) rm -f "$obs/profile"; echo "deleted profile $2" ;;
+  get)
+    case "$2" in
+      /v1/spectroclusters/c-a)
+        echo '{"status":{"packs":[
+          {"name":"barney-config","profileUid":"hp-1","condition":{"type":"Ready","status":"True"}},
+          {"name":"strata-live-config","profileUid":"ad-1","condition":{"type":"Ready","status":"True"}}]}}' ;;
+      "/v1/events/components/spectrocluster/c-a?limit=100")
+        echo '{"items":[
+          {"metadata":{"creationTimestamp":"2099-01-01T00:00:00.000Z"},"reason":"after","message":"an event after the edit"},
+          {"metadata":{"creationTimestamp":"2001-01-01T00:00:00.000Z"},"reason":"before","message":"an event before the run"}]}' ;;
+      *) echo "api.sh: no route $2" >&2; exit 2 ;;
+    esac ;;
+  *) echo "api.sh: no stand-in for $1" >&2; exit 2 ;;
+esac
+"##;
+
+/// The `kubectl` of hand-edit.sh. It logs each call to `$FAKE_OBS/kubectl.log`, and answers only
+/// with the kubeconfig that the stand-in of Palette serves. The Deployment `barney-app` is in the
+/// files `replicas` and `uid` of `$FAKE_OBS`.
+///
+/// `FAKE_RECONCILE` set to N gives a reconcile of Palette at the Nth read after a scale or a delete,
+/// while cluster A runs the profile. The Deployment gets the replicas of the manifest again, and a
+/// deleted Deployment is there again with the uid `uid-2`.
+const FAKE_KUBECTL_BARNEY: &str = r##"#!/usr/bin/env bash
+obs=$FAKE_OBS
+echo "$*" >> "$obs/kubectl.log"
+grep -q 'fake-kubeconfig' "${KUBECONFIG:-/dev/null}" 2>/dev/null || { echo "no kubeconfig" >&2; exit 1; }
+gone() { echo 'Error from server (NotFound): deployments.apps "barney-app" not found' >&2; exit 1; }
+case "$*" in
+  "scale deployment barney-app -n default --replicas="*)
+    [ -f "$obs/uid" ] || gone
+    echo "${@: -1}" | cut -d= -f2 > "$obs/replicas"; echo 0 > "$obs/reads"
+    echo "deployment.apps/barney-app scaled" ;;
+  "delete deployment barney-app -n default --ignore-not-found")
+    [ ! -f "$obs/uid" ] || echo 'deployment.apps "barney-app" deleted'
+    rm -f "$obs/replicas" "$obs/uid"; echo 0 > "$obs/reads" ;;
+  "get deployment barney-app -n default"*)
+    reads=$(( $(cat "$obs/reads" 2>/dev/null || echo 0) + 1 ))
+    echo "$reads" > "$obs/reads"
+    if [ "$reads" = "${FAKE_RECONCILE:-0}" ] && [ -f "$obs/attached" ]; then
+      sed -n 's/^  replicas: //p' "$obs/manifest.yaml" > "$obs/replicas"
+      [ -f "$obs/uid" ] || echo uid-2 > "$obs/uid"
+    fi
+    [ -f "$obs/uid" ] || gone
+    case "$*" in
+      *"{.spec.replicas}"*) printf %s "$(cat "$obs/replicas")" ;;
+      *"{.metadata.uid}"*) printf %s "$(cat "$obs/uid")" ;;
+      *) echo "barney-app $(cat "$obs/replicas")/$(cat "$obs/replicas")" ;;
+    esac ;;
+  *) echo "kubectl: no stand-in for: $*" >&2; exit 1 ;;
+esac
+"##;
+
+/// A stage for hand-edit.sh. The script runs in a tree of its own, with the stand-ins of `api.sh`,
+/// `tenant.sh`, `kubectl`, and the scripts of [`lab_stand_ins`]. Cluster A is `c-a`. The files of
+/// `stage.path("obs")` hold the state of Palette and of the cluster.
+fn hand_edit_stage() -> Stage {
+    let mut stage = Stage::new(baseline_outputs());
+    let tree = stage.path("tree");
+    copy_scripts(
+        &tree,
+        &[
+            "examples/live/hand-edit.sh",
+            "examples/live/lib.sh",
+            "examples/live/common.sh",
+        ],
+    );
+    let live = tree.join("examples/live");
+    executable(&live.join("api.sh"), FAKE_API_BARNEY);
+    executable(&live.join("tenant.sh"), FAKE_TENANT_FRED);
+    lab_stand_ins(&live);
+    let obs = stage.path("obs");
+    let bin = stage.path("obs-bin");
+    for dir in [&obs, &bin] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    executable(&bin.join("kubectl"), FAKE_KUBECTL_BARNEY);
+    stage.strata(
+        &format!("snapshot {HAND_PROFILE} -o profile.json"),
+        0,
+        &observer_profile_record(HAND_PROFILE, HAND_PROFILE_NAME, "add-on"),
+    );
+    stage.strata(
+        &format!("compare profile.json cluster:c-a/{HAND_PROFILE_NAME}"),
+        0,
+        "IDENTICAL\n",
+    );
+    stage.strata(
+        "list profiles --json",
+        0,
+        r#"{"profiles":[{"name":"strata-live-addon","uid":"ad-1"}]}"#,
+    );
+    stage.bin_first(&bin);
+    stage.env("FAKE_OBS", obs.to_str().unwrap());
+    stage
+}
+
+/// The output of the check `id` of a run of `stage`.
+fn hand_edit_output(stage: &Stage, id: &str) -> String {
+    std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap()
+}
+
+/// The calls of the run to `api.sh` that make, attach, detach, and delete the profile, in order.
+fn hand_edit_profile_calls(stage: &Stage) -> Vec<String> {
+    observer_log(stage, "api.log")
+        .lines()
+        .filter(|l| {
+            ["manifest-profile ", "attach ", "detach ", "delete "]
+                .iter()
+                .any(|call| l.starts_with(call))
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+/// The run leaves no profile and no Deployment in the stand-ins, and no kubeconfig in a file.
+fn assert_hand_edit_left_nothing(stage: &Stage) {
+    for file in ["profile", "attached", "uid"] {
+        assert!(
+            !stage.path("obs").join(file).exists(),
+            "the run leaves {file}"
+        );
+    }
+    let left = files_under(&stage.path("tmp"));
+    assert!(
+        left.iter()
+            .all(|(_, body)| !body.contains("fake-kubeconfig")),
+        "a kubeconfig is left: {left:?}"
+    );
+    assert!(
+        stage.path("out/summary.md").is_file(),
+        "the summary is written"
+    );
+}
+
+/// #691: Palette restores the field and makes the Deployment again at the third read after each
+/// change. Each read stops at its result, and the run removes the profile and the Deployment.
+#[test]
+fn hand_edit_sh_reads_until_palette_restores_the_field_and_the_deployment_and_removes_what_it_made()
+{
+    let mut stage = hand_edit_stage();
+    stage.env("FAKE_RECONCILE", "3");
+    let (o, steps) = stage.run_in_tree("hand-edit.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    assert_eq!(check_ids(&steps), HAND_EDIT_CHECKS, "{steps}");
+    let judged: Vec<&str> = HAND_EDIT_CHECKS
+        .into_iter()
+        .filter(|id| !HAND_EDIT_SEEN.contains(id))
+        .collect();
+    passed(&steps, &judged);
+    seen(&steps, &HAND_EDIT_SEEN);
+    for id in ["edit-reads", "delete-reads"] {
+        assert!(step_line(&steps, id).ends_with("got 0"), "{steps}");
+    }
+    assert_eq!(
+        hand_edit_output(&stage, "edit-reads"),
+        "minute 0: spec.replicas 2\nminute 5: spec.replicas 2\nminute 10: spec.replicas 1\n"
+    );
+    assert_eq!(
+        hand_edit_output(&stage, "delete-reads"),
+        "minute 0: uid none\nminute 5: uid none\nminute 10: uid uid-2\n"
+    );
+    assert_eq!(hand_edit_output(&stage, "delete-uid"), "uid-1");
+
+    // the manifest layer holds the Deployment of one replica, which kubectl scales to 2
+    let manifest = std::fs::read_to_string(stage.path("obs/manifest.yaml")).unwrap();
+    for line in [
+        format!("  name: {HAND_DEPLOYMENT}"),
+        "  replicas: 1".to_string(),
+    ] {
+        assert!(manifest.lines().any(|l| l == line), "{manifest}");
+    }
+    let kubectl = observer_log(&stage, "kubectl.log");
+    assert!(
+        kubectl.contains(&format!(
+            "scale deployment {HAND_DEPLOYMENT} -n default --replicas=2"
+        )),
+        "{kubectl}"
+    );
+    // strata compares the record with the copy of cluster A, which Palette holds
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    assert!(
+        calls.contains(&format!(
+            "compare profile.json cluster:c-a/{HAND_PROFILE_NAME}"
+        )),
+        "{calls}"
+    );
+    // the pack of the profile, and the event after the edit alone
+    let status = hand_edit_output(&stage, "edit-pack-status");
+    assert_eq!(
+        status,
+        format!(
+            "{{\"name\":\"{HAND_PROFILE_NAME}\",\"condition\":{{\"type\":\"Ready\",\"status\":\"True\"}}}}\n"
+        )
+    );
+    let events = hand_edit_output(&stage, "events");
+    assert!(events.contains(r#""reason":"after""#), "{events}");
+    assert!(!events.contains(r#""reason":"before""#), "{events}");
+
+    // the old profile of the name goes first, and the profile goes after it leaves cluster A
+    let api = observer_log(&stage, "api.log");
+    let named = api
+        .lines()
+        .position(|l| l == format!("delete-named {HAND_PROFILE_NAME}"))
+        .unwrap_or_else(|| panic!("no delete-named in:\n{api}"));
+    let made = api
+        .lines()
+        .position(|l| l.starts_with("manifest-profile "))
+        .unwrap();
+    assert!(named < made, "{api}");
+    assert_eq!(
+        hand_edit_profile_calls(&stage),
+        [
+            format!("manifest-profile {HAND_PROFILE_NAME} {HAND_PROFILE_NAME} deployment.yaml"),
+            format!("attach c-a {HAND_PROFILE}"),
+            format!("detach c-a {HAND_PROFILE}"),
+            format!("delete {HAND_PROFILE}"),
+        ]
+    );
+    assert_hand_edit_left_nothing(&stage);
+}
+
+/// #691: when Palette restores nothing, the reads of each change continue for 70 minutes, and the
+/// checks with `?` record 1. The detach and the cleanup still pass.
+#[test]
+fn hand_edit_sh_reads_for_70_minutes_when_the_edit_and_the_delete_stay_and_still_cleans_up() {
+    let stage = hand_edit_stage();
+    let (o, steps) = stage.run_in_tree("hand-edit.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    for id in ["edit-reads", "delete-reads"] {
+        assert!(step_line(&steps, id).ends_with("got 1"), "{steps}");
+        let reads = hand_edit_output(&stage, id);
+        let minutes: Vec<&str> = reads
+            .lines()
+            .map(|l| l.split(':').next().unwrap())
+            .collect();
+        let want: Vec<String> = (0..=70).step_by(5).map(|m| format!("minute {m}")).collect();
+        assert_eq!(minutes, want, "{id}:\n{reads}");
+    }
+    assert!(hand_edit_output(&stage, "edit-reads").ends_with("minute 70: spec.replicas 2\n"));
+    assert!(hand_edit_output(&stage, "delete-reads").ends_with("minute 70: uid none\n"));
+    passed(&steps, &["removed", "profile-delete", "clean", "baseline"]);
+    assert_hand_edit_left_nothing(&stage);
+}
+
+/// #691: READ_EVERY and READ_MINUTES give the reads other times.
+#[test]
+fn hand_edit_sh_takes_the_times_of_the_reads_from_read_every_and_read_minutes() {
+    let mut stage = hand_edit_stage();
+    stage.env("READ_EVERY", "10");
+    stage.env("READ_MINUTES", "20");
+    let (o, steps) = stage.run_in_tree("hand-edit.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    assert_eq!(
+        hand_edit_output(&stage, "edit-reads"),
+        "minute 0: spec.replicas 2\nminute 10: spec.replicas 2\nminute 20: spec.replicas 2\n"
+    );
+}
+
+/// #691: the cleanup runs when the run stops. Cluster A stays busy after the attach, so the wait
+/// stops the run. The cleanup removes the profile from cluster A, and deletes the Deployment and
+/// the profile.
+#[test]
+fn hand_edit_sh_removes_the_profile_from_cluster_a_and_deletes_it_when_the_cluster_stays_busy() {
+    let mut stage = hand_edit_stage();
+    stage.env("FAKE_NOT_RUNNING", "1");
+    let (o, steps) = stage.run_in_tree("hand-edit.sh", &[]);
+    assert_eq!(o.status.code(), Some(2), "{steps}{}", text(&o.stderr));
+    // the message of the stop is in the errors of the check that stopped the run
+    let said = std::fs::read_to_string(stage.path("out/attach.err")).unwrap();
+    assert!(said.contains("not Running after an hour"), "{said}");
+    not_run(&steps, &["applied", "edit"]);
+    assert_eq!(
+        hand_edit_profile_calls(&stage)[1..],
+        [
+            format!("attach c-a {HAND_PROFILE}"),
+            format!("detach c-a {HAND_PROFILE}"),
+            format!("delete {HAND_PROFILE}"),
+        ]
+    );
+    let kubectl = observer_log(&stage, "kubectl.log");
+    assert!(
+        kubectl.contains(&format!(
+            "delete deployment {HAND_DEPLOYMENT} -n default --ignore-not-found"
+        )),
+        "{kubectl}"
+    );
+    assert_hand_edit_left_nothing(&stage);
+}
+
+/// #691: the script takes no argument, and stops before it reads or changes anything.
+#[test]
+fn hand_edit_sh_refuses_an_argument_and_changes_nothing() {
+    let stage = hand_edit_stage();
+    let (o, steps) = stage.run_in_tree("hand-edit.sh", &["2"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stdout).contains("examples/live/hand-edit.sh"),
+        "{}",
+        text(&o.stdout)
+    );
+    assert!(steps.is_empty(), "no stage ran: {steps}");
+    assert!(observer_log(&stage, "api.log").is_empty());
+}
+
+/// #691: the section of hand-edit.sh in `live-runs.md` names each check of the script, and each row
+/// says that no live window ran it yet.
+#[test]
+fn the_page_of_live_runs_names_each_check_of_hand_edit_sh_with_no_result_yet() {
+    assert_page_names_each_check("hand-edit.sh");
+    let mut ids = script_check_ids("hand-edit.sh");
+    ids.sort();
+    let mut want = HAND_EDIT_CHECKS.map(str::to_string).to_vec();
+    want.sort();
+    assert_eq!(ids, want);
+    let section = page_section("docs/src/development/live-runs.md", "## hand-edit.sh");
+    let rows = table_rows(&section, "| Check |");
+    assert!(!rows.is_empty(), "{section}");
+    for row in rows {
+        assert!(
+            row[2].contains("No result yet: no live window ran hand-edit.sh."),
+            "{row:?}"
+        );
+    }
+}
+
 #[test]
 fn api_sh_set_values_replaces_the_values_of_one_pack_and_keeps_the_rest() {
     let root = tempfile::tempdir().unwrap();
@@ -11672,8 +12074,8 @@ exit 0
 "##;
 
 /// A stage for observer-kind.sh with the stand-ins of the tools of the script. The script runs in a
-/// tree of its own, so that its `api.sh`, `tf.sh`, and `git` are stand-ins. The key of the tenant is
-/// `key-that-no-log-shows`.
+/// tree of its own, so that its `api.sh`, the scripts of [`lab_stand_ins`], and `git` are stand-ins.
+/// The key of the tenant is `key-that-no-log-shows`.
 fn observer_kind_stage() -> Stage {
     let mut stage = Stage::new(serde_json::json!({
         "project_uid": "p-1", "cluster_uid": "c-a",
@@ -11703,10 +12105,7 @@ fn observer_kind_stage() -> Stage {
     copy_scripts(&tree, &files);
     let live = tree.join("examples/live");
     executable(&live.join("api.sh"), FAKE_API_KIND);
-    executable(
-        &live.join("tf.sh"),
-        "#!/usr/bin/env bash\ncat \"$FAKE_OUTPUTS\"\n",
-    );
+    lab_stand_ins(&live);
     let obs = stage.path("obs");
     std::fs::create_dir_all(&obs).unwrap();
     std::fs::write(
@@ -11770,8 +12169,7 @@ fn observer_kind_stage() -> Stage {
         0,
         &observer_record("strata-live-addon"),
     );
-    let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
-    stage.env("PATH", &path);
+    stage.bin_first(&bin);
     stage.env("PALETTE_API_KEY", "key-that-no-log-shows");
     stage.env("FAKE_OBS", obs.to_str().unwrap());
     stage.env("FAKE_REPO", env!("CARGO_MANIFEST_DIR"));
@@ -11781,8 +12179,7 @@ fn observer_kind_stage() -> Stage {
 
 /// Run observer-kind.sh of the tree of `stage`.
 fn run_kind(stage: &Stage) -> (Output, String) {
-    let script = stage.path("tree/examples/live/observer-kind.sh");
-    stage.run(script.to_str().unwrap(), &[])
+    stage.run_in_tree("observer-kind.sh", &[])
 }
 
 /// Each check of observer-kind.sh, in the order that it runs.
@@ -11840,6 +12237,18 @@ const OBSERVER_KIND_SEEN: [&str; 2] = ["mirror-image-id", "mirror-image-string"]
 
 fn observer_log(stage: &Stage, file: &str) -> String {
     std::fs::read_to_string(stage.path("obs").join(file)).unwrap_or_default()
+}
+
+/// The stand-ins of three scripts of the lab in `live`, the `examples/live` of a tree of its own.
+/// `tf.sh` prints the OpenTofu outputs of the stage, and `baseline.sh` and `diagnose.sh` pass.
+fn lab_stand_ins(live: &Path) {
+    executable(
+        &live.join("tf.sh"),
+        "#!/usr/bin/env bash\ncat \"$FAKE_OUTPUTS\"\n",
+    );
+    for script in ["baseline.sh", "diagnose.sh"] {
+        executable(&live.join(script), "#!/usr/bin/env bash\nexit 0\n");
+    }
 }
 
 #[test]
@@ -12637,12 +13046,7 @@ fn images_stage() -> Stage {
     copy_scripts(&tree, &files);
     let live = tree.join("examples/live");
     executable(&live.join("api.sh"), FAKE_API_IMAGES);
-    executable(
-        &live.join("tf.sh"),
-        "#!/usr/bin/env bash\ncat \"$FAKE_OUTPUTS\"\n",
-    );
-    executable(&live.join("baseline.sh"), "#!/usr/bin/env bash\nexit 0\n");
-    executable(&live.join("diagnose.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    lab_stand_ins(&live);
 
     let obs = stage.path("obs");
     std::fs::create_dir_all(&obs).unwrap();
@@ -12677,8 +13081,7 @@ fn images_stage() -> Stage {
         0,
         &observer_profile_record("r-1", "strata-live-profile", "cluster"),
     );
-    let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
-    stage.env("PATH", &path);
+    stage.bin_first(&bin);
     stage.env("PALETTE_API_KEY", OBSERVER_KEY);
     stage.env("FAKE_OBS", obs.to_str().unwrap());
     stage.env("CYCLE_TRIES", "3");
@@ -12687,8 +13090,7 @@ fn images_stage() -> Stage {
 
 /// Run observer-images.sh of the tree of `stage`.
 fn run_images(stage: &Stage) -> (Output, String) {
-    let script = stage.path("tree/examples/live/observer-images.sh");
-    stage.run(script.to_str().unwrap(), &[])
+    stage.run_in_tree("observer-images.sh", &[])
 }
 
 /// Each check of observer-images.sh, in the order that it runs on a good run.
@@ -13214,8 +13616,7 @@ fn the_scripts_of_the_digest_checks_are_valid_bash_and_refuse_a_stage_that_does_
         assert!(o.status.success(), "{script}: {}", text(&o.stderr));
     }
     let stage = images_stage();
-    let script = stage.path("tree/examples/live/observer-images.sh");
-    let (o, steps) = stage.run(script.to_str().unwrap(), &["9"]);
+    let (o, steps) = stage.run_in_tree("observer-images.sh", &["9"]);
     assert_eq!(o.status.code(), Some(2));
     assert!(
         text(&o.stdout).contains("observer-images.sh [FROM_STAGE]"),
@@ -13335,14 +13736,19 @@ fn page_check_ids(script: &str) -> Vec<String> {
         .collect()
 }
 
+/// The section of `script` in `live-runs.md` names each check of the script, and no other check.
+fn assert_page_names_each_check(script: &str) {
+    let mut in_script = script_check_ids(script);
+    let mut on_page = page_check_ids(script);
+    in_script.sort();
+    on_page.sort();
+    assert_eq!(in_script, on_page, "{script}");
+}
+
 #[test]
 fn the_page_of_live_runs_names_each_check_of_observer_images_sh_and_of_observer_kind_sh() {
     for script in ["observer-images.sh", "observer-kind.sh"] {
-        let mut in_script = script_check_ids(script);
-        let mut on_page = page_check_ids(script);
-        in_script.sort();
-        on_page.sort();
-        assert_eq!(in_script, on_page, "{script}");
+        assert_page_names_each_check(script);
     }
     // the eight checks of the plan, by name
     let page = script_check_ids("observer-images.sh");
@@ -13419,8 +13825,8 @@ esac
 exit 0
 "##;
 
-/// The `tenant.sh` of that tree: cluster A is Running, and after an attach with `FAKE_NOT_RUNNING` it
-/// stays in Provisioning.
+/// The `tenant.sh` of that tree, and of the tree of hand-edit.sh: cluster A is Running, and after an
+/// attach with `FAKE_NOT_RUNNING` it stays in Provisioning.
 const FAKE_TENANT_FRED: &str = r##"#!/usr/bin/env bash
 if [ -n "${FAKE_NOT_RUNNING-}" ] && [ -f "$FAKE_OBS/attached" ]; then
   echo "fred c-a: Provisioning"
@@ -13705,12 +14111,7 @@ fn observer_stage() -> Stage {
     std::fs::create_dir_all(live.join("count-requests")).unwrap();
     executable(&live.join("api.sh"), FAKE_API_FRED);
     executable(&live.join("tenant.sh"), FAKE_TENANT_FRED);
-    executable(
-        &live.join("tf.sh"),
-        "#!/usr/bin/env bash\ncat \"$FAKE_OUTPUTS\"\n",
-    );
-    executable(&live.join("baseline.sh"), "#!/usr/bin/env bash\nexit 0\n");
-    executable(&live.join("diagnose.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    lab_stand_ins(&live);
 
     let obs = stage.path("obs");
     std::fs::create_dir_all(&obs).unwrap();
@@ -13786,8 +14187,7 @@ fn observer_stage() -> Stage {
         r#"{"profiles":[{"name":"strata-live-profile","uid":"r-1"},{"name":"strata-live-addon","uid":"ad-1"}]}"#,
     );
 
-    let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
-    stage.env("PATH", &path);
+    stage.bin_first(&bin);
     stage.env("PALETTE_API_KEY", OBSERVER_KEY);
     stage.env("FAKE_OBS", obs.to_str().unwrap());
     stage.env("FAKE_REPO", env!("CARGO_MANIFEST_DIR"));
@@ -13797,8 +14197,7 @@ fn observer_stage() -> Stage {
 
 /// Run observer.sh of the tree of `stage`.
 fn run_observer(stage: &Stage, args: &[&str]) -> (Output, String) {
-    let script = stage.path("tree/examples/live/observer.sh");
-    stage.run(script.to_str().unwrap(), args)
+    stage.run_in_tree("observer.sh", args)
 }
 
 /// Each check of observer.sh, in the order that it runs on a good run.
@@ -14995,11 +15394,7 @@ fn observer_chart_sh_fails_when_the_registry_stays() {
 
 #[test]
 fn the_page_of_live_runs_names_each_check_of_observer_chart_sh() {
-    let mut in_script = script_check_ids("observer-chart.sh");
-    let mut on_page = page_check_ids("observer-chart.sh");
-    in_script.sort();
-    on_page.sort();
-    assert_eq!(in_script, on_page);
+    assert_page_names_each_check("observer-chart.sh");
     // the three questions to Palette record a result and judge none
     let source = repo_file("examples/live/observer-chart.sh");
     for id in ["registry-no-login", "sync-no-login", "chart-no-login"] {
@@ -16023,8 +16418,7 @@ fn platform_stage() -> Stage {
     executable(&bin.join("kubectl"), PLATFORM_KUBECTL);
     let kube = stage.path("kube");
     std::fs::create_dir_all(&kube).unwrap();
-    let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
-    stage.env("PATH", &path);
+    stage.bin_first(&bin);
     stage.env("FAKE_KUBE", kube.to_str().unwrap());
     stage.route(&cluster_route("w-1"), &wilma_document(pack_ready));
     stage.route(
@@ -16847,11 +17241,7 @@ fn aws_inventory_counts_the_objects_of_each_option() {
 /// other check.
 #[test]
 fn the_page_of_live_runs_names_each_check_of_platform_sh() {
-    let mut in_script = script_check_ids("platform.sh");
-    let mut on_page = page_check_ids("platform.sh");
-    in_script.sort();
-    on_page.sort();
-    assert_eq!(in_script, on_page);
+    assert_page_names_each_check("platform.sh");
 }
 
 /// The key of the role in the tests of `observer-clusters.sh`: a user whose one role is Project

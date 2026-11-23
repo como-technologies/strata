@@ -171,6 +171,13 @@ registry_uid() {
   "$live/api.sh" get /v1/registries/metadata | jq -r --arg n "$1" '.items[] | select(.name == $n) | .uid'
 }
 
+# ---- the profiles of the project ---------------------------------------------------------------------
+
+# no_profile_named NAME: strata lists no version of the profile NAME in the project
+no_profile_named() {
+  [ "$("$strata" list profiles --json | jq --arg n "$1" '[.profiles[] | select(.name == $n)] | length')" = 0 ]
+}
+
 # ---- git ---------------------------------------------------------------------------------------------
 
 # isolate_git NAME: give each git command of the script the author NAME and no setting of the
@@ -440,6 +447,53 @@ kube() {
   [ -n "${KUBE_FILE:-}" ] || rm -f "$k"
   return "$rc"
 }
+
+# pack_status CLUSTER_UID PROFILE_UID: the name and the condition of each pack of the profile, as the
+# document of the cluster gives them. The output has one line of JSON for each pack.
+pack_status() {
+  "$live/api.sh" get "/v1/spectroclusters/$1" | jq -c --arg u "$2" \
+    '.status.packs[]? | select(.profileUid == $u) | {name, condition}'
+}
+
+# ---- a Deployment of a manifest layer ------------------------------------------------------------------
+#
+# image-digest.sh and hand-edit.sh put a Deployment of one pod in a manifest layer, and read it in
+# cluster A ($C) with kubectl.
+
+# pause_image: the image of the pod. Its container starts and does nothing.
+pause_image=registry.k8s.io/pause:3.10.2
+
+# deployment_manifest NAME IMAGE: the document of the Deployment NAME in the namespace default, with
+# one replica. Its one container runs IMAGE.
+deployment_manifest() {
+  cat << EOF
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: $1
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: $1
+  template:
+    metadata:
+      labels:
+        app: $1
+    spec:
+      containers:
+        - name: pause
+          image: $2
+          imagePullPolicy: IfNotPresent
+EOF
+}
+# deployment_absent NAME: cluster A has no Deployment NAME in the namespace default
+deployment_absent() { ! kube "$C" get deployment "$1" -n default > /dev/null 2>&1; }
+# delete_deployment NAME: delete the Deployment NAME of the namespace default from cluster A. A
+# Deployment that is gone already is no error.
+delete_deployment() { kube "$C" delete deployment "$1" -n default --ignore-not-found; }
 
 # ---- baseline ------------------------------------------------------------------------------------------
 
