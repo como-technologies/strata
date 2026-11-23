@@ -6766,9 +6766,66 @@ fn variable_declaration(name: &str) -> String {
 fn variable_default(name: &str) -> Option<String> {
     variable_declaration(name)
         .lines()
-        .find_map(|l| l.trim().strip_prefix("default"))
-        .and_then(|l| l.trim_start().strip_prefix('='))
-        .map(|l| l.trim().trim_matches('"').to_string())
+        .find_map(|l| assigned(l, "default"))
+        .map(|e| e.trim_matches('"').to_string())
+}
+
+/// The test reads the version of the provider `spectrocloud/spectrocloud` in `terraform/`,
+/// `terraform-platform/`, and `terraform-version/`, and in each lock file that the repository
+/// holds. It also reads the section of the provider in `live-runs.md`.
+#[test]
+fn each_module_of_the_live_example_pins_the_provider_version_that_live_runs_md_names() {
+    let required = "spectrocloud = {";
+    let locked = "provider \"registry.opentofu.org/spectrocloud/spectrocloud\" {";
+    let pins = [
+        ("terraform/versions.tf", required, "version"),
+        ("terraform-platform/versions.tf", required, "version"),
+        ("terraform-version/main.tf", required, "version"),
+        ("terraform/.terraform.lock.hcl", locked, "version"),
+        ("terraform/.terraform.lock.hcl", locked, "constraints"),
+        ("terraform-platform/.terraform.lock.hcl", locked, "version"),
+        (
+            "terraform-platform/.terraform.lock.hcl",
+            locked,
+            "constraints",
+        ),
+    ];
+    let found: Vec<String> = pins
+        .iter()
+        .map(|(file, start, key)| {
+            let text = std::fs::read_to_string(live_script(file)).unwrap();
+            let block = text
+                .split(start)
+                .nth(1)
+                .unwrap_or_else(|| panic!("{file} has no {start:?}"))
+                .split('}')
+                .next()
+                .unwrap();
+            block
+                .lines()
+                .find_map(|l| assigned(l, key))
+                .unwrap_or_else(|| panic!("{file} gives no {key} to the provider"))
+                .trim_matches('"')
+                .to_string()
+        })
+        .collect();
+    let version = &found[0];
+    for ((file, _, key), pin) in pins.iter().zip(&found) {
+        assert_eq!(pin, version, "the {key} of the provider in {file}");
+    }
+
+    let runs = repo_file("docs/src/development/live-runs.md");
+    let section = runs
+        .split("\n## The release of the provider\n")
+        .nth(1)
+        .expect("live-runs.md has the section of the provider")
+        .split("\n## ")
+        .next()
+        .unwrap();
+    assert!(
+        section.contains(&format!("pins the Spectro Cloud provider at {version}.")),
+        "{section}"
+    );
 }
 
 /// The scripts name the registry of the lab with `public_repo` in `lib.sh`, and OpenTofu makes the
@@ -6844,8 +6901,7 @@ impl TfBlock {
     fn selector(&self) -> Option<&str> {
         self.body.lines().find_map(|line| {
             let line = line.strip_prefix("  ").filter(|l| !l.starts_with(' '))?;
-            let (key, expression) = line.split_once('=')?;
-            matches!(key.trim(), "count" | "for_each").then(|| expression.trim())
+            assigned(line, "count").or_else(|| assigned(line, "for_each"))
         })
     }
 
@@ -6907,15 +6963,18 @@ fn terraform_files() -> Vec<(String, String)> {
         .collect()
 }
 
+/// The expression of a line `name = expression`, when the line gives a value to `name`.
+fn assigned<'a>(line: &'a str, name: &str) -> Option<&'a str> {
+    let (key, expression) = line.split_once('=')?;
+    (key.trim() == name).then(|| expression.trim())
+}
+
 /// The expression that a line `  name = expression` gives to the local `name`.
 fn local_expression<'a>(files: &'a [(String, String)], name: &str) -> Option<&'a str> {
     files
         .iter()
         .flat_map(|(_, text)| text.lines())
-        .find_map(|line| {
-            let (key, expression) = line.strip_prefix("  ")?.split_once('=')?;
-            (key.trim() == name).then(|| expression.trim())
-        })
+        .find_map(|line| assigned(line.strip_prefix("  ")?, name))
 }
 
 /// Whether `expression` reads the variable `own_registries`, itself or through a local.

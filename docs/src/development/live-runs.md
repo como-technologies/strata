@@ -2685,6 +2685,46 @@ the create, `capa-bootstrap-stack` passes, because the stack is complete: the
 create itself breaks it. The two new rules find the risk before the create. See
 [The CAPA stack of an AWS account](../internals/palette/clusters.md#the-capa-stack-of-an-aws-account).
 
+## The release of the provider
+
+The live example pins the Spectro Cloud provider at 0.30.7. The results on
+this page come from earlier releases. On 0.30.7, the facts below have no
+result yet: no live window ran on it. The code of 0.30.7 shows each fact as an
+earlier run showed it. The item of `provider-timeout-success` adds a new
+behavior of the code.
+[What to do with a new release](./facts.md#what-to-do-with-a-new-release)
+says how to add the facts of a release to this list.
+
+These facts depend on what the provider sends, plans, or keeps in its state:
+
+- The build and the baseline. `just live-up` builds the example through the
+  provider. `baseline.sh` checks that a plan with the default variables
+  changes nothing.
+- `version-bump-flag` and `version-bump-clone`: `in-place.sh on` and
+  `in-place.sh off`. The checks `plan-no-change` and `plan-edit` record what
+  the provider plans.
+- `version-bump-skip-destroy`: each script that applies with the flag on runs
+  `hold_versions` first. No check bumps a version without it.
+- `version-own-state` and `version-string-as-given`: `version-states.sh`, with
+  the module `terraform-version/`.
+- `cluster-variable-change` and `delete-in-progress`: `cluster.sh`. It sets a
+  variable of the add-on profile through the provider. The check
+  `state-has-no-cluster` reads the state after the delete.
+- `tags-are-labels`: `fleet.sh`.
+- `cluster-group-config` and `cluster-group-limit-units`: `cluster-group.sh`.
+  It changes the CPU limit of the group through the provider.
+- `template-lock-cluster-create`, `template-cluster-document`, and
+  `template-cluster-time-zone`: `template.sh`. It makes the template and a
+  cluster in it through the provider.
+- `tag-stored-as-authored`: `tag-only.sh`.
+- The rule `provider-eks-azs`: `eks.sh`. The code of 0.30.7 does not read
+  `cloud_config.azs` back either, so `cloud-eks.tf` still ignores the field.
+- The rule `provider-timeout-success`: `preflight-plan.sh` and `gke.sh`. From
+  provider 0.30.6, a pack in the state `Error` during the create also ends the
+  apply with a warning and success. The code of the provider shows it; no live
+  run shows it yet.
+- The platform cluster: `platform.sh`, with the module `terraform-platform/`.
+
 ## What has no live run
 
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`,
