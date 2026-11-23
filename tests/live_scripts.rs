@@ -11494,6 +11494,432 @@ fn api_sh_manifest_profile_sends_the_uid_that_palette_asks_of_a_manifest_pack() 
     );
 }
 
+// ---- the masked default test (#997) ----------------------------------------------------------------
+
+/// The variable that masked-default.sh gives the new version of the add-on profile.
+const MASKED_VARIABLE: &str = "strata_sensitive";
+
+/// The default value of [`MASKED_VARIABLE`]: a made-up text.
+const MASKED_DEFAULT: &str = "the default that the profile holds";
+
+/// The uid that Palette gives the new version of the add-on profile.
+const MASKED_UID: &str = "md-1";
+
+/// The variable [`MASKED_VARIABLE`] as Palette holds it: required and sensitive, with
+/// [`MASKED_DEFAULT`].
+fn masked_variable() -> serde_json::Value {
+    variable(MASKED_VARIABLE, "strata sensitive", MASKED_DEFAULT, true)
+}
+
+/// The route of the stand-in that moves cluster A. When `$FAKE_ROUTES/<key>.status` is 204,
+/// Palette takes the update with no body. For another status, it sends the body of
+/// `<key>.refusal`, and the cluster stays. The file `$FAKE_MASKED/runs` holds the uid of the add-on
+/// version that cluster A runs.
+const FAKE_MASKED_MOVE: &str = r#"#!/usr/bin/env bash
+key=v1_spectroclusters_c-a_profiles
+if [ "$(cat "$FAKE_ROUTES/$key.status")" = 204 ]; then
+  jq -r '.profiles[0].uid' "$FAKE_ROUTES/sent/PATCH_$key" > "$FAKE_MASKED/runs"
+else
+  cat "$FAKE_ROUTES/$key.refusal"
+fi
+"#;
+
+/// The document of cluster A in the stand-in: it runs the add-on version of `$FAKE_MASKED/runs`.
+const FAKE_MASKED_CLUSTER: &str = r#"#!/usr/bin/env bash
+jq -n --arg u "$(cat "$FAKE_MASKED/runs")" '{metadata: {name: "fred", uid: "c-a"},
+  status: {state: "Running"}, spec: {clusterProfileTemplates: [{uid: $u}]}}'
+"#;
+
+/// The cluster variables route of cluster A in the stand-in: `$FAKE_MASKED/<uid>.variables` of the
+/// add-on version that cluster A runs.
+const FAKE_MASKED_CLUSTER_VARIABLES: &str = r#"#!/usr/bin/env bash
+cat "$FAKE_MASKED/$(cat "$FAKE_MASKED/runs").variables"
+"#;
+
+/// A `kubectl` for masked-default.sh. It logs its arguments, and answers only with the kubeconfig
+/// of the stand-in. For the `ConfigMap` of the add-on manifest, it gives `edited` as cluster A holds
+/// it. On the new version, Palette resolves each variable of the manifest that the create sent with
+/// the default of the variable. With `$FAKE_RESOLVES_MASK`, it resolves each one with the mask.
+const FAKE_KUBECTL_MASKED: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_KUBECTL_LOG"
+grep -q 'fake-kubeconfig' "${KUBECONFIG:-/dev/null}" 2>/dev/null || { echo "no kubeconfig" >&2; exit 1; }
+case "$*" in *"get configmap strata-live -n default"*) ;; *) exit 0 ;; esac
+[ "$(cat "$FAKE_MASKED/runs")" = md-1 ] || { echo no; exit 0; }
+jq -j --arg mask "${FAKE_RESOLVES_MASK:-}" '
+  [.spec.variables[] | {key: "{{.spectro.var.\(.name)}}", value: (if $mask == "" then .defaultValue else $mask end)}] as $vars
+  | [.spec.template.packs[].manifests[].content] | join("\n")
+  | reduce $vars[] as $v (.; split($v.key) | join($v.value))
+  | capture("edited: \"(?<e>[^\"]*)\"").e' "$FAKE_ROUTES/sent/POST_v1_clusterprofiles"
+"#;
+
+/// A stage of masked-default.sh. Cluster A `c-a` runs the add-on version `ad-1` at the start, or
+/// the version `runs`. Palette makes the new version [`MASKED_UID`], and its variables route gives
+/// `variables`. strata lists the new version, and `compare --validate` gives `compared`.
+fn masked_stage(runs: &str, variables: &serde_json::Value, compared: &serde_json::Value) -> Stage {
+    let mut stage = Stage::new(baseline_outputs());
+    let live = stage.copy_live();
+    executable(&live.join("baseline.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    let masked = stage.path("masked");
+    std::fs::create_dir_all(&masked).unwrap();
+    std::fs::write(masked.join("runs"), runs).unwrap();
+    // the cluster variables route of each version: the add-on version gives the variable purpose,
+    // and the new version gives the masked value of its variable
+    let purpose = serde_json::json!([{"profileUid": "ad-1", "variables": [merged(
+        variable("purpose", "Purpose", "strata live example", false),
+        serde_json::json!({"value": "strata live example"}),
+    )]}]);
+    let served = cluster_route_variable(&masked_variable());
+    let new = serde_json::json!([{"profileUid": MASKED_UID, "variables": [
+        merged(served, serde_json::json!({"value": MASKED}))]}]);
+    std::fs::write(masked.join("ad-1.variables"), purpose.to_string()).unwrap();
+    std::fs::write(
+        masked.join(format!("{MASKED_UID}.variables")),
+        new.to_string(),
+    )
+    .unwrap();
+    let routes = stage.path("routes");
+    let cluster = cluster_route("c-a");
+    executable(
+        &routes.join(format!("{}.sh", Stage::route_key(&cluster))),
+        FAKE_MASKED_CLUSTER,
+    );
+    // a live run shows that Palette takes an update with HTTP 204 and no body (#919)
+    let move_key = Stage::route_key(&cluster_profiles_route("c-a"));
+    executable(&routes.join(format!("{move_key}.sh")), FAKE_MASKED_MOVE);
+    std::fs::write(routes.join(format!("{move_key}.status")), "204").unwrap();
+    executable(
+        &routes.join(format!(
+            "{}.sh",
+            Stage::route_key(&cluster_variables_route("c-a"))
+        )),
+        FAKE_MASKED_CLUSTER_VARIABLES,
+    );
+    stage.route(&cluster_manifests_route("c-a"), r#"{"profiles":[]}"#);
+    stage.route(
+        &cluster_kubeconfig_route("c-a"),
+        "apiVersion: v1 # fake-kubeconfig\n",
+    );
+    let manifests = |content: &str| {
+        serde_json::json!({"spec": {"packs": [{"spec": {"name": "strata-live-config",
+            "manifests": [{"name": "strata-live-config", "uid": "m-1", "content": content}]}}]}})
+        .to_string()
+    };
+    stage.published("ad-1", ADDON_PACK, &manifests("edited: \"no\"\n"));
+    stage.published(
+        MASKED_UID,
+        ADDON_PACK,
+        &manifests(&format!(
+            "edited: \"{{{{.spectro.var.{MASKED_VARIABLE}}}}}\"\n"
+        )),
+    );
+    stage.route(
+        "/v1/clusterprofiles",
+        &format!(r#"{{"uid":"{MASKED_UID}"}}"#),
+    );
+    stage.route(&variables_route(MASKED_UID), &variables.to_string());
+    stage.strata(
+        "list profiles --json",
+        0,
+        &serde_json::json!({"profiles": [
+            {"name": "strata-live-addon", "version": "1.0.0", "uid": "ad-1"},
+            {"name": "strata-live-addon", "version": "1.0.97", "uid": MASKED_UID}]})
+        .to_string(),
+    );
+    stage.strata(
+        &format!("compare {CLUSTER_PREFIX}c-a strata-live-addon@1.0.97 --validate --json"),
+        1,
+        &compared.to_string(),
+    );
+    let bin = stage.path("masked-bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    executable(&bin.join("kubectl"), FAKE_KUBECTL_MASKED);
+    let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
+    stage.env("PATH", &path);
+    stage.env("FAKE_MASKED", masked.to_str().unwrap());
+    stage.env("PROPAGATION_MINUTES", "1");
+    stage
+}
+
+/// `value` with each field of `more` in its place.
+fn merged(mut value: serde_json::Value, more: serde_json::Value) -> serde_json::Value {
+    for (k, v) in more.as_object().unwrap() {
+        value[k] = v.clone();
+    }
+    value
+}
+
+/// The variables route of the new version as Palette serves it: the mask in place of the default.
+fn masked_route() -> serde_json::Value {
+    serde_json::json!({"variables": [profile_route_variable(&masked_variable())]})
+}
+
+/// The comparison of the move to the new version: the route accepts, and strata names no required
+/// variable.
+fn masked_compared() -> serde_json::Value {
+    serde_json::json!({"paletteValidation": {"clusterUid": "c-a", "accepts": true}})
+}
+
+/// Run each stage of masked-default.sh from `from`, in the copy of the scripts of `stage`.
+fn run_masked(stage: &Stage, from: &str) -> (Output, String) {
+    stage.run("masked-default.sh", &[from])
+}
+
+/// Each check of masked-default.sh, in the order that it runs when each one passes. The checks of
+/// stage 4 start at [`MASKED_UNDO`].
+fn masked_checks() -> Vec<&'static str> {
+    vec![
+        "masked-version",
+        "masked-route",
+        "masked-route-mask",
+        "masked-validate",
+        "masked-asked",
+        "masked-says",
+        "masked-update",
+        "masked-taken",
+        "masked-runs",
+        "masked-cluster",
+        "masked-cluster-value",
+        "masked-inside",
+        "masked-back",
+        "masked-back-taken",
+        "masked-back-runs",
+        "masked-back-inside",
+        "masked-delete",
+        "masked-baseline",
+    ]
+}
+
+/// The index in [`masked_checks`] of the first check of stage 4.
+const MASKED_UNDO: usize = 12;
+
+#[test]
+fn masked_default_sh_moves_cluster_a_to_the_version_and_back_and_deletes_the_version() {
+    let stage = masked_stage("ad-1", &masked_route(), &masked_compared());
+    let (o, steps) = run_masked(&stage, "1");
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert_eq!(check_ids(&steps), masked_checks(), "{steps}");
+    // compare --validate records its exit code, and the checks after it judge the answer
+    let (validate, judged): (Vec<&str>, Vec<&str>) = masked_checks()
+        .into_iter()
+        .partition(|id| *id == "masked-validate");
+    seen(&steps, &validate);
+    passed(&steps, &judged);
+
+    // the create: a new version of the add-on profile, whose manifest reads the variable
+    let created = stage.sent(Method::Post.as_str(), "/v1/clusterprofiles");
+    assert_eq!(created.len(), 1, "{created:?}");
+    assert_eq!(created[0]["metadata"]["name"], "strata-live-addon");
+    assert_eq!(created[0]["spec"]["version"], "1.0.97");
+    let stored = masked_variable();
+    let fields = [
+        "name",
+        "displayName",
+        "defaultValue",
+        "required",
+        "isSensitive",
+    ];
+    let sent = &created[0]["spec"]["variables"];
+    assert_eq!(sent.as_array().map(Vec::len), Some(1), "{sent}");
+    for field in fields {
+        assert_eq!(sent[0][field], stored[field], "{field}: {sent}");
+    }
+    assert_eq!(
+        created[0]["spec"]["template"]["packs"][0]["manifests"],
+        serde_json::json!([{"name": "strata-live-config",
+            "content": format!("edited: \"{{{{.spectro.var.{MASKED_VARIABLE}}}}}\"\n")}]),
+        "the manifest reads the variable, and the version gets a manifest of its own"
+    );
+
+    // the move gives the variable no value, and the undo moves cluster A back
+    let moves = stage.sent("PATCH", &cluster_profiles_route("c-a"));
+    let entry = |n: usize| {
+        let profiles = moves[n]["profiles"].as_array().unwrap();
+        assert_eq!(profiles.len(), 1, "{moves:?}");
+        let e = &profiles[0];
+        (
+            e["uid"].as_str().unwrap(),
+            e["replaceWithProfile"].as_str().unwrap(),
+            e["variables"].clone(),
+        )
+    };
+    assert_eq!(moves.len(), 2, "{moves:?}");
+    assert_eq!(entry(0), (MASKED_UID, "ad-1", serde_json::json!([])));
+    assert_eq!(entry(1), ("ad-1", MASKED_UID, serde_json::json!([])));
+
+    // the delete of the version follows the move back
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    let lines: Vec<&str> = calls.lines().collect();
+    let last_move = lines
+        .iter()
+        .rposition(|l| *l == "PATCH /v1/spectroclusters/c-a/profiles")
+        .unwrap();
+    let delete = lines
+        .iter()
+        .position(|l| *l == format!("DELETE {}", profile_route(MASKED_UID)))
+        .unwrap_or_else(|| panic!("no delete in:\n{calls}"));
+    assert!(last_move < delete, "{calls}");
+}
+
+/// The value of the sensitive variable is in no output of the run, no log, and no summary. The
+/// kubeconfig is in no file that the run leaves.
+#[test]
+fn masked_default_sh_writes_the_value_of_the_variable_in_no_file_of_the_run() {
+    let stage = masked_stage("ad-1", &masked_route(), &masked_compared());
+    let (o, steps) = run_masked(&stage, "1");
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let out = files_under(&stage.path("out"));
+    assert!(out.iter().any(|(name, _)| name == "summary.md"), "{out:?}");
+    for (name, body) in out.iter().chain(&files_under(&stage.path("tmp"))) {
+        assert!(!body.contains(MASKED_DEFAULT), "{name} holds the value");
+        assert!(
+            !body.contains("fake-kubeconfig"),
+            "{name} holds the kubeconfig"
+        );
+    }
+    for stream in [&o.stdout, &o.stderr] {
+        assert!(!text(stream).contains(MASKED_DEFAULT));
+    }
+    let log = std::fs::read_to_string(stage.path("out/propagation.log")).unwrap();
+    assert!(
+        log.contains("the ConfigMap holds the value that the check wants"),
+        "{log}"
+    );
+}
+
+#[test]
+fn masked_default_sh_fails_a_check_when_palette_answers_in_another_way() {
+    // the variables route gives the default value as it is
+    let plain = serde_json::json!({"variables": [masked_variable()]});
+    let stage = masked_stage("ad-1", &plain, &masked_compared());
+    let (o, steps) = run_masked(&stage, "1");
+    failed(&steps, &["masked-route-mask"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+
+    // strata names the variable as a required variable with no default value
+    let named = serde_json::json!({
+        "paletteValidation": {"clusterUid": "c-a", "accepts": true},
+        "updateChecks": {"requiredVariables": {"code": INVALID_VARIABLE_CODE,
+            "names": [MASKED_VARIABLE]}}});
+    let stage = masked_stage("ad-1", &masked_route(), &named);
+    let (_, steps) = run_masked(&stage, "1");
+    failed(&steps, &["masked-says"]);
+    passed(
+        &steps,
+        &["masked-route-mask", "masked-taken", "masked-inside"],
+    );
+
+    // Palette resolves the variable in the manifest with the mask
+    let mut stage = masked_stage("ad-1", &masked_route(), &masked_compared());
+    stage.env("FAKE_RESOLVES_MASK", MASKED);
+    let (_, steps) = run_masked(&stage, "1");
+    failed(&steps, &["masked-inside"]);
+    passed(
+        &steps,
+        &["masked-taken", "masked-cluster-value", "masked-back-inside"],
+    );
+    let log = std::fs::read_to_string(stage.path("out/propagation.log")).unwrap();
+    assert!(log.contains("the ConfigMap holds the mask"), "{log}");
+
+    // the cluster variables route gives no value: the cluster holds none
+    let stage = masked_stage("ad-1", &masked_route(), &masked_compared());
+    let empty = serde_json::json!([{"profileUid": MASKED_UID, "variables": [
+        merged(cluster_route_variable(&masked_variable()), serde_json::json!({"value": ""}))]}]);
+    std::fs::write(
+        stage.path(&format!("masked/{MASKED_UID}.variables")),
+        empty.to_string(),
+    )
+    .unwrap();
+    let (_, steps) = run_masked(&stage, "1");
+    failed(&steps, &["masked-cluster-value"]);
+    passed(&steps, &["masked-taken", "masked-inside"]);
+}
+
+/// Palette refuses the update. Cluster A stays on the add-on version, so the undo sends no update.
+/// It deletes the new version.
+#[test]
+fn masked_default_sh_fails_the_move_that_palette_refuses_and_deletes_the_version() {
+    let stage = masked_stage("ad-1", &masked_route(), &masked_compared());
+    let key = Stage::route_key(&cluster_profiles_route("c-a"));
+    std::fs::write(stage.path(&format!("routes/{key}.status")), "500").unwrap();
+    std::fs::write(
+        stage.path(&format!("routes/{key}.refusal")),
+        error_body(
+            INVALID_VARIABLE_CODE,
+            &format!(
+                "spectrocluster variable is invalid due to default value can't be empty for required variable '{MASKED_VARIABLE}'"
+            ),
+        ),
+    )
+    .unwrap();
+    let (o, steps) = run_masked(&stage, "1");
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    passed(
+        &steps,
+        &["masked-update", "masked-delete", "masked-baseline"],
+    );
+    failed(
+        &steps,
+        &[
+            "masked-taken",
+            "masked-runs",
+            "masked-cluster-value",
+            "masked-inside",
+        ],
+    );
+    not_run(
+        &steps,
+        &[
+            "masked-back",
+            "masked-back-taken",
+            "masked-back-runs",
+            "masked-back-inside",
+        ],
+    );
+    let moves = stage.sent("PATCH", &cluster_profiles_route("c-a"));
+    assert_eq!(moves.len(), 1, "no update moves cluster A back: {moves:?}");
+}
+
+/// `masked-default.sh 4` removes what an earlier run left: cluster A on the new version, and the
+/// version.
+#[test]
+fn masked_default_sh_4_moves_cluster_a_back_and_deletes_the_version_of_an_earlier_run() {
+    let stage = masked_stage(MASKED_UID, &masked_route(), &masked_compared());
+    let (o, steps) = run_masked(&stage, "4");
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let undo = &masked_checks()[MASKED_UNDO..];
+    assert_eq!(check_ids(&steps), undo, "{steps}");
+    passed(&steps, undo);
+    assert!(
+        stage
+            .sent(Method::Post.as_str(), "/v1/clusterprofiles")
+            .is_empty()
+    );
+    assert_eq!(
+        std::fs::read_to_string(stage.path("masked/runs")).unwrap(),
+        "ad-1\n"
+    );
+}
+
+/// Palette makes no version. The stage stops before the move, and changes nothing on cluster A.
+#[test]
+fn masked_default_sh_stops_before_the_move_when_palette_makes_no_version() {
+    let stage = masked_stage("ad-1", &masked_route(), &masked_compared());
+    std::fs::write(stage.path("routes/v1_clusterprofiles.status"), "400").unwrap();
+    let (o, steps) = run_masked(&stage, "1");
+    assert_eq!(o.status.code(), Some(2), "{steps}");
+    assert!(
+        text(&o.stderr).contains("Palette made no version strata-live-addon@1.0.97"),
+        "{}",
+        text(&o.stderr)
+    );
+    failed(&steps, &["masked-version"]);
+    assert!(
+        stage
+            .sent("PATCH", &cluster_profiles_route("c-a"))
+            .is_empty()
+    );
+}
+
 // ---- observer-kind.sh --------------------------------------------------------------------------------
 
 /// A `kubectl` for observer-kind.sh. It logs each call to `$FAKE_OBS/kubectl.log`.
