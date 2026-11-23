@@ -136,8 +136,8 @@ resource "spectrocloud_cluster_eks" "cluster" {
   }
 
   # Provider 0.30.1 does not read cloud_config.azs back from Palette, and azs forces a new
-  # resource. Without this line each plan after the create replaces the cluster, whatever else it
-  # changes.
+  # resource. The code of provider 0.30.7 does not read it either. Without this line each plan
+  # after the create replaces the cluster, whatever else it changes.
   lifecycle {
     ignore_changes = [cloud_config[0].azs]
   }

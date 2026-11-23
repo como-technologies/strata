@@ -296,7 +296,9 @@ back to false with the default variables (`apply_baseline`).
   cluster stays `Provisioning` with no error field.
   When the create takes longer than its timeout, the provider gives a warning
   and ends the apply with success, so `just live-up` can end while the cluster
-  still builds: `gke.sh` waits for `Running`.
+  still builds: `gke.sh` waits for `Running`. From provider 0.30.6, a pack in
+  the state `Error` during the create also ends the apply in this way. The code
+  of the provider shows it; no live run shows it yet.
 - For `cloud = "eks"`: the six core policies of Palette as customer managed
   policies in the AWS account, by the names that `palette_core_policies` holds,
   and an `aws_profile` that can create an IAM role and a policy. See

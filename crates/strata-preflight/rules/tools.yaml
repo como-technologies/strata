@@ -13,13 +13,17 @@ rules:
     status: seen
     what: |
       At its create timeout the provider gives a warning and exit 0 ("Creation complete") while the
-      cluster still builds. Gate on `Running`, or run `strata-preflight --watch`.
+      cluster still builds. From provider 0.30.6, a pack in the state `Error` during the create also
+      ends the create in this way. Gate on `Running`, or run `strata-preflight --watch`.
     fix:
       owner: provider
       text: An error, or an opt-in warning.
     evidence:
       - kind: run
         ref: "#89, #90"
+      - kind: source
+        ref: docs/src/development/live-example.md
+        note: the code of provider 0.30.6 ends the create with a warning when a pack is in the state Error; no live run shows it yet
 
   - id: provider-eks-azs
     title: The provider reads cloud_config.azs back on EKS

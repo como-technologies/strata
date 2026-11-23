@@ -685,6 +685,43 @@ The weekly run can have opened its own issue for the same value, so close both t
 release of strata names the value, remove the label `unknown-value` from the issue and close it. A
 closed issue with the label still counts toward the limit of the endpoint.
 
+### What to do with a new release
+
+An issue "Prove the facts again on" a repository and a tag means that the Palette SDK or the
+Terraform provider has a new release. The contract run sends each of its requests itself, so a
+release changes no answer of the run. A release of the provider can change what the live example
+sends to Palette, what it plans, and what it keeps in its state. A release of the SDK reaches the
+live example only through a release of the provider that uses it. Do these steps:
+
+1. Read the result of the last contract run, and the open issues of the label `palette-drift`.
+   Name each fact that differs, and each fact that the release can change.
+2. Read the changes of the release in its code. [The code of Palette](./changes.md#the-code-of-palette)
+   says where a session finds it. Find each change to a resource or a data source that the live
+   example uses.
+3. For a release of the provider, move the pin of each module of the live example. The pins are in
+   `versions.tf` of `terraform/` and `terraform-platform/`, and in `main.tf` of `terraform-version/`.
+4. Write the lock files of `terraform/` and `terraform-platform/` again. Lock each platform that the
+   registry lists, so that each file holds the hashes of each platform:
+
+   ```bash
+   v=0.30.7
+   platforms=$(curl -s https://registry.opentofu.org/v1/providers/spectrocloud/spectrocloud/versions \
+     | jq -r --arg v "$v" '.versions[] | select(.version == $v) | .platforms[] | "-platform=\(.os)_\(.arch)"')
+   for m in terraform terraform-platform; do
+     sed -i '/^provider "registry.opentofu.org\/spectrocloud\/spectrocloud"/,/^}/d' examples/live/$m/.terraform.lock.hcl
+     tofu -chdir=examples/live/$m providers lock $platforms registry.opentofu.org/spectrocloud/spectrocloud
+   done
+   ```
+
+   The `sed` removes the entry of the old version. Without it, `tofu` refuses the new version.
+   Git ignores the lock file of `terraform-version/`.
+5. In each module, run `tofu init -backend=false -lockfile=readonly`, and then `tofu validate`.
+6. List the facts that the release can change, and their live checks, in
+   [The release of the provider](./live-runs.md#the-release-of-the-provider). The live window of
+   the lead runs them on the release. Then the page states each result.
+7. For each fact that Palette changed, change the stand-in, the fact, and the page together. Mark a
+   change that only the code shows: "The code of the provider shows it; no live run shows it yet".
+
 ## The facts of the clouds
 
 A rule of the cloud tier of strata-preflight runs the tool of a cloud, such as `aws` or `gcloud`,
