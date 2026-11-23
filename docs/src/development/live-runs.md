@@ -834,6 +834,34 @@ change and a delete with `kubectl`.
 | `detach`, `deployment-gone` | 0 | `barney-config` leaves cluster A, and the Deployment goes within 20 minutes. [observer.sh](#observersh) shows that Palette deletes the Deployment of a layer that leaves the cluster. No result yet: no live window ran hand-edit.sh. |
 | `profile-delete`, `clean`, `baseline` | 0 | Palette deletes `barney-config`. No Deployment and no profile of the run stay, and the example is at its baseline. No result yet: no live window ran hand-edit.sh. |
 
+## masked-default.sh
+
+Read-write. It needs the example at its baseline with cluster A, and `kubectl`.
+Stage 1 makes the add-on version 1.0.97 through the API. The version has one
+more variable, `strata_sensitive`, which is required and sensitive. Its default
+value is a made-up text, and the manifest reads the variable. Stage 2 moves
+cluster A to the version with no value for the variable, and stage 4 moves it
+back and deletes the version.
+
+The script reads the ConfigMap inside cluster A with a kubeconfig that it keeps
+in a temporary file. No output and no log holds the value of the variable.
+`propagation.log` names only the case of each read: the value that the check
+wants, the mask, or another value. `masked-default.sh 4` removes what an earlier
+run left. It moves cluster A back only when the cluster runs the version.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `masked-version` | 0 | #997: Palette makes and publishes the version with the variable. No result yet: no live window ran the stage |
+| `masked-route`, `masked-route-mask` | 0 | #997: `GET /v1/clusterprofiles/<uid>/variables` gives `********` in place of the default value, and the variable is required and sensitive. No result yet: no live window ran the stage |
+| `masked-validate`, `masked-asked` | ?, 0 | #997: `compare cluster:<uid> <ref> --validate` asks the route about the move, and the comparison holds an answer. No result yet: no live window ran the stage |
+| `masked-says` | 0 | #912, #997: the comparison has no `updateChecks.requiredVariables`. Strata reads the mask as a default value, and names no required variable. No result yet: no live window ran the stage |
+| `masked-update`, `masked-taken` | 0 | #997: `api.sh replace-status` sends the update with no value for the variable. Palette takes it with HTTP 204, and does not refuse it with `InvalidVariable`. No result yet: no live window ran the stage |
+| `masked-runs` | 0 | #997: the document of cluster A names the version. No result yet: no live window ran the stage |
+| `masked-cluster`, `masked-cluster-value` | 0 | #997: `GET /v1/spectroclusters/<uid>/variables` gives `********` for the value of the variable. So the cluster gives the variable a value. No result yet: no live window ran the stage |
+| `masked-inside` | 0 | #997: the ConfigMap inside cluster A holds the default value that the profile holds, and not the mask. The check reads it for at most `PROPAGATION_MINUTES` minutes, 20 by default. No result yet: no live window ran the stage |
+| `masked-back`, `masked-back-taken`, `masked-back-runs`, `masked-back-inside` | 0 | cluster A runs the add-on version 1.0.0 again, and the ConfigMap holds its value. No result yet: no live window ran the stage |
+| `masked-delete`, `masked-baseline` | 0 | the version is deleted, and the example is at its baseline. No result yet: no live window ran the stage |
+
 ## macro-repave.sh
 
 Read-write, and it replaces the nodes of cluster A. It needs the example at its

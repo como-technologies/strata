@@ -1251,7 +1251,8 @@ facts:
       - src/api/codes.rs
 
   # At the update, Palette takes the default value that the profile holds, and not the mask that
-  # the variables route gives. So a move reads the mask as a default value (#912).
+  # the variables route gives. So a move reads the mask as a default value (#912). masked-default.sh
+  # moves cluster A with no value for the variable, and reads what the cluster then holds (#997).
   - id: update-takes-a-masked-default
     kind: behavior
     reads:
@@ -1259,8 +1260,12 @@ facts:
         - variables[].defaultValue
         - variables[].isSensitive
         - variables[].required
-    live: []
-    unchecked: The code of Palette shows it. No run gives a profile a sensitive variable.
+    live:
+      - masked-default.sh:masked-route-mask
+      - masked-default.sh:masked-says
+      - masked-default.sh:masked-taken
+      - masked-default.sh:masked-cluster-value
+      - masked-default.sh:masked-inside
     pages:
       - internals/palette/profiles.md#the-checks-of-an-update
     code:
