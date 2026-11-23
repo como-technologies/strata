@@ -681,7 +681,7 @@ just live-validate-route BODIES                                                #
 just live-route-bodies BODIES                                                  # #408, #413, needs just live-profiles on AWS; tries four add-on profiles, runs validate-route.sh on those that Palette takes, deletes them
 just live-pending                                                              # #70, #276, needs just live-up
 just live-macros                                                               # #72, needs just live-up
-just live-image-digest                                                        # #630, needs just live-up, kubectl, and crane
+just live-image-digest                                                         # #630, needs just live-up, kubectl, and crane
 just live-masked-default                                                       # #997, needs just live-up and kubectl
 just live-macro-repave                                                         # #72, needs just live-up; leaves a repave that waits, so live-down follows
 just live-repave                                                               # #73, needs just live-up
