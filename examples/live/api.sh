@@ -27,12 +27,16 @@
 #       request has the header ProjectUid PROJECT_UID. The source is a published version of the
 #       project of PALETTE_PROJECT_UID. Print the uid of the new profile. Delete it with
 #       PALETTE_PROJECT_UID=PROJECT_UID api.sh delete.
-#   api.sh variable-copy PROFILE_UID NAME VARIABLE FROM TO
+#   api.sh variable-copy PROFILE_UID NAME VARIABLE FROM TO [VERSION [FIELDS]]
 #       Create and publish the profile NAME, a copy of a published version, with one more
 #       variable VARIABLE. The variable is of the format string, is not required, and has no
-#       default value. In the one pack values that hold the text FROM, the copy has TO in its
-#       place. TO can read the variable, as in podCIDR: "{{.spectro.var.VARIABLE}}". Print the uid
-#       of the new profile. Exit 2 when no pack values, or more than one, hold FROM.
+#       default value. FIELDS, a JSON object, gives the variable other fields, such as
+#       {"required": true, "isSensitive": true, "defaultValue": "a"}. In the one pack values or
+#       manifest that holds the text FROM, the copy has TO in its place. TO can read the
+#       variable, as in podCIDR: "{{.spectro.var.VARIABLE}}". The copy has the version VERSION,
+#       or the version of the source when VERSION is empty. With the NAME of the source, the
+#       copy is a new version of its profile. Print the uid of the new profile. Exit 2 when no
+#       pack values or manifest, or more than one, hold FROM.
 #   api.sh delete-tenant PROFILE_UID
 #       Delete a profile of the tenant: DELETE with no ProjectUid header. A missing one is not an
 #       error.
@@ -309,14 +313,22 @@ reorder_cluster() {
 # edit_body UID FROM TO DIR: DIR/body, the published version UID with the text FROM changed to
 # TO in the one pack values or manifest that holds it
 edit_body() {
-  local uid=$1 from=$2 to=$3 dir=$4 matches
+  local uid=$1 from=$2 to=$3 dir=$4
   fetch_published "$uid" "$dir"
-  matches=$(jq --arg from "$from" --slurpfile c "$dir/contents" '
-      [.spec.published.packs[] | (.values // ""), ($c[0][.name] // [] | .[].content)]
-      | map(select(contains($from))) | length' "$dir/profile")
+  body "$dir" '.' > "$dir/whole"
+  replace_once "$uid" "$from" "$to" "$dir/whole" > "$dir/body"
+}
+
+# replace_once UID FROM TO FILE: print FILE, the body of a profile version. In the one pack values
+# or manifest that holds the text FROM, the output has TO in its place. UID names the source in the
+# message. Exit 2 unless exactly one holds FROM.
+replace_once() {
+  local uid=$1 from=$2 to=$3 file=$4 matches
+  matches=$(jq --arg from "$from" '[.spec.template.packs[] | .values, (.manifests[] | .content // "")]
+      | map(select(contains($from))) | length' "$file")
   [ "$matches" = 1 ] || die "$matches values and manifests of $uid contain the text to replace; want exactly 1"
-  body "$dir" '.values |= (split($from) | join($to)) | .manifests |= map(.content = ((.content // "") | split($from) | join($to)))' \
-    --arg from "$from" --arg to "$to" > "$dir/body"
+  jq --arg from "$from" --arg to "$to" '.spec.template.packs[] |= (.values |= (split($from) | join($to))
+      | .manifests |= map(.content = ((.content // "") | split($from) | join($to))))' "$file"
 }
 
 edit() {
@@ -372,15 +384,16 @@ copy_into() {
 }
 
 variable_copy() {
-  local uid=${1:-} name=${2:-} variable=${3:-} from=${4:-} to=${5:-} tmp hits
-  [ -n "$to" ] || die "usage: api.sh variable-copy PROFILE_UID NAME VARIABLE FROM TO"
+  local uid=${1:-} name=${2:-} variable=${3:-} from=${4:-} to=${5:-} version=${6:-} fields=${7:-} tmp
+  [ -n "$to" ] || die "usage: api.sh variable-copy PROFILE_UID NAME VARIABLE FROM TO [VERSION [FIELDS]]"
+  [ -n "$fields" ] || fields='{}'
+  jq -e 'type == "object"' <<<"$fields" > /dev/null 2>&1 || die "FIELDS is not a JSON object"
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
   copy_body "$uid" "$name" "$tmp"
-  hits=$(jq --arg f "$from" '[.spec.template.packs[] | select(.values | contains($f))] | length' "$tmp/body")
-  [ "$hits" = 1 ] || die "$hits pack values of $uid contain the text to replace; want exactly 1"
-  jq --arg f "$from" --arg t "$to" --arg v "$variable" '
-    .spec.variables = [{name: $v, displayName: $v, format: "string", required: false, defaultValue: ""}]
-    | .spec.template.packs[].values |= (split($f) | join($t))' "$tmp/body" > "$tmp/variable-body"
+  replace_once "$uid" "$from" "$to" "$tmp/body" > "$tmp/replaced"
+  jq --arg v "$variable" --arg version "$version" --argjson fields "$fields" '
+    .spec.variables = [{name: $v, displayName: $v, format: "string", required: false, defaultValue: ""} + $fields]
+    | if $version == "" then . else .spec.version = $version end' "$tmp/replaced" > "$tmp/variable-body"
   create_published "$tmp/variable-body" || exit 2
 }
 

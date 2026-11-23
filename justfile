@@ -651,6 +651,11 @@ live-edge-host: build
 live-macros: build
     examples/live/macros.sh
 
+# The masked default test: cluster A moves to a version with a required sensitive variable with a default value (#997). Needs live-up and kubectl; undoes each change.
+[group('live checks')]
+live-masked-default: build
+    examples/live/masked-default.sh
+
 # The image digest test: what cluster A pulls when a digest sits in the image list of a pack alone, and when it sits in the manifest that the workload reads (#630). Needs live-up, kubectl, and crane; undoes each change.
 [group('live checks')]
 live-image-digest: build

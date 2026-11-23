@@ -704,6 +704,9 @@ default value that is not empty. See [The variables route](#the-variables-route)
 At the update, Palette takes the default value that the profile holds. So strata
 reads `********` as a default value at a move, and does not name the variable.
 The code of Palette shows it; no live run shows it yet.
+[masked-default.sh](../../development/live-runs.md#masked-defaultsh) moves
+cluster A to such a version with no value for the variable, and reads what the
+cluster then holds.
 
 When a route of Palette checks a rule before the update, strata removes its
 check and reads the answer of the route. See
