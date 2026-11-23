@@ -36,9 +36,9 @@
 #      that adds a required variable with no default value, and moves Kubernetes one minor
 #      version at most. For each one that you give, `strata compare --validate` asks the route.
 #      Then the update PATCH /v1/spectroclusters/{uid}/profiles puts the version in the place of
-#      the version of its profile that the cluster runs. A live run shows that Palette takes the
-#      update of SKIP (#919). When Palette takes an update, the cluster moves: give a cluster of
-#      the lab only. It runs only when you give its number.
+#      the version of its profile that the cluster runs. A live run shows that the route and the
+#      update refuse the move of SKIP (#1002). When Palette takes an update, the cluster moves:
+#      give a cluster of the lab only. It runs only when you give its number.
 #
 # Results go under runs/<UTC time>/validate-packs/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
@@ -249,6 +249,9 @@ fi
 
 # The jq filter for the pin of kubernetes that is behind, in a `behind --json` report
 kubernetes_pin='.pins[] | select(.name == "kubernetes" and .behind)'
+# The jq filter that is true of a `paletteValidation` that refuses a move above the upgrade window
+# of a pack
+upgrade_refused='.accepts == false and ([.errors[].code] | index("DependencyPackUpgradeNotSupported") != null)'
 
 # A tag that no registry has, and the jq filter for the body of the route of a cluster, from the
 # document of the cluster: each profile by uid, and for the profile that holds kubernetes, its
@@ -273,7 +276,7 @@ if [ "$stage" = 6 ]; then
     check bump-asked 0 '#166: the bump of kubernetes holds an answer of Palette' -- \
       jq -e "[$kubernetes_pin | select(.bump.paletteValidation != null)] | length == 1" bump-behind.out
     check bump-refused 0 '#166: Palette refuses the move with DependencyPackUpgradeNotSupported' -- \
-      jq -e "$kubernetes_pin | .bump.paletteValidation | .accepts == false and ([.errors[].code] | index(\"DependencyPackUpgradeNotSupported\") != null)" bump-behind.out
+      jq -e "$kubernetes_pin | .bump.paletteValidation | $upgrade_refused" bump-behind.out
     check bump-clusters 0 '#166: the message of the error names a cluster that runs the version' -- \
       jq -e "$kubernetes_pin | .bump.paletteValidation.errors | map(.clusters | length) | max > 0" bump-behind.out
     check bump-text '?' '#166: behind prints the answer under the bump' -- "$strata" behind bump-profile.json
@@ -350,10 +353,12 @@ if [ "$stage" = 7 ]; then
       move_check skip "$SKIP"
       check skip-says 0 '#623: strata says that the move skips a minor version' -- \
         jq -e '.updateChecks.skippedMinor != null' skip-validate.out
-      # the book states the live result: Palette takes the update. A refusal fails the check, so
-      # a change of Palette shows, and the book changes with it
-      check skip-refused 0 '#919: Palette takes the update with HTTP 204, and does not refuse it with K8sUpgradeNotSupported' -- \
-        answered 204 skip-update.out
+      check skip-route 0 '#1002: the route of the cluster refuses the move with DependencyPackUpgradeNotSupported' -- \
+        jq -e ".paletteValidation | $upgrade_refused" skip-validate.out
+      # the book states the live result: the upgrade window of the pack refuses the update. HTTP
+      # 204 or another code fails the check, so a change of Palette shows, and the book changes
+      check skip-refused 0 '#1002: Palette refuses the update with HTTP 500 and ClusterUpdateValidationFailure' -- \
+        refused 500 ClusterUpdateValidationFailure skip-update.out
     fi
     if [ -n "${VARIABLES:-}" ]; then
       echo "== a move that adds a required variable with no default value: $VARIABLES on $CLUSTER (#623)" | tee -a steps.log

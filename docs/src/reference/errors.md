@@ -368,13 +368,15 @@ prefix and no JSON line, also with `--json`.
 
 ## Refusals of the update that strata names first
 
-The code of Palette has these codes for a refusal of the update of a cluster,
-and no validate route checks their rules. `behind` and `compare --validate`
-check each rule for a move, and print a line before the answer of Palette. The
-line is no error of strata, and the exit does not change. See
+The update of the profiles of a cluster refuses a move with these codes.
+`behind` and `compare --validate` name each refusal before the update. For a
+rule that no validate route checks, strata prints a line before the answer of
+Palette. The line is no error of strata, and the exit does not change. For the
+upgrade window of a pack, strata prints the answer of the validate route. See
 [The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
 
 | Code | What Palette does |
 | --- | --- |
-| `K8sUpgradeNotSupported` | No live run saw it yet. In the code of Palette, it is HTTP `400` for a move of the pack of the `k8s` layer of more than one minor version. A live run of such an update got HTTP 204: Palette took the update. So the line of strata names the rule of Kubernetes, and no code. See [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version). |
+| `ClusterUpdateValidationFailure` | A live run saw it with HTTP `500` for a move of `kubernetes` above the upgrade window of the pack. The message is `Cluster update failure`, then the profile, the pack, and the error that the validate route gave first: `DependencyPackUpgradeNotSupported`. Strata prints that error as a `palette refuses` line. See [The upgrade dependency](../internals/palette/validate-routes.md#the-upgrade-dependency). |
+| `K8sUpgradeNotSupported` | The code of Palette shows it; no live run shows it yet. It is HTTP `400` for a move of the Kubernetes pack of more than one minor version, or to a higher major version. Palette checks the upgrade window of each pack first: a live run of such a move of `kubernetes` got `ClusterUpdateValidationFailure`. The line of strata names the rule, and no code. See [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version). |
 | `InvalidVariable` | A live run saw it with HTTP `500`, and the message named the variable. In the code of Palette, it is HTTP `500` for a required variable with no value and no default value. See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check). |

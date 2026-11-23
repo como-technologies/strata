@@ -8,9 +8,9 @@ use std::process::{Command, Output};
 
 use common::*;
 use strata::api::codes::{
-    DUPLICATE_CLUSTER_PACKS_CODE, Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE,
-    OPERATION_FORBIDDEN_CODE, PACKS_IN_CONFLICT_CODE, PROFILE_EXISTS_CODE,
-    UPGRADE_NOT_SUPPORTED_CODE,
+    CLUSTER_UPDATE_FAILURE_CODE, DUPLICATE_CLUSTER_PACKS_CODE, Denial, INVALID_VARIABLE_CODE,
+    K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE, PACKS_IN_CONFLICT_CODE,
+    PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
 };
 use strata::api::{JSON_TYPE, MASKED, Method, PROJECT_UID_HEADER};
 use strata::closed_set::ClosedSet;
@@ -8862,17 +8862,34 @@ fn move_stage(
     (stage, steps)
 }
 
-/// The comparison of the move to [`SKIP_MOVE`]: the route accepts, and strata says that the move
-/// from Kubernetes 1.35.8 to 1.37.0 skips a minor version.
+/// The comparison of the move to [`SKIP_MOVE`], as a live run gave it. The route of the cluster
+/// refuses the move above the upgrade window of kubernetes. Strata says that the move from
+/// Kubernetes 1.35.8 to 1.37.0 skips a minor version.
 fn skip_compared() -> serde_json::Value {
     let skip = MinorSkip::of("k8s", "kubernetes", "1.35.8", "1.37.0").unwrap();
-    serde_json::json!({"paletteValidation": {"clusterUid": FRED_UID, "accepts": true},
-        "updateChecks": {"skippedMinor": skip}})
+    let mut validation = upgrade_refused();
+    validation["clusterUid"] = FRED_UID.into();
+    serde_json::json!({"paletteValidation": validation, "updateChecks": {"skippedMinor": skip}})
 }
 
-/// A refusal of the update that moves Kubernetes from 1.35.8 to 1.37.0. No live run saw it: a live
-/// run got HTTP 204 (#919).
+/// The refusal of the update of [`SKIP_MOVE`], as a live run gave it: HTTP 500 and
+/// [`CLUSTER_UPDATE_FAILURE_CODE`]. The message holds the error that the route of the cluster gave.
 fn skip_refused() -> String {
+    let error = &upgrade_refused()["errors"][0];
+    error_body(
+        CLUSTER_UPDATE_FAILURE_CODE,
+        &format!(
+            "Cluster update failure Profile-strata-live-release: Pack-{}: {}",
+            error["pack"].as_str().unwrap(),
+            error["message"].as_str().unwrap()
+        ),
+    )
+}
+
+/// The refusal of the update of [`SKIP_MOVE`] by the rule of the `k8s` layer, with HTTP 400. The
+/// code of Palette shows it. No live run gave it: the upgrade window of the pack refuses the move
+/// first.
+fn skip_refused_by_the_rule() -> String {
     error_body(
         K8S_UPGRADE_NOT_SUPPORTED_CODE,
         "Kubernetes upgrade from 1.35.8 to 1.37.0 is not supported",
@@ -8880,10 +8897,10 @@ fn skip_refused() -> String {
 }
 
 #[test]
-fn validate_packs_sh_stage_7_asks_the_route_about_a_skip_of_a_minor_version_and_palette_takes_the_update()
+fn validate_packs_sh_stage_7_asks_the_route_about_a_skip_of_a_minor_version_and_palette_refuses_the_update()
  {
-    // a live run: Palette takes the update with HTTP 204 and no body (#919)
-    let (stage, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 204, "");
+    // a live run: the route of the cluster refuses the move, and the update gets HTTP 500 (#1002)
+    let (stage, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 500, &skip_refused());
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(
         &steps,
@@ -8892,6 +8909,7 @@ fn validate_packs_sh_stage_7_asks_the_route_about_a_skip_of_a_minor_version_and_
             "skip-record",
             "skip-asked",
             "skip-says",
+            "skip-route",
             "skip-update",
             "skip-refused",
         ],
@@ -8914,18 +8932,21 @@ fn replaced_with(stage: &Stage, m: &Move) {
 }
 
 #[test]
-fn validate_packs_sh_stage_7_fails_when_palette_refuses_the_skip_or_strata_finds_no_skip() {
-    // Palette refuses the update: the book states another result, and the check fails
-    let (_, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 400, &skip_refused());
-    passed(&steps, &["skip-says", "skip-update"]);
-    failed(&steps, &["skip-refused"]);
+fn validate_packs_sh_stage_7_fails_when_palette_takes_the_skip_or_strata_finds_no_skip() {
+    // Palette takes the update, or the rule of the k8s layer refuses it: the book states another
+    // result, and the check fails
+    for (status, answer) in [(204, String::new()), (400, skip_refused_by_the_rule())] {
+        let (_, steps) = move_stage(&SKIP_MOVE, &skip_compared(), status, &answer);
+        passed(&steps, &["skip-says", "skip-route", "skip-update"]);
+        failed(&steps, &["skip-refused"]);
+    }
 
-    // strata says nothing about the move, and Palette takes it
+    // the route accepts the move, and strata says nothing about it
     let compared =
         serde_json::json!({"paletteValidation": {"clusterUid": FRED_UID, "accepts": true}});
-    let (_, steps) = move_stage(&SKIP_MOVE, &compared, 204, "");
+    let (_, steps) = move_stage(&SKIP_MOVE, &compared, 500, &skip_refused());
     passed(&steps, &["skip-refused"]);
-    failed(&steps, &["skip-says"]);
+    failed(&steps, &["skip-says", "skip-route"]);
 }
 
 #[test]

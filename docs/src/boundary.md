@@ -129,13 +129,12 @@ and of each wave, checks them.
      names the profile versions that pin a pack either, so `behind` reads the
      template of each newer version. See
      [A newer version of a profile](./internals/palette/profiles.md#a-newer-version-of-a-profile).
-   - No validate route checks the minor step of Kubernetes, or a value of a
-     required variable. Palette checks a variable only at the update. A live
-     run shows that the update takes a move that skips a minor version of
-     Kubernetes, so that check is a check of strata. `behind`,
+   - No validate route checks the minor step of the `k8s` layer, or a value of
+     a required variable. Palette checks both only at the update. `behind`,
      `compare --validate`, and `compare` of two versions of one profile check
-     both for a move. When a route of Palette checks
-     a rule before the update, strata removes its check. See
+     both for a move. The validate routes check the upgrade window that a pack
+     declares, so strata prints their answer and copies no window. When a route
+     of Palette checks a rule before the update, strata removes its check. See
      [The checks of an update](./internals/palette/profiles.md#the-checks-of-an-update).
 2. **Do not repeat a status that Palette shows.** Palette shows flags and
    states in its console, its notifications, and its audit log. A record holds
