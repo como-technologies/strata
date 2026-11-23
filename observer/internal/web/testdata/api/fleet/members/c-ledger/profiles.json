@@ -360,7 +360,7 @@
       "version": "1.2.0",
       "type": "add-on",
       "scope": "project",
-      "status": "ok",
+      "status": "not-checked",
       "published": {
         "status": "unverified",
         "rootRecorded": "6968f9261db7ce26a4f6da47a480698aa093b7ce16b4205f53ed2f47bec1b245"
@@ -375,7 +375,7 @@
           "name": "velero",
           "layer": "addon",
           "version": "1.17.0",
-          "status": "ok",
+          "status": "not-checked",
           "registry": "quarry-zarf",
           "kind": "OCI, zarf",
           "upstream": "",

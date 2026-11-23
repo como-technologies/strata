@@ -29,9 +29,9 @@
     "newer": 0,
     "newerProfiles": 0,
     "newerProfileVersions": 0,
-    "notChecked": 0,
+    "notChecked": 1,
     "packs": 29,
-    "packsInFull": 29,
+    "packsInFull": 28,
     "profiles": 12
   }
 }

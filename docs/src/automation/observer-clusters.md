@@ -144,9 +144,22 @@ The versions cycle runs `behind` one time for each key. A click "Ask Palette" ru
 `behind --pin` with the key of the project of the record, and it waits for one
 project of a versions cycle at most.
 
+## The status of a cluster
+
+A row of the screen Clusters is `not-checked` only when the observer could not check
+its cluster:
+
+- the key of its project was refused,
+- the last read of the cluster failed, or
+- no read of the cluster ended well in two periods of the content cycle.
+
+A cause of "Not checked" changes no status. The row of a cluster that the observer
+checked has the status of its content, and the row names the count of its causes.
+The screen does not say "Nothing changed" while a cluster has such a cause.
+
 ## When a read fails
 
-- **A refused key** leaves the clusters of its project `not checked`, with the status.
+- **A refused key** leaves the clusters of its project `not-checked`, with the status.
   The checks of the other projects continue.
 - **The page is `lost`** when no check of any project ended well.
 - **A selector that selects no cluster** shows "No cluster matches" with the

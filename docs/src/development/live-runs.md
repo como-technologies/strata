@@ -1947,7 +1947,8 @@ search](../internals/palette/clusters.md#the-reach-of-a-search).
 | `list-role-tenant` | 2 | #702: the same list at tenant scope fails with the key of the role. No result yet: the live window of the wave runs the script. |
 | `list-role-filter` | 2 | #702: `list clusters --filter` fails with the key of the role, because the saved filters need a role of the tenant. No result yet: the live window of the wave runs the script. |
 | `observer-records` | 0 | a record of each profile of cluster A, gzipped as the Secrets of the records hold it |
-| `observer-once`, `observer-row`, `observer-selector` | 0 | #702: one cycle of the observer with the key of the role as `api-key`. The row of cluster A names its project and is checked, and the selector selects cluster A. No result yet: the live window of the wave runs the script. |
+| `observer-once`, `observer-selector` | 0 | #702: one cycle of the observer with the key of the role as `api-key`, and the selector selects cluster A. No result yet: the live window of the wave runs the script. |
+| `observer-row` | 0 | #1003: the row of cluster A names its project and has `checkedAt`. A row is `not-checked` only when the observer could not check its cluster. A cause of "Not checked", such as a pack with no upstream digest, changes no status. No result yet: the live window of the wave runs the script. |
 | `observer-no-key` | 0 | #702: no file of the run holds the key of the role |
 | `unlabel`, `filter-delete`, `baseline` | 0 | the labels of cluster A as they were, the filter deleted, and the example at its baseline |
 

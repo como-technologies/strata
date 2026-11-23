@@ -98,9 +98,10 @@ function selectorBars() {
     : h`<div class="alertbar a">No cluster matches <span class="m">${s.selector}</span>. <span>Check the label on the clusters, or the saved filter in Palette.</span></div>`);
 }
 
-// setCalm says that the screen of the clusters can read calm: the checks can speak, each selector selects a cluster, and each cluster is
-// OK. A cluster that is not checked keeps the calm away, so the state of the set is never better than its worst cluster.
-const setCalm = rows => calmOk() && rows.length > 0 && rows.every(r => r.status === ROW.OK) && !D.set.selectors.some(s => s.unread || !s.clusters);
+// setCalm says that the screen of the clusters can read calm. The checks can speak, each selector selects a cluster, and each cluster is OK
+// with no cause of Not checked. A cluster that is not checked keeps the calm away, so the state of the set is never better than its worst
+// cluster. A cause of Not checked keeps it away too, because it limits what a check says.
+const setCalm = rows => calmOk() && rows.length > 0 && rows.every(r => r.status === ROW.OK && !r.notChecked) && !D.set.selectors.some(s => s.unread || !s.clusters);
 
 /* ---- The screen of the clusters ---- */
 function viewClusters() {
@@ -122,12 +123,16 @@ function setTiles(rows) {
   </section>`;
 }
 
+// causesLine counts the causes of Not checked of a cluster that the observer checked. They limit its check, and they change no status.
+const causesLine = r => r.status !== ROW.NOT_CHECKED && r.notChecked > 0
+  ? h`<div class="small mut">${r.notChecked} ${plural(r.notChecked, "cause", "causes")} in Not checked</div>` : "";
+
 function clustersCard(rows) {
   const head = h`<thead><tr><th>Status</th><th>Cluster</th><th class="narrow-hide">Project</th><th class="n narrow-hide">Profiles</th><th>Checked</th></tr></thead>`;
   const row = r => {
     const href = clusterHash(r.uid), err = r.lastError ? h`<div class="small mut">${errorWords(r.lastError)}</div>` : "";
     const here = r.here ? h` <span class="mut small">runs the observer</span>` : "";
-    return h`<tr class="link" data-go="${href}"><td class="w110">${rowBadge(r)}</td><td class="m"><a href="${href}">${r.name || r.uid}</a>${here}${err}</td><td class="narrow-hide">${r.project.name || r.project.uid}</td><td class="n narrow-hide">${r.profiles}</td><td class="mut nw">${r.checkedAt ? `${ago(r.checkedAt)} ago` : "not yet"}</td></tr>`;
+    return h`<tr class="link" data-go="${href}"><td class="w110">${rowBadge(r)}</td><td class="m"><a href="${href}">${r.name || r.uid}</a>${here}${err}${causesLine(r)}</td><td class="narrow-hide">${r.project.name || r.project.uid}</td><td class="n narrow-hide">${r.profiles}</td><td class="mut nw">${r.checkedAt ? `${ago(r.checkedAt)} ago` : "not yet"}</td></tr>`;
   };
   const empty = h`<tr><td colspan="5">${inline(TONE.OFF, "No cluster is in the set.")}</td></tr>`;
   return h`<section class="card"><div class="chead"><h2>Clusters <span class="sub">${rows.length}, the worst first</span></h2></div><div class="tw"><table>${head}<tbody>${rows.length ? rows.map(row) : empty}</tbody></table></div></section>`;

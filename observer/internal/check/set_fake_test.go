@@ -67,12 +67,17 @@ type fleet struct {
 	// that differs from its record, as "<cluster>/<record uid>".
 	drifted map[string]bool
 	differs map[string]bool
-	calls   []fleetCall
+	// unverified holds the uid of each record that `verify` cannot verify, such as for a pack with no upstream digest.
+	// broken holds each cluster whose read gets HTTP 500.
+	unverified map[string]bool
+	broken     map[string]bool
+	calls      []fleetCall
 }
 
 func newFleet() *fleet {
 	return &fleet{clusters: map[string]fleetCluster{}, selected: map[string][]string{}, records: map[string][2]string{},
-		refused: map[string]bool{}, drifted: map[string]bool{}, differs: map[string]bool{}}
+		refused: map[string]bool{}, drifted: map[string]bool{}, differs: map[string]bool{}, unverified: map[string]bool{},
+		broken: map[string]bool{}}
 }
 
 func (f *fleet) Run(ctx context.Context, dir string, args ...string) (runner.Result, error) {
@@ -146,9 +151,11 @@ func readRecord(dir, name string) (docs.Record, error) {
 	return r, json.Unmarshal(raw, &r)
 }
 
-// verify answers one row for each record file of the run: drifted for a record of drifted, else unchanged.
+// verify answers one row for each record file of the run: drifted for a record of drifted, unverified for a record of
+// unverified, else unchanged. A run with an unverified record exits 1, as strata does.
 func (f *fleet) verify(dir string, args []string) (runner.Result, error) {
 	s := docs.VerifySummary{Schema: docs.VerifySummarySchema, Tool: docs.Tool{Version: "0.36.0"}}
+	exit := 0
 	for _, a := range args[1:] {
 		if strings.HasPrefix(a, "-") {
 			break
@@ -159,13 +166,16 @@ func (f *fleet) verify(dir string, args []string) (runner.Result, error) {
 		}
 		row := docs.VerifyRow{Path: a, Status: docs.VerifyUnchanged, Name: r.Source.Name, Version: r.Source.Version, RootRecorded: r.Root, RootLive: r.Root}
 		f.mu.Lock()
-		if f.drifted[r.Source.UID] {
+		switch {
+		case f.drifted[r.Source.UID]:
 			row.Status, row.RootLive = docs.VerifyDrifted, "r-edited"
+		case f.unverified[r.Source.UID]:
+			row.Status, exit = docs.VerifyUnverified, 1
 		}
 		f.mu.Unlock()
 		s.Records = append(s.Records, row)
 	}
-	return doc(s, 0)
+	return doc(s, exit)
 }
 
 // snapshot writes the read of a cluster, or the side of one profile, which names the cluster for the compare.
@@ -181,7 +191,11 @@ func (f *fleet) snapshot(dir string, args []string) (runner.Result, error) {
 	}
 	f.mu.Lock()
 	c, ok := f.clusters[uid]
+	broken := f.broken[uid]
 	f.mu.Unlock()
+	if broken {
+		return runner.Result{}, &runner.RunError{Kind: docs.KindAPI, Status: 500}
+	}
 	if !ok {
 		return runner.Result{}, fmt.Errorf("the fake has no cluster %q", uid)
 	}

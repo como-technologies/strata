@@ -15,8 +15,8 @@ type ClusterStatus string
 
 // The states of a cluster of a set, from the worst to the best. Drift says that a finding names a published
 // version or the pods of the cluster. Differs says that each finding names the copy of the cluster: it runs other
-// content than its record. Not checked says that no check of the cluster ended well, or that a cause of Not checked
-// limits its check. It never raises a severity.
+// content than its record. Not checked says that the observer could not check the cluster. It never raises a
+// severity. A cause of Not checked limits a check that ended well, so it changes no state.
 const (
 	RowDrift      = ClusterStatus(StatusDrift)
 	RowDiffers    = ClusterStatus(CopyDiffers)
@@ -161,8 +161,10 @@ func SetOf(in SetInput) SetSummary {
 	return s
 }
 
-// RowOf gives the row of one cluster of a set. A cluster with no good check, or with a refused key, is not checked.
-// A finding makes the row a drift, or a copy that differs when each finding names the copy of the cluster.
+// RowOf gives the row of one cluster of a set. A finding makes the row a drift, or a copy that differs when each
+// finding names the copy of the cluster. The cluster is not checked when the key of its project was refused, when
+// its last read failed, or when its page is not ok. A cause of Not checked does not change the status: the row
+// counts it in NotChecked.
 func RowOf(m Member) ClusterRow {
 	sum := m.Summary
 	row := ClusterRow{UID: sum.Cluster.UID, Name: sum.Cluster.Name, Project: m.Project, Profiles: sum.Counts.Profiles,
@@ -176,7 +178,7 @@ func RowOf(m Member) ClusterRow {
 		row.Status = RowDrift
 	case len(sum.Findings) > 0:
 		row.Status = RowDiffers
-	case m.LastError != nil, sum.Page != PageOK, sum.Content.CheckedAt == nil, sum.Counts.NotChecked > 0:
+	case m.LastError != nil, sum.Content.LastError != nil, sum.Page != PageOK, sum.Content.CheckedAt == nil:
 		row.Status = RowNotChecked
 	default:
 		row.Status = RowOK
