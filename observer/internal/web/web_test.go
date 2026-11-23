@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"unicode/utf8"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
@@ -1048,6 +1049,20 @@ func ruleOf(css, selector string) string {
 	return out.String()
 }
 
+// pxOf gives the pixels that the group of re finds in a rule of the style. The test fails when the rule has no such value.
+func pxOf(t *testing.T, re *regexp.Regexp, rule string) float64 {
+	t.Helper()
+	m := re.FindStringSubmatch(rule)
+	if m == nil {
+		t.Fatalf("the rule %q has no %s", rule, re)
+	}
+	v, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
 // ruleProblem gives the problem of the rule of the selector in css when its declarations are not want, or "".
 func ruleProblem(css, selector, want string) string {
 	if got := ruleOf(css, selector); got != want {
@@ -1965,22 +1980,34 @@ func TestTheCauseOfPodsNotReadHasARowWithNoProfileAndOpensTheImages(t *testing.T
 	screens := render(t, devdata.StateImagesUnread, false)
 	notChecked := pageOf(t, screens, "#notchecked", "")
 	row := rowTo(t, notChecked, "#images")
-	mustHold(t, "the row", row, `<td class="m"><span class="mut">The pods</span></td>`, `<td class="m"><span class="mut">-</span></td>`,
-		"<td>The observer could not read the pods, so the list of images is old or empty.</td>")
+	mustHold(t, "the row", row, `<td class="m"><span class="mut">The pods</span></td>`, `<td class="m narrow-hide">`+noProfile+`</td>`,
+		`<td class="why">The observer could not read the pods, so the list of images is old or empty.</td>`)
 	mustHold(t, "the other rows", notChecked, goTo("#p-"+testkit.GazooProfile), goTo("#p-hoppy-autoscale@1.3.0"))
 	mustHold(t, "the heading", notChecked, wordNotChecked+` on this run <span class="sub">3.`)
 }
 
-// refCell is a cell of the columns What and Profile of the screen Not checked. keptRef is a ref in a span that keeps its text on
-// one line.
+// rowCell is a cell of a row, with its classes. keptRef is a ref in a span that keeps its text on one line. blockEdge is the start or
+// the end of a block in a cell.
 var (
-	refCell = regexp.MustCompile(`<td class="m">(.*?)</td>`)
-	keptRef = regexp.MustCompile(`<span class="nw">([^<@]+@[^<]+)</span>`)
+	rowCell   = regexp.MustCompile(`<td(?: class="([^"]*)")?>(.*?)</td>`)
+	keptRef   = regexp.MustCompile(`<span class="nw">([^<@]+@[^<]+)</span>`)
+	blockEdge = regexp.MustCompile(`</?div[^>]*>`)
 )
 
+// notCheckedRows gives the rows of the table of the screen Not checked, or nil for a screen with no such table. The card of the
+// coverage under it has a table too.
+func notCheckedRows(html string) []string {
+	_, table, found := strings.Cut(html, "<th>What</th>")
+	if !found {
+		return nil
+	}
+	table, _, _ = strings.Cut(table, "</tbody>")
+	return strings.Split(table, "</tr>")
+}
+
 // Issue #958. On the screen Not checked of each set, each ref of a pack or of a profile is in a span of the class nw. So a ref does
-// not break at a hyphen of its name. The test fails when a cell of the table holds an @ out of such a span, and when it finds no
-// ref with a hyphen.
+// not break at a hyphen of its name. The test fails when a cell of the class m holds an @ out of such a span. It also fails when it
+// finds no ref with a hyphen.
 func TestTheScreenNotCheckedKeepsEachRefOnOneLine(t *testing.T) {
 	hyphens := 0
 	for _, state := range devdata.States {
@@ -1988,19 +2015,158 @@ func TestTheScreenNotCheckedKeepsEachRefOnOneLine(t *testing.T) {
 			if s.Hash != "#notchecked" {
 				continue
 			}
-			table, _, _ := strings.Cut(s.HTML, "</tbody>")
-			for _, cell := range refCell.FindAllStringSubmatch(table, -1) {
-				for _, ref := range keptRef.FindAllStringSubmatch(cell[1], -1) {
-					hyphens += strings.Count(ref[1], "-")
-				}
-				if rest := keptRef.ReplaceAllString(cell[1], ""); strings.Contains(rest, "@") {
-					t.Errorf("%s %q: a ref of the cell %q is in no span of the class nw", state, s.Variant, cell[1])
+			for _, row := range notCheckedRows(s.HTML) {
+				for _, cell := range rowCell.FindAllStringSubmatch(row, -1) {
+					if !slices.Contains(strings.Fields(cell[1]), "m") {
+						continue
+					}
+					for _, ref := range keptRef.FindAllStringSubmatch(cell[2], -1) {
+						hyphens += strings.Count(ref[1], "-")
+					}
+					if rest := keptRef.ReplaceAllString(cell[2], ""); strings.Contains(rest, "@") {
+						t.Errorf("%s %q: a ref of the cell %q is in no span of the class nw", state, s.Variant, cell[2])
+					}
 				}
 			}
 		}
 	}
 	if hyphens == 0 {
 		t.Error("no ref on the screen Not checked has a hyphen: the test did not reach the case")
+	}
+}
+
+// noProfile is the cell Profile of a row of the screen Not checked with no profile.
+const noProfile = `<span class="mut">-</span>`
+
+// At 760 pixels and below, the column Profile of the screen Not checked goes, and the profiles move under the packs. The block with
+// the class narrow-show holds what the cell with the class narrow-hide holds. A row with no profile has no such block.
+func TestTheScreenNotCheckedMovesTheProfilesUnderThePacksOnAPhone(t *testing.T) {
+	rows := 0
+	for _, state := range devdata.States {
+		for _, s := range crawl(t, state) {
+			table := notCheckedRows(s.HTML)
+			if s.Hash != "#notchecked" || table == nil {
+				continue
+			}
+			mustHold(t, "the head of the table", s.HTML, `<th class="narrow-hide">Profile</th>`)
+			for _, row := range table {
+				cells := rowCell.FindAllStringSubmatch(row, -1)
+				where := fmt.Sprintf("%s %q: the row %q", state, s.Variant, textOf(row))
+				if len(cells) == 0 {
+					continue
+				} else if len(cells) != 3 {
+					t.Errorf("%s has %d cells, want 3", where, len(cells))
+					continue
+				}
+				rows++
+				what, profile := cells[0][2], cells[1]
+				mustHold(t, where, profile[1], "narrow-hide")
+				if profile[2] == noProfile {
+					mustNotHold(t, where, what, "narrow-show")
+				} else {
+					mustHold(t, where, what, `<div class="mut narrow-show">`+profile[2]+`</div>`)
+				}
+			}
+		}
+	}
+	if rows == 0 {
+		t.Error("no screen Not checked has a row: the test did not reach the case")
+	}
+}
+
+// narrowWindow is the width of a phone in pixels, from the render check of the host on #958. monoAdvance is the width of each
+// letter of Roboto Mono, the face of the class m, as a part of the size of its font.
+const (
+	narrowWindow = 420
+	monoAdvance  = 0.6
+)
+
+// narrowMedia is the head of each block of the style for a window of 760 pixels or less. The patterns find a value in pixels in a
+// rule of the style.
+const narrowMedia = "@media (max-width:760px)"
+
+var (
+	fontSize     = regexp.MustCompile(`font-size:([0-9.]+)px`)
+	minWidth     = regexp.MustCompile(`min-width:([0-9.]+)px`)
+	paddingLeft  = regexp.MustCompile(`padding-left:([0-9.]+)px`)
+	paddingRight = regexp.MustCompile(`padding-right:([0-9.]+)px`)
+	borderWidth  = regexp.MustCompile(`border:([0-9.]+)px`)
+)
+
+// narrowRules gives the rules of each block narrowMedia of the style, one after the other.
+func narrowRules(css string) string {
+	var out strings.Builder
+	for rest := css; strings.Contains(rest, narrowMedia); rest = without(rest, narrowMedia) {
+		out.WriteString(block(rest, narrowMedia))
+	}
+	return out.String()
+}
+
+// longestRun counts the letters of the longest text of a cell with no place where a line can break. A line breaks at a space, at
+// the edge of a block, and after a hyphen. It does not break in a ref of a span of the class nw.
+func longestRun(cell string) int {
+	kept := keptRef.ReplaceAllStringFunc(cell, func(ref string) string {
+		return strings.Repeat("x", utf8.RuneCountInString(keptRef.FindStringSubmatch(ref)[1]))
+	})
+	longest := 0
+	for _, word := range strings.Fields(textOf(blockEdge.ReplaceAllString(kept, " "))) {
+		for _, part := range strings.SplitAfter(word, "-") {
+			longest = max(longest, utf8.RuneCountInString(part))
+		}
+	}
+	return longest
+}
+
+// Issue #958. At 420 pixels, the table of the screen Not checked of each set fits its card. The test adds the smallest width of
+// each column that shows at that width. A column of refs takes its longest run of text in the face of the class m, with the
+// padding of a cell. The column Why takes the minimum width of the class why. The test fails when the sum is more than the card
+// gives, and when a cell of the column Why has no class why.
+func TestAt420PixelsTheTableOfTheScreenNotCheckedFitsItsCard(t *testing.T) {
+	css := string(readPage(t, "app.css"))
+	narrow := narrowRules(css)
+	card := narrowWindow - 2*pxOf(t, padding, ruleOf(narrow, ".page")) - 2*pxOf(t, borderWidth, ruleOf(css, ".card"))
+	cell := ruleOf(narrow, "th,td")
+	sides := pxOf(t, paddingLeft, cell) + pxOf(t, paddingRight, cell)
+	letter := monoAdvance * pxOf(t, fontSize, ruleOf(css, ".m"))
+	why := pxOf(t, minWidth, ruleOf(css, ".why"))
+	tables := 0
+	for _, state := range devdata.States {
+		for _, s := range crawl(t, state) {
+			rows := notCheckedRows(s.HTML)
+			if s.Hash != "#notchecked" || rows == nil {
+				continue
+			}
+			tables++
+			columns := map[int]float64{}
+			for _, row := range rows {
+				cells := rowCell.FindAllStringSubmatch(row, -1)
+				for i, c := range cells {
+					classes := strings.Fields(c[1])
+					switch {
+					case slices.Contains(classes, "narrow-hide"):
+					case i == len(cells)-1:
+						if !slices.Contains(classes, "why") {
+							t.Errorf("%s %q: the cell Why %q has no class why", state, s.Variant, c[2])
+						}
+						columns[i] = why
+					case slices.Contains(classes, "m"):
+						columns[i] = max(columns[i], float64(longestRun(c[2]))*letter+sides)
+					default:
+						t.Errorf("%s %q: the cell of refs %q has no class m", state, s.Variant, c[2])
+					}
+				}
+			}
+			need := 0.0
+			for _, w := range columns {
+				need += w
+			}
+			if need > card {
+				t.Errorf("%s %q: at %d pixels the table needs %.1f pixels, and its card gives %.1f", state, s.Variant, narrowWindow, need, card)
+			}
+		}
+	}
+	if tables == 0 {
+		t.Error("no screen Not checked has a table: the test did not reach the case")
 	}
 }
 
