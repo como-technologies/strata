@@ -116,8 +116,9 @@ the refusal.
 A field test ran `behind` on a pin of `kubernetes-eks` 1.31. It printed
 `bump to 1.37` and `palette accepts`, and a reader took that to mean that the move
 works. The route checks the packs. Kubernetes moves one minor version at each
-upgrade, and Palette takes an update that skips one. `aws-stack@1.1.20` pins
-`kubernetes` 1.34.9, and the newest version is 1.36.2:
+upgrade, and Palette checks that rule only at the update. The code of Palette
+shows it; no live run shows it yet. `aws-stack@1.1.20` pins `kubernetes` 1.34.9,
+and the newest version is 1.36.2:
 
 ```text
 {{#include ../output/behind-skip.txt}}
@@ -203,7 +204,10 @@ lists it with the time it first listed it, and the issue of the pack follows. Se
 [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack).
 
 A live run of stage 7 of `validate-packs.sh` sent an update that skips a minor
-version of Kubernetes. Palette took the update with HTTP 204, and did not refuse
-it. So the line of the skip is a check of strata. See
+version of `kubernetes`. The pack declares an upgrade window. So the route of the
+cluster refused the move with `DependencyPackUpgradeNotSupported`, and the update
+refused it with HTTP 500 and `ClusterUpdateValidationFailure`. A pack with no
+window gets no answer from a route, so the line of the skip is a check of
+strata. See
 [validate-packs.sh](../development/live-runs.md#validate-packssh) and
 [What the update checks](../internals/palette/validate-routes.md#what-the-update-checks).

@@ -181,15 +181,27 @@ pub const PROJECT_SCOPE_CODE: &str = "ProjectUidIsNotEmpty";
 /// A pack of the body is above the highest version that a cluster can move to from the version it
 /// runs. The validate routes of the packs answer it in `packs.results[]` with HTTP 200, with the
 /// other errors of a pack. It is not a refusal of the whole request, so no table of a check holds
-/// it. `behind` prints it under the bump, and strata decides nothing from it.
+/// it. `behind` prints it under the bump, and strata decides nothing from it. The update refuses
+/// the same move with [`CLUSTER_UPDATE_FAILURE_CODE`].
 pub const UPGRADE_NOT_SUPPORTED_CODE: &str = "DependencyPackUpgradeNotSupported";
 
-/// The code of the refusal of an update that moves the Kubernetes pack of a cluster more than one
-/// minor version.
+/// The code of the refusal of an update of the profiles of a cluster that fails a check of the
+/// packs.
 ///
-/// The code of Palette shows it with HTTP 400; no live run shows it yet. A live run of the update
-/// of the profiles of a cluster, with a move of two minor versions, got HTTP 204. So strata checks
-/// the move itself, and its line names no code: see [`MinorSkip`](crate::model::update::MinorSkip).
+/// Palette answers HTTP 500. The message is `Cluster update failure`, then the profile, the pack,
+/// and the error of the pack. A live run shows it for a move above the upgrade window of a pack.
+/// The error is then the error of [`UPGRADE_NOT_SUPPORTED_CODE`], which the validate routes give
+/// first. Strata sends no update, and the live check of the update reads the code.
+pub const CLUSTER_UPDATE_FAILURE_CODE: &str = "ClusterUpdateValidationFailure";
+
+/// The code of the refusal of an update that moves the Kubernetes pack more than one minor
+/// version, or to a higher major version.
+///
+/// The code of Palette shows it with HTTP 400; no live run shows it yet. No validate route checks
+/// this rule, so strata checks the move itself: see [`MinorSkip`](crate::model::update::MinorSkip).
+/// The update checks the upgrade window of each pack first. A live run of a move of two minor
+/// versions got [`CLUSTER_UPDATE_FAILURE_CODE`]. No read route gives the window, so the line of
+/// strata names no code.
 pub const K8S_UPGRADE_NOT_SUPPORTED_CODE: &str = "K8sUpgradeNotSupported";
 
 /// The codes of the errors that the import validate route gives with HTTP 500 when it matches no

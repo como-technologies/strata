@@ -236,8 +236,10 @@ The checks, in order:
    dependency over the packs of all the profiles of the body. So a pack that
    needs a newer version of a pack in another profile of the cluster fails
    here: `DependencyPackWithMinVersionRequired`,
-   `Pack '<pack>' is required with minimum compatible version '<version>'`. On
-   an imported cluster, the validator checks only the values.
+   `Pack '<pack>' is required with minimum compatible version '<version>'`. It
+   also checks the upgrade window of each pack that the cluster runs: see
+   [The upgrade dependency](#the-upgrade-dependency). On an imported cluster,
+   the validator checks only the values.
 
 The answer is `200` with `profiles[]`: only the profiles with an error, each
 with its `uid` and `packs.results[].errors[]` of `code` and `message`. Palette
@@ -245,8 +247,8 @@ puts the error of a pack under each profile of the body that holds a pack of
 that name. It gives the profiles in no fixed order. With no error, the answer
 has no profile. `machinePools` stays empty: the route checks no machine. The
 route does not say whether the change repaves: `validate/repave` answers that.
-The route checks no variable and no minor version of Kubernetes: see
-[What the update checks](#what-the-update-checks).
+The route checks no variable, and not the rule of the `k8s` layer for a minor
+version: see [What the update checks](#what-the-update-checks).
 
 Some checks refuse the whole request: the YAML check of step 1, steps 3, 4,
 and 5, and the check of a disabled pack in step 6. Such a refusal is HTTP `500`
@@ -463,8 +465,9 @@ A pack can declare a dependency of the type `upgrade`. Its `maxVersion`, such as
 Palette, and the last one from the public documentation. The paragraphs after
 the list come from a live run:
 
-- The pack validator reads the dependency of each pack of the body. It runs over
-  each cluster that runs the version.
+- The pack validator checks each pack of the body against the pack of that name
+  that a cluster runs. The route of a profile version checks each cluster that
+  runs the version. The route of a cluster and the update check that cluster.
 - For each cluster, Palette takes the version of the pack that the cluster runs.
   It derives the highest minor version that the cluster can move to.
 - A pack of the body above that version is an error in `packs.results[]`:
@@ -487,6 +490,11 @@ The route accepts the bumps of the other pins of that version: `cni-cilium-oss`
 1.20.1 to 1.20.3, and `csi-aws-ebs` 1.65.0 to 1.67.1. See
 [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
+A live run shows the same refusal on the route of the cluster. The body moves
+cluster A to a profile version that pins `kubernetes` 1.37.0. The update of the
+profiles of the cluster then refuses the move: see
+[What the update checks](#what-the-update-checks).
+
 No read route gives the dependency. The summary of a pack has no field for it.
 The `packValues[].dependencies` of `GET /v1/packs/{uid}` and of the tags route
 hold the template dependencies. They are `[]` for `kubernetes` 1.36.2 in the
@@ -500,9 +508,9 @@ for the body. A pin of `kubernetes` 1.35.3, with 1.37.0 in the registry, is a
 move of two minor versions. Palette refuses it on each cluster that runs 1.35.
 The pin and the registry decide whether a live example has such a pair.
 
-The limit is a dependency of the pack, and not a rule of the route. So the route
-accepts a move of two minor versions of a pack with no such dependency. A live
-run shows that the update takes a move of two minor versions of Kubernetes: see
+The limit is a dependency of the pack, and not a rule of the route. So the routes
+accept a move of two minor versions of a pack with no such dependency. No route
+checks the rule of the `k8s` layer: see
 [What the update checks](#what-the-update-checks).
 
 Stage 6 of `validate-packs.sh` asks the route for a move of Kubernetes by two
@@ -512,30 +520,46 @@ that pins an older Kubernetes than the example does.
 ## What the update checks
 
 The update of the profiles of a cluster is a `PUT` or a `PATCH` of
-`/v1/spectroclusters/{uid}/profiles`. No validate route checks the minor version
-of Kubernetes, or a value of a required variable. Stage 7 of `validate-packs.sh`
-sends the update: see
+`/v1/spectroclusters/{uid}/profiles`. No validate route checks the rule of the
+`k8s` layer for a minor version, or a value of a required variable. Stage 7 of
+`validate-packs.sh` sends the update: see
 [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 ### The minor version of Kubernetes
 
+The update checks two rules for a move of the pack of the `k8s` layer. The
+first rule that refuses the move gives the answer:
+
+1. The upgrade window of each pack that the cluster runs: see
+   [The upgrade dependency](#the-upgrade-dependency). The validate routes check
+   it too. Palette refuses the update with HTTP 500 and
+   `ClusterUpdateValidationFailure`. The message is `Cluster update failure`,
+   then the profile, the pack, and the error that the route gives.
+2. The rule of the `k8s` layer. A move of more than one minor version, or to a
+   higher major version, is HTTP 400 and `K8sUpgradeNotSupported`. No validate
+   route checks this rule. The code of Palette shows it; no live run shows it
+   yet.
+
 A live run sent the update to a cluster of the lab. The new profile version
-moves the pack of the `k8s` layer two minor versions above the version that the
-cluster runs:
+moves `kubernetes` of the Public Repo from 1.35.8 to 1.37.0, two minor versions
+above the version that the cluster runs:
 
-- `compare --validate` asked the validate route of the cluster about the move.
-  The route accepted the move with no error.
-- Palette took the update with HTTP 204, and did not refuse it with
-  `K8sUpgradeNotSupported`.
-- The cluster then ran the profile version of the move. The run did not watch
-  the nodes.
+- `compare --validate` asked the route of the cluster about the move. The
+  route refused it with `DependencyPackUpgradeNotSupported`.
+- Palette refused the update with HTTP 500 and `ClusterUpdateValidationFailure`.
+  The message holds the error of the route:
 
-A pack can also declare a limit of its own, and the route of a profile version
-checks it: see [The upgrade dependency](#the-upgrade-dependency).
+  ```text
+  Cluster update failure Profile-<profile>: Pack-<pack>: Pack upgrade to '1.37.0' is not compatible with the clusters '<cluster>'
+  ```
 
-Kubernetes moves one minor version at each upgrade. The public documentation
-states the same rule: update Kubernetes one minor version at a time. So strata
-checks the move itself: see
+- The cluster did not move. No answer held `K8sUpgradeNotSupported`, because
+  the first rule refused the move.
+
+A pack with no upgrade window gets no refusal from a route. Kubernetes moves one
+minor version at each upgrade. The public documentation states the same rule:
+update Kubernetes one minor version at a time. So strata checks the second rule
+itself: see
 [The gaps that strata fills](./profiles.md#the-checks-of-an-update).
 
 ### A value of each required variable
@@ -559,8 +583,8 @@ checks the move itself: see
 - No validate route checks a variable. The body of the profile routes has no
   field for one.
 
-`behind` and `compare --validate` check the minor version and the required
-variables before the update: see
+`behind` and `compare --validate` check the rule of the `k8s` layer and the
+required variables before the update: see
 [The gaps that strata fills](./profiles.md#the-checks-of-an-update).
 
 ## GET /v1/clusterprofiles/validate/name
@@ -805,8 +829,9 @@ a policy or to test a permission. `strata preflight` runs the tool of the cloud 
 these, and prints `NOT CHECKED` with the command for the rest: see
 [What strata preflight does not check](limits.md#what-strata-preflight-does-not-check).
 
-No validate route checks the minor version of Kubernetes or a value of a
-required variable either: see [What the update checks](#what-the-update-checks).
+No validate route checks the rule of the `k8s` layer for a minor version, or a
+value of a required variable, either: see
+[What the update checks](#what-the-update-checks).
 
 ## Where these answers come from
 

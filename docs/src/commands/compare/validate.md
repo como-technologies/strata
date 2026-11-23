@@ -100,10 +100,12 @@ each one that it finds. Each rule names its owner in
   `payments` to `aws-stack@1.1.1` adds `platform_owner`: see
   [Compare a profile version with a cluster](./clusters.md#compare-a-profile-version-with-a-cluster).
 - **A move of Kubernetes that skips a minor version.** Kubernetes moves one
-  minor version at each upgrade. Palette takes an update that skips one: see
+  minor version at each upgrade, and no validate route checks this rule: see
   [What the update checks](../../internals/palette/validate-routes.md#what-the-update-checks).
-  So the line is a check of strata. Here the cluster `search` runs Kubernetes
-  1.34.9, and `aws-stack@1.1.1` pins 1.36.2:
+  A pack can also declare an upgrade window. The route then refuses the move
+  with `DependencyPackUpgradeNotSupported`, and the `note` line stays beside
+  it, because it names the next step. Here the pack declares no window: the
+  cluster `search` runs Kubernetes 1.34.9, and `aws-stack@1.1.1` pins 1.36.2:
 
 ```text
 {{#include ../../output/validate-skip-lines.txt}}

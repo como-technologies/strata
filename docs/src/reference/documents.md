@@ -402,8 +402,9 @@ A comparison of two sides, `a` and `b`.
     Palette refuses an update that gives such a variable no value.
   - `skippedMinor`: the move of the pack of the `k8s` layer, when it skips a
     minor version. It has `pack`, `from`, `to`, and `nextMinor`, the minor
-    version to move to first, such as `1.35`. It has no `code`: the skip is a
-    check of strata, and a live run shows that Palette takes such an update.
+    version to move to first, such as `1.35`. It has no `code`: the upgrade
+    window of a pack can refuse the update first, with another code. See
+    [What the update checks](../internals/palette/validate-routes.md#what-the-update-checks).
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.

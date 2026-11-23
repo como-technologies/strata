@@ -477,9 +477,10 @@ reads that document one time in each project: see
 ## A move that skips a minor version
 
 `palette accepts` covers the packs of the move. Kubernetes moves one minor
-version at each upgrade. No validate route checks the move, and a live run shows
-that Palette takes an update that skips a minor version. So strata makes the
-check, and Kubernetes is the owner of the rule: see
+version at each upgrade. No validate route checks the rule: Palette checks it
+only at the update, with `K8sUpgradeNotSupported`. The code of Palette shows it;
+no live run shows it yet. So strata makes the check, and Palette at the update is
+the owner of the rule: see
 [The gaps that strata fills](../internals/palette/profiles.md#the-checks-of-an-update).
 Here the record pins `kubernetes` 1.34.9, and the newest version is 1.36.2:
 
@@ -499,6 +500,11 @@ such version, the line ends with `move to a version of 1.35 first`.
 - **Strata compares the pinned version** with the version of the move.
 - **A version in which strata reads no version**, such as `1.29.x`, gets no
   check.
+- **A pack can also declare an upgrade window**, such as `kubernetes` of the
+  Public Repo. The route checks the window, so the last line is then
+  `palette refuses: DependencyPackUpgradeNotSupported`, with the clusters. The
+  skip line stays, because it names the next step. See
+  [The upgrade dependency](../internals/palette/validate-routes.md#the-upgrade-dependency).
 
 `--json` gives the skip in `bump.updateChecks.skippedMinor`. The field gives no
 code of Palette:

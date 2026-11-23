@@ -17,7 +17,10 @@ use common::{
     toml_value, version_of, walk, without_code, without_link_targets, word_faults,
 };
 use strata::TOOL_NAME;
-use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute};
+use strata::api::codes::{
+    CLUSTER_UPDATE_FAILURE_CODE, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE,
+    ValidateRoute,
+};
 use strata::content::canonical_json;
 use strata::ops::ConsumerKind;
 use strata::reference::version::compare;
@@ -340,13 +343,18 @@ fn the_code_table_of_each_validate_route_in_the_book_holds_the_codes_of_the_rout
     }
 }
 
-/// `behind` and `compare --validate` check two rules of a move before the update. The table of
-/// `errors.md` lists the code of each rule, as `codes.rs` holds it.
+/// `behind` and `compare --validate` name each refusal of a move before the update: a check of
+/// strata, or the answer of a validate route. The table of `errors.md` lists the code of each
+/// refusal of the update, as `codes.rs` holds it.
 #[test]
 fn the_book_lists_each_refusal_of_the_update_that_strata_names_first() {
     let errors = read(&docs().join("reference/errors.md"));
     let book = codes_after(&errors, "## Refusals of the update that strata names first");
-    let mut kept = [INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE];
+    let mut kept = [
+        CLUSTER_UPDATE_FAILURE_CODE,
+        INVALID_VARIABLE_CODE,
+        K8S_UPGRADE_NOT_SUPPORTED_CODE,
+    ];
     kept.sort_unstable();
     assert_eq!(book, kept);
 }

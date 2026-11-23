@@ -696,7 +696,7 @@ no request:
 
 | Rule | Owner | Code |
 | --- | --- | --- |
-| One upgrade moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the move with the version of the pin, of the cluster, or of side A of `compare`. | Kubernetes. A live run shows that Palette takes an update that skips a minor version. | None: the line names the rule. |
+| One upgrade moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the move with the version of the pin, of the cluster, or of side A of `compare`. | Palette, at the update. The code of Palette shows it; no live run shows it yet. | `K8sUpgradeNotSupported`. The line names the rule and no code, because the upgrade window of a pack can refuse the move first. |
 | Each required variable has a value or a default value. The default value of a dropdown variable counts only when it is the label of an option. Palette also accepts a dropdown variable with a default option. Strata names each required variable with no such default that the move adds. | Palette, at the update | `InvalidVariable` |
 
 For a sensitive variable, the variables route gives `********` in place of a
@@ -707,6 +707,15 @@ The code of Palette shows it; no live run shows it yet.
 [masked-default.sh](../../development/live-runs.md#masked-defaultsh) moves
 cluster A to such a version with no value for the variable, and reads what the
 cluster then holds.
+
+A pack can also declare an upgrade window, such as `kubernetes` of the Public
+Repo. The validate routes check the window, and the update refuses a move above
+it with `ClusterUpdateValidationFailure`. Strata does not check the window,
+because the routes answer it: see
+[The rules of the scope](../../boundary.md#the-rules-of-the-scope).
+`behind` and `compare --validate` print the answer of the route,
+`DependencyPackUpgradeNotSupported`, beside the line of strata. See
+[The upgrade dependency](./validate-routes.md#the-upgrade-dependency).
 
 When a route of Palette checks a rule before the update, strata removes its
 check and reads the answer of the route. See

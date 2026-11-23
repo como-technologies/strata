@@ -4,11 +4,9 @@
 //! packs. Strata makes two more checks. `compare` of two versions of one profile makes them too,
 //! with no request.
 //!
-//! Each required variable has a value or a default value. Palette checks this rule only at the
-//! update, and no route answers it before the update. One upgrade moves the Kubernetes pack one
-//! minor version at most: that is a rule of Kubernetes. A live run shows that Palette takes an
-//! update that skips a minor version, so this check is a check of strata. "The gaps that strata
-//! fills" in the book lists both checks.
+//! Each required variable has a value or a default value. One upgrade moves the Kubernetes pack
+//! one minor version at most. Palette checks each rule only at the update, and no route answers it
+//! before the update. "The gaps that strata fills" in the book lists both checks.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -21,8 +19,8 @@ use crate::text::{and_list, plural};
 
 /// The most minor versions that one upgrade moves the Kubernetes pack of a cluster.
 ///
-/// Kubernetes moves one minor version at each upgrade. A live run shows that Palette takes an
-/// update that moves more, so strata names such a move: see [`MinorSkip`].
+/// Kubernetes moves one minor version at each upgrade. No validate route checks the rule, so strata
+/// names a move that skips a minor version: see [`MinorSkip`].
 const KUBERNETES_MINOR_STEP: u64 = 1;
 
 /// What strata checks about a move beside the answer of a validate route. It checks a rule that
@@ -111,8 +109,10 @@ fn takes_a_default(v: &Variable) -> bool {
 
 /// A move of the Kubernetes pack of more than one minor version, or to a higher major version.
 ///
-/// Kubernetes moves one minor version at each upgrade, so strata names such a move. This is a
-/// check of strata: a live run shows that Palette takes the update with no error.
+/// Kubernetes moves one minor version at each upgrade, so strata names such a move. Palette checks
+/// the rule only at the update. An upgrade window that the pack declares can refuse the move
+/// first, with another code. So the line names the rule and no code: see
+/// [`K8S_UPGRADE_NOT_SUPPORTED_CODE`](crate::api::codes::K8S_UPGRADE_NOT_SUPPORTED_CODE).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MinorSkip {

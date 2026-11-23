@@ -1006,8 +1006,8 @@ mark `disabled`. These are the stages and the options:
   minor versions above the cluster. `VARIABLES` is a version that adds a
   required variable with no default value. The stage asks the route about each
   move, then sends the update. When Palette accepts an update, the cluster
-  moves, so give a cluster of the lab only. Palette takes the update of `SKIP`,
-  so give `VARIABLES` in a run of its own, before `SKIP`.
+  moves, so give a cluster of the lab only. Palette refuses the update of
+  `SKIP`, and the cluster does not move.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1048,9 +1048,10 @@ mark `disabled`. These are the stages and the options:
 | `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move. The code is `DependencyPackUpgradeNotSupported`, and the message is `Pack upgrade to '1.37.0' is not compatible with the clusters '<cluster A>'`. Cluster A is in `clusters`. |
 | `cluster-route-doc`, `cluster-route-tag`, `cluster-route-tag-says` | 0 | #453: the route of the cluster answers HTTP 200 with no error for a body with the tag `9.99.9` for `kubernetes`. No registry has that version, and the profile is one that the cluster runs. So the route does not check the sent tag. The body of a real cluster is longer than one argument can be (128 KiB). So `cluster-route-tag` writes the body to `cluster-route-body.json` and gives `api.sh post-status` the path of that file (#466). |
 | `move-cluster-record` | 0 | #623: a record of the cluster `CLUSTER`. A live run passed. |
-| `skip-record`, `skip-validate`, `skip-asked` | 0, ?, 0 | #623: `compare cluster:<CLUSTER> <SKIP> --validate` asks the route about the move, and the comparison holds an answer. A live run passed: the route accepts the move, with no error. |
-| `skip-says` | 0 | #623: `updateChecks.skippedMinor` of the comparison says that the move skips a minor version. A live run passed. |
-| `skip-update`, `skip-refused` | 0 | #623, #919: `api.sh replace-status` sends the update, as the Spectro Cloud provider sends it. `skip-refused` passes on HTTP 204, and fails on a refusal. A live run gave HTTP 204: Palette took the update, and did not refuse it with K8sUpgradeNotSupported. |
+| `skip-record`, `skip-validate`, `skip-asked` | 0, ?, 0 | #623, #1002: `compare cluster:<CLUSTER> <SKIP> --validate` asks the route about the move, and the comparison holds an answer. A live run passed: the route refuses the move. |
+| `skip-says` | 0 | #623, #1002: `updateChecks.skippedMinor` of the comparison says that the move skips a minor version, beside the refusal of the route. A live run passed. |
+| `skip-route` | 0 | #1002: the route of the cluster refuses the move with `DependencyPackUpgradeNotSupported`, the error of the upgrade window of the pack. A live run gave this answer. No result yet: no live window ran the check. |
+| `skip-update`, `skip-refused` | 0 | #623, #1002: `api.sh replace-status` sends the update, as the Spectro Cloud provider sends it. `skip-refused` passes on HTTP 500 with `ClusterUpdateValidationFailure`. It fails on HTTP 204, and on another code, such as `K8sUpgradeNotSupported`. A live run gave HTTP 500 and `ClusterUpdateValidationFailure`, and the cluster did not move. No result yet: no live window ran the check in this form. |
 | `variables-record`, `variables-validate`, `variables-asked` | 0, ?, 0 | #623: `compare cluster:<CLUSTER> <VARIABLES> --validate` asks the route about the move, and the comparison holds an answer. A live run passed. |
 | `variables-accepts`, `variables-says` | 0 | #623: the route accepts the packs, and `updateChecks.requiredVariables.names` holds the required variables that the move adds. A live run passed. |
 | `variables-update`, `variables-refused` | 0 | #623: Palette refuses the update with HTTP 500 and `InvalidVariable`, the code that `requiredVariables.code` names. The message names a variable of `requiredVariables.names`. A live run passed: Palette refused the update with HTTP 500 and `InvalidVariable`, and the message named the variable. |
@@ -1064,8 +1065,10 @@ yet: no live window ran the form of the check that reads the place of the line.
 Stage 7 can use cluster A on Kubernetes 1.35.8 too. `SKIP` is then a version of
 the release profile with Kubernetes 1.37.0. `VARIABLES` is a version of the
 add-on profile of cluster A with one more variable: required, with no default
-value. Each check of `SKIP` passes on cluster A. Palette takes the update, and
-the cluster then runs the version of `SKIP`. The run did not watch the nodes.
+value. The route and the update refuse the move of `SKIP`, above the upgrade
+window of `kubernetes`, and cluster A stays on its version. Each check of `SKIP`
+but `skip-route` and `skip-refused` passes on cluster A. These two have no result
+yet: no live window ran them.
 
 Stage 6 needs a cluster two minor versions behind. When cluster A runs the
 release version, Kubernetes 1.36.2, the route of the profile version accepts the
