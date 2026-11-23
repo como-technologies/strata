@@ -117,22 +117,33 @@ const currentPacks = () => D.profiles.reduce((n, x) => n + x.packs.filter(p => n
 function viewNotChecked() {
   return withChecks("notchecked", crumbs("Not checked"), () => {
     const rows = D.notChecked;
-    const body = rows.length ? h`<div class="tw"><table><thead><tr><th>What</th><th>Profile</th><th>Why</th></tr></thead><tbody>${rows.map(r => {
+    const body = rows.length ? h`<div class="tw"><table><thead><tr><th>What</th><th class="narrow-hide">Profile</th><th>Why</th></tr></thead><tbody>${rows.map(r => {
       const first = r.profiles[0];
       const p = first ? profileOf(first) : null;
       const names = r.packs.map(k => {
         const found = D.profiles.filter(x => r.profiles.includes(subjectOf(x))).flatMap(x => x.packs).find(q => q.key === k);
         return found ? at(found.name, found.version) : packName(k);
       });
-      const what = [...new Set(names)].join(", ");
+      // A ref does not break at a hyphen of its name. A line breaks only after the comma between two refs.
+      const what = [...new Set(names)];
+      // At 760 pixels and below, the profiles move under the packs. Then the table fits a phone, and each ref stays on one line.
+      const profiles = r.profiles.length ? spanList("nw", r.profiles) : null;
       const why = r.cause === CAUSE.OLD_COPY && r.registry ? `Current against an older copy of ${r.registry}. A newer version can be missing here.`
         : r.cause === CAUSE.NO_RECORD && D.cluster.records.baseline === BASELINE.FIRST_SEEN ? NO_RECORD_FIRST_SEEN : (CAUSE_TEXT[r.cause] || r.cause);
       const pods = r.cause === CAUSE.PODS_NOT_READ;
-      return h`<tr class="link" data-go="${pods ? link("images") : p ? profileHash(first) : link("profiles")}"><td class="m">${what || mut(pods ? "The pods" : "The profile")}</td><td class="m">${r.profiles.length ? r.profiles.join(", ") : mut("-")}</td><td>${why}</td></tr>`;
+      return h`<tr class="link" data-go="${pods ? link("images") : p ? profileHash(first) : link("profiles")}"><td class="m">${what.length ? spanList("nw", what) : mut(pods ? "The pods" : "The profile")}${profiles && h`<div class="mut narrow-show">${profiles}</div>`}</td><td class="m narrow-hide">${profiles || mut("-")}</td><td class="why">${why}</td></tr>`;
     })}</tbody></table></div>` : noCauses();
     return h`<section class="card"><div class="chead"><h2>Not checked on this run <span class="sub">${rows.length}. This never raises a severity, and it stops the page from saying "No change".</span></h2></div>${body}</section>${coverageCard()}`;
   });
 }
+
+// The words of the card "Published version" for a status of verify that keeps the root of the record. Strata read a version that is
+// unverified, but a pack has no upstream digest. A status that the page does not know gets the words of an error.
+const PUBLISHED_WORDS = {
+  [VERIFY.UNCHANGED]: "Unchanged since the record",
+  [VERIFY.UNVERIFIED]: "Strata read this version, but not the upstream digest of each pack.",
+  [VERIFY.ERROR]: "Strata could not read this version.",
+};
 
 /* The two sides of a profile: the published version, and the copy of this cluster in Palette. */
 function verdict(x) {
@@ -142,12 +153,9 @@ function verdict(x) {
     pubCard = h`<div class="vcard"><div class="h">Published version ${badge("y", "No record")}</div><div class="small mut mt6">Nothing to compare with.</div></div>`;
   } else if (pub.status === VERIFY.DRIFTED) {
     pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub)}</div><div class="m mt6">root <span class="was">${root(pub.rootRecorded)}</span>${ARROW}<span class="now">${root(pub.rootLive)}</span></div></div>`;
-  } else if (pub.status === VERIFY.UNCHANGED && carried) {
-    pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub, carried)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">${CARRIED_WORDS}</div></div>`;
-  } else if (pub.status === VERIFY.UNCHANGED) {
-    pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">Unchanged since the record</div></div>`;
   } else {
-    pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">Strata could not read this version.</div></div>`;
+    const words = pub.status === VERIFY.UNCHANGED && carried ? CARRIED_WORDS : PUBLISHED_WORDS[pub.status] || PUBLISHED_WORDS[VERIFY.ERROR];
+    pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub, carried)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">${words}</div></div>`;
   }
   let copyCard;
   if (!cp) {

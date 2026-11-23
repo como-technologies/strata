@@ -4,7 +4,6 @@ import (
 	"fmt"
 	htmlpkg "html"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -113,18 +112,8 @@ const maxChars = 48
 func rowHeight(t *testing.T, before, after []string) float64 {
 	t.Helper()
 	css := string(readPage(t, "app.css"))
-	line, cell := lineHeight.FindStringSubmatch(ruleOf(css, ".vls")), ruleOf(css, "td")
-	pad, edge := padding.FindStringSubmatch(cell), border.FindStringSubmatch(cell)
-	if line == nil || pad == nil || edge == nil {
-		t.Fatalf("app.css has no line height for .vls, or no padding and border for td: %q %q", ruleOf(css, ".vls"), cell)
-	}
-	px := func(m []string) float64 {
-		v, err := strconv.ParseFloat(m[1], 64)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return v
-	}
+	cell := ruleOf(css, "td")
+	line, pad, edge := pxOf(t, lineHeight, ruleOf(css, ".vls")), pxOf(t, padding, cell), pxOf(t, border, cell)
 	for _, l := range append(append([]string{}, before...), after...) {
 		if l == gap {
 			continue
@@ -133,7 +122,7 @@ func rowHeight(t *testing.T, before, after []string) float64 {
 			t.Errorf("the line %q has more than %d characters, so it can wrap", l, maxChars)
 		}
 	}
-	return float64(max(len(before), len(after)))*px(line) + 2*px(pad) + px(edge)
+	return float64(max(len(before), len(after)))*line + 2*pad + edge
 }
 
 func countClass(lines []string, class string) int {
