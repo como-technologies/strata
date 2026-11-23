@@ -2000,9 +2000,19 @@ issue are the checks with `?`. Their results go to the pages of
 The judged checks of case 2 state what the code of Palette shows: see
 [One pack in two profiles of a cluster](../internals/palette/clusters.md#one-pack-in-two-profiles-of-a-cluster).
 Case 1 edits the line `releaseNameOverride: "cert-manager"` of the values of
-cert-manager. Case 7 edits the line `retention: 10d` of prometheus-operator.
-`EDIT_FROM`, `EDIT_TO`, `PROMETHEUS_FROM`, and `PROMETHEUS_TO` give other lines,
-for a version whose values do not hold them.
+cert-manager. Case 7 edits the line `"retention": "10d"` of prometheus-operator.
+`terraform-platform/` writes the values of prometheus-operator again with the
+password of Grafana, so each key and each text of them has quotes. `EDIT_FROM`,
+`EDIT_TO`, `PROMETHEUS_FROM`, and `PROMETHEUS_TO` give other lines, for a
+version whose values do not hold them.
+
+`just live-platform-up` creates the seven profiles first. Palette refuses a
+profile that gives a pack no value for a key that the pack requires: see
+[The values that a pack requires](../internals/palette/packs.md#the-values-that-a-pack-requires).
+`just live-platform-values` tests the values of `terraform-platform/` for each
+such key before a build. It uses mock providers, and sends no request. When
+`up` stops before it makes `wilma`, `just live-platform-down` destroys the
+state that `up` made.
 
 | Check | Expected exit | What it shows |
 |---|---|---|

@@ -6,11 +6,11 @@
 packs = {
   cert-manager              = { registry = "Public Repo", version = "", type = "" } # behind
   vault                     = { registry = "Palette Registry", version = "", type = "" }
-  external-secrets-operator = { registry = "Palette Community Registry", version = "", type = "" }
+  external-secrets-operator = { registry = "Public Repo", version = "", type = "" }
   kyverno                   = { registry = "Public Repo", version = "", type = "" }
-  envoy-gateway             = { registry = "Public Repo", version = "", type = "" }
+  envoy-gateway             = { registry = "Bitnami", version = "", type = "" }
   external-dns              = { registry = "Bitnami", version = "", type = "" } # behind
-  cloudnative-pg            = { registry = "Palette Community Registry", version = "", type = "" } # behind
+  cloudnative-pg            = { registry = "Bitnami", version = "", type = "" } # behind
   keycloak                  = { registry = "Bitnami", version = "", type = "" }
   argo-cd                   = { registry = "Public Repo", version = "", type = "" } # behind
   prometheus-operator       = { registry = "Public Repo", version = "", type = "" }

@@ -317,6 +317,21 @@ facts:
     rules:
       - pack-dependency
 
+  # ---- The values that a pack requires -----------------------------------------------------------
+
+  - id: pack-values-required
+    kind: behavior
+    reads:
+      codes:
+        - ClusterProfileCreationValidationFailure
+    stand_in: []
+    live: []
+    unchecked: No check asserts the refusal. The first build of the platform cluster got it, and terraform-platform/ now gives each value. just live-platform-values tests the values with mock providers.
+    pages:
+      - internals/palette/packs.md#the-values-that-a-pack-requires
+    code:
+      - examples/live/terraform-platform/main.tf
+
   # ---- Pack schema and presets -------------------------------------------------------------------
 
   - id: pack-schema-not-on-profile

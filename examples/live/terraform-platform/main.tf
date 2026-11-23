@@ -75,11 +75,12 @@ data "spectrocloud_pack" "other_cert_manager" {
 
 # ---- the values -----------------------------------------------------------------------------------
 #
-# Most packs keep the values that the registry lists. Five packs change some values, and the glue
-# reads the namespace of six. The values of a chart are under charts.<chart> in a pack of Spectro
-# Cloud, and at the top in a chart of a Helm registry. A patch goes into the values of the chart,
-# three levels deep. A map of a patch merges into the map of the chart. Each other value replaces
-# the value of the chart. The text that a patch gives is YAML with no comments.
+# Most packs keep the values that the registry lists. Six packs change some values, each chart of a
+# Helm registry gets a namespace, and the glue reads the namespace of six. The values of a chart are
+# under charts.<chart> in a pack of Spectro Cloud, and at the top in a chart of a Helm registry. A
+# patch goes into the values of the chart, three levels deep. A map of a patch merges into the map
+# of the chart. Each other value replaces the value of the chart. The text that a patch gives is
+# YAML with no comments.
 
 locals {
   sso_realm = {
@@ -159,18 +160,26 @@ locals {
         }
       }
     } if var.sso]...)
+    # Palette requires a password of Grafana in this pack: ClusterProfileCreationValidationFailure.
+    prometheus-operator = { grafana = { adminPassword = random_password.grafana.result } }
   }
+  # The values of a chart of a Helm registry start with `pack.namespace: ""`. Palette refuses a
+  # profile that gives such a pack no namespace: ClusterProfileCreationValidationFailure. So each
+  # such chart gets the pack section below, with no patch.
+  helm_charts = [for k, d in data.spectrocloud_pack.pin : k if try(yamldecode(d.values).pack.namespace, null) == ""]
+  patched     = merge({ for k in local.helm_charts : k => {} }, local.patches)
   # The pack section of a patched pack: the namespace when its values name none, and the priority.
-  default_namespaces = { cert-manager = "cert-manager", vault = "vault", external-dns = "external-dns", keycloak = "keycloak", grafana = "grafana", argo-cd = "argocd" }
+  # A pack with no default namespace here gets its name.
+  default_namespaces = { cert-manager = "cert-manager", vault = "vault", external-dns = "external-dns", keycloak = "keycloak", grafana = "grafana", argo-cd = "argocd", prometheus-operator = "monitoring" }
   pack_extra         = { keycloak = { "spectrocloud.com/install-priority" = local.keycloak_priority } }
 
-  decoded    = { for k in keys(local.default_namespaces) : k => yamldecode(data.spectrocloud_pack.pin[k].values) }
+  decoded    = { for k in setunion(keys(local.default_namespaces), local.helm_charts) : k => yamldecode(data.spectrocloud_pack.pin[k].values) }
   wrapped    = { for k, d in local.decoded : k => can(keys(d.charts)) }
   chart_key  = { for k, d in local.decoded : k => try(keys(d.charts)[0], "") }
   chart      = { for k, d in local.decoded : k => try(d.charts[local.chart_key[k]], d) }
-  namespaces = { for k, d in local.decoded : k => try(d.pack.namespace, local.default_namespaces[k]) }
+  namespaces = { for k, d in local.decoded : k => try(coalesce(d.pack.namespace), lookup(local.default_namespaces, k, k)) }
 
-  patched_chart = { for p, patch in local.patches : p => {
+  patched_chart = { for p, patch in local.patched : p => {
     for k, v in merge(local.chart[p], patch) : k => try(
       { for k2, v2 in merge(local.chart[p][k], patch[k]) : k2 => try(merge(local.chart[p][k][k2], patch[k][k2]), v2) },
     v)
@@ -179,9 +188,16 @@ locals {
     [local.decoded[p]],
     [for w in [local.wrapped[p]] : { charts = merge(local.decoded[p].charts, { (local.chart_key[p]) = c }) } if w],
     [for w in [local.wrapped[p]] : c if !w],
-    [{ pack = merge({ namespace = local.namespaces[p] }, try(local.decoded[p].pack, {}), try(local.pack_extra[p], {})) }],
+    [{ pack = merge(try(local.decoded[p].pack, {}), { namespace = local.namespaces[p] }, try(local.pack_extra[p], {})) }],
   )...)) }
   pack_values = { for k, d in data.spectrocloud_pack.pin : k => lookup(local.patched_values, k, d.values) }
+}
+
+# The password of Grafana in prometheus-operator. OpenTofu makes it at the first apply, and keeps it
+# in the state, so a plan with the defaults changes nothing. No file of the repository holds it.
+resource "random_password" "grafana" {
+  length  = 24
+  special = false
 }
 
 # ---- the profiles ---------------------------------------------------------------------------------

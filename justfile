@@ -347,6 +347,12 @@ live-profiles: build
 live-platform-pins: build
     examples/live/platform.sh pins
 
+# Test the values that Palette requires of the packs of wilma, with mock providers: no request, and no cost (#1004)
+[group('live checks')]
+live-platform-values:
+    tofu -chdir=examples/live/terraform-platform init -input=false
+    tofu -chdir=examples/live/terraform-platform test
+
 # Build wilma with seven add-on profiles and 14 community packs, and wait until each pack is ready (#700). Billable until live-platform-down.
 [group('live')]
 live-platform-up: build
