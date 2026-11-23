@@ -651,9 +651,7 @@ undo() {
   undone=1
 }
 # profile_gone: no profile of way 2 stays in Palette
-profile_gone() {
-  [ -z "$OP" ] && [ "$("$strata" list profiles --json | jq --arg n "$profile_name" '[.profiles[] | select(.name == $n)] | length')" = 0 ]
-}
+profile_gone() { [ -z "$OP" ] && no_profile_named "$profile_name"; }
 # secret_in_run: a file of the run holds the key. The key goes to grep through a pipe. The key is not
 # empty, because palette_settings stops the script then: an empty pattern matches each line.
 secret_in_run() { grep -rIlF -f <(printf %s "$palette_key") .; }

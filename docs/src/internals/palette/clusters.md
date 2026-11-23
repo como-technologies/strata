@@ -257,7 +257,7 @@ Palette deleted the Deployment of the layer. See
 | Step | What Palette does |
 | --- | --- |
 | An edit drops an object, and the cluster takes the update | The object stays. Palette applies the objects that the content still names. |
-| A person deletes an object that the content still names | No run shows this. The code of Palette makes the object again at the next reconcile. |
+| A person deletes an object that the content still names | No run shows this. The code of Palette makes the object again at the next reconcile. [hand-edit.sh](../../development/live-runs.md#hand-editsh) checks it, and has no result yet. |
 | A person removes the whole layer from the cluster | Palette deletes the objects that the content names at that time. A live run shows it for a Deployment. No run shows what Palette does with a namespace that the layer owns. |
 | The same, for an object that an earlier edit dropped | No run shows this. The content at that time does not name the object. |
 

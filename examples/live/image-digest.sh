@@ -36,7 +36,7 @@ case "$from" in 1|2|3|4) ;; *) usage; exit 2 ;; esac
 command -v kubectl > /dev/null || die "kubectl is needed to read the image inside the cluster"
 command -v crane > /dev/null || die "crane is needed to read the digest of the image"
 
-image=registry.k8s.io/pause:3.10.2
+image=$pause_image
 pack=strata-live-config
 deploy=strata-live-image
 minutes=${PROPAGATION_MINUTES:-20}
@@ -59,35 +59,10 @@ addon=$(out addon_profile_name)
 [ -n "$C" ] || die "no cluster A; run just live-up"
 export PALETTE_PROJECT_UID=$P
 
-# workload IMAGE: the document that the add-on manifest gets, a Deployment of one pod
-workload() {
-  cat << EOF
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: $deploy
-  namespace: default
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: $deploy
-  template:
-    metadata:
-      labels:
-        app: $deploy
-    spec:
-      containers:
-        - name: pause
-          image: $1
-          imagePullPolicy: IfNotPresent
-EOF
-}
 # the manifest text after stage 2, where the Deployment names the tag, and after stage 3, where it
 # names the digest
-with_tag="$addon_from"$'\n'"$(workload "$image")"
-with_digest="$addon_from"$'\n'"$(workload "$image@$digest")"
+with_tag="$addon_from"$'\n'"$(deployment_manifest "$deploy" "$image")"
+with_digest="$addon_from"$'\n'"$(deployment_manifest "$deploy" "$image@$digest")"
 # list_values IMAGE: the values of the pack, with IMAGE in the list pack.content.images
 list_values() { printf 'pack:\n  content:\n    images:\n      - image: %s\n' "$1"; }
 
@@ -125,17 +100,13 @@ wait_pod() {
 # wait_gone: wait up to $minutes minutes until the Deployment is not in the cluster
 wait_gone() {
   for _ in $(seq 1 $((minutes * 2))); do
-    kube "$C" get deployment "$deploy" -n default > /dev/null 2>&1 || return 0
+    deployment_absent "$deploy" && return 0
     sleep 30
   done
   return 1
 }
 # pod_after_wait: the image of the pod, when the pod reports one within the time
 pod_after_wait() { wait_pod && pod_image_id; }
-# delete_deployment: delete the Deployment from cluster A. No error when it is gone already.
-delete_deployment() { kube "$C" delete deployment "$deploy" -n default --ignore-not-found; }
-# deployment_absent: cluster A has no Deployment of the example
-deployment_absent() { ! kube "$C" get deployment "$deploy" -n default > /dev/null 2>&1; }
 # names_a_value_alone: compare names a changed value, and no change of the image list
 names_a_value_alone() { grep -q AUTHORED digest-compare.out && ! grep -q IMAGES digest-compare.out; }
 # has_digest TEXT: succeeds when TEXT names an image by a digest
@@ -149,7 +120,7 @@ undo_manifest() {
 if stage 1 "the baseline"; then
   require_baseline
   check base-record 0 "record $addon" -- "$strata" snapshot "$AD" -o addon-0.json
-  check base-no-deployment 0 "#630: cluster A runs no Deployment $deploy at the baseline" -- deployment_absent
+  check base-no-deployment 0 "#630: cluster A runs no Deployment $deploy at the baseline" -- deployment_absent "$deploy"
 fi
 
 if stage 2 "the digest in the list alone"; then
@@ -190,8 +161,8 @@ if stage 4 "undo"; then
   check undo-values 0 "the values of the pack back" -- "$live/api.sh" set-values "$AD" "$pack" ""
   check undo-accept 0 'cluster A takes it' -- "$live/api.sh" apply "$C"
   check undo-gone ? "#630: the Deployment is gone from cluster A within $minutes minutes (0), or it stays after the content drops it (1)" -- wait_gone
-  check undo-delete 0 "#630: kubectl deletes the Deployment, so that the run leaves cluster A clean" -- delete_deployment
-  check undo-clean 0 "#630: cluster A runs no Deployment $deploy" -- deployment_absent
+  check undo-delete 0 "#630: kubectl deletes the Deployment, so that the run leaves cluster A clean" -- delete_deployment "$deploy"
+  check undo-clean 0 "#630: cluster A runs no Deployment $deploy" -- deployment_absent "$deploy"
   check undo-baseline 0 'the example is at its baseline' -- "$live/baseline.sh"
 fi
 
