@@ -54,8 +54,8 @@ kubectl -n strata-observer create secret generic strata-observer-key \
   project was taken at tenant scope, and the key `api-key` checks it.
 - **`filter:` needs a role of the tenant.** The saved tag filters belong to the
   tenant. Their two routes need `filter.list` and `filter.get` there, as Tenant
-  Viewer gives them. The code of Palette shows it; no live run shows it yet. With
-  Project Viewer alone, use `tag:`. See [The reach of a
+  Viewer gives them. A live run shows that Palette refuses both routes to a key
+  with Project Viewer alone. With that role, use `tag:`. See [The reach of a
   search](../internals/palette/clusters.md#the-reach-of-a-search).
 
 > **Give the Secret to nobody who must not read each of its projects.** Whoever
@@ -134,7 +134,8 @@ A person changes the copy of `prod` on its cluster. The row of that cluster says
 
 1. **Find the clusters.** Strata searches each selector in the project of each key,
    with `strata list clusters --project`. A key with a role in one project cannot
-   search the tenant. The code of Palette shows it; no live run shows it yet.
+   search the tenant, as a live run shows: see [The reach of a
+   search](../internals/palette/clusters.md#the-reach-of-a-search).
 2. **Check each record once.** `verify` checks the records of each project one time.
    A profile version that ten clusters run is one check.
 3. **Read each cluster.** The observer reads the cluster, and compares each record

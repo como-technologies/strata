@@ -74,11 +74,12 @@ and
   more than a month older than its `lastRunTime`. The copy of Palette is then
   the copy of the last sync that completed.
 - Palette gives no `status` when `isSyncSupported` is `false`: it does not
-  sync the registry. The code of Palette shows it; no live run shows it yet.
-  The last live run got a `lastSyncedTime` and no `status` for the Bitnami
-  registry. The check `bitnami-no-status` of
-  [packs.sh](../../development/live-runs.md#packssh) reads its
-  `isSyncSupported`.
+  sync the registry. A live run shows it for the Bitnami registry of the
+  tenant: the Helm summary listing gives it `isSyncSupported` `false` and no
+  `status`. So strata reads no sync, and the line of the pin names none. See
+  the check `bitnami-no-status` of
+  [packs.sh](../../development/live-runs.md#packssh). An earlier live run got
+  a `lastSyncedTime` and no `status` for that registry.
 - Palette writes `0001-01-01T00:00:00.000Z` for a registry that never
   completed a sync.
 - Palette refuses a sync while a sync of the registry runs. The sync route of
