@@ -183,6 +183,7 @@ facts:
       - packs.sh:bitnami-sync
       - packs.sh:stale-current
       - packs.sh:stale-json
+      - packs.sh:bitnami-no-status
     pages:
       - reference/palette-api.md#other-reads
       - internals/palette/packs.md#the-sync-of-a-registry
@@ -229,6 +230,7 @@ facts:
       - packs.sh:verify-sync
       - packs.sh:bitnami-sync
       - packs.sh:stale-json
+      - packs.sh:bitnami-no-status
     pages:
       - internals/palette/packs.md#the-sync-of-a-registry
     code:

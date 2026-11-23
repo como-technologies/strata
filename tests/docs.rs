@@ -658,7 +658,7 @@ fn the_variables_of_the_gitlab_preflight_job_are_described_on_gitlab_md_and_list
         if page.extension().is_none_or(|e| e != "md")
             || page.starts_with(docs().join("output"))
             || page.ends_with("automation/gitlab.md")
-            || page.ends_with("development/live-runs.md")
+            || page.ends_with(LIVE_RUNS_PAGE)
         {
             continue;
         }
@@ -887,18 +887,14 @@ fn the_sentences_that_the_style_review_of_wave_11_named_keep_to_the_limits() {
             "The workflow installs the release binary",
             MOST_WORDS,
         ),
+        (LIVE_RUNS_PAGE, "makes a checkout of the caller", MOST_WORDS),
         (
-            "development/live-runs.md",
-            "makes a checkout of the caller",
-            MOST_WORDS,
-        ),
-        (
-            "development/live-runs.md",
+            LIVE_RUNS_PAGE,
             "#419: with `CLUSTER`, the record of the cluster",
             MOST_WORDS,
         ),
         (
-            "development/live-runs.md",
+            LIVE_RUNS_PAGE,
             "#158: `verify-report.sh --who` puts",
             MOST_WORDS,
         ),
@@ -1134,9 +1130,9 @@ const WAVE_8_PAGES: [&str; 31] = [
     "development/changes.md",
     CODE_PAGE,
     "development/documentation.md",
-    "development/live-runs.md",
+    LIVE_RUNS_PAGE,
     "install.md",
-    "internals/palette/packs.md",
+    PALETTE_PACKS_PAGE,
     "internals/palette/profiles.md",
     "reference/candidate-file.md",
     COMPATIBILITY_PAGE,
@@ -1362,7 +1358,7 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
 /// sends its two downloads at once, and no live window ran that form.
 #[test]
 fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
-    let page = read(&docs().join("development/live-runs.md"));
+    let page = read(&docs().join(LIVE_RUNS_PAGE));
     for check in [
         "route-names",
         "copy-create",
@@ -1427,7 +1423,7 @@ fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
 /// row that says "no result yet" for one of them tells a reader that nobody ran the check.
 #[test]
 fn the_rows_of_the_checks_of_public_sh_state_a_result() {
-    let page = read(&docs().join("development/live-runs.md"));
+    let page = read(&docs().join(LIVE_RUNS_PAGE));
     let public = section(&page, "## public.sh", Some("\n## "));
     for check in [
         "book-opens",
@@ -1454,7 +1450,7 @@ fn the_rows_of_the_checks_of_public_sh_state_a_result() {
 /// "no result yet" for one of them tells a reader that nobody ran the check.
 #[test]
 fn the_rows_of_the_checks_that_the_wave_11_live_window_ran_state_a_result() {
-    let page = read(&docs().join("development/live-runs.md"));
+    let page = read(&docs().join(LIVE_RUNS_PAGE));
     for check in [
         "ask-repave-comment",
         "preflight-comment",
@@ -1521,7 +1517,7 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
         );
     }
 
-    let runs = read(&docs().join("development/live-runs.md"));
+    let runs = read(&docs().join(LIVE_RUNS_PAGE));
     let route = section(&runs, "## validate-route.sh", Some("\n## route-bodies.sh"));
     for row in route
         .lines()
@@ -1973,6 +1969,24 @@ const CODE_PAGE: &str = "development/code.md";
 /// The page of the version rules of strata and of the changes of each release.
 const COMPATIBILITY_PAGE: &str = "reference/compatibility.md";
 
+/// The page of the checks of each live script and of their results.
+const LIVE_RUNS_PAGE: &str = "development/live-runs.md";
+
+/// The page of what Palette does with a cluster, a key, and a search.
+const PALETTE_CLUSTERS_PAGE: &str = "internals/palette/clusters.md";
+
+/// The page of what Palette does with a registry and a pack.
+const PALETTE_PACKS_PAGE: &str = "internals/palette/packs.md";
+
+/// The page of what no live run covers.
+const PALETTE_LIMITS_PAGE: &str = "internals/palette/limits.md";
+
+/// The command page of `strata list`.
+const LIST_PAGE: &str = "commands/list.md";
+
+/// The page of the observer of a set of clusters.
+const OBSERVER_CLUSTERS_PAGE: &str = "automation/observer-clusters.md";
+
 /// A helper of `tests/common/` that another package includes is in a file of its own. The rule of
 /// "Tests" in `code.md` names each such file, and no other. The table "Where the code goes" of
 /// `build-test.md` has a row for each. The verify of #711 and of #721 found a file that each page
@@ -2374,7 +2388,7 @@ fn compatibility_says_what_release_0_25_0_did_for_a_world_and_a_fixture_that_are
 /// no "no result yet": the marked version of each pack, and the count of versions.
 #[test]
 fn the_row_of_packs_palette_latest_states_the_result_of_the_live_window_of_wave_12() {
-    let page = read(&docs().join("development/live-runs.md"));
+    let page = read(&docs().join(LIVE_RUNS_PAGE));
     let row = page
         .lines()
         .find(|l| l.starts_with("| `packs-palette-latest`"))
@@ -2410,7 +2424,7 @@ fn the_behind_pages_link_the_version_that_palette_calls_the_latest_from_the_pre_
             "{page}: the block of {anchor:?} does not link {link}: {found}"
         );
     }
-    let packs = read(&docs().join("internals/palette/packs.md"));
+    let packs = read(&docs().join(PALETTE_PACKS_PAGE));
     assert!(
         packs.contains("\n## The version that Palette calls the latest\n"),
         "packs.md has no section for the link"
@@ -2432,7 +2446,7 @@ fn the_behind_pages_link_the_version_that_palette_calls_the_latest_from_the_pre_
 /// a machine pool. The page of the clusters states what Palette gave.
 #[test]
 fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_field() {
-    let page = one_line(&read(&docs().join("internals/palette/clusters.md")));
+    let page = one_line(&read(&docs().join(PALETTE_CLUSTERS_PAGE)));
     for needle in [
         "Palette omits a field that has no value.",
         "no pool of its cloud config holds `overrideClusterAPIConfig`, `overrideHealthCheckConfiguration`, or `overrideKubeadmConfiguration`.",
@@ -2997,7 +3011,7 @@ fn no_cell_of_a_table_in_the_book_starts_with_the_target_of_a_link() {
 /// off, a digest in the image list, or a role.
 #[test]
 fn the_results_of_the_wave_15_live_window_are_in_the_book() {
-    let runs = read(&docs().join("development/live-runs.md"));
+    let runs = read(&docs().join(LIVE_RUNS_PAGE));
     for script in [
         "image-digest.sh",
         "observer-kind.sh",
@@ -3076,7 +3090,7 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         role.contains("`role-audits`") && role.contains("HTTP 403 with the code `AccessDenied`")
     );
 
-    let limits = one_line(&read(&docs().join("internals/palette/limits.md")));
+    let limits = one_line(&read(&docs().join(PALETTE_LIMITS_PAGE)));
     for old in [
         "and no run uses it",
         "No run shows what a node pulls in this case",
@@ -3085,7 +3099,7 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
     ] {
         assert!(!limits.contains(old), "limits.md still says {old:?}");
     }
-    let clusters = one_line(&read(&docs().join("internals/palette/clusters.md")));
+    let clusters = one_line(&read(&docs().join(PALETTE_CLUSTERS_PAGE)));
     assert!(
         clusters.contains("A live run did this, and Palette deleted the Deployment of the layer."),
         "clusters.md lacks the result of the removal of a layer"
@@ -3105,7 +3119,7 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
 /// fact whose check has no result keeps its words (#920).
 #[test]
 fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
-    let runs = read(&docs().join("development/live-runs.md"));
+    let runs = read(&docs().join(LIVE_RUNS_PAGE));
     for start in [
         "| `list-registries` |",
         "| `validate-accepts-says` |",
@@ -3129,7 +3143,7 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
     // each page, the words of a result or of a fact with no result, and the words that are gone
     let pages: [(&str, &[&str], &[&str]); 8] = [
         (
-            "internals/palette/clusters.md",
+            PALETTE_CLUSTERS_PAGE,
             &[
                 "reads the three routes with such a key, and gets this answer from each one.",
                 "sends a key that no tenant has. The output and the errors of `strata list projects` hold no copy of it.",
@@ -3137,7 +3151,6 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
                 "The cluster listing answers HTTP 500 with `ResourceAccessDenied`, and the profile listing gives the profiles.",
                 "The stage also shows that an added profile goes to the end when the `PUT` gives it first.",
                 "show that Palette answers the search of each project of the tenant listing.",
-                "The code of Palette shows these facts; no live run shows the refusal yet:",
                 "The code of Palette shows it; no live run shows it yet. Stage 10 of",
             ],
             &[
@@ -3149,10 +3162,9 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
             ],
         ),
         (
-            "internals/palette/limits.md",
+            PALETTE_LIMITS_PAGE,
             &[
                 "A run shows that answer only for the cluster listing:",
-                "The refusal of a search to a key that cannot read a project.",
                 "reads such a cluster with two keys, and has no result yet.",
             ],
             &[
@@ -3198,7 +3210,7 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
             ],
         ),
         (
-            "internals/palette/packs.md",
+            PALETTE_PACKS_PAGE,
             &["Palette takes it, and the registry listing names it."],
             &[
                 "`ResourceNameAlreadyExists`. The code of Palette shows it; no live run shows it yet.",
@@ -3215,21 +3227,122 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
                 "| `InvalidVariable` | No live run saw it yet.",
             ],
         ),
-        (
-            "development/live-runs.md",
-            &[],
-            &["No live window ran stage 4."],
-        ),
+        (LIVE_RUNS_PAGE, &[], &["No live window ran stage 4."]),
     ];
+    pages_say(&pages);
+}
+
+/// Each page of `pages` holds each of its texts `now`, and no text `gone`. A page is a path under
+/// `docs/src/`, and the test reads it as one line.
+fn pages_say(pages: &[(&str, &[&str], &[&str])]) {
     for (name, now, gone) in pages {
         let text = one_line(&read(&docs().join(name)));
-        for needle in now {
+        for needle in *now {
             assert!(text.contains(needle), "{name} lacks {needle:?}");
         }
-        for old in gone {
+        for old in *gone {
             assert!(!text.contains(old), "{name} still says {old:?}");
         }
     }
+}
+
+/// The first live window of Wave 18 ran the checks of #702, #703, #919, #928, and #940. The row
+/// of each check that passed says so. Each page of their facts gives the result in place of "no
+/// live run shows it yet". A part that no check shows keeps its words (#1005).
+#[test]
+fn the_pages_state_the_results_of_the_first_live_window_of_wave_18() {
+    let runs = read(&docs().join(LIVE_RUNS_PAGE));
+    for start in [
+        "| `bitnami-no-status`, ",
+        "| `ref-same-release`, ",
+        "| `ref-compare` |",
+        "| `ref-record`, ",
+        "| `ref-consumers` |",
+        "| `ref-no-project`, ",
+        "| `bump-text-says` |",
+        "| `bump-text-skip` |",
+        "| `slash-several`, ",
+        "| `record`, `label`, `filter-create` |",
+        "| `filters-control`, ",
+        "| `filters-role`, ",
+        "| `filter-role`, ",
+        "| `search-control`, ",
+        "| `search-role-tenant`, ",
+        "| `search-role-project`, ",
+        "| `list-role-project`, ",
+        "| `list-role-tenant` |",
+        "| `list-role-filter` |",
+    ] {
+        let row = runs
+            .lines()
+            .find(|l| l.starts_with(start))
+            .unwrap_or_else(|| panic!("live-runs.md has no row {start:?}"));
+        assert!(
+            row.contains("A live run passed") && !row.to_lowercase().contains("no result yet"),
+            "the row {start:?} gives no result: {row}"
+        );
+    }
+    // each page, the words of a result or of a part with no result, and the words that are gone
+    let pages: [(&str, &[&str], &[&str]); 6] = [
+        (
+            LIVE_RUNS_PAGE,
+            &[
+                "Each check of stage 6 passes on cluster A, built on Kubernetes",
+                "In later live runs, `bitnami-sync` got no `status` for Bitnami, and the last one got `isSyncSupported` `false`",
+            ],
+            &[
+                "Each check of stage 6 but `bump-text-says` and `bump-text-skip` passes",
+                "No live window ran the form of `snapshot` yet.",
+                "In the last live run, `bitnami-sync` got no `status`",
+            ],
+        ),
+        (
+            PALETTE_PACKS_PAGE,
+            &[
+                "A live run shows it for the Bitnami registry of the tenant: the Helm summary listing gives it `isSyncSupported` `false` and no `status`.",
+            ],
+            &["sync the registry. The code of Palette shows it; no live run shows it yet."],
+        ),
+        (
+            PALETTE_CLUSTERS_PAGE,
+            &[
+                "A live run shows the status and the code for a key with Project Viewer alone",
+                "The code of Palette shows the message; no live run shows it yet.",
+                "A live run shows this refusal of the cluster search, in the next list. No live run shows the refusal of the edge host search yet.",
+                "`Project 'staging' access denied`. No live run shows this refusal yet.",
+                "A live run shows the status and the code. No live run shows the message yet.",
+                "A live run shows the clusters of the project, and the project in `specSummary.projectMeta`.",
+                "A live run shows both answers.",
+            ],
+            &[
+                "The code of Palette shows this answer; no live run shows it yet.",
+                "The code of Palette shows these facts; no live run shows the refusal yet:",
+                "one project; no live run shows them yet:",
+            ],
+        ),
+        (
+            PALETTE_LIMITS_PAGE,
+            &[
+                "Two refusals of a search: the edge host search at tenant scope, and the search of one project.",
+                "A live run shows only the refusal of the cluster search at tenant scope.",
+            ],
+            &["A run shows only the searches of a key that reads each project."],
+        ),
+        (
+            LIST_PAGE,
+            &["A live run shows these refusals to a key with Project Viewer alone."],
+            &["The code of Palette shows these refusals; no live run shows them yet."],
+        ),
+        (
+            OBSERVER_CLUSTERS_PAGE,
+            &[
+                "A live run shows that Palette refuses both routes to a key with Project Viewer alone.",
+                "cannot search the tenant, as a live run shows:",
+            ],
+            &["The code of Palette shows it; no live run shows it yet."],
+        ),
+    ];
+    pages_say(&pages);
 }
 
 /// The five pages of the observer, in the book: the pages of `OBSERVER_PAGES` for a reader, and two
@@ -3390,8 +3503,8 @@ fn the_pages_of_the_observer_no_longer_hold_the_statements_that_nothing_backs() 
         text.push('\n');
     }
     text.push_str(&read(&docs().join("loop.md")));
-    text.push_str(&read(&docs().join("internals/palette/clusters.md")));
-    text.push_str(&read(&docs().join("development/live-runs.md")));
+    text.push_str(&read(&docs().join(PALETTE_CLUSTERS_PAGE)));
+    text.push_str(&read(&docs().join(LIVE_RUNS_PAGE)));
     text.push_str(&read(&docs().join("development/live-example.md")));
     let text = one_line(&text);
     for old in [
@@ -3460,8 +3573,8 @@ fn the_install_steps_say_where_the_script_comes_from_and_the_two_pages_of_palett
     }
     assert!(!steps.contains("two settings"));
 
-    let clusters = one_line(&read(&docs().join("internals/palette/clusters.md")));
-    let limits = one_line(&read(&docs().join("internals/palette/limits.md")));
+    let clusters = one_line(&read(&docs().join(PALETTE_CLUSTERS_PAGE)));
+    let limits = one_line(&read(&docs().join(PALETTE_LIMITS_PAGE)));
     assert!(
         clusters.contains("No run shows what Palette does with a namespace that the layer owns.")
     );
@@ -3814,7 +3927,7 @@ fn compatibility_says_that_a_refusal_of_a_validate_route_is_an_answer_with_no_co
 /// after a colon, or after the words `for this form of the check`.
 #[test]
 fn each_row_of_live_runs_with_no_result_gives_its_reason() {
-    let page = one_line(&read(&docs().join("development/live-runs.md")));
+    let page = one_line(&read(&docs().join(LIVE_RUNS_PAGE)));
     let lower = page.to_lowercase();
     let mut found = 0;
     for (at, _) in lower.match_indices("no result yet") {
@@ -3835,7 +3948,7 @@ fn each_row_of_live_runs_with_no_result_gives_its_reason() {
 /// plan say what they wait for.
 #[test]
 fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for() {
-    let page = read(&docs().join("development/live-runs.md"));
+    let page = read(&docs().join(LIVE_RUNS_PAGE));
     let none = |row: &str| !row.to_lowercase().contains("no result yet");
     let contract = section(&page, "## contract.sh", Some("\n## "));
     for item in [
@@ -3908,7 +4021,7 @@ fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for()
 /// and `validate-routes.md` links there. A fact of `limits.yaml` holds each one.
 #[test]
 fn the_rules_of_the_instance_type_routes_that_only_the_code_of_palette_gives_are_in_limits() {
-    let limits = one_line(&read(&docs().join("internals/palette/limits.md")));
+    let limits = one_line(&read(&docs().join(PALETTE_LIMITS_PAGE)));
     for needle in [
         "**The default filter of the GCP and Azure instance type routes.** They list only the types with 2 vCPUs or more and 4 GiB of memory or more, when the query does not say. Strata sends `cpuGtEq=0&memoryGtEq=0` to each route.",
         "**An AWS account with the annotation `freeCredit` set to `true`.** The AWS instance type route lists only the types with up to 4 vCPUs and 8 GiB of memory for such an account.",
@@ -4096,11 +4209,11 @@ fn the_paragraphs_that_the_review_at_the_end_of_wave_13_named_have_six_sentences
         ("development/facts.md", "Each account sees its own values"),
         ("development/facts.md", "When the answer lists some values"),
         (
-            "internals/palette/clusters.md",
+            PALETTE_CLUSTERS_PAGE,
             "**Saved tag filters** belong to the tenant",
         ),
         (
-            "internals/palette/clusters.md",
+            PALETTE_CLUSTERS_PAGE,
             "The query takes `tag`, `meta`, or `resource`.",
         ),
         (
@@ -4310,7 +4423,7 @@ fn loop_sh_has_the_check_report_log_and_the_book_has_its_row() {
         "loop.sh has no check report-log"
     );
 
-    let page = read(&docs().join("development/live-runs.md"));
+    let page = read(&docs().join(LIVE_RUNS_PAGE));
     let part = section(&page, "## loop.sh", Some("\n## "));
     let row = part
         .lines()
@@ -4453,7 +4566,7 @@ fn the_book_states_the_cases_where_latest_is_not_the_version_that_the_ref_record
         !packs.contains("So the version that strata marks is the version that Palette marks"),
         "packs.md says that the two marks are one version"
     );
-    let palette = one_line(&read(&docs().join("internals/palette/packs.md")));
+    let palette = one_line(&read(&docs().join(PALETTE_PACKS_PAGE)));
     assert!(
         palette
             .contains("`@latest` is the highest version of that copy that is not a pre-release."),
@@ -4983,7 +5096,7 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
             "strata follows the order of the Rust crate `versions` 8.0.1: see",
         ),
         (
-            "internals/palette/limits.md",
+            PALETTE_LIMITS_PAGE,
             "strata follows the order of the Rust crate `versions` 8.0.1: see",
         ),
         (
@@ -5791,7 +5904,7 @@ fn compatibility_compares_each_change_of_the_wave_with_release_0_26_0() {
 /// each one as a fact, with no run id and no date.
 #[test]
 fn the_rows_of_the_live_window_of_wave_14_state_their_results() {
-    let page = one_line(&read(&docs().join("development/live-runs.md")));
+    let page = one_line(&read(&docs().join(LIVE_RUNS_PAGE)));
     for needle in [
         "#576: with a cluster up, `just live-contract --with-cluster` exits 0. The run finds 120 \
          facts: 63 `same`, none `differs`, 57 skipped, none that the run cannot check, and 0 \
@@ -6341,7 +6454,7 @@ fn the_text_of_the_book_that_the_review_of_wave_14_named_keeps_to_the_limits() {
         ("development/live-example.md", "| `github.sh` |"),
         ("development/live-example.md", "| `lib.sh` |"),
         (
-            "internals/palette/limits.md",
+            PALETTE_LIMITS_PAGE,
             "A region that AWS refuses for the VPC route",
         ),
         (

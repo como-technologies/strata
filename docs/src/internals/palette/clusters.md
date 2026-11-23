@@ -378,8 +378,10 @@ listing gives the profiles. The code of Palette shows the refusal of the profile
 listing and the message of each listing; no live run shows them yet.
 
 The saved tag filters need `filter.list` in the tenant. Without it, Palette
-answers HTTP 403 with `AccessDenied`, and the message names `filter.list`. The
-code of Palette shows this answer; no live run shows it yet.
+answers HTTP 403 with `AccessDenied`, and the message names `filter.list`. A
+live run shows the status and the code for a key with Project Viewer alone: see
+[The reach of a search](#the-reach-of-a-search). The code of Palette shows the
+message; no live run shows it yet.
 
 Strata sends no denial again, and its message names what Palette denied: see
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
@@ -579,10 +581,12 @@ keeps the clusters that run the version. The checks `search-profile-runs`,
 
 ## The reach of a search
 
-The code of Palette shows these facts; no live run shows the refusal yet:
+The code of Palette shows these facts:
 
 - The cluster search and the edge host search at tenant scope need `project.list`
-  in the tenant. Without it, Palette answers HTTP 403 with `AccessDenied`.
+  in the tenant. Without it, Palette answers HTTP 403 with `AccessDenied`. A
+  live run shows this refusal of the cluster search, in the next list. No live
+  run shows the refusal of the edge host search yet.
 - With it, each search gives the projects where a role of the key gives the
   listing. The cluster search needs `cluster.list`, and the edge host search
   needs `edgehost.list`. It omits each other project, with no error. A role of the tenant, such
@@ -590,7 +594,7 @@ The code of Palette shows these facts; no live run shows the refusal yet:
 - The search of one project, with its `ProjectUid`, answers HTTP 500 with the
   code `ResourceAccessDenied` when no role of the key there gives the listing.
   The message names the project by its name, as in `Project 'staging' access
-  denied`.
+  denied`. No live run shows this refusal yet.
 - At tenant scope, the project listing holds each project of the tenant only for
   a key whose role gives `project.list` in the tenant. For another key, it holds
   the projects of its roles.
@@ -599,18 +603,20 @@ The code of Palette shows these facts; no live run shows the refusal yet:
   project of a profile of a project in `metadata.annotations.projectUid`.
 
 The code of Palette shows these facts of a key whose one role is Project Viewer in
-one project; no live run shows them yet:
+one project:
 
 - The role holds `project.list` and `cluster.list` in its project alone. So the
   cluster search at tenant scope answers HTTP 403 with `AccessDenied`, and the
-  message names `project.list` in the scope `tenant`.
+  message names `project.list` in the scope `tenant`. A live run shows the
+  status and the code. No live run shows the message yet.
 - The search of its project, with that `ProjectUid`, gives the clusters of the
   project. Each item names its project in `specSummary.projectMeta` and in
-  `metadata.annotations.projectUid`.
+  `metadata.annotations.projectUid`. A live run shows the clusters of the
+  project, and the project in `specSummary.projectMeta`.
 - The listing of the saved tag filters needs `filter.list` in the tenant, and one
   filter, `GET /v1/filters/tag/{uid}`, needs `filter.get`. No role of a project
   holds either. The listing answers HTTP 403 with `AccessDenied`, and one filter
-  answers HTTP 500 with `OperationForbidden`.
+  answers HTTP 500 with `OperationForbidden`. A live run shows both answers.
 - Tenant Viewer, Tenant Admin, and Tenant Project Admin hold `filter.list`,
   `filter.get`, and `project.list` in the tenant.
 

@@ -5703,7 +5703,7 @@ fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_re
         not_run(&steps, &NO_STATUS_CHECKS);
     }
 
-    // the page of live runs names each check, and says that no live window ran it
+    // the page of live runs names each check, and gives the result of the live run (#1005)
     let in_script: std::collections::BTreeSet<String> =
         script_check_ids("packs.sh").into_iter().collect();
     let section = page_section("docs/src/development/live-runs.md", "## packs.sh");
@@ -5721,7 +5721,7 @@ fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_re
         let row = row_of
             .get(id)
             .unwrap_or_else(|| panic!("live-runs.md has no row for {id}"));
-        assert!(row[2].contains("No result yet: "), "{row:?}");
+        assert!(row[2].contains("A live run passed"), "{row:?}");
     }
 }
 

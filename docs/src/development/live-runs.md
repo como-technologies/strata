@@ -234,10 +234,10 @@ registries the tenant can see, including one pack that two registries hold.
 | `verify-no-time` | 0 | #191: `verify --json` gives no `verify.lastModified` for a pack record |
 | `arch-listing` | 0 | #126: the listing names the architectures of `loki` 2.10.2 as `amd64,arm64`, and of 3.6.7 as `amd64`: see [The architectures of a version](../internals/palette/packs.md#the-architectures-of-a-version) |
 | `arch-record`, `arch-behind`, `arch-behind-says`, `arch-behind-json` | 0, 1, 0, 0 | #126: a record of `loki` 2.10.2 is behind 3.6.7, and `behind` says that the move drops `arm64`, in the line and in `newer[].drops` |
-| `bitnami-sync` | 0 | #122, #928: the Helm summary listing gives the sync of the Bitnami registry. The last live run got a `lastSyncedTime` and no `status`. Earlier live runs got `InProgress`, with `syncRecovery` `Recovering` and `sync interrupted` |
+| `bitnami-sync` | 0 | #122, #928: the Helm summary listing gives the sync of the Bitnami registry. Later live runs got no `status`. One of them got a `lastSyncedTime`, and the last one got `isSyncSupported` `false`. Earlier live runs got `InProgress`, with `syncRecovery` `Recovering` and `sync interrupted` |
 | `stale-record`, `stale-current` | 0 | #122: a record of the newest `nginx` of Bitnami, and `behind` says that the pin is current |
-| `stale-note`, `stale-json` | 0 | #122: the last sync did not complete, so the line of the pin names the sync that runs, the last complete sync, and the recovery. `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. Earlier live runs passed `stale-note` and `stale-json` while the sync of Bitnami was `InProgress`. The last live run failed them: Palette gave Bitnami no sync status, and the line of the pin had no note. No run shows `stale-no-note` |
-| `bitnami-no-status`, `stale-no-status`, `stale-no-status-json` | 0 | #928: when the listing gives the Bitnami registry no sync status, these checks run in place of `stale-note` and `stale-json`. The listing gives `isSyncSupported` `false`, so strata reads no sync, and the line of the pin names none. `--json` gives no `pins[].registrySync` and no `pins[].registrySyncError`. No result yet: no live window ran this case |
+| `stale-note`, `stale-json` | 0 | #122: the last sync did not complete, so the line of the pin names the sync that runs, the last complete sync, and the recovery. `--json` gives `pins[].registrySync` with the status of Palette: see [A pin that is current against an older copy](../commands/behind.md#a-pin-that-is-current-against-an-older-copy). When the last sync completed, `stale-no-note` checks that the pin has no note in its place. Earlier live runs passed `stale-note` and `stale-json` while the sync of Bitnami was `InProgress`. A later live run failed them: Palette gave Bitnami no sync status, and the line of the pin had no note. No run shows `stale-no-note` |
+| `bitnami-no-status`, `stale-no-status`, `stale-no-status-json` | 0 | #928: when the listing gives the Bitnami registry no sync status, these checks run in place of `stale-note` and `stale-json`. The listing gives `isSyncSupported` `false`, so strata reads no sync, and the line of the pin names none. `--json` gives no `pins[].registrySync` and no `pins[].registrySyncError`. A live run passed |
 
 Palette lists the registries of a tenant in no fixed order, so strata sorts them
 and the ambiguous-ref message reads the same every time:
@@ -597,11 +597,11 @@ it deletes the copy at its end. It deletes no project. This is the source for
 | `same-release-line` | 0 | #486: the terminal verdict has the line `project <lab uid> -> <second uid>` under the pair. |
 | `compare-projects` | 0 | #486: `compare` with a project for each side gives the project and the uid of each side in `a` and `b`, and `sameContent` is true. |
 | `records-same` | 0 | #486: `same-release` of the two record files passes. |
-| `ref-same-release`, `ref-same-release-projects` | 0 | #703: `same-release project:<lab project>/<name>@<version> project:<second project>/<name>@<version>` passes. `records[0].projectUid` names the lab project, and `records[1].projectUid` names the second project. No result yet: no live window ran #703. |
-| `ref-compare` | 0 | #703: `compare` of the same two refs gives the project and the uid of each side in `a` and `b`, and `sameContent` is true. No result yet: no live window ran #703. |
-| `ref-record`, `ref-record-project` | 0 | #703: `snapshot project:<uid of the second project>/<name>@<version>` records the copy. `source.projectUid` names the second project, and `source.ref` is the ref as typed. No result yet: no live window ran #703. |
-| `ref-consumers` | 0 | #703: `consumers project:<second project>/<name>@<version> --list-only` exits `0`: no cluster runs the copy. No result yet: no live window ran #703. |
-| `ref-no-project`, `ref-no-project-kind` | 2, 0 | #703: a ref in a project that the key cannot see is the error `project-not-found`, and `available` holds the lab project. No result yet: no live window ran #703. |
+| `ref-same-release`, `ref-same-release-projects` | 0 | #703: `same-release project:<lab project>/<name>@<version> project:<second project>/<name>@<version>` passes. `records[0].projectUid` names the lab project, and `records[1].projectUid` names the second project. A live run passed. |
+| `ref-compare` | 0 | #703: `compare` of the same two refs gives the project and the uid of each side in `a` and `b`, and `sameContent` is true. A live run passed. |
+| `ref-record`, `ref-record-project` | 0 | #703: `snapshot project:<uid of the second project>/<name>@<version>` records the copy. `source.projectUid` names the second project, and `source.ref` is the ref as typed. A live run passed. |
+| `ref-consumers` | 0 | #703: `consumers project:<second project>/<name>@<version> --list-only` exits `0`: no cluster runs the copy. A live run passed. |
+| `ref-no-project`, `ref-no-project-kind` | 2, 0 | #703: a ref in a project that the key cannot see is the error `project-not-found`, and `available` holds the lab project. A live run passed. |
 | `other-project-read` | ? | #486: what Palette answers to a `GET` of the copy with the `ProjectUid` of the lab project. `other-project-read.out` holds the status and the error code, and the check records them. Palette refuses the read: HTTP 500, with the code `OperationForbidden`. |
 | `copy-delete` | 0 | #486: the delete of the copy, with the `ProjectUid` of the second project. |
 
@@ -1039,8 +1039,8 @@ mark `disabled`. These are the stages and the options:
 | `bump-pair` | 0 | #166, #623: the newest version of `kubernetes` is two minor versions or more above the pin. `bump.updateChecks.skippedMinor` of `behind` says so. |
 | `bump-asked` | 0 | #166: `behind` asks the route of the version, and the bump of `kubernetes` holds an answer of Palette in `bump.paletteValidation`. |
 | `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. |
-| `bump-text-says` | 0 | #166, #634: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on cluster <cluster>`, or `on clusters <clusters>`, under the `pinned by` line of the pin. No result yet: no live window ran this form of the check. |
-| `bump-text-skip` | 0 | #623, #919: `behind` prints `kubernetes <pin> -> <newest> skips a minor version: Kubernetes moves one minor version at each upgrade` under the bump. No result yet: no live window ran the new words of the line (#919). |
+| `bump-text-says` | 0 | #166, #634: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on cluster <cluster>`, or `on clusters <clusters>`, under the `pinned by` line of the pin. A live run passed. |
+| `bump-text-skip` | 0 | #623, #919: `behind` prints `kubernetes <pin> -> <newest> skips a minor version: Kubernetes moves one minor version at each upgrade` under the bump. A live run passed. |
 | `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
 | `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
 | `bump-cluster-same` | 0 | #419: with `CLUSTER`, the record of the cluster and the record of the profile get one bump of `kubernetes`. The two bumps have the same version, impact level, and change flags: the bump to 1.37.0, with the level `repave`. |
@@ -1055,11 +1055,9 @@ mark `disabled`. These are the stages and the options:
 | `variables-accepts`, `variables-says` | 0 | #623: the route accepts the packs, and `updateChecks.requiredVariables.names` holds the required variables that the move adds. A live run passed. |
 | `variables-update`, `variables-refused` | 0 | #623: Palette refuses the update with HTTP 500 and `InvalidVariable`, the code that `requiredVariables.code` names. The message names a variable of `requiredVariables.names`. A live run passed: Palette refused the update with HTTP 500 and `InvalidVariable`, and the message named the variable. |
 
-Each check of stage 6 but `bump-text-says` and `bump-text-skip` passes on cluster A, built on
+Each check of stage 6 passes on cluster A, built on
 Kubernetes 1.35.8. That version is two minor versions under the newest version
-of the registry, 1.37.0. The stage exits `0`. `bump-text-says` has no result
-yet: no live window ran the form of the check that reads the place of the line.
-`bump-text-skip` has no result yet: no live window ran the new words of #919.
+of the registry, 1.37.0. The stage exits `0`.
 
 Stage 7 can use cluster A on Kubernetes 1.35.8 too. `SKIP` is then a version of
 the release profile with Kubernetes 1.37.0. `VARIABLES` is a version of the
@@ -1277,7 +1275,7 @@ state what it shows.
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
 | `slash-registry`, `slash-listing`, `slash-listed` | 0 | #853: Palette takes a second registry over the Spectro pack registry, with the name `strata-live/packs`, and the registry listing names it. A live run passed. |
 | `slash-sync` | 0 | Palette reads the registry `strata-live/packs`. A live run passed. |
-| `slash-several`, `slash-several-uid` | 2, 0 | #853, #940: a ref of the pack with no registry is `pack-in-several-registries`. The check runs `snapshot` of the ref with `--json --quiet`, which writes the error as JSON on standard error. The field `registries` gives `strata-live/packs` by its uid, and never by its name. A live run passed with `compare --json --quiet` in place of `snapshot`. No live window ran the form of `snapshot` yet. |
+| `slash-several`, `slash-several-uid` | 2, 0 | #853, #940: a ref of the pack with no registry is `pack-in-several-registries`. The check runs `snapshot` of the ref with `--json --quiet`, which writes the error as JSON on standard error. The field `registries` gives `strata-live/packs` by its uid, and never by its name. A live run passed. An earlier live run passed with `compare --json --quiet` in place of `snapshot`. |
 | `slash-record`, `slash-named` | 0 | #853: the ref `pack:<uid>/strata-live-pack@1.0.0` records the pack, and the record names the registry `strata-live/packs` and its uid. A live run passed. |
 | `slash-delete` | 0 | #853: the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack. A live run passed. |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
@@ -1901,17 +1899,17 @@ search](../internals/palette/clusters.md#the-reach-of-a-search).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `record`, `label`, `filter-create` | 0 | #702: the label `env=prod` on cluster A, and the saved filter `strata-live-set` that selects it. No result yet: the live window of the wave runs the script. |
-| `filters-control`, `filters-control-says` | 0 | #702: the key of the example reads the saved filters at tenant scope, with HTTP 200. No result yet: the live window of the wave runs the script. |
-| `filters-role`, `filters-role-says` | 0 | #702: the key of the role gets HTTP 403 with `AccessDenied` for the saved filters at tenant scope. The role holds no `filter.list` in the tenant. No result yet: the live window of the wave runs the script. |
-| `filter-role`, `filter-role-says` | 0 | #702: the key of the role gets HTTP 500 with `OperationForbidden` for the saved filter. The role holds no `filter.get`. No result yet: the live window of the wave runs the script. |
+| `record`, `label`, `filter-create` | 0 | #702: the label `env=prod` on cluster A, and the saved filter `strata-live-set` that selects it. A live run passed. |
+| `filters-control`, `filters-control-says` | 0 | #702: the key of the example reads the saved filters at tenant scope, with HTTP 200. A live run passed. |
+| `filters-role`, `filters-role-says` | 0 | #702: the key of the role gets HTTP 403 with `AccessDenied` for the saved filters at tenant scope. The role holds no `filter.list` in the tenant. A live run passed. |
+| `filter-role`, `filter-role-says` | 0 | #702: the key of the role gets HTTP 500 with `OperationForbidden` for the saved filter. The role holds no `filter.get`. A live run passed. |
 | `search-body` | 0 | the body of the cluster search for the label `env=prod`, as strata sends it |
-| `search-control`, `search-control-says` | 0 | #702: the key of the example searches at tenant scope, and the answer names cluster A in its project. No result yet: the live window of the wave runs the script. |
-| `search-role-tenant`, `search-role-tenant-says` | 0 | #702: the key of the role gets HTTP 403 with `AccessDenied` for the search at tenant scope. The role holds no `project.list` in the tenant. No result yet: the live window of the wave runs the script. |
-| `search-role-project`, `search-role-project-says` | 0 | #702: the search of the project of cluster A with the key of the role names cluster A, in its project. No result yet: the live window of the wave runs the script. |
-| `list-role-project`, `list-role-project-row` | 0 | #702: `list clusters --tag env=prod --project` with the key of the role names cluster A in its project. No result yet: the live window of the wave runs the script. |
-| `list-role-tenant` | 2 | #702: the same list at tenant scope fails with the key of the role. No result yet: the live window of the wave runs the script. |
-| `list-role-filter` | 2 | #702: `list clusters --filter` fails with the key of the role, because the saved filters need a role of the tenant. No result yet: the live window of the wave runs the script. |
+| `search-control`, `search-control-says` | 0 | #702: the key of the example searches at tenant scope, and the answer names cluster A in its project. A live run passed. |
+| `search-role-tenant`, `search-role-tenant-says` | 0 | #702: the key of the role gets HTTP 403 with `AccessDenied` for the search at tenant scope. The role holds no `project.list` in the tenant. A live run passed. |
+| `search-role-project`, `search-role-project-says` | 0 | #702: the search of the project of cluster A with the key of the role names cluster A, in its project. A live run passed. |
+| `list-role-project`, `list-role-project-row` | 0 | #702: `list clusters --tag env=prod --project` with the key of the role names cluster A in its project. A live run passed. |
+| `list-role-tenant` | 2 | #702: the same list at tenant scope fails with the key of the role. A live run passed: the error names `AccessDenied`. |
+| `list-role-filter` | 2 | #702: `list clusters --filter` fails with the key of the role, because the saved filters need a role of the tenant. A live run passed: the error names `AccessDenied`. |
 | `observer-records` | 0 | a record of each profile of cluster A, gzipped as the Secrets of the records hold it |
 | `observer-once`, `observer-row`, `observer-selector` | 0 | #702: one cycle of the observer with the key of the role as `api-key`. The row of cluster A names its project and is checked, and the selector selects cluster A. No result yet: the live window of the wave runs the script. |
 | `observer-no-key` | 0 | #702: no file of the run holds the key of the role |
@@ -2548,8 +2546,9 @@ script holds the other reads.
   the millisecond: the time is the start of the sync job, not its end.
 - The Bitnami registry was `InProgress`, with `syncRecovery` `Recovering` and
   `sync interrupted`. Its `lastSyncedTime` was more than a month older than its
-  `lastRunTime`. In the last live run, `bitnami-sync` got no `status` for
-  Bitnami: see [packs.sh](#packssh).
+  `lastRunTime`. In later live runs, `bitnami-sync` got no `status` for
+  Bitnami, and the last one got `isSyncSupported` `false`: see
+  [packs.sh](#packssh).
 - A registry whose sync failed gives `Failed` and the cause in `message`.
 
 See [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).

@@ -78,10 +78,10 @@ These are open:
   stage 8 of [tiers.sh](../../development/live-runs.md#tierssh) runs
   `strata list` with a role that does not give `cluster.list`. See
   [The role that a key needs](clusters.md#the-role-that-a-key-needs).
-- The refusal of a search to a key that cannot read a project. The code of
-  Palette shows HTTP 403 with `AccessDenied` at tenant scope, and HTTP 500 with
-  `ResourceAccessDenied` for the search of one project. A run shows only the
-  searches of a key that reads each project. See
+- Two refusals of a search: the edge host search at tenant scope, and the
+  search of one project. The code of Palette shows HTTP 403 with `AccessDenied`
+  for the first, and HTTP 500 with `ResourceAccessDenied` for the second. A
+  live run shows only the refusal of the cluster search at tenant scope. See
   [The reach of a search](clusters.md#the-reach-of-a-search).
 - An imported cluster: no run imports one. So no run shows the `clusterType`
   of an import in the listing, or a read-only import with no add-on profile.
