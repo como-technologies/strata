@@ -154,6 +154,47 @@ func TestARefusedKeyLeavesOnlyTheClustersOfItsProjectNotCheckedWithTheStatus(t *
 	}
 }
 
+// The observer checks each cluster, and verify cannot verify the record of web. So the check of payments and ledger
+// has one cause of Not checked. Their rows keep the status of their content and count the cause.
+func TestACheckedClusterWithACauseOfNotCheckedKeepsTheStatusOfItsContentAndCountsTheCause(t *testing.T) {
+	r := twoProjects(t)
+	r.f.unverified[webHome] = true
+	s := r.set()
+	contentOnce(t, s)
+	sum := s.Clusters()
+	for uid, causes := range map[string]int{cPayments: 1, cLedger: 1, cSearch: 0} {
+		if row := rowOf(t, sum, uid); row.Status != model.RowOK || row.NotChecked != causes || row.CheckedAt == nil || row.LastError != nil {
+			t.Errorf("%s: %+v, want the status ok with %d causes", uid, row, causes)
+		}
+	}
+	if sum.Counts.NotChecked != 0 {
+		t.Errorf("counts %+v: the observer checked each cluster", sum.Counts)
+	}
+}
+
+// The second read of ledger fails, and the first one ended well. The row of ledger is not checked, with the error and
+// the time of its last good check. The other clusters keep the status of their content.
+func TestAReadOfAClusterThatFailsLeavesOnlyItsRowNotCheckedWithTheError(t *testing.T) {
+	r := twoProjects(t)
+	s := r.set()
+	contentOnce(t, s)
+	r.f.broken[cLedger] = true
+	contentOnce(t, s)
+	sum := s.Clusters()
+	row := rowOf(t, sum, cLedger)
+	if row.Status != model.RowNotChecked || row.CheckedAt == nil || row.LastError == nil || row.LastError.Kind != docs.KindAPI || row.LastError.Status != 500 {
+		t.Errorf("the cluster whose read failed: %+v", row)
+	}
+	for _, uid := range []string{cPayments, cSearch} {
+		if row := rowOf(t, sum, uid); row.Status != model.RowOK || row.LastError != nil {
+			t.Errorf("%s: %+v", uid, row)
+		}
+	}
+	if sum.Counts.NotChecked != 1 || sum.Page != model.PageOK {
+		t.Errorf("counts %+v, page %s", sum.Counts, sum.Page)
+	}
+}
+
 func TestEachKeyRefusedMakesTheCycleFailAndThePageLost(t *testing.T) {
 	r := twoProjects(t)
 	r.f.refused[home], r.f.refused[other] = true, true

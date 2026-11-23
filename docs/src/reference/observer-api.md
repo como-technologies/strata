@@ -139,12 +139,14 @@ gets `404`.
   newer version.
 - A row of `clusters` has `uid`, `name`, `project` with `uid` and `name`, `profiles`,
   `status`, `drift`, `newer`, `notChecked`, `checkedAt`, and `page`. `drift` counts its
-  findings. `here` is true for the cluster where the observer runs. `lastError` is the
-  refusal of the key of its project.
+  findings, and `notChecked` its causes of "Not checked". `here` is true for the
+  cluster where the observer runs. `lastError` is the refusal of the key of its
+  project, or the error of the last read of the cluster.
 - `status` is `drift` when a finding names a published version or the pods, and
   `differs` when each finding names the copy of the cluster. It is `not-checked` when
-  no check of the cluster ended well, its key was refused, or a cause of "Not checked"
-  limits its check. It is `ok` otherwise. The rows come the worst first.
+  the observer could not check the cluster: its key was refused, its last read failed,
+  or its `page` is not `ok`. It is `ok` otherwise. A cause of "Not checked" changes no
+  status. The rows come the worst first.
 - A row of `projects` names each project with a key: `uid`, `name`, and `lastError`, the
   error of its last search or check.
 - A row of `selectors` names each selector of `--clusters`, with the number of clusters

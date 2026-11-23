@@ -16,6 +16,6 @@
   "clusters": [
     {"uid":"7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35","name":"quarry-1","project":{"uid":"p-dev","name":"dev"},"profiles":12,"status":"drift","drift":1,"newer":11,"notChecked":2,"checkedAt":"2026-11-03T11:54:00Z","page":"ok","here":true},
     {"uid":"c-search","name":"search","project":{"uid":"p-prod","name":"prod"},"profiles":0,"status":"not-checked","drift":0,"newer":0,"notChecked":0,"checkedAt":null,"page":"lost","lastError":{"kind":"api","status":403}},
-    {"uid":"c-ledger","name":"ledger","project":{"uid":"p-dev","name":"dev"},"profiles":12,"status":"ok","drift":0,"newer":0,"notChecked":0,"checkedAt":"2026-11-03T11:53:00Z","page":"ok"}
+    {"uid":"c-ledger","name":"ledger","project":{"uid":"p-dev","name":"dev"},"profiles":12,"status":"ok","drift":0,"newer":0,"notChecked":1,"checkedAt":"2026-11-03T11:53:00Z","page":"ok"}
   ]
 }

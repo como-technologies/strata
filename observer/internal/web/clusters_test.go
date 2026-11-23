@@ -19,11 +19,12 @@ import (
 /* The tests below hold the page of a set of clusters, with the set fleet of testdata/api. With no --clusters, the page
 is the page of one cluster, and the tests of the other files hold it. */
 
-// The clusters of the set fleet: quarry-1 runs the observer and has a drift, and ledger is OK. The key of the project
-// of search is refused.
+// The clusters of the set fleet: quarry-1 runs the observer and has a drift, and ledger is OK with one cause of Not
+// checked. The key of the project of search is refused.
 const (
 	quarryHash = "#c-" + testkit.ClusterUID
 	ledgerHash = "#c-c-ledger"
+	searchHash = "#c-c-search"
 	// wilmaShared is the profile version whose copy on ledger differs from its record, by its uid.
 	wilmaShared = "u-wilma-gateway-312"
 )
@@ -75,6 +76,36 @@ func TestTheScreenOfTheClustersShowsTheWorstFirstARefusedKeyAndASelectorThatSele
 	mustHoldInOrder(t, "the rows", html, ">quarry-1<", ">search<", ">ledger<")
 	// a cluster that is not checked, and a selector with no cluster, keep the calm away
 	mustNotHold(t, "the clusters", html, calmChanged, calmQuiet)
+}
+
+// causesLine gives the line of a row of the clusters that counts the causes of Not checked, such as "1 cause".
+func causesLine(count string) string {
+	return `<div class="small mut">` + count + " in " + wordNotChecked + "</div>"
+}
+
+// ledger is OK with one cause of Not checked, and quarry-1 has a drift with two causes. Each row keeps the status of its
+// content and names the count of its causes. The code gives two causes to search, whose key is refused: its row is not
+// checked, and it names no cause.
+func TestARowOfACheckedClusterKeepsTheStatusOfItsContentAndNamesTheCountOfItsCauses(t *testing.T) {
+	html := screenOf(t, crawl(t, devdata.StateFleet), "#clusters")
+	mustHold(t, "the row of ledger", rowTo(t, html, ledgerHash+"/overview"), badge("g", "OK"), causesLine("1 cause"))
+	mustHold(t, "the row of quarry-1", rowTo(t, html, quarryHash+"/overview"), badge("r", "Drift 1"), causesLine("2 causes"))
+	causes := pageWith(t, "testdata/api", devdata.StateFleet, "#clusters", `D.set.clusters.find(c => c.uid === "c-search").notChecked = 2`)
+	search := rowTo(t, causes, searchHash+"/overview")
+	mustHold(t, "the row of search", search, badge("y", wordNotChecked))
+	mustNotHold(t, "the row of search", search, causesLine("2 causes"))
+}
+
+// The code keeps the row of ledger alone, with the selector that selects it, and no finding. ledger is OK with one
+// cause of Not checked, so the screen of the clusters does not read calm. With no cause, the same screen reads calm.
+func TestACauseOfNotCheckedOfACheckedClusterKeepsTheCalmAwayFromTheScreenOfTheClusters(t *testing.T) {
+	alone := `D.set.clusters = D.set.clusters.filter(c => c.uid === "c-ledger"); D.set.selectors = D.set.selectors.filter(s => s.clusters > 0);
+		D.cluster.counts.findings = 0; D.cluster.counts.notChecked = 0;`
+	withCause := pageWith(t, "testdata/api", devdata.StateFleet, "#clusters", alone)
+	mustHold(t, "ledger with one cause", withCause, "None in what was checked", causesLine("1 cause"))
+	mustNotHold(t, "ledger with one cause", withCause, calmChanged)
+	noCause := pageWith(t, "testdata/api", devdata.StateFleet, "#clusters", alone+` D.set.clusters[0].notChecked = 0;`)
+	mustHold(t, "ledger with no cause", noCause, calmChanged)
 }
 
 func TestAScreenOfAClusterOfASetNamesTheSetAndItsImagesSayThatTheObserverReadsItsOwnClusterOnly(t *testing.T) {

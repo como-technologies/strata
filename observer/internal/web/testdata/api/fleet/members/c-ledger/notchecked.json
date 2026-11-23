@@ -1,0 +1,6 @@
+{
+  "notChecked": [
+    {"cause":"no-upstream-digest","profiles":["gazoo-backup@1.2.0"],"packs":["addon/velero"],"registry":""}
+  ],
+  "limits": {"imagesNamedByATag":88,"helmPacks":6,"maskedPaths":0}
+}

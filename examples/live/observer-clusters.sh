@@ -145,8 +145,8 @@ if stage 4 "the observer of the set with the key of the role"; then
   [ -x "$observer_bin" ] || die "no observer binary at $observer_bin; run just observer-build"
   check observer-records 0 'a record of each profile of cluster A' -- observer_records
   check observer-once 0 '#702: one cycle of the observer with --clusters tag:env=prod and the key of the role' -- observer_once
-  check observer-row 0 '#702: the row of cluster A names its project and is checked' -- \
-    jq -e --arg c "$C" --arg p "$P" '[.clusters[] | select(.uid == $c and .project.uid == $p and .status != "not-checked")] | length == 1' once.json
+  check observer-row 0 '#1003: the row of cluster A names its project and has checkedAt. Its status is the status of its content, also with a cause of Not checked' -- \
+    jq -e --arg c "$C" --arg p "$P" '[.clusters[] | select(.uid == $c and .project.uid == $p and .checkedAt != null and .status != "not-checked")] | length == 1' once.json
   check observer-selector 0 '#702: the selector tag:env=prod selects cluster A' -- \
     jq -e '.selectors == [{"selector": "tag:env=prod", "clusters": 1}]' once.json
   check observer-no-key 0 '#702: no file of the run holds the key of the role' -- \

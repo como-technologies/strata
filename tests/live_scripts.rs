@@ -17285,14 +17285,17 @@ fn the_page_of_live_runs_names_each_check_of_platform_sh() {
 const SET_ROLE_KEY: &str = "set-role-k";
 
 /// A stand-in for the observer, which logs its arguments to `$FAKE_STRATA/observer.log`. It prints
-/// the summary of a set with the row of cluster A and the selector. The key `api-key` of `--keys`
-/// must be the key of the role, and `PALETTE_PROJECT_UID` must name the project of the role.
+/// the summary of a set with the row of cluster A and the selector. The observer checked cluster A,
+/// with one cause of Not checked. The status of the row is `$FAKE_ROW_STATUS`, or `ok`. The key
+/// `api-key` of `--keys` must be the key of the role, and `PALETTE_PROJECT_UID` must name the
+/// project of the role.
 const FAKE_SET_OBSERVER: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_STRATA/observer.log"
 keys=""; prev=""
 for a in "$@"; do [ "$prev" = --keys ] && keys=$a; prev=$a; done
 [ "$(cat "$keys/api-key")" = set-role-k ] && [ "$PALETTE_PROJECT_UID" = p-1 ] || exit 2
-echo '{"page":"ok","clusters":[{"uid":"c-a","project":{"uid":"p-1"},"status":"ok"}],"selectors":[{"selector":"tag:env=prod","clusters":1}]}'
+row='{"uid":"c-a","project":{"uid":"p-1"},"status":"'"${FAKE_ROW_STATUS:-ok}"'","notChecked":1,"checkedAt":"2026-11-23T12:00:00Z"}'
+echo '{"page":"ok","clusters":['"$row"'],"selectors":[{"selector":"tag:env=prod","clusters":1}]}'
 "#;
 
 /// The search of the clusters: the key of the example gets cluster A at each scope. The key of the
@@ -17464,6 +17467,18 @@ fn observer_clusters_sh_fails_the_checks_of_the_refusals_when_palette_answers_th
     assert_eq!(o.status.code(), Some(1), "{steps}");
     failed(&steps, &["filters-role-says"]);
     passed(&steps, &["filter-role-says", "search-role-tenant-says"]);
+}
+
+/// #1003: the stand-in of the observer checked cluster A, with one cause of Not checked. It gives
+/// the row the status `not-checked`, as the observer did before #1003. So `observer-row` fails.
+#[test]
+fn observer_clusters_sh_fails_observer_row_when_the_row_of_a_checked_cluster_is_not_checked() {
+    let mut stage = observer_clusters_stage();
+    stage.env("FAKE_ROW_STATUS", "not-checked");
+    let (o, steps) = stage.run("observer-clusters.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["observer-row"]);
+    passed(&steps, &["observer-once", "observer-selector"]);
 }
 
 #[test]
