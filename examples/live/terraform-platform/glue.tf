@@ -24,9 +24,9 @@ locals {
     cert-manager              = { app = "cert-manager", port = "tcp-prometheus-servicemonitor" }
     external-secrets-operator = { app = "external-secrets", port = "metrics" }
     kyverno                   = { app = "kyverno", port = "metrics-port" }
-    envoy-gateway             = { app = "gateway-helm", port = "metrics" }
+    envoy-gateway             = { app = "envoy-gateway", port = "http-metrics" }
     external-dns              = { app = "external-dns", port = "http" }
-    cloudnative-pg            = { app = "cloudnative-pg", port = "metrics" }
+    cloudnative-pg            = { app = "cloudnative-pg", port = "http-metrics" }
     keycloak                  = { app = "keycloak", port = "http" }
     argo-cd                   = { app = "argocd-metrics", port = "http-metrics" }
     grafana                   = { app = "grafana", port = "http" }

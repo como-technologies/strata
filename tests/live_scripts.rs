@@ -17038,7 +17038,7 @@ fn platform_sh_case_7_reads_the_observer_on_wilma_at_scale() {
         let mut stage = platform_stage();
         stage.published(
             "t-observability",
-            r#"[{"name":"prometheus-operator","tag":"1.0.0","type":"spectro","values":"retention: 10d\n"}]"#,
+            r#"[{"name":"prometheus-operator","tag":"1.0.0","type":"spectro","values":"\"retention\": \"10d\"\n"}]"#,
             "{}",
         );
         // the count copies the records of the baseline

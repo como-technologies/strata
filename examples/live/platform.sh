@@ -219,8 +219,8 @@ baseline_ready() { apply_defaults && wait_ready; }
 
 edit_from=${EDIT_FROM:-releaseNameOverride: \"cert-manager\"}
 edit_to=${EDIT_TO:-releaseNameOverride: \"cert-manager-edited\"}
-prometheus_from=${PROMETHEUS_FROM:-retention: 10d}
-prometheus_to=${PROMETHEUS_TO:-retention: 9d}
+prometheus_from=${PROMETHEUS_FROM:-\"retention\": \"10d\"}
+prometheus_to=${PROMETHEUS_TO:-\"retention\": \"9d\"}
 
 # edit_security: an edit in place of a value of cert-manager in the profile of the security team
 edit_security() {

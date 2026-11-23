@@ -461,9 +461,43 @@ The recipe pins the version that strata marks latest. A line with the mark
 registry does not hold a pack, the recipe names the registries that do. Change
 the line, and run the recipe again.
 
+`terraform.tfvars.example` pins each pack to one of four registries:
+
+| Registry | Packs |
+| --- | --- |
+| Public Repo | cert-manager, external-secrets-operator, kyverno, argo-cd, prometheus-operator, fluentbit, and crossplane |
+| Palette Registry | vault |
+| Bitnami | envoy-gateway, external-dns, cloudnative-pg, keycloak, and grafana |
+| Palette Community Registry | loki |
+
+The catalog of the tenant changed after the example was written, and three
+packs moved to other registries (#1004):
+
+- external-secrets-operator is not in Palette Community Registry now. Public
+  Repo and Palette Registry hold it, and the pin uses Public Repo.
+- envoy-gateway is not in Public Repo now. Only Bitnami holds it.
+- cloudnative-pg is not in Palette Community Registry now. Bitnami holds it.
+
+No case needs a chart that Bitnami does not have. The Bitnami charts of
+envoy-gateway and cloudnative-pg hold each CRD that the glue uses, and the
+controller name of the `GatewayClass`. The Bitnami chart of cloudnative-pg gives
+the database of Keycloak a Bitnami image of PostgreSQL. Case 8 reads each pack of
+Bitnami, and Bitnami moved its free images to another repository (#630). So the
+database, and Keycloak after it, can wait for an image.
+
+A chart of a Helm registry needs a namespace, and prometheus-operator needs a
+password of Grafana: see [The values that a pack
+requires](../internals/palette/packs.md#the-values-that-a-pack-requires).
+`terraform-platform/` gives each chart of a Helm registry a namespace: the
+default of its pack in `main.tf`, or the name of the pack. OpenTofu makes the password with `random_password` at the first
+apply, and keeps it in the state, so no file of the repository holds it. `just
+live-platform-values` tests these values with mock providers. It needs `tofu`,
+and it sends no request to Palette or AWS.
+
 ```bash
 just live-profiles                  # or just live-up: the release profile of the lab
 just live-platform-pins             # once: terraform-platform/terraform.tfvars
+just live-platform-values           # no request: the values that Palette requires
 just live-platform-up               # billable until live-platform-down
 just live-platform                  # each case; just live-platform 4 runs case 4 alone
 just live-platform-down             # then the inventory
@@ -479,6 +513,11 @@ profiles leave `wilma`, so their workloads free the claims of their volumes.
 Then the recipe deletes each claim while the CSI driver runs, so that the driver
 deletes each volume. Then it destroys the state, and deletes each version of
 each profile name.
+
+When `just live-platform-up` stops before it makes `wilma`, for example at the
+create of the profiles, the state holds no cluster. Then `just
+live-platform-down` skips the first two steps. The destroy removes the profiles
+that the state holds, and the inventory finds nothing of `wilma` in AWS.
 
 `just live-platform-inventory` reads the inventory again. A volume that the
 driver made has no tag of its cluster, so the inventory counts each such volume

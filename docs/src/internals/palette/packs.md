@@ -106,6 +106,26 @@ layer. Palette checks each dependency again over the packs of all the profiles
 when it creates a cluster. A record carries no constraint: the profile Palette accepted is the one
 that holds it.
 
+## The values that a pack requires
+
+Palette refuses the create of a profile when the values of a pack give no value
+to a key that the pack requires. An empty text is no value. The code is
+`ClusterProfileCreationValidationFailure`, and the message names the pack and
+the key. The first build of [the platform
+cluster](../../development/live-example.md#the-platform-cluster) met two such
+keys, and Palette refused four of its seven add-on profiles:
+
+- `pack.namespace` of a chart of a Helm registry. The values that Palette lists
+  for such a chart start with `pack.namespace: ""`. So Palette refuses a
+  profile that keeps the values of the registry. It refused each profile with a
+  chart of Bitnami.
+- `charts.kube-prometheus-stack.grafana.adminPassword` of prometheus-operator in
+  Public Repo: the password of Grafana. The values of the registry give it no
+  value.
+
+For the same reason, the chart of the live example gives `pack.namespace` in its
+values: see `examples/live/chart/`.
+
 ## Pack schema and presets
 
 Palette stores neither the pack schema nor the presets on a profile. They belong
