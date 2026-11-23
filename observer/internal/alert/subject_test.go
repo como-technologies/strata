@@ -1,6 +1,7 @@
 package alert
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -96,8 +97,9 @@ func TestTheSampleIsTheMessageOfAFindingForAMadeUpProfile(t *testing.T) {
 	}
 }
 
-// The package reads the summary tier only. It names internal/model for the types of the summary and no
-// other package of the observer: not internal/docs, which holds the changed values.
+// The package reads the summary tier only. It names internal/model for the types of the summary, and internal/media
+// for the media type of JSON. It names no other package of the observer: not internal/docs, which holds the changed
+// values.
 func TestThePackageImportsNoPackageThatHoldsAValue(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -113,13 +115,39 @@ func TestThePackageImportsNoPackageThatHoldsAValue(t *testing.T) {
 		}
 		for _, imp := range parsed.Imports {
 			path := strings.Trim(imp.Path.Value, `"`)
-			if strings.Contains(path, "/observer/internal/") && !strings.HasSuffix(path, "/internal/model") {
+			if strings.Contains(path, "/observer/internal/") && !strings.HasSuffix(path, "/internal/model") && !strings.HasSuffix(path, "/internal/media") {
 				t.Errorf("%s imports %s", name, path)
 			}
 		}
 	}
 	if _, err := os.Stat("subject.go"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// internal/media imports no package, and it declares consts only: no type, no variable, and no function. So the
+// import of it in this package brings in no value.
+func TestTheMediaPackageImportsNothingAndDeclaresConstsOnly(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("..", "media", "*.go"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("the files of internal/media: %v, error %v", files, err)
+	}
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(parsed.Imports) != 0 {
+			t.Errorf("%s imports %d packages", name, len(parsed.Imports))
+		}
+		for _, decl := range parsed.Decls {
+			if gen, ok := decl.(*ast.GenDecl); !ok || gen.Tok != token.CONST {
+				t.Errorf("%s declares more than consts", name)
+			}
+		}
 	}
 }
 

@@ -14,6 +14,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/como-technologies/strata/observer/internal/media"
 )
 
 // Sender sends the text of a message to a channel. The Webhook is the sender of the program, and a test
@@ -123,7 +125,7 @@ func (w *Webhook) Send(ctx context.Context, channel, text string) error {
 	if err != nil {
 		return &SendError{Channel: channel, Kind: KindAddress}
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", media.JSONType)
 	resp, err := w.client.Do(req)
 	if err != nil {
 		return &SendError{Channel: channel, Kind: KindTransport}

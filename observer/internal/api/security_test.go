@@ -46,13 +46,13 @@ func TestEachAnswerHasTheFourHeaders(t *testing.T) {
 		status                   int
 	}{
 		{"health", "GET", patternHealth, testkit.LoopbackHost, 200},
-		{"a summary route", "GET", summaryRoutes[patternCluster], testkit.LoopbackHost, 200},
+		{"a summary route", "GET", summaryRoutes[PatternCluster], testkit.LoopbackHost, 200},
 		{"the detail route", "GET", pathPublished, "localhost:1", 200},
-		{"a profile that does not exist", "GET", patternProfiles + "/nope", testkit.LoopbackHost, 404},
+		{"a profile that does not exist", "GET", PatternProfiles + "/nope", testkit.LoopbackHost, 404},
 		{noSuchSide, "GET", kubernetesDiff("x"), testkit.LoopbackHost, 400},
 		{"the page", "GET", "/", testkit.LoopbackHost, 404},
-		{"a post", "POST", summaryRoutes[patternCluster], testkit.LoopbackHost, 405},
-		{"a host that is not loopback", "GET", summaryRoutes[patternCluster], "evil.example", 421},
+		{"a post", "POST", summaryRoutes[PatternCluster], testkit.LoopbackHost, 405},
+		{"a host that is not loopback", "GET", summaryRoutes[PatternCluster], "evil.example", 421},
 		{"a path that the mux redirects", "GET", "/v1//cluster", testkit.LoopbackHost, http.StatusTemporaryRedirect},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -94,7 +94,7 @@ func TestARequestWithAHostThatIsNotLoopbackGets421(t *testing.T) {
 		{"192.168.1.1", 421},
 		{"", 421},
 	} {
-		rec := testkit.Serve(h, http.MethodGet, summaryRoutes[patternCluster], c.host, "")
+		rec := testkit.Serve(h, http.MethodGet, summaryRoutes[PatternCluster], c.host, "")
 		if rec.Code != c.want {
 			t.Errorf("Host %q gave %d, want %d", c.host, rec.Code, c.want)
 		}
@@ -108,7 +108,7 @@ func TestOnlyGetIsServed(t *testing.T) {
 	_, o, _ := asked(t, "")
 	h := handlerOf(o)
 	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT"} {
-		for _, path := range []string{summaryRoutes[patternCluster], patternHealth, pathPublished, "/nowhere"} {
+		for _, path := range []string{summaryRoutes[PatternCluster], patternHealth, pathPublished, "/nowhere"} {
 			rec := testkit.Serve(h, method, path, testkit.LoopbackHost, "")
 			refusedWithAllow(t, rec, method+" "+path, http.MethodGet)
 		}
@@ -121,7 +121,7 @@ func TestListenTakesOnlyALoopbackAddress(t *testing.T) {
 		ok   bool
 	}{
 		{DefaultListen, true},
-		{"127.0.0.1:0", true},
+		{testkit.PortZero, true},
 		{"127.1.2.3:8080", true},
 		{"[::1]:8080", true},
 		{"0.0.0.0:8080", false},

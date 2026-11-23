@@ -30,7 +30,7 @@ func (s setStub) StartCycle(string) (model.Start, bool) {
 }
 
 // setRoutes are the routes of the set itself. Each other route of a set is a route of one cluster under its uid.
-var setRoutes = []string{patternHealth, PatternClusters, PatternShared, patternAlerts, patternCycle}
+var setRoutes = []string{patternHealth, PatternClusters, PatternShared, PatternAlerts, patternCycle}
 
 // memberPath gives the path of a route of one cluster of a set.
 func memberPath(uid, path string) string {
@@ -83,8 +83,8 @@ func TestEachSummaryRouteOfAClusterOfASetHoldsNoSentinelAndAnUnknownClusterGets4
 		t.Error("the list of the shared versions is null, and not empty")
 	}
 	// a set serves no route of one cluster at the top, because the page names each cluster
-	if rec := get(h, patternCluster); rec.Code != http.StatusNotFound {
-		t.Errorf("%s of a set: status %d", patternCluster, rec.Code)
+	if rec := get(h, PatternCluster); rec.Code != http.StatusNotFound {
+		t.Errorf("%s of a set: status %d", PatternCluster, rec.Code)
 	}
 	for _, path := range detailRoutes[patternPackDiff] {
 		if rec := get(h, memberPath(testkit.PaymentsUID, path)); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), sentinelValue) {
@@ -99,7 +99,7 @@ func TestAPostToAClusterOfASetNeedsTheHeaderOfARequestFromThePage(t *testing.T) 
 	if rec := testkit.Serve(h, http.MethodPost, path, testkit.LoopbackHost, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("a POST with no header: status %d", rec.Code)
 	}
-	if rec := testkit.Serve(h, http.MethodPost, pathCycle, testkit.LoopbackHost, testkit.SameOrigin); rec.Code != http.StatusAccepted {
+	if rec := testkit.Serve(h, http.MethodPost, pathCycle, testkit.LoopbackHost, sameOrigin); rec.Code != http.StatusAccepted {
 		t.Errorf("the click Check now of the set: status %d", rec.Code)
 	}
 }

@@ -72,10 +72,8 @@ const (
 	SetHome    = "p-home"
 	SetHomeKey = "key-of-home"
 	SetProd    = "tag:env=prod"
-	// RecordFile is the file of the record of AWSStackProfile, which AWSStack gives. MetaFile is the meta file of the
-	// records, which WriteMeta writes.
+	// RecordFile is the file of the record of AWSStackProfile, which AWSStack gives.
 	RecordFile = AWSStackProfile + ".json.gz"
-	MetaFile   = "meta.json"
 	// ContentEvery and VersionsEvery are the periods of the content cycle and of the versions cycle of an observer of a
 	// test. DigestEvery is the period of the digest of its alerts.
 	ContentEvery  = 15 * time.Minute
@@ -141,8 +139,6 @@ const (
 	// FaviconLight and FaviconDark are the icons of the page for the light and the dark scheme.
 	FaviconLight = "favicon-light.svg"
 	FaviconDark  = "favicon-dark.svg"
-	// JSONType is the Content-Type of a document of JSON.
-	JSONType = "application/json"
 	// LoopbackHost is the Host of a request to the server of the page through the port-forward of `just observer-open`,
 	// on port 18080. FetchSite is the header that a browser sets on a fetch, and SameOrigin is its value on a fetch of the
 	// page itself. The server refuses a POST with no SameOrigin.
@@ -300,14 +296,17 @@ func AskPath(profile, key string) string {
 	return packRoute(profile, key) + "/ask"
 }
 
+// DiffSide ends the route of the diff of a pack, before the value of the side. The page asks each diff with a side.
+const DiffSide = "/diff?side="
+
 // DiffPath gives the route of the diff of the pack key of the profile on the side, such as cluster. An empty side gives
 // the route with no side.
 func DiffPath(profile, key, side string) string {
-	path := packRoute(profile, key) + "/diff"
+	path := packRoute(profile, key) + DiffSide + side
 	if side == "" {
-		return path
+		path, _, _ = strings.Cut(path, "?")
 	}
-	return path + "?side=" + side
+	return path
 }
 
 // DexAsk is the route of the question to Palette for the move of dex in the dev data.
@@ -510,12 +509,6 @@ type RigDirs struct{ Records, Work, State string }
 func NewRigDirs(t *testing.T) RigDirs {
 	t.Helper()
 	return RigDirs{Records: t.TempDir(), Work: t.TempDir(), State: filepath.Join(t.TempDir(), "state")}
-}
-
-// WriteMeta writes body to the meta file of the records in dir.
-func WriteMeta(t *testing.T, dir, body string) {
-	t.Helper()
-	WriteIn(t, dir, MetaFile, body)
 }
 
 // StateText gives the text of the state file that an observer wrote in the directory state.

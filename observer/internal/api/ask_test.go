@@ -134,7 +134,7 @@ func TestTheChecksOfStrataReachTheDetailTierBesideTheAnswerAndNoOtherRoute(t *te
 func TestA403FromPaletteReadsNoAnswerWithItsStatusAndMakesNoFinding(t *testing.T) {
 	r, o, fake := asked(t, ask403)
 	h := handlerOf(o)
-	before := get(h, summaryRoutes[patternCluster]).Body.String() + get(h, summaryRoutes[patternFindings]).Body.String() + get(h, summaryRoutes[patternEvents]).Body.String()
+	before := get(h, summaryRoutes[PatternCluster]).Body.String() + get(h, summaryRoutes[PatternFindings]).Body.String() + get(h, summaryRoutes[PatternEvents]).Body.String()
 	rec := click(h, pathAsk)
 	var got model.Answer
 	decode(t, rec, &got)
@@ -144,7 +144,7 @@ func TestA403FromPaletteReadsNoAnswerWithItsStatusAndMakesNoFinding(t *testing.T
 	// The body of the answer of Palette does not leave the observer.
 	testkit.HoldsNone(t, "the answer", rec.Body.String(), "SENTINEL")
 	testkit.HoldsNone(t, "the log", r.log.String(), "SENTINEL")
-	if after := get(h, summaryRoutes[patternCluster]).Body.String() + get(h, summaryRoutes[patternFindings]).Body.String() + get(h, summaryRoutes[patternEvents]).Body.String(); after != before {
+	if after := get(h, summaryRoutes[PatternCluster]).Body.String() + get(h, summaryRoutes[PatternFindings]).Body.String() + get(h, summaryRoutes[PatternEvents]).Body.String(); after != before {
 		t.Errorf("a failed question changed the summary:\n%s\n%s", before, after)
 	}
 	// A request that failed is no answer, so the next click asks again. The role can change meanwhile.
@@ -175,9 +175,18 @@ func TestARunThatFailsGivesNoAnswerWithTheStatusOfTheRun(t *testing.T) {
 func TestAPostNeedsTheHeaderOfARequestFromThePageItself(t *testing.T) {
 	_, o, fake := asked(t, askNoError)
 	h := handlerOf(o)
-	for _, site := range []string{"", "cross-site", "same-site", "none", "Same-Origin ", testkit.SameOrigin + "; x"} {
+	// Each value of the header that is not the value of a request from the page, with what sends it.
+	sites := map[string]string{
+		"":                 "a client that is no browser",
+		"cross-site":       "a page of another site",
+		"same-site":        "a page of another origin of the same site",
+		"none":             "a request that a person starts, such as a bookmark",
+		"Same-Origin ":     "a client that changes the case and adds a space",
+		sameOrigin + "; x": "a client that adds a text after the value",
+	}
+	for site, from := range sites {
 		if rec := testkit.Serve(h, http.MethodPost, pathAsk, testkit.LoopbackHost, site); rec.Code != http.StatusForbidden {
-			t.Errorf(testkit.FetchSite+" %q gave %d", site, rec.Code)
+			t.Errorf(headerFetchSite+" %q from %s gave %d", site, from, rec.Code)
 		} else if strings.Contains(rec.Body.String(), site) && site != "" {
 			t.Errorf("the refusal echoes the header: %s", rec.Body.String())
 		}
@@ -213,7 +222,7 @@ func TestEachMethodButTheOneOfARouteGets405WithItsAllowHeader(t *testing.T) {
 		refusedWithAllow(t, rec, other+" "+path, route.Method)
 	}
 	// The POSTs of the server are the two clicks: a POST with the header to a route that takes GET is refused.
-	refusedWithAllow(t, click(h, summaryRoutes[patternCluster]), "a POST to a summary route", http.MethodGet)
+	refusedWithAllow(t, click(h, summaryRoutes[PatternCluster]), "a POST to a summary route", http.MethodGet)
 	if len(fake.questions()) != 0 {
 		t.Errorf("%d questions", len(fake.questions()))
 	}

@@ -25,6 +25,17 @@ func TestEachKindHasASentenceThatIsTheMessageOfItsEvent(t *testing.T) {
 	}
 }
 
+func TestEachKindHasTheReasonOfItsEvent(t *testing.T) {
+	for _, k := range allKinds {
+		if k.Reason() == "" || k.Reason() != eventKinds[k].reason {
+			t.Errorf("%s has the reason %q", k, k.Reason())
+		}
+	}
+	if Kind("NoSuchKind").Reason() != "" {
+		t.Error("a kind that is not in the list has a reason")
+	}
+}
+
 func TestTheKeyOfARowIsTheKeyOfItsPin(t *testing.T) {
 	p := pin("dex", "addon", "2.42.0", "2.44.0")
 	row := Newer{Name: p.Name, RegistryUID: p.RegistryUID, Version: p.Version, Newest: "2.44.0"}
