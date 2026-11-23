@@ -11,7 +11,7 @@
 #   3  the state of 1.0.0 plans no change; a change of its content, at the same version, plans an
 #      update in place: the provider keeps that path open, and verify is what finds it
 #   4  with cluster A: a cluster runs 1.0.0, and a destroy of its state is refused; after the
-#      cluster lets it go, the destroy removes it
+#      cluster stops its use, the destroy removes it
 #   5  the states destroyed, and no version of the name left
 #   6  a short version number and one with a v prefix, through the provider: the version that
 #      Palette stores
@@ -54,8 +54,8 @@ tv() {
 }
 uid_of() { state "$1" && vtf output -raw uid; }
 
-# cleanup: the cluster lets 1.0.0 go, and each state is destroyed; each step changes nothing where
-# there is nothing to undo
+# cleanup: the cluster stops its use of 1.0.0, and each state is destroyed; each step changes
+# nothing where there is nothing to undo
 cleanup() {
   if [ -n "${U1:-}" ] && "$live/api.sh" get "/v1/spectroclusters/$C" | jq -e --arg u "$U1" \
       '[.spec.clusterProfileTemplates[].uid] | index($u) != null' > /dev/null 2>&1; then
@@ -105,7 +105,7 @@ check destroy-refused 1 '#81: a destroy of the state of 1.0.0 is refused while a
   tv 1.0.0 one destroy -auto-approve
 check destroy-refused-says 0 'the refusal says that the version is in use' -- grep -qi 'in-use\|in use' destroy-refused.err
 check still-there 0 '#81: the version is still there, and its record verifies' -- "$strata" verify v1.json
-check detach 0 "cluster A lets $NAME@1.0.0 go" -- "$live/api.sh" detach "$C" "$U1"
+check detach 0 "cluster A stops its use of $NAME@1.0.0" -- "$live/api.sh" detach "$C" "$U1"
 for _ in $(seq 1 30); do "$strata" consumers "$U1" > /dev/null 2>&1 && break || sleep 10; done
 check free 0 "nothing uses $NAME@1.0.0" -- "$strata" consumers "$U1"
 

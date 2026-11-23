@@ -14559,7 +14559,7 @@ fn observer_sh_undoes_the_edit_in_place_and_removes_the_namespace_when_a_signal_
 }
 
 #[test]
-fn observer_sh_takes_the_profile_off_and_removes_the_namespace_when_the_cluster_stays_busy() {
+fn observer_sh_removes_the_profile_from_cluster_a_and_the_namespace_when_the_cluster_stays_busy() {
     let mut stage = observer_stage();
     stage.env("FAKE_NOT_RUNNING", "1");
     let (o, steps) = run_observer(&stage, &[]);

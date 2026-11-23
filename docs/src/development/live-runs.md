@@ -2039,7 +2039,7 @@ removes it. It needs the example with cluster A.
 | `attach`, `in-use` | 0, 1 | cluster A runs 1.0.0 too |
 | `destroy-refused`, `destroy-refused-says` | 1, 0 | #81: a destroy of the state of 1.0.0 fails while a cluster uses the version, and the refusal says that it is in use |
 | `still-there` | 0 | #81: the version is still there, and its record verifies |
-| `detach`, `free` | 0 | cluster A lets 1.0.0 go |
+| `detach`, `free` | 0 | cluster A stops its use of 1.0.0 |
 | `destroy-1`, `old-gone`, `old-gone-says` | 0, 1, 0 | #81: the destroy of the state removes the version, and `verify` of its record reports that the version no longer exists |
 | `destroy-2`, `none-left` | 0 | no version of the name is left |
 | `apply-short`, `stored-short`, `short-as-given`, `replan-short`, `destroy-short` | 0 | #81: Palette stores the version `1.2` as given, and not as `1.2.0`, and the provider plans no change after it |
