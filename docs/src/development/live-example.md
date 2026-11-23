@@ -470,7 +470,7 @@ the line, and run the recipe again.
 | Bitnami | envoy-gateway, external-dns, cloudnative-pg, keycloak, and grafana |
 | Palette Community Registry | loki |
 
-The catalog of the tenant changed after the example was written, and three
+The catalog of the tenant changed after the first version of the example. Three
 packs moved to other registries (#1004):
 
 - external-secrets-operator is not in Palette Community Registry now. Public

@@ -2,9 +2,9 @@
 # are mocks, so the test sends no request. `just live-platform-values` runs it.
 #
 # Palette refuses a profile with ClusterProfileCreationValidationFailure in two cases. A chart of a
-# Helm registry gives no value to `pack.namespace`, and the registry starts the values of each such
-# chart with `pack.namespace: ""`. Or prometheus-operator gives Grafana no password. Each run gives
-# each pin the values of one form.
+# Helm registry gives no value to `pack.namespace`: Palette starts the values of each such chart
+# with `pack.namespace: ""`. Or prometheus-operator gives Grafana no password. Each run gives each
+# pin the values of one form.
 
 mock_provider "spectrocloud" {}
 mock_provider "aws" {}

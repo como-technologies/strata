@@ -79,8 +79,8 @@ data "spectrocloud_pack" "other_cert_manager" {
 # Helm registry gets a namespace, and the glue reads the namespace of six. The values of a chart are
 # under charts.<chart> in a pack of Spectro Cloud, and at the top in a chart of a Helm registry. A
 # patch goes into the values of the chart, three levels deep. A map of a patch merges into the map
-# of the chart. Each other value replaces the value of the chart. The text that a patch gives is YAML
-# with no comments.
+# of the chart. Each other value replaces the value of the chart. The text that a patch gives is
+# YAML with no comments.
 
 locals {
   sso_realm = {
