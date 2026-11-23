@@ -147,7 +147,7 @@ if stage 1 "barney-config on cluster A"; then
   [ -n "$HP" ] || die "no profile $name; see $run/profile.err"
   check record 0 "record $name" -- "$strata" snapshot "$HP" -o profile.json
   check attach 0 "#691: cluster A runs $name" -- attach_profile
-  check applied 0 "#691: the Deployment runs in cluster A within 20 minutes, with 1 replica" -- applied
+  check deployed 0 "#691: the Deployment runs in cluster A within 20 minutes, with 1 replica" -- applied
 fi
 
 if stage 2 "the hand edit"; then
@@ -170,7 +170,7 @@ fi
 
 if stage 4 "the cleanup"; then
   check detach 0 "$name leaves cluster A" -- detach_profile
-  check removed 0 "the Deployment goes from cluster A within 20 minutes" -- removed
+  check deployment-gone 0 "the Deployment goes from cluster A within 20 minutes" -- removed
   check profile-delete 0 "Palette deletes $name" -- delete_profile
   check clean 0 "no Deployment $deploy in cluster A, and no version of $name in the project" -- clean
   check baseline 0 'the example is at its baseline' -- "$live/baseline.sh"

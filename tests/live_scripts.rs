@@ -17,6 +17,7 @@ use strata::closed_set::ClosedSet;
 use strata::model::cloud::Cloud;
 use strata::model::pack_state::PackState;
 use strata::model::pack_type::PackType;
+use strata::model::profile_type::ProfileType;
 use strata::model::update::MinorSkip;
 use strata::model::validation::{PaletteRefusal, answer_lines};
 use strata::reference::{CLUSTER_PREFIX, PROJECT_PREFIX, TAG_PREFIX};
@@ -11445,36 +11446,23 @@ const HAND_PROFILE_NAME: &str = "barney-config";
 /// The Deployment of the manifest layer of that profile.
 const HAND_DEPLOYMENT: &str = "barney-app";
 
-/// Each check of hand-edit.sh, in the order that it runs.
-const HAND_EDIT_CHECKS: [&str; 18] = [
-    "profile",
-    "record",
-    "attach",
-    "applied",
-    "edit",
-    "edit-reads",
-    "edit-compare",
-    "edit-pack-status",
-    "delete-uid",
-    "delete",
-    "delete-reads",
-    "delete-pack-status",
-    "events",
-    "detach",
-    "removed",
-    "profile-delete",
-    "clean",
-    "baseline",
-];
+/// The script of the hand edit test.
+const HAND_EDIT: &str = "hand-edit.sh";
 
-/// The checks of hand-edit.sh that record a result and judge none.
-const HAND_EDIT_SEEN: [&str; 5] = [
-    "edit-reads",
-    "edit-pack-status",
-    "delete-reads",
-    "delete-pack-status",
-    "events",
-];
+/// Each check of hand-edit.sh ran, in the order of the script. Each check with `?` records its
+/// result and judges none, and each other check passed.
+fn assert_hand_edit_ran_each_check(steps: &str) {
+    let checks = script_checks(HAND_EDIT);
+    let ids: Vec<&str> = checks.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(check_ids(steps), ids, "{steps}");
+    for (id, want) in &checks {
+        if want == "?" {
+            seen(steps, &[id]);
+        } else {
+            passed(steps, &[id]);
+        }
+    }
+}
 
 /// The `api.sh` of the tree of hand-edit.sh. It logs each call to `$FAKE_OBS/api.log`, and keeps the
 /// state of Palette in files of `$FAKE_OBS`.
@@ -11490,13 +11478,13 @@ echo "$*" >> "$obs/api.log"
 case "$1" in
   get-kubeconfig) echo "apiVersion: v1 # fake-kubeconfig" ;;
   delete-named) echo "$2: no versions" ;;
-  manifest-profile) cp "$4" "$obs/manifest.yaml"; touch "$obs/profile"; echo hp-1 ;;
+  manifest-profile) cp "$4" "$obs/manifest.yaml"; touch "$obs/profile.exists"; echo hp-1 ;;
   attach)
     touch "$obs/attached"
     sed -n 's/^  replicas: //p' "$obs/manifest.yaml" > "$obs/replicas"
     echo uid-1 > "$obs/uid" ;;
   detach) rm -f "$obs/attached" "$obs/replicas" "$obs/uid" ;;
-  delete) rm -f "$obs/profile"; echo "deleted profile $2" ;;
+  delete) rm -f "$obs/profile.exists"; echo "deleted profile $2" ;;
   get)
     case "$2" in
       /v1/spectroclusters/c-a)
@@ -11556,13 +11544,10 @@ esac
 fn hand_edit_stage() -> Stage {
     let mut stage = Stage::new(baseline_outputs());
     let tree = stage.path("tree");
+    let script = format!("examples/live/{HAND_EDIT}");
     copy_scripts(
         &tree,
-        &[
-            "examples/live/hand-edit.sh",
-            "examples/live/lib.sh",
-            "examples/live/common.sh",
-        ],
+        &[&script, "examples/live/lib.sh", "examples/live/common.sh"],
     );
     let live = tree.join("examples/live");
     executable(&live.join("api.sh"), FAKE_API_BARNEY);
@@ -11577,13 +11562,9 @@ fn hand_edit_stage() -> Stage {
     stage.strata(
         &format!("snapshot {HAND_PROFILE} -o profile.json"),
         0,
-        &observer_profile_record(HAND_PROFILE, HAND_PROFILE_NAME, "add-on"),
+        &observer_profile_record(HAND_PROFILE, HAND_PROFILE_NAME, ProfileType::AddOn.as_str()),
     );
-    stage.strata(
-        &format!("compare profile.json cluster:c-a/{HAND_PROFILE_NAME}"),
-        0,
-        "IDENTICAL\n",
-    );
+    stage.strata(&hand_edit_compare(), 0, "");
     stage.strata(
         "list profiles --json",
         0,
@@ -11594,9 +11575,10 @@ fn hand_edit_stage() -> Stage {
     stage
 }
 
-/// The output of the check `id` of a run of `stage`.
-fn hand_edit_output(stage: &Stage, id: &str) -> String {
-    std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap()
+/// The arguments of the compare of hand-edit.sh: the record of the profile, and the copy of
+/// cluster A.
+fn hand_edit_compare() -> String {
+    format!("compare profile.json {CLUSTER_PREFIX}c-a/{HAND_PROFILE_NAME}")
 }
 
 /// The calls of the run to `api.sh` that make, attach, detach, and delete the profile, in order.
@@ -11614,7 +11596,7 @@ fn hand_edit_profile_calls(stage: &Stage) -> Vec<String> {
 
 /// The run leaves no profile and no Deployment in the stand-ins, and no kubeconfig in a file.
 fn assert_hand_edit_left_nothing(stage: &Stage) {
-    for file in ["profile", "attached", "uid"] {
+    for file in ["profile.exists", "attached", "uid"] {
         assert!(
             !stage.path("obs").join(file).exists(),
             "the run leaves {file}"
@@ -11639,27 +11621,21 @@ fn hand_edit_sh_reads_until_palette_restores_the_field_and_the_deployment_and_re
 {
     let mut stage = hand_edit_stage();
     stage.env("FAKE_RECONCILE", "3");
-    let (o, steps) = stage.run_in_tree("hand-edit.sh", &[]);
+    let (o, steps) = stage.run_in_tree(HAND_EDIT, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
-    assert_eq!(check_ids(&steps), HAND_EDIT_CHECKS, "{steps}");
-    let judged: Vec<&str> = HAND_EDIT_CHECKS
-        .into_iter()
-        .filter(|id| !HAND_EDIT_SEEN.contains(id))
-        .collect();
-    passed(&steps, &judged);
-    seen(&steps, &HAND_EDIT_SEEN);
+    assert_hand_edit_ran_each_check(&steps);
     for id in ["edit-reads", "delete-reads"] {
         assert!(step_line(&steps, id).ends_with("got 0"), "{steps}");
     }
     assert_eq!(
-        hand_edit_output(&stage, "edit-reads"),
+        check_out(&stage, "edit-reads"),
         "minute 0: spec.replicas 2\nminute 5: spec.replicas 2\nminute 10: spec.replicas 1\n"
     );
     assert_eq!(
-        hand_edit_output(&stage, "delete-reads"),
+        check_out(&stage, "delete-reads"),
         "minute 0: uid none\nminute 5: uid none\nminute 10: uid uid-2\n"
     );
-    assert_eq!(hand_edit_output(&stage, "delete-uid"), "uid-1");
+    assert_eq!(check_out(&stage, "delete-uid"), "uid-1");
 
     // the manifest layer holds the Deployment of one replica, which kubectl scales to 2
     let manifest = std::fs::read_to_string(stage.path("obs/manifest.yaml")).unwrap();
@@ -11678,21 +11654,15 @@ fn hand_edit_sh_reads_until_palette_restores_the_field_and_the_deployment_and_re
     );
     // strata compares the record with the copy of cluster A, which Palette holds
     let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
-    assert!(
-        calls.contains(&format!(
-            "compare profile.json cluster:c-a/{HAND_PROFILE_NAME}"
-        )),
-        "{calls}"
-    );
+    assert!(calls.contains(&hand_edit_compare()), "{calls}");
     // the pack of the profile, and the event after the edit alone
-    let status = hand_edit_output(&stage, "edit-pack-status");
+    let status: serde_json::Value =
+        serde_json::from_str(&check_out(&stage, "edit-pack-status")).unwrap();
     assert_eq!(
         status,
-        format!(
-            "{{\"name\":\"{HAND_PROFILE_NAME}\",\"condition\":{{\"type\":\"Ready\",\"status\":\"True\"}}}}\n"
-        )
+        serde_json::json!({"name": HAND_PROFILE_NAME, "condition": {"type": "Ready", "status": "True"}})
     );
-    let events = hand_edit_output(&stage, "events");
+    let events = check_out(&stage, "events");
     assert!(events.contains(r#""reason":"after""#), "{events}");
     assert!(!events.contains(r#""reason":"before""#), "{events}");
 
@@ -11724,34 +11694,36 @@ fn hand_edit_sh_reads_until_palette_restores_the_field_and_the_deployment_and_re
 #[test]
 fn hand_edit_sh_reads_for_70_minutes_when_the_edit_and_the_delete_stay_and_still_cleans_up() {
     let stage = hand_edit_stage();
-    let (o, steps) = stage.run_in_tree("hand-edit.sh", &[]);
+    let (o, steps) = stage.run_in_tree(HAND_EDIT, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
-    for id in ["edit-reads", "delete-reads"] {
+    assert_hand_edit_ran_each_check(&steps);
+    let want: Vec<String> = (0..=70).step_by(5).map(|m| format!("minute {m}")).collect();
+    for (id, last) in [
+        ("edit-reads", "minute 70: spec.replicas 2"),
+        ("delete-reads", "minute 70: uid none"),
+    ] {
         assert!(step_line(&steps, id).ends_with("got 1"), "{steps}");
-        let reads = hand_edit_output(&stage, id);
+        let reads = check_out(&stage, id);
         let minutes: Vec<&str> = reads
             .lines()
             .map(|l| l.split(':').next().unwrap())
             .collect();
-        let want: Vec<String> = (0..=70).step_by(5).map(|m| format!("minute {m}")).collect();
         assert_eq!(minutes, want, "{id}:\n{reads}");
+        assert_eq!(reads.lines().last(), Some(last), "{id}:\n{reads}");
     }
-    assert!(hand_edit_output(&stage, "edit-reads").ends_with("minute 70: spec.replicas 2\n"));
-    assert!(hand_edit_output(&stage, "delete-reads").ends_with("minute 70: uid none\n"));
-    passed(&steps, &["removed", "profile-delete", "clean", "baseline"]);
     assert_hand_edit_left_nothing(&stage);
 }
 
-/// #691: READ_EVERY and READ_MINUTES give the reads other times.
+/// #691: `READ_EVERY` and `READ_MINUTES` give the reads other times.
 #[test]
 fn hand_edit_sh_takes_the_times_of_the_reads_from_read_every_and_read_minutes() {
     let mut stage = hand_edit_stage();
     stage.env("READ_EVERY", "10");
     stage.env("READ_MINUTES", "20");
-    let (o, steps) = stage.run_in_tree("hand-edit.sh", &[]);
+    let (o, steps) = stage.run_in_tree(HAND_EDIT, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
     assert_eq!(
-        hand_edit_output(&stage, "edit-reads"),
+        check_out(&stage, "edit-reads"),
         "minute 0: spec.replicas 2\nminute 10: spec.replicas 2\nminute 20: spec.replicas 2\n"
     );
 }
@@ -11763,12 +11735,12 @@ fn hand_edit_sh_takes_the_times_of_the_reads_from_read_every_and_read_minutes() 
 fn hand_edit_sh_removes_the_profile_from_cluster_a_and_deletes_it_when_the_cluster_stays_busy() {
     let mut stage = hand_edit_stage();
     stage.env("FAKE_NOT_RUNNING", "1");
-    let (o, steps) = stage.run_in_tree("hand-edit.sh", &[]);
+    let (o, steps) = stage.run_in_tree(HAND_EDIT, &[]);
     assert_eq!(o.status.code(), Some(2), "{steps}{}", text(&o.stderr));
     // the message of the stop is in the errors of the check that stopped the run
     let said = std::fs::read_to_string(stage.path("out/attach.err")).unwrap();
-    assert!(said.contains("not Running after an hour"), "{said}");
-    not_run(&steps, &["applied", "edit"]);
+    assert!(said.contains("after an hour"), "{said}");
+    not_run(&steps, &["deployed", "edit"]);
     assert_eq!(
         hand_edit_profile_calls(&stage)[1..],
         [
@@ -11791,10 +11763,10 @@ fn hand_edit_sh_removes_the_profile_from_cluster_a_and_deletes_it_when_the_clust
 #[test]
 fn hand_edit_sh_refuses_an_argument_and_changes_nothing() {
     let stage = hand_edit_stage();
-    let (o, steps) = stage.run_in_tree("hand-edit.sh", &["2"]);
+    let (o, steps) = stage.run_in_tree(HAND_EDIT, &["2"]);
     assert_eq!(o.status.code(), Some(2));
     assert!(
-        text(&o.stdout).contains("examples/live/hand-edit.sh"),
+        text(&o.stdout).contains(&format!("examples/live/{HAND_EDIT}")),
         "{}",
         text(&o.stdout)
     );
@@ -11806,20 +11778,16 @@ fn hand_edit_sh_refuses_an_argument_and_changes_nothing() {
 /// says that no live window ran it yet.
 #[test]
 fn the_page_of_live_runs_names_each_check_of_hand_edit_sh_with_no_result_yet() {
-    assert_page_names_each_check("hand-edit.sh");
-    let mut ids = script_check_ids("hand-edit.sh");
-    ids.sort();
-    let mut want = HAND_EDIT_CHECKS.map(str::to_string).to_vec();
-    want.sort();
-    assert_eq!(ids, want);
-    let section = page_section("docs/src/development/live-runs.md", "## hand-edit.sh");
+    assert_page_names_each_check(HAND_EDIT);
+    let section = page_section(
+        "docs/src/development/live-runs.md",
+        &format!("## {HAND_EDIT}"),
+    );
     let rows = table_rows(&section, "| Check |");
     assert!(!rows.is_empty(), "{section}");
+    let none = format!("No result yet: no live window ran {HAND_EDIT}.");
     for row in rows {
-        assert!(
-            row[2].contains("No result yet: no live window ran hand-edit.sh."),
-            "{row:?}"
-        );
+        assert!(row[2].contains(&none), "{row:?}");
     }
 }
 
@@ -13716,13 +13684,24 @@ fn no_file_of_the_live_example_reads_a_pull_token_or_makes_a_pull_secret() {
     assert!(found.is_empty(), "{found:#?}");
 }
 
-/// The ids of the checks that a script runs: the word after `check` on each line that starts with it.
-fn script_check_ids(script: &str) -> Vec<String> {
+/// The id and the expected exit of each check that a script runs: the two words after `check` on
+/// each line that starts with it.
+fn script_checks(script: &str) -> Vec<(String, String)> {
     repo_file(&format!("examples/live/{script}"))
         .lines()
         .filter_map(|l| l.trim_start().strip_prefix("check "))
-        .filter_map(|rest| rest.split_whitespace().next())
-        .map(str::to_string)
+        .filter_map(|rest| {
+            let mut words = rest.split_whitespace().map(str::to_string);
+            Some((words.next()?, words.next()?))
+        })
+        .collect()
+}
+
+/// The ids of the checks that a script runs, in the order of [`script_checks`].
+fn script_check_ids(script: &str) -> Vec<String> {
+    script_checks(script)
+        .into_iter()
+        .map(|(id, _)| id)
         .collect()
 }
 
