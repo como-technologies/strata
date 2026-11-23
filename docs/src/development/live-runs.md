@@ -2724,6 +2724,13 @@ These facts depend on what the provider sends, plans, or keeps in its state:
   run shows it yet.
 - The platform cluster: `platform.sh`, with the module `terraform-platform/`.
 
+The window does not run the checks of two facts, because their result does not
+depend on the provider. For `cluster-profile-order-append`, `order.sh 4` sends
+the PATCH of the profiles itself. For `preflight-gap-route-callers`, `loop.sh`
+`preflight-live` calls the validate routes of Palette through strata, with no
+`tofu`. The fact states that the provider calls no validate route of a cluster
+create. The code of the provider shows it; no live run shows it yet.
+
 ## What has no live run
 
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`,
