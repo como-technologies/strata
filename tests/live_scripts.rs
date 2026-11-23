@@ -17224,7 +17224,7 @@ fn platform_sh_up_waits_until_each_pack_is_ready_and_names_each_pack_that_is_not
 /// of a volume while the CSI driver runs, and then it destroys. It deletes each version of each
 /// profile name. The inventory counts the objects that the workloads, the zone, and the policy
 /// leave. #1004: with outputs that have no `cluster_uid`, `down` runs the destroy with no apply
-/// and no `kubectl`, deletes each version of each profile name, and the inventory finds nothing.
+/// and no `kubectl`. It deletes each version of each profile name, and the inventory finds nothing.
 #[test]
 fn platform_sh_down_removes_the_add_ons_and_the_claims_first_or_only_destroys_with_no_cluster() {
     let mut stage = platform_stage();
