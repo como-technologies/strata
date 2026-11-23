@@ -16595,6 +16595,72 @@ fn platform_sh_pins_takes_the_newest_version_or_the_version_before_it_in_the_ord
     assert!(!dir.join("terraform.tfvars.new").exists());
 }
 
+/// The packs of `terraform.tfvars.example` that the catalog of the tenant moved (#1004): the
+/// name, the registry of its line, and each registry of the tenant that holds the pack.
+const PLATFORM_MOVED: [(&str, &str, &[&str]); 3] = [
+    (
+        "external-secrets-operator",
+        "Public Repo",
+        &["Public Repo", "Palette Registry"],
+    ),
+    ("envoy-gateway", "Bitnami", &["Bitnami"]),
+    ("cloudnative-pg", "Bitnami", &["Bitnami"]),
+];
+
+/// #1004: `platform.sh pins` passes on `terraform.tfvars.example` against the catalog of the
+/// tenant. The catalog holds each pack of [`PLATFORM_MOVED`] in its registries, and each other
+/// pack in the registry of its line. The example pins each moved pack to its registry.
+#[test]
+fn platform_sh_pins_passes_on_the_example_with_the_registries_that_hold_each_pack() {
+    let example =
+        std::fs::read_to_string(live_script("terraform-platform/terraform.tfvars.example"))
+            .unwrap();
+    let lines: Vec<(&str, &str)> = example
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| {
+            let (name, rest) = line.split_once('=')?;
+            let (_, registry) = rest.split_once("registry = \"")?;
+            Some((name.trim(), registry.split_once('"')?.0))
+        })
+        .collect();
+    let mut stage = Stage::new(serde_json::json!({}));
+    let live = stage.copy_live();
+    let dir = live.join("terraform-platform");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("terraform.tfvars.example"), &example).unwrap();
+    let versions: &[ListedVersion] = &[("2.1.0", true, None), ("2.0.0", false, None)];
+    for (name, registry) in &lines {
+        let line = [*registry];
+        let held = PLATFORM_MOVED
+            .iter()
+            .find(|(moved, ..)| moved == name)
+            .map_or(&line[..], |(.., held)| held);
+        let registries: Vec<(&str, &[ListedVersion])> =
+            held.iter().map(|r| (*r, versions)).collect();
+        stage.strata(
+            &format!("packs {name} *"),
+            0,
+            &packs_answer(name, &registries),
+        );
+    }
+    let (o, _) = stage.run("platform.sh", &["pins"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let pins = std::fs::read_to_string(dir.join("terraform.tfvars")).unwrap();
+    assert_eq!(
+        pins.lines().filter(|l| l.contains("registry = ")).count(),
+        lines.len(),
+        "{pins}"
+    );
+    for (name, registry, _) in PLATFORM_MOVED {
+        assert!(lines.contains(&(name, registry)), "{name}: {lines:?}");
+        assert!(
+            pins.contains(&format!("  {name} = {{ registry = \"{registry}\", version = ")),
+            "{name}:\n{pins}"
+        );
+    }
+}
+
 /// A strata for case 1. `verify` of the record of the security profile gives a finding while the
 /// last `PUT` of that profile holds the edit. Each other call goes to the answers of the stage.
 const PLATFORM_STRATA_EDIT: &str = r#"#!/usr/bin/env bash
@@ -17210,6 +17276,57 @@ fn platform_sh_down_removes_the_add_ons_and_deletes_the_claims_before_the_destro
     assert!(
         aws.contains("PolicyNames[?@ == 'strata-live-wilma-external-dns']"),
         "{aws}"
+    );
+}
+
+/// #1004: an `up` that stops at the create of the profiles leaves a state with no cluster, and
+/// outputs with no `cluster_uid`. `platform.sh down` then runs the destroy, with no apply and no
+/// `kubectl`. It deletes each version of each profile name, and the inventory finds nothing.
+#[test]
+fn platform_sh_down_destroys_a_state_that_has_no_cluster() {
+    let mut stage = platform_stage();
+    let mut outputs = platform_outputs();
+    for name in [
+        "cluster_uid",
+        "profile_uids",
+        "on_cluster",
+        "network_next_uid",
+        "moved_uids",
+    ] {
+        outputs.as_object_mut().unwrap().remove(name);
+    }
+    std::fs::write(stage.path("outputs.json"), tofu_output_json(&outputs)).unwrap();
+    stage.route(
+        PROFILE_LISTING,
+        r#"{"items":[{"metadata":{"name":"wilma-security","uid":"t-security"}}]}"#,
+    );
+    stage.command("aws", FAKE_AWS);
+    let log = stage.path("tofu.log");
+    stage.env("FAKE_KUBECTL_LOG", log.to_str().unwrap());
+    let (o, steps) = stage.run("platform.sh", &["down"]);
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "{steps}\n{}\n{}",
+        text(&o.stdout),
+        text(&o.stderr)
+    );
+    assert!(steps.contains("== the state has no cluster"), "{steps}");
+    let calls = stage.tofu_calls();
+    assert!(calls.contains(" destroy "), "{calls}");
+    assert!(
+        !calls.contains(" apply ") && !calls.contains("kubectl"),
+        "{calls}"
+    );
+    let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        curl.contains("DELETE /v1/clusterprofiles/t-security"),
+        "{curl}"
+    );
+    assert!(
+        text(&o.stdout).contains("== aws, cluster wilma"),
+        "{}",
+        text(&o.stdout)
     );
 }
 

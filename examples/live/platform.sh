@@ -436,21 +436,29 @@ no_volume_left() { [ "$(kj get pv -o json | jq '.items | length')" = 0 ]; }
 
 # down: remove the add-on profiles from wilma, so that their workloads free the claims of their
 # volumes. Delete each claim while the CSI driver runs, so that it deletes each volume. Then destroy,
-# delete each version of each profile name, and read the inventory.
+# delete each version of each profile name, and read the inventory. When the state has no wilma, as
+# after an up that stopped before the cluster, the destroy removes what the state holds.
 down() {
   local names
-  platform_outputs
+  load_outputs
   names=$(out profile_names | jq -r '.[]')
-  echo "== the add-on profiles leave $name" | tee -a steps.log
-  tf_apply false -var addons=false
-  poll 120 no_addon_left || echo "packs of an add-on profile are still on $name; the destroy continues" | tee -a steps.log
-  echo "== each claim of a volume goes, while the CSI driver runs" | tee -a steps.log
-  KUBE_TIMEOUT=600 kc delete pvc --all -A --wait=true | tee -a steps.log
-  poll 60 no_volume_left || echo "persistent volumes are still in $name: the inventory counts their volumes" | tee -a steps.log
+  if [ -n "$(out cluster_uid)" ]; then
+    platform_outputs
+    echo "== the add-on profiles leave $name" | tee -a steps.log
+    tf_apply false -var addons=false
+    poll 120 no_addon_left || echo "packs of an add-on profile are still on $name; the destroy continues" | tee -a steps.log
+    echo "== each claim of a volume goes, while the CSI driver runs" | tee -a steps.log
+    KUBE_TIMEOUT=600 kc delete pvc --all -A --wait=true | tee -a steps.log
+    poll 60 no_volume_left || echo "persistent volumes are still in $name: the inventory counts their volumes" | tee -a steps.log
+  else
+    PALETTE_PROJECT_UID=$(out project_uid)
+    export PALETTE_PROJECT_UID
+    echo "== the state has no cluster: the destroy removes the profiles that it holds" | tee -a steps.log
+  fi
   echo "== the destroy" | tee -a steps.log
   "$live/tf.sh" destroy || "$live/tf.sh" destroy || { "$live/diagnose.sh" "$PWD/diagnostics" >&2; exit 1; }
   # shellcheck disable=SC2086
-  "$live/api.sh" delete-named $names
+  [ -z "$names" ] || "$live/api.sh" delete-named $names
   inventory
 }
 
