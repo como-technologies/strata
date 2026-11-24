@@ -553,12 +553,14 @@ apply, and keeps it in the state, so no file of the repository holds it. `just
 live-platform-values` tests these values with mock providers. It needs `tofu`,
 and it sends no request to Palette or AWS.
 
-The values of prometheus-operator are the text of the registry, with the
-password in the line `adminPassword: ""`. Each other line stays. The other
-patched packs get a text that `yamlencode` writes. Palette gave back such a
-text of prometheus-operator with a deeper indent of the list `inhibit_rules`, so
-each plan found a change. `just live-platform-values` tests that the text keeps
-each line of the registry, and that a plan after the apply gives the same text.
+The values of prometheus-operator are the text of the registry, with one
+change. The line `adminPassword: ""` names the profile variable
+`grafana_password`. Each profile with prometheus-operator declares that
+variable. The variable is sensitive, and its default is the password. So the
+text that Palette keeps is the text that the example sends, and a plan after
+the apply finds no change. `just live-platform-values` tests that the values
+keep each other line of the registry. It also tests that a plan after the apply
+gives the same values and the same variable.
 
 ```bash
 just live-profiles                  # or just live-up: the release profile of the lab

@@ -94,8 +94,13 @@ run "prometheus_operator_gets_a_password_of_grafana" {
   }
 
   assert {
-    condition     = length(yamldecode(local.pack_values["prometheus-operator"]).charts.kube-prometheus-stack.grafana.adminPassword) == 24
+    condition     = yamldecode(local.pack_values["prometheus-operator"]).charts.kube-prometheus-stack.grafana.adminPassword == "{{.spectro.var.grafana_password}}"
     error_message = "prometheus-operator gives Grafana no password"
+  }
+  assert {
+    condition = [for v in spectrocloud_cluster_profile.team["observability"].profile_variables[0].variable : length(v.default_value)
+    if v.name == "grafana_password"] == [24]
+    error_message = "the variable grafana_password of wilma-observability gives no password of 24 characters"
   }
   assert {
     condition     = local.pack_values["cert-manager"] == data.spectrocloud_pack.pin["cert-manager"].values
@@ -104,10 +109,10 @@ run "prometheus_operator_gets_a_password_of_grafana" {
 }
 
 # Each pin has the text of the values of prometheus-operator in the registry: comments, the line of
-# the presets, quotes, and lists with an indent. Palette keeps such a text. The values of
-# prometheus-operator in both profiles that hold it are that text, with the password of Grafana in
-# its one line adminPassword. Each other line stays (#700).
-run "prometheus_operator_keeps_the_text_of_its_registry_with_a_password_of_grafana" {
+# the presets, quotes, and lists with an indent. The values of prometheus-operator in both profiles
+# that hold it are that text, with the variable grafana_password in its one line adminPassword. Each
+# other line stays. Each of the two profiles declares the variable, and it is sensitive (#700).
+run "prometheus_operator_keeps_the_text_of_its_registry_with_a_variable_for_the_password" {
   command = apply
 
   variables {
@@ -144,7 +149,7 @@ run "prometheus_operator_keeps_the_text_of_its_registry_with_a_password_of_grafa
 
   assert {
     condition = [for i, l in split("\n", local.pack_values["prometheus-operator"]) : l
-    if l != try(split("\n", data.spectrocloud_pack.pin["prometheus-operator"].values)[i], null)] == ["      adminPassword: \"${random_password.grafana.result}\""]
+    if l != try(split("\n", data.spectrocloud_pack.pin["prometheus-operator"].values)[i], null)] == ["      adminPassword: \"{{.spectro.var.grafana_password}}\""]
     error_message = "the values of prometheus-operator change a line of the registry beside the line adminPassword"
   }
   assert {
@@ -152,18 +157,19 @@ run "prometheus_operator_keeps_the_text_of_its_registry_with_a_password_of_grafa
     error_message = "the values of prometheus-operator add or remove a line of the registry"
   }
   assert {
-    condition     = length(yamldecode(local.pack_values["prometheus-operator"]).charts.kube-prometheus-stack.grafana.adminPassword) == 24
-    error_message = "prometheus-operator gives Grafana no password"
-  }
-  assert {
     condition = alltrue([for p in concat(spectrocloud_cluster_profile.team["observability"].pack, spectrocloud_cluster_profile.workload_team[0].pack) :
     p.values == local.pack_values["prometheus-operator"] if p.name == "prometheus-operator"])
     error_message = "a profile does not send the values of prometheus-operator"
   }
+  assert {
+    condition = [for v in flatten([for p in [spectrocloud_cluster_profile.team["observability"], spectrocloud_cluster_profile.workload_team[0]] : p.profile_variables[0].variable]) :
+    { default = v.default_value, sensitive = v.is_sensitive } if v.name == "grafana_password"] == [for i in [1, 2] : { default = random_password.grafana.result, sensitive = true }]
+    error_message = "a profile with prometheus-operator does not declare the sensitive variable grafana_password with the password"
+  }
 }
 
-# A plan after the apply of the run before, with the same text of the registry, gives each profile
-# with prometheus-operator the same values. The password is in the state.
+# The run plans after the apply of the run before, with the same text of the registry. Each profile
+# with prometheus-operator keeps its values and its variable. The password is in the state.
 run "a_plan_after_the_apply_gives_prometheus_operator_the_same_values" {
   command = plan
 
@@ -201,9 +207,14 @@ run "a_plan_after_the_apply_gives_prometheus_operator_the_same_values" {
 
   assert {
     condition = [for p in concat(spectrocloud_cluster_profile.team["observability"].pack, spectrocloud_cluster_profile.workload_team[0].pack) :
-      p.values == replace(data.spectrocloud_pack.pin["prometheus-operator"].values, "adminPassword: \"\"", "adminPassword: \"${random_password.grafana.result}\"")
+      p.values == replace(data.spectrocloud_pack.pin["prometheus-operator"].values, "adminPassword: \"\"", "adminPassword: \"{{.spectro.var.grafana_password}}\"")
     if p.name == "prometheus-operator"] == [true, true]
     error_message = "the plan changes the values of prometheus-operator"
+  }
+  assert {
+    condition = [for v in flatten([for p in [spectrocloud_cluster_profile.team["observability"], spectrocloud_cluster_profile.workload_team[0]] : p.profile_variables[0].variable]) :
+    v.default_value if v.name == "grafana_password"] == [for i in [1, 2] : random_password.grafana.result]
+    error_message = "the plan changes the password of Grafana"
   }
 }
 
@@ -505,7 +516,8 @@ run "case_2_of_the_boundary_moves_vault_to_wilma_security_1_1_0" {
 # The run makes each profile of each case. Each layer of glue that names the variable domain is in a
 # profile that declares the variable. In a profile with no variable domain, the glue keeps the text
 # {{.spectro.var.domain}}. So wilma refused the route of Vault of wilma-security, and wilma stayed
-# Provisioning (#701).
+# Provisioning (#701). Each variable that the values of a pack name is a variable of its profile too:
+# the values of prometheus-operator name grafana_password (#700).
 run "each_glue_that_names_the_variable_domain_is_in_a_profile_that_declares_it" {
   command = apply
 
@@ -517,7 +529,7 @@ run "each_glue_that_names_the_variable_domain_is_in_a_profile_that_declares_it" 
 
   override_data {
     target = data.spectrocloud_pack.pin
-    values = { values = "pack:\n  namespace: \"monitoring\"\n" }
+    values = { values = "pack:\n  namespace: \"monitoring\"\ncharts:\n  kube-prometheus-stack:\n    grafana:\n      adminPassword: \"\"\n" }
   }
 
   assert {
@@ -536,5 +548,22 @@ run "each_glue_that_names_the_variable_domain_is_in_a_profile_that_declares_it" 
       ) : contains(flatten([for v in p.profile_variables : v.variable[*].name]), "domain")
     if strcontains(join("", flatten([for k in p.pack : k.manifest[*].content])), local.domain)])
     error_message = "a layer of glue names ${local.domain} in a profile that declares no variable domain"
+  }
+  assert {
+    condition = flatten([for p in concat(
+      values(spectrocloud_cluster_profile.team), spectrocloud_cluster_profile.network_next, values(spectrocloud_cluster_profile.moved),
+      values(spectrocloud_cluster_profile.copy), spectrocloud_cluster_profile.workload_team, spectrocloud_cluster_profile.shared,
+      spectrocloud_cluster_profile.workload_release,
+      ) : [for n in distinct(flatten(regexall("{{\\.spectro\\.var\\.([a-z_]+)}}", join("", p.pack[*].values)))) : "${p.name}@${p.version}: ${n}"
+    if !contains(flatten([for v in p.profile_variables : v.variable[*].name]), n)]]) == []
+    error_message = "the values of a pack name a variable that its profile does not declare"
+  }
+  assert {
+    condition = [for p in concat(
+      values(spectrocloud_cluster_profile.team), spectrocloud_cluster_profile.network_next, values(spectrocloud_cluster_profile.moved),
+      values(spectrocloud_cluster_profile.copy), spectrocloud_cluster_profile.workload_team, spectrocloud_cluster_profile.shared,
+      spectrocloud_cluster_profile.workload_release,
+    ) : "${p.name}@${p.version}" if strcontains(join("", p.pack[*].values), "{{.spectro.var.grafana_password}}")] == ["wilma-observability@1.0.0", "wilma-observability@1.1.0", "pebbles-apps@1.0.0"]
+    error_message = "the values of prometheus-operator do not name the variable grafana_password in each profile with prometheus-operator"
   }
 }

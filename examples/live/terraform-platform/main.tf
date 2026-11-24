@@ -216,12 +216,23 @@ locals {
     [for w in [local.wrapped[p]] : c if !w],
     [{ pack = merge(try(local.decoded[p].pack, {}), { namespace = local.namespaces[p] }, try(local.pack_extra[p], {})) }],
   )...)) }
-  # The values of prometheus-operator are the text of the registry, with the password of Grafana in
-  # its one line `adminPassword: ""`. Palette keeps that text. Palette gave back the text of
-  # yamlencode with another indent of a list, so each plan found a change. Without that line, Palette
-  # refuses the profile: ClusterProfileCreationValidationFailure.
-  password_values = { for k, v in local.source_values : k => replace(v, "/(?m)^( *adminPassword: )\"\"$/", "$${1}\"${random_password.grafana.result}\"") if k == "prometheus-operator" }
+  # The values of prometheus-operator are the text of the registry, with the profile variable
+  # grafana_password in its one line `adminPassword: ""`. The password of Grafana goes through a
+  # sensitive profile variable, so the text that Palette keeps is the text that the example sends.
+  # Then a plan finds no change. Without that line, Palette refuses the profile:
+  # ClusterProfileCreationValidationFailure.
+  password_values = { for k, v in local.source_values : k => replace(v, "/(?m)^( *adminPassword: )\"\"$/", "$${1}\"{{.spectro.var.${local.grafana_password.name}}}\"") if k == "prometheus-operator" }
   pack_values     = { for k, v in local.source_values : k => lookup(local.password_values, k, lookup(local.patched_values, k, v)) }
+  # The variable of the password of Grafana, in each profile with prometheus-operator. Palette masks
+  # the default of a sensitive variable in its answer, and the provider then keeps the default of the
+  # state.
+  grafana_password = {
+    name          = "grafana_password"
+    display_name  = "Grafana password"
+    description   = "The password of the admin of Grafana in prometheus-operator"
+    default_value = random_password.grafana.result
+    is_sensitive  = true
+  }
 
   # The images that the values of each pin name, for `platform.sh images` before the apply. They are
   # each image of pack.content.images, and each map with a repository and a tag in the first five
@@ -250,8 +261,9 @@ locals {
   ))) }
 }
 
-# The password of Grafana in prometheus-operator. OpenTofu makes it at the first apply, and keeps it
-# in the state, so a plan with the defaults changes nothing. No file of the repository holds it.
+# The password of Grafana in prometheus-operator: the default of the variable grafana_password.
+# OpenTofu makes it at the first apply, and keeps it in the state, so a plan with the defaults
+# changes nothing. No file of the repository holds it.
 resource "random_password" "grafana" {
   length  = 24
   special = false
@@ -331,6 +343,19 @@ resource "spectrocloud_cluster_profile" "team" {
         description   = "The domain of the platform: the private zone of external-dns"
         default_value = var.domain
         required      = false
+      }
+      dynamic "variable" {
+        for_each = contains(each.value[*].name, "prometheus-operator") ? [local.grafana_password] : []
+        iterator = v
+        content {
+          name          = v.value.name
+          display_name  = v.value.display_name
+          format        = "string"
+          description   = v.value.description
+          default_value = v.value.default_value
+          required      = false
+          is_sensitive  = v.value.is_sensitive
+        }
       }
     }
   }
@@ -434,6 +459,19 @@ resource "spectrocloud_cluster_profile" "moved" {
         description   = "The domain of the platform: the private zone of external-dns"
         default_value = var.domain
         required      = false
+      }
+      dynamic "variable" {
+        for_each = contains(each.value[*].name, "prometheus-operator") ? [local.grafana_password] : []
+        iterator = v
+        content {
+          name          = v.value.name
+          display_name  = v.value.display_name
+          format        = "string"
+          description   = v.value.description
+          default_value = v.value.default_value
+          required      = false
+          is_sensitive  = v.value.is_sensitive
+        }
       }
     }
   }
