@@ -216,11 +216,17 @@ locals {
   maps_4      = { for k, l in local.maps_3 : k => flatten([for m in l : [for c in values(m) : c if can(keys(c))]]) }
   maps_5      = { for k, l in local.maps_4 : k => flatten([for m in l : [for c in values(m) : c if can(keys(c))]]) }
   # A map names its image as a chart of Bitnami does: registry/repository, then @digest, or :tag
-  # when the digest is empty.
+  # when the digest is empty. A map with no registry takes the registry that the values give each
+  # image of a chart, global.image.registry, as the chart of kyverno does. With no registry, the
+  # image has no host, and the container runtime asks Docker Hub.
+  global_registry = { for k, d in local.source_docs : k => try(coalesce(concat(
+    [try(tostring(d.global.image.registry), null)],
+    [for c in try(values(d.charts), []) : try(tostring(c.global.image.registry), null)],
+  )...), "") }
   images = { for k, d in local.source_docs : k => sort(distinct(concat(
     [for i in try(d.pack.content.images, []) : i.image if can(tostring(i.image))],
     [for m in concat(local.maps_1[k], local.maps_2[k], local.maps_3[k], local.maps_4[k], local.maps_5[k]) : format("%s%s",
-      join("/", compact([try(tostring(m.registry), ""), m.repository])),
+      join("/", compact([try(coalesce(try(tostring(m.registry), null), local.global_registry[k]), ""), m.repository])),
       try(length(tostring(m.digest)) > 0, false) ? "@${m.digest}" : ":${m.tag}",
     ) if try(length(tostring(m.repository)) > 0 && length(tostring(m.tag)) > 0, false)],
   ))) }

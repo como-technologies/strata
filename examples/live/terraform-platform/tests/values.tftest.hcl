@@ -7,7 +7,8 @@
 # pin the values of one form.
 #
 # A chart of the registry Bitnami names its images in docker.io/bitnami, which Docker Hub no longer
-# serves (#700). The last run tests the images of bitnamilegacy, and the output images.
+# serves (#700). The third run tests the images of bitnamilegacy, and the output images. The last
+# run tests an image map with no registry, as in the values of kyverno.
 
 mock_provider "spectrocloud" {}
 mock_provider "aws" {}
@@ -156,5 +157,54 @@ run "each_chart_of_bitnami_names_the_images_of_bitnamilegacy" {
   assert {
     condition     = contains(output.images["cert-manager"], "docker.io/bitnami/grafana:12.1.1-debian-12-r0") && !yamldecode(local.pack_values["cert-manager"]).global.security.allowInsecureImages
     error_message = "a pack of Public Repo changes the images of its values"
+  }
+}
+
+# Each pin has the values of a pack of kyverno. The chart gives the registry of its images once, at
+# global.image.registry, and most of its image maps have a registry with no value. The list of
+# images of the pack names one of them with its host.
+run "a_map_with_no_registry_takes_the_registry_of_its_chart" {
+  command = apply
+
+  override_data {
+    target = data.spectrocloud_pack.pin
+    values = {
+      values = <<-EOT
+        pack:
+          namespace: "kyverno"
+          content:
+            images:
+              - image: us-docker.pkg.dev/palette-images/packs/kyverno/1.19.2/kyverno:v1.19.2
+        charts:
+          kyverno:
+            global:
+              image:
+                registry: us-docker.pkg.dev
+            admissionController:
+              container:
+                image:
+                  registry: ~
+                  repository: palette-images/packs/kyverno/1.19.2/kyverno
+                  tag: v1.19.2
+            cleanupController:
+              image:
+                repository: palette-images/packs/kyverno/1.19.2/kyverno-cleanup-controller
+                tag: v1.19.2
+            webhooksCleanup:
+              image:
+                registry: quay.io
+                repository: team/kubectl
+                tag: v1
+      EOT
+    }
+  }
+
+  assert {
+    condition = output.images["kyverno"] == tolist([
+      "quay.io/team/kubectl:v1",
+      "us-docker.pkg.dev/palette-images/packs/kyverno/1.19.2/kyverno-cleanup-controller:v1.19.2",
+      "us-docker.pkg.dev/palette-images/packs/kyverno/1.19.2/kyverno:v1.19.2",
+    ])
+    error_message = "an image of kyverno does not take the registry of its chart: ${jsonencode(output.images["kyverno"])}"
   }
 }

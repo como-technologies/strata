@@ -514,7 +514,10 @@ and the images that its values name.
 `just live-platform-images` asks `crane digest` for each image that the values
 of the pins name. It reads the output `images` of a plan, so it makes no change.
 The output holds each entry of `pack.content.images`, and each map with a
-`repository` and a `tag`, five levels deep at most. `just live-platform-up` runs
+`repository` and a `tag`, five levels deep at most. A map with no `registry`
+takes the registry that the values give each image of the chart,
+`global.image.registry`, as the chart of kyverno does: most image maps of kyverno
+have a `registry` with no value. `just live-platform-up` runs
 the same check first. It stops before the apply, and names each image that does
 not resolve. Case 8 reads the images that the pods of each Bitnami pack run.
 
