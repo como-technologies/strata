@@ -11,11 +11,11 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, LIVE_RUN_PASSED, MOST_WORDS, block_sentences,
-    cells, code_of, code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in,
-    go_line, marks_of, one_line, recipe, repo_file, schema, script, sentences, table_rows,
-    toml_entries, toml_table, toml_value, version_of, walk, without_code, without_link_targets,
-    word_faults,
+    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, LIVE_EXAMPLE_PAGE, LIVE_RUN_PASSED,
+    MOST_WORDS, block_sentences, cells, code_of, code_spans, comment_blocks, comment_lines,
+    first_cells, gitlab_drop_in, go_line, marks_of, one_line, recipe, repo_file, schema, script,
+    sentences, table_rows, toml_entries, toml_table, toml_value, version_of, walk, without_code,
+    without_link_targets, word_faults,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::{
@@ -3469,6 +3469,110 @@ fn the_pages_state_the_results_of_the_second_live_window_of_wave_18() {
     pages_say(&pages);
 }
 
+/// The second live window of Wave 18 ran the live example and the scripts of its facts on
+/// provider 0.30.7, on AWS alone (#939, #999). The test reads the result of each row of "The
+/// release of the provider" in `live-runs.md`. It also reads the pages that named a result of
+/// 0.30.1.
+#[test]
+fn each_row_of_the_release_of_the_provider_gives_its_result_on_0_30_7() {
+    let passed = [
+        "| The build and the baseline |",
+        "| `version-bump-flag`, `version-bump-clone` |",
+        "| `version-bump-skip-destroy` |",
+        "| `version-own-state`, `version-string-as-given` |",
+        "| `tags-are-labels` |",
+        "| `template-lock-cluster-create`, ",
+        "| `tag-stored-as-authored` |",
+        "| The rule `provider-timeout-success` |",
+    ];
+    rows_say(&passed, LIVE_RUN_PASSED);
+    // the result of each other row, and the part of a row that has no live run
+    let others = [
+        (
+            "| `cluster-variable-change`, `delete-in-progress` |",
+            "The fact holds: after the update, the audit log of cluster A has the entry of the change of the variables.",
+        ),
+        (
+            "| `cluster-group-config`, `cluster-group-limit-units` |",
+            "No result on 0.30.7: the virtual cluster of the group did not reach",
+        ),
+        (
+            "| The rule `provider-eks-azs` |",
+            "No result on 0.30.7: the window ran on AWS alone.",
+        ),
+        (
+            "| The rule `provider-timeout-success` |",
+            "The code of the provider shows it; no live run shows it yet. `gke.sh` has no result on 0.30.7: the window ran on AWS alone.",
+        ),
+        (
+            "| The platform cluster |",
+            "No result on 0.30.7: four packs of the Bitnami registry pull images that Docker Hub no longer serves (#700).",
+        ),
+        (
+            "| The standing profiles of the contract |",
+            "A live run gave a plan that adds and destroys nothing.",
+        ),
+    ];
+    for (start, result) in others {
+        rows_say(&[start], result);
+    }
+    // the rows above are each row of the table
+    let runs = read(&docs().join(LIVE_RUNS_PAGE));
+    let release = section(&runs, "\n## The release of the provider\n", Some("\n## "));
+    let named: BTreeSet<&str> = passed
+        .into_iter()
+        .chain(others.map(|(start, _)| start))
+        .collect();
+    assert_eq!(table_rows(release, "|").len(), named.len(), "{release}");
+    // each page, the words of a result or of a part with no result, and the words that are gone
+    let pages: [(&str, &[&str], &[&str]); 5] = [
+        (
+            LIVE_RUNS_PAGE,
+            &[
+                "A live window ran the example and the scripts of the facts below on 0.30.7, on AWS alone. No fact of Palette changed on this release.",
+                "The code of 0.30.7 does not read it either. `eks.sh` has no result on 0.30.7: see [The release of the provider](#the-release-of-the-provider).",
+            ],
+            &[
+                "the facts below have no result yet",
+                "Provider 0.30.1 does not read `cloud_config.azs` of an EKS cluster back",
+            ],
+        ),
+        (
+            PALETTE_PROFILES_PAGE,
+            &["A live run of provider 0.30.1 shows it, and the code of 0.30.7 does the same."],
+            &["not the new value (provider 0.30.1)."],
+        ),
+        (
+            PALETTE_CLUSTERS_PAGE,
+            &[
+                "Provider 0.30.1 and 0.30.7 send a new version of a profile in that form.",
+                "After the change of a field, `compare` of the cluster copy finds no change",
+                "No check runs `compare` after the delete.",
+            ],
+            &[
+                "Provider 0.30.1 sends a new version",
+                "does not change, so `compare` of the cluster copy finds no change.",
+            ],
+        ),
+        (
+            PALETTE_LIMITS_PAGE,
+            &[
+                "When an item names a live run, the run shows a fact beside the rule, and not the rule itself.",
+            ],
+            &["No live run checks them, so strata makes no claim that depends on them."],
+        ),
+        (
+            LIVE_EXAMPLE_PAGE,
+            &[
+                "Live runs of provider 0.29.7 and 0.30.1 show it, and the code of 0.30.7 does the same.",
+                "during the create also ends the apply in this way. The code of the provider shows it; no live run shows it yet.",
+            ],
+            &["(provider 0.29.7 and 0.30.1)"],
+        ),
+    ];
+    pages_say(&pages);
+}
+
 /// The five pages of the observer, in the book: the pages of `OBSERVER_PAGES` for a reader, and two
 /// for a maintainer.
 fn observer_book_pages() -> impl Iterator<Item = &'static str> {
@@ -3629,7 +3733,7 @@ fn the_pages_of_the_observer_no_longer_hold_the_statements_that_nothing_backs() 
     text.push_str(&read(&docs().join("loop.md")));
     text.push_str(&read(&docs().join(PALETTE_CLUSTERS_PAGE)));
     text.push_str(&read(&docs().join(LIVE_RUNS_PAGE)));
-    text.push_str(&read(&docs().join("development/live-example.md")));
+    text.push_str(&read(&docs().join(LIVE_EXAMPLE_PAGE)));
     let text = one_line(&text);
     for old in [
         "A removal is clean",
@@ -4231,11 +4335,7 @@ fn the_sentences_that_the_review_at_the_end_of_wave_13_named_keep_to_the_limits(
             "| `exec` | `argv`,",
             MOST_WORDS,
         ),
-        (
-            "development/live-example.md",
-            "| `aws_profile` |",
-            MOST_WORDS,
-        ),
+        (LIVE_EXAMPLE_PAGE, "| `aws_profile` |", MOST_WORDS),
         (
             "development/facts.md",
             "Strata depends on facts about Palette.",
@@ -5958,7 +6058,7 @@ fn the_pages_of_a_pipeline_name_the_setting_of_the_report_the_log_and_the_schema
 /// recipes holds `just live-report-send`.
 #[test]
 fn the_live_example_lists_the_contract_scripts_the_send_script_and_the_recipe_of_the_send() {
-    let page = read(&docs().join("development/live-example.md"));
+    let page = read(&docs().join(LIVE_EXAMPLE_PAGE));
     for script in ["contract.sh", "contract-report.sh", "report-send.sh"] {
         assert!(
             page.contains(&format!("| `{script}` |")),
@@ -6575,8 +6675,8 @@ fn the_text_of_the_book_that_the_review_of_wave_14_named_keeps_to_the_limits() {
             "commands/snapshot/other-objects.md",
             "The hash covers the mask, so a new password",
         ),
-        ("development/live-example.md", "| `github.sh` |"),
-        ("development/live-example.md", "| `lib.sh` |"),
+        (LIVE_EXAMPLE_PAGE, "| `github.sh` |"),
+        (LIVE_EXAMPLE_PAGE, "| `lib.sh` |"),
         (
             PALETTE_LIMITS_PAGE,
             "A region that AWS refuses for the VPC route",
@@ -7341,7 +7441,7 @@ fn each_page_that_says_a_request_changes_nothing_says_what_validate_repave_can_s
             "use-cases/stop-a-build.md",
             "Each line reads, and changes nothing",
         ),
-        ("development/live-example.md", "| `tenant.sh` | Lookups"),
+        (LIVE_EXAMPLE_PAGE, "| `tenant.sh` | Lookups"),
         (
             "internals/palette/validate-routes.md",
             "The request changes no setting of the cluster",
@@ -7837,7 +7937,7 @@ fn the_sentences_that_the_area_of_the_style_named_keep_to_25_words() {
             "automation/upstream-issues.md",
             "The patch is the newest patch of the minor version",
         ),
-        ("development/live-example.md", "| `api.sh` |"),
+        (LIVE_EXAMPLE_PAGE, "| `api.sh` |"),
     ] {
         let block = block(&read(&docs().join(page)), anchor);
         assert_no_faults(&word_faults(page, &block_sentences(&block), MOST_WORDS));

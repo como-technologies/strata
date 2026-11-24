@@ -239,12 +239,7 @@ fn contract_report_opens_one_issue_for_each_fact_that_differs_in_the_backlog() {
         body.contains("`docs/src/reference/palette-api.md#a-cluster`"),
         "{body}"
     );
-    assert!(
-        body.contains(
-            "https://github.com/o/r/blob/main/docs/src/development/facts.md#the-weekly-contract-run"
-        ),
-        "{body}"
-    );
+    assert!(body.contains(&page_link("o/r")), "{body}");
     assert!(
         text(&o.stderr).contains("1 same, 1 differ"),
         "{}",
@@ -425,7 +420,7 @@ fn contract_report_opens_one_issue_for_the_new_values_of_a_set_and_names_each_va
         "`GET /v1/cluster-document/{uid}`",
         "`verify.sh:snapshot-cluster`, `tiers.sh:a-applied`",
         "`docs/src/reference/palette-api.md#a-cluster`",
-        "https://github.com/o/r/blob/main/docs/src/development/facts.md#what-to-do-with-a-new-value",
+        &facts_link("o/r", "what-to-do-with-a-new-value"),
     ] {
         assert!(
             body.contains(expected),
@@ -718,6 +713,30 @@ fn contract_report_opens_one_issue_for_a_new_release_and_none_for_a_release_that
 }
 
 #[test]
+fn contract_report_links_the_steps_of_a_new_release_in_the_body_of_its_issue() {
+    let r = Report::new();
+    let releases = vec![release(
+        "spectrocloud/terraform-provider-spectrocloud",
+        "v0.30.7",
+        Some("v0.30.6"),
+        true,
+    )];
+    let o = r.report(
+        &document(vec![entry("cluster-listing", "same", json!([]))], releases),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let bodies = r.bodies_of("issue create");
+    assert_eq!(bodies.len(), 1, "{:?}", r.calls());
+    let steps = facts_link("o/r", "what-to-do-with-a-new-release");
+    assert!(bodies[0].contains(&steps), "{}", bodies[0]);
+    assert!(!bodies[0].contains(&page_link("o/r")), "{}", bodies[0]);
+    // the link names a section that the page has
+    let facts = repo_file("docs/src/development/facts.md");
+    assert!(facts.contains("\n### What to do with a new release\n"));
+}
+
+#[test]
 fn contract_report_opens_no_second_issue_for_a_release_that_has_one() {
     let r = Report::new();
     r.open_issues(&[(
@@ -797,11 +816,16 @@ fn contract_report_dry_run_prints_each_body_and_calls_no_host() {
     );
 }
 
-/// The link to the page of the book that each body holds, for the repository `repo`.
+/// The link to the section `anchor` of the page of the facts in the book, for the repository
+/// `repo`.
+fn facts_link(repo: &str, anchor: &str) -> String {
+    format!("https://github.com/{repo}/blob/main/docs/src/development/facts.md#{anchor}")
+}
+
+/// The link to the section of the weekly run, for the repository `repo`. Each body holds it, but
+/// the body of a new release.
 fn page_link(repo: &str) -> String {
-    format!(
-        "https://github.com/{repo}/blob/main/docs/src/development/facts.md#the-weekly-contract-run"
-    )
+    facts_link(repo, "the-weekly-contract-run")
 }
 
 /// A directory that is a git checkout with the remote `origin` at `url`, or with no remote.

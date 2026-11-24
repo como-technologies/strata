@@ -165,8 +165,9 @@ examples/live/api.sh app-version            # HTTP 500
 
 ## What the source of Palette says
 
-The code of Palette gives these rules. No live run checks them, so strata
-makes no claim that depends on them.
+The code of Palette gives these rules. No live run checks a rule of this list,
+so strata makes no claim that depends on one. When an item names a live run,
+the run shows a fact beside the rule, and not the rule itself.
 
 - **An object that a person changes in a workload cluster.** The API of Palette
   has no route and no field that compares the objects of the cluster with the

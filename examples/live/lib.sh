@@ -396,8 +396,9 @@ try_apply() {
 # hold_versions: at the baseline, store skip_destroy for the script's flag on every profile in the
 # state, changing nothing else. Every script that applies runs it right after require_baseline. A
 # flag-on version bump replaces the profile resource. The provider deletes the replaced object with
-# the skip_destroy that its state holds, not the new value (provider 0.30.1). Without this, the bump
-# asks Palette to delete the old version. Palette refuses the delete while a cluster runs that
+# the skip_destroy that its state holds, not the new value. A live run of provider 0.30.1 shows it,
+# and the code of 0.30.7 does the same. Without this, the bump asks Palette to delete the old
+# version. Palette refuses the delete while a cluster runs that
 # version (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
 hold_versions() { tf_apply "$flag"; }
 # apply_baseline: the default variables with the flag off, which is the baseline's configuration;

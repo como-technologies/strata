@@ -267,9 +267,10 @@ Palette deleted the Deployment of the layer. See
 
 Palette reports no change and no delete with `kubectl`. After each one, the
 condition of the pack of the layer stays `Ready`, with the reason
-`PackServicesReady`. The cluster gets no event about it. The copy that Palette
-holds for the cluster does not change, so `compare` of the cluster copy finds no
-change. A live run shows each of these facts: see
+`PackServicesReady`. The cluster gets no event about it. After the change of a
+field, `compare` of the cluster copy finds no change: the copy that Palette
+holds for the cluster does not change. No check runs `compare` after the
+delete. A live run shows each of these facts: see
 [hand-edit.sh](../../development/live-runs.md#hand-editsh).
 
 To remove an object that the content dropped, delete it on the cluster with
@@ -421,8 +422,8 @@ A `PUT` and a `PATCH` of the profiles of a cluster keep the order of the
 profiles that the cluster has. Each new uid goes to the end, also when the
 body gives it first. A `PUT` drops each profile that its body does not name. A
 `PATCH` keeps them, and drops the profile that the field `replaceWithProfile`
-of an entry names. Provider 0.30.1 sends a new version of a profile in that
-form.
+of an entry names. Provider 0.30.1 and 0.30.7 send a new version of a profile
+in that form.
 
 So an added profile goes to the end of the list. A new version of the
 infrastructure profile has a new uid, so it goes to the end too. After that

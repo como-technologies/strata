@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::common::{
-    CommandExt, FAKE_PORT_FORWARD, copy_scripts, executable, fake_bin, just_dry_run, on_path,
-    path_with, repo_file, text, walk,
+    CommandExt, FAKE_PORT_FORWARD, LIVE_EXAMPLE_PAGE, copy_scripts, executable, fake_bin,
+    just_dry_run, on_path, path_with, repo_file, text, walk,
 };
 
 /// The key of Palette in a run. A run must not show it in an argument of `kubectl` or in a file.
@@ -948,7 +948,7 @@ fn the_readme_of_the_observer_holds_only_links_to_the_book_and_each_link_exists(
         "development/observer.md",
         "development/observer-api.md",
         "development/observer-deploy.md",
-        "development/live-example.md",
+        LIVE_EXAMPLE_PAGE,
     ] {
         assert!(targets.iter().any(|t| t == page), "the README lacks {page}");
     }
