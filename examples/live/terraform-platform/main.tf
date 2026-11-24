@@ -83,8 +83,9 @@ data "spectrocloud_pack" "other_cert_manager" {
 
 # ---- the values -----------------------------------------------------------------------------------
 #
-# Most packs keep the values that the registry lists. Six packs change some values, each chart of a
-# Helm registry gets a namespace, and the glue reads the namespace of six. The values of a chart are
+# Most packs keep the values that the registry lists. Five packs change some values, each chart of a
+# Helm registry gets a namespace, and the glue reads the namespace of six. prometheus-operator
+# changes one line of the text of the registry: the password of Grafana. The values of a chart are
 # under charts.<chart> in a pack of Spectro Cloud, and at the top in a chart of a Helm registry. A
 # patch goes into the values of the chart, three levels deep. A map of a patch merges into the map
 # of the chart. Each other value replaces the value of the chart. The text that a patch gives is
@@ -183,8 +184,6 @@ locals {
         }
       }
     } if var.sso]...)
-    # Palette requires a password of Grafana in this pack: ClusterProfileCreationValidationFailure.
-    prometheus-operator = { grafana = { adminPassword = random_password.grafana.result } }
   }
   # The values of a chart of a Helm registry start with `pack.namespace: ""`. Palette refuses a
   # profile that gives such a pack no namespace: ClusterProfileCreationValidationFailure. So each
@@ -197,7 +196,7 @@ locals {
   ) }
   # The pack section of a patched pack: the namespace when its values name none, and the priority.
   # A pack with no default namespace here gets its name.
-  default_namespaces = { cert-manager = "cert-manager", vault = "vault", external-dns = "external-dns", keycloak = "keycloak", grafana = "grafana", argo-cd = "argocd", prometheus-operator = "monitoring" }
+  default_namespaces = { cert-manager = "cert-manager", vault = "vault", external-dns = "external-dns", keycloak = "keycloak", grafana = "grafana", argo-cd = "argocd" }
   pack_extra         = { keycloak = { "spectrocloud.com/install-priority" = local.keycloak_priority } }
 
   decoded    = { for k in setunion(keys(local.default_namespaces), local.helm_charts, local.bitnami) : k => yamldecode(local.source_values[k]) }
@@ -217,7 +216,12 @@ locals {
     [for w in [local.wrapped[p]] : c if !w],
     [{ pack = merge(try(local.decoded[p].pack, {}), { namespace = local.namespaces[p] }, try(local.pack_extra[p], {})) }],
   )...)) }
-  pack_values = { for k, v in local.source_values : k => lookup(local.patched_values, k, v) }
+  # The values of prometheus-operator are the text of the registry, with the password of Grafana in
+  # its one line `adminPassword: ""`. Palette keeps that text. Palette gave back the text of
+  # yamlencode with another indent of a list, so each plan found a change. Without that line, Palette
+  # refuses the profile: ClusterProfileCreationValidationFailure.
+  password_values = { for k, v in local.source_values : k => replace(v, "/(?m)^( *adminPassword: )\"\"$/", "$${1}\"${random_password.grafana.result}\"") if k == "prometheus-operator" }
+  pack_values     = { for k, v in local.source_values : k => lookup(local.password_values, k, lookup(local.patched_values, k, v)) }
 
   # The images that the values of each pin name, for `platform.sh images` before the apply. They are
   # each image of pack.content.images, and each map with a repository and a tag in the first five

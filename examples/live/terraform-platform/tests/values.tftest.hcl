@@ -6,9 +6,12 @@
 # with `pack.namespace: ""`. Or prometheus-operator gives Grafana no password. Each run gives each
 # pin the values of one form.
 #
+# The third run tests that prometheus-operator keeps the text of its registry, apart from the
+# password (#700). The fourth run tests that a plan after the apply keeps the same text.
+#
 # A chart of the registry Bitnami names its images in docker.io/bitnami, which Docker Hub no longer
-# serves (#700). The third run tests the images of bitnamilegacy, and the output images. The fourth
-# run tests an image map with no registry, as in the values of kyverno. The fifth run tests that
+# serves (#700). The fifth run tests the images of bitnamilegacy, and the output images. The sixth
+# run tests an image map with no registry, as in the values of kyverno. The seventh run tests that
 # keycloak takes the Secret of the Certificate of its glue, and makes no Secret of that name (#700).
 #
 # The next three runs test pebbles in a second project (#701), and wilma with no second project.
@@ -97,6 +100,110 @@ run "prometheus_operator_gets_a_password_of_grafana" {
   assert {
     condition     = local.pack_values["cert-manager"] == data.spectrocloud_pack.pin["cert-manager"].values
     error_message = "cert-manager does not keep the values of its registry"
+  }
+}
+
+# Each pin has the text of the values of prometheus-operator in the registry: comments, the line of
+# the presets, quotes, and lists with an indent. Palette keeps such a text. The values of
+# prometheus-operator in both profiles that hold it are that text, with the password of Grafana in
+# its one line adminPassword. Each other line stays (#700).
+run "prometheus_operator_keeps_the_text_of_its_registry_with_a_password_of_grafana" {
+  command = apply
+
+  variables {
+    second_project = "second"
+  }
+
+  override_data {
+    target = data.spectrocloud_pack.pin
+    values = {
+      values = <<-EOT
+        # spectrocloud.com/enabled-presets: Email Alerts:disable-email-alert
+        pack:
+          namespace: "monitoring"
+        charts:
+          kube-prometheus-stack:
+            alertmanager:
+              config:
+                inhibit_rules:
+                  - source_matchers:
+                      - 'severity = critical'
+                    equal:
+                      - 'namespace'
+                route:
+                  group_by: ['namespace']
+            grafana:
+              # adminPassword: strongpassword
+              adminPassword: ""
+            prometheus:
+              prometheusSpec:
+                retention: 10d
+      EOT
+    }
+  }
+
+  assert {
+    condition = [for i, l in split("\n", local.pack_values["prometheus-operator"]) : l
+    if l != try(split("\n", data.spectrocloud_pack.pin["prometheus-operator"].values)[i], null)] == ["      adminPassword: \"${random_password.grafana.result}\""]
+    error_message = "the values of prometheus-operator change a line of the registry beside the line adminPassword"
+  }
+  assert {
+    condition     = length(split("\n", local.pack_values["prometheus-operator"])) == length(split("\n", data.spectrocloud_pack.pin["prometheus-operator"].values))
+    error_message = "the values of prometheus-operator add or remove a line of the registry"
+  }
+  assert {
+    condition     = length(yamldecode(local.pack_values["prometheus-operator"]).charts.kube-prometheus-stack.grafana.adminPassword) == 24
+    error_message = "prometheus-operator gives Grafana no password"
+  }
+  assert {
+    condition = alltrue([for p in concat(spectrocloud_cluster_profile.team["observability"].pack, spectrocloud_cluster_profile.workload_team[0].pack) :
+    p.values == local.pack_values["prometheus-operator"] if p.name == "prometheus-operator"])
+    error_message = "a profile does not send the values of prometheus-operator"
+  }
+}
+
+# A plan after the apply of the run before, with the same text of the registry, gives each profile
+# with prometheus-operator the same values. The password is in the state.
+run "a_plan_after_the_apply_gives_prometheus_operator_the_same_values" {
+  command = plan
+
+  variables {
+    second_project = "second"
+  }
+
+  override_data {
+    target = data.spectrocloud_pack.pin
+    values = {
+      values = <<-EOT
+        # spectrocloud.com/enabled-presets: Email Alerts:disable-email-alert
+        pack:
+          namespace: "monitoring"
+        charts:
+          kube-prometheus-stack:
+            alertmanager:
+              config:
+                inhibit_rules:
+                  - source_matchers:
+                      - 'severity = critical'
+                    equal:
+                      - 'namespace'
+                route:
+                  group_by: ['namespace']
+            grafana:
+              # adminPassword: strongpassword
+              adminPassword: ""
+            prometheus:
+              prometheusSpec:
+                retention: 10d
+      EOT
+    }
+  }
+
+  assert {
+    condition = [for p in concat(spectrocloud_cluster_profile.team["observability"].pack, spectrocloud_cluster_profile.workload_team[0].pack) :
+      p.values == replace(data.spectrocloud_pack.pin["prometheus-operator"].values, "adminPassword: \"\"", "adminPassword: \"${random_password.grafana.result}\"")
+    if p.name == "prometheus-operator"] == [true, true]
+    error_message = "the plan changes the values of prometheus-operator"
   }
 }
 

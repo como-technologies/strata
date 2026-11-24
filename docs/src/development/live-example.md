@@ -553,6 +553,13 @@ apply, and keeps it in the state, so no file of the repository holds it. `just
 live-platform-values` tests these values with mock providers. It needs `tofu`,
 and it sends no request to Palette or AWS.
 
+The values of prometheus-operator are the text of the registry, with the
+password in the line `adminPassword: ""`. Each other line stays. The other
+patched packs get a text that `yamlencode` writes. Palette gave back such a
+text of prometheus-operator with a deeper indent of the list `inhibit_rules`, so
+each plan found a change. `just live-platform-values` tests that the text keeps
+each line of the registry, and that a plan after the apply gives the same text.
+
 ```bash
 just live-profiles                  # or just live-up: the release profile of the lab
 just live-platform-pins             # once: terraform-platform/terraform.tfvars
