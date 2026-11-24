@@ -10,8 +10,9 @@
 # serves (#700). The third run tests the images of bitnamilegacy, and the output images. The fourth
 # run tests an image map with no registry, as in the values of kyverno.
 #
-# The last three runs test pebbles in a second project (#701), and wilma with no second project.
-# They also test the move of Vault of case 2 of platform-boundary.sh.
+# The next three runs test pebbles in a second project (#701), and wilma with no second project.
+# They also test the move of Vault of case 2 of platform-boundary.sh. The last run tests that each
+# profile whose glue names the variable domain declares it.
 
 mock_provider "spectrocloud" {}
 mock_provider "spectrocloud" {
@@ -334,5 +335,42 @@ run "case_2_of_the_boundary_moves_vault_to_wilma_security_1_1_0" {
   assert {
     condition     = contains([for p in spectrocloud_cluster_aws.wilma.cluster_profile : p.id], spectrocloud_cluster_profile.team["security"].id)
     error_message = "wilma does not run wilma-security 1.1.0"
+  }
+}
+
+# The run makes each profile of each case. Each layer of glue that names the variable domain is in a
+# profile that declares the variable. In a profile with no variable domain, the glue keeps the text
+# {{.spectro.var.domain}}. So wilma refused the route of Vault of wilma-security, and wilma stayed
+# Provisioning (#701).
+run "each_glue_that_names_the_variable_domain_is_in_a_profile_that_declares_it" {
+  command = apply
+
+  variables {
+    second_project       = "second"
+    network_cert_manager = "2.0.0"
+    move_fluentbit       = true
+  }
+
+  override_data {
+    target = data.spectrocloud_pack.pin
+    values = { values = "pack:\n  namespace: \"monitoring\"\n" }
+  }
+
+  assert {
+    condition = alltrue([for c in [
+      spectrocloud_cluster_profile.team, spectrocloud_cluster_profile.network_next, spectrocloud_cluster_profile.moved,
+      spectrocloud_cluster_profile.copy, spectrocloud_cluster_profile.workload_team, spectrocloud_cluster_profile.shared,
+      spectrocloud_cluster_profile.workload_release,
+    ] : length(c) > 0])
+    error_message = "the run does not make each profile of each case"
+  }
+  assert {
+    condition = alltrue([for p in concat(
+      values(spectrocloud_cluster_profile.team), spectrocloud_cluster_profile.network_next, values(spectrocloud_cluster_profile.moved),
+      values(spectrocloud_cluster_profile.copy), spectrocloud_cluster_profile.workload_team, spectrocloud_cluster_profile.shared,
+      spectrocloud_cluster_profile.workload_release,
+      ) : contains(flatten([for v in p.profile_variables : v.variable[*].name]), "domain")
+    if strcontains(join("", flatten([for k in p.pack : k.manifest[*].content])), local.domain)])
+    error_message = "a layer of glue names ${local.domain} in a profile that declares no variable domain"
   }
 }

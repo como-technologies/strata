@@ -144,7 +144,7 @@ variable "data_profile" {
 }
 
 variable "cluster_domain" {
-  description = "The value that wilma gives the variable domain of the four profiles; empty for the default (case 4)"
+  description = "The value that wilma gives the variable domain of the five profiles; empty for the default (case 4)"
   type        = string
   default     = ""
 }
