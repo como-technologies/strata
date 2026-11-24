@@ -5,7 +5,8 @@
 # apart from the live example, so a normal live window costs the same as before.
 #
 #   examples/live/platform.sh pins        write terraform-platform/terraform.tfvars from the tenant
-#   examples/live/platform.sh up          build wilma, and wait until each pack is ready
+#   examples/live/platform.sh images      resolve each image that the values of the pins name
+#   examples/live/platform.sh up          images, then build wilma, and wait until each pack is ready
 #   examples/live/platform.sh [N]         run case N, or each case from 1 to 8
 #   examples/live/platform.sh down        remove wilma, its profiles, its zone, and its policy
 #   examples/live/platform.sh inventory   what wilma still has in AWS: 0 on each line after down
@@ -21,12 +22,14 @@
 #
 # pins reads the registry of each pack, and the mark `# behind`, from terraform.tfvars.example. It
 # pins the newest version in the order of strata, or the version before it for a pack with the mark.
+# images reads the output images from a plan, and asks crane for the digest of each image. It stops
+# before the apply with the name of each image that does not resolve, and it changes nothing.
 # up and down show their plans and ask before they change anything. Each case gives wilma its
 # baseline again at its end, also after a failed check: the defaults of terraform-platform/.
 # KEEP=1 skips that undo, for a person who reads the state of wilma after a failed check.
 #
 # Needs `just live-profiles` or `just live-up` first, for the release profile of the lab. Needs
-# tofu, jq, curl, kubectl, go, the AWS CLI, and the key of Palette in PALETTE_API_KEY or
+# tofu, jq, curl, crane, kubectl, go, the AWS CLI, and the key of Palette in PALETTE_API_KEY or
 # ~/.palette.env. Case 4 and case 7 install the observer with observer-up.sh, which needs gh or
 # OBSERVER_IMAGE. EDIT_FROM and EDIT_TO give the edit of case 1, and PROMETHEUS_FROM and
 # PROMETHEUS_TO the edit of case 7. Results go under runs/<UTC time>/platform/, or OUT. Exit 0 only
@@ -36,7 +39,7 @@ script=platform
 flag=false
 mode=cases from=1 to=8
 case "${1:-}" in
-  pins | up | down | inventory) mode=$1 ;;
+  pins | images | up | down | inventory) mode=$1 ;;
   "") ;;
   [1-8]) from=$1 to=$1 ;;
   -h | --help) mode=help ;;
@@ -407,12 +410,57 @@ bitnami_images() {
   done
 }
 
+# ---- the images of the pins -----------------------------------------------------------------------
+
+# One line for each image of the output images of a plan: the pack, then the image.
+images_jq='.planned_values.outputs.images.value // {} | to_entries[] | .key as $p | .value[] | "\($p) \(.)"'
+# images_listed: images.txt holds the lines of images_jq, from a plan of terraform-platform/. The
+# plan can hold the password of Grafana, so a temporary file keeps it, and the function removes it.
+images_listed() {
+  local plan rc
+  plan=$(mktemp) || return 2
+  "$live/tf.sh" plan -input=false -no-color -out="$plan" > images-plan.txt 2>&1 \
+    && "$live/tf.sh" show -json "$plan" | jq -r "$images_jq" > images.txt
+  rc=$?
+  rm -f "$plan"
+  [ "$rc" = 0 ] || { tail -n 20 images-plan.txt; return 2; }
+  [ -s images.txt ] || { echo "the plan gives no image; see images-plan.txt"; return 2; }
+}
+# images_resolve: crane gives the digest of each image of the plan. Each line names the pack and the
+# image, with the digest, or with the last line of the answer of crane. That line is the error, after
+# the warning of a HEAD that failed.
+images_resolve() {
+  local pack ref digest bad=0
+  images_listed || return 2
+  while read -r pack ref; do
+    if digest=$(crane digest "$ref" 2> images-crane.err < /dev/null); then
+      echo "$pack: $ref $digest"
+    else
+      echo "does not resolve: $ref, of $pack: $(tail -n 1 images-crane.err)"
+      bad=1
+    fi
+  done < images.txt
+  return "$bad"
+}
+# images: stop unless crane resolves each image that the values of the pins name. The standard
+# error names each image that does not resolve. It makes no change, so up runs it first.
+images() {
+  [ -f "$pins_file" ] || die "no pins: run examples/live/platform.sh pins first"
+  command -v crane > /dev/null || die "crane is needed to resolve the images of the pins"
+  "$live/tf.sh" init -input=false || exit 2
+  check images 0 '#700: crane resolves each image that the values of the pins name, before the apply' -- images_resolve
+  [ "$failures" = 0 ] && return 0
+  { grep '^does not resolve' images.out || cat images.out; } >&2
+  echo "$script: no apply; see $PWD/images.out" >&2
+  return 1
+}
+
 # ---- up, down, and the inventory ------------------------------------------------------------------
 
-# up: build wilma, and wait until each pack is ready. The apply asks first, as live-up does.
+# up: build wilma when each image resolves, and wait until each pack is ready. The apply asks
+# first, as live-up does.
 up() {
-  [ -f "$pins_file" ] || die "no pins: run examples/live/platform.sh pins first"
-  "$live/tf.sh" init -input=false || exit 2
+  images || return 1
   "$live/tf.sh" apply || { "$live/diagnose.sh" "$PWD/diagnostics" >&2; exit 1; }
   platform_outputs
   wait_running "$W"
@@ -473,9 +521,16 @@ mkdir -p "$run" && cd "$run" || exit 2
 [ -f ids.env ] && . ./ids.env
 
 case "$mode" in
+  images)
+    images
+    write_summary "the images of the pins of the platform cluster" "."
+    [ "$failures" = 0 ]
+    exit
+    ;;
   up)
     up
-    write_summary "the platform cluster up" ", cluster $(md span "$name") $(md span "$W")."
+    # when up stops at the images, it has no cluster to name
+    write_summary "the platform cluster up" "${W:+, cluster $(md span "$name") $(md span "$W")}."
     [ "$failures" = 0 ]
     exit
     ;;

@@ -353,7 +353,12 @@ live-platform-values:
     tofu -chdir=examples/live/terraform-platform init -input=false
     tofu -chdir=examples/live/terraform-platform test
 
-# Build wilma with seven add-on profiles and 14 community packs, and wait until each pack is ready (#700). Billable until live-platform-down.
+# Resolve each image that the values of the pins of wilma name, with crane and a plan: no change, and no cost (#700)
+[group('live checks')]
+live-platform-images:
+    examples/live/platform.sh images
+
+# Resolve the images of the pins, then build wilma with seven add-on profiles and 14 community packs, and wait until each pack is ready (#700). Billable until live-platform-down.
 [group('live')]
 live-platform-up: build
     examples/live/platform.sh up

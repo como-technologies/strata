@@ -2012,8 +2012,15 @@ such key before a build. It uses mock providers, and sends no request. When
 `up` stops before it makes `wilma`, `just live-platform-down` destroys the
 state that `up` made.
 
+Before the apply, `just live-platform-up` asks `crane` for the digest of each
+image that the values of the pins name. It stops when an image does not resolve.
+`just live-platform-images` runs that check alone, and makes no change. See
+[The platform cluster](./live-example.md#the-platform-cluster) for the images of
+the Bitnami packs.
+
 | Check | Expected exit | What it shows |
 |---|---|---|
+| `images` | 0 | #700: before the apply, `crane digest` resolves each image of the output `images` of a plan of `terraform-platform/`. The output names each image with its digest. When an image does not resolve, `up` stops, and its standard error names each such image. No result yet: no live window ran platform.sh. |
 | `packs-ready` | 0 | #700: `just live-platform-up` built `wilma`, and each pack of each add-on profile has a condition with the status `True`. Each line of the output names a pack with its reason, or the reason that it waits. No result yet: no live window ran platform.sh. |
 | `records` | 0 | #700: a record of the release, of each profile of a team, and of `wilma`, at the baseline. No result yet: no live window ran platform.sh. |
 | `verify-before`, `verify-after` | 0 | #700: case 1. `verify` passes on each record before the edit and after its undo. No result yet: no live window ran platform.sh. |

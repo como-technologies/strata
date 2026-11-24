@@ -344,9 +344,17 @@ printf 'chart archive\n' > "$dest/$name-$version.tgz"
 /// A `crane` whose `digest REF` prints a fixed digest.
 ///
 /// It fails when `$FAKE_CRANE_FAIL` has a value, and logs its arguments to `$FAKE_TOOL_LOG`.
+/// `$FAKE_CRANE_MISSING` is a list of images, with a space between them. For each one, the stand-in
+/// answers as crane answers a tag that Docker Hub does not serve: a warning, then the error.
 const FAKE_CRANE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_TOOL_LOG"
 [ -z "${FAKE_CRANE_FAIL:-}" ] || { echo "UNAUTHORIZED: authentication required" >&2; exit 1; }
+case " ${FAKE_CRANE_MISSING:-} " in
+  *" $2 "*)
+    echo "HEAD request failed, falling back on GET: unexpected status code 404 Not Found" >&2
+    echo "Error: GET https://index.docker.io/v2/$2: MANIFEST_UNKNOWN: manifest unknown" >&2
+    exit 1 ;;
+esac
 echo "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 "#;
 
@@ -16794,17 +16802,21 @@ fn platform_outputs() -> serde_json::Value {
 }
 
 /// A `tofu` for `platform.sh`. It answers the outputs, a plan with no change, and the variables of
-/// `inventory.sh --platform`. It refuses the edit in place of case 2 as Palette does, unless
+/// `inventory.sh --platform`. A plan with `-out` writes its file, and `show -json` prints
+/// `$FAKE_PLAN`. It refuses the edit in place of case 2 as Palette does, unless
 /// `$FAKE_IN_PLACE_TAKEN` has a value. [`platform_tofu`] puts the code of the refusal in place of
 /// `CODE_IN_CONFLICT`.
 const PLATFORM_TOFU: &str = r#"#!/usr/bin/env bash
 echo "tofu $*" >> "$FAKE_TOFU_LOG"
 case "$*" in
   *"output -json"*) cat "$FAKE_OUTPUTS" ;;
+  *"show -json"*) cat "$FAKE_PLAN" ;;
   *console*)
     printf '{\n  "a" = "wilma"\n  "domain" = "wilma.strata-live.internal"\n  "policy" = "strata-live-wilma-external-dns"\n'
     printf '  "region" = "us-east-2"\n  "role" = "nodes.cluster-api-provider-aws.sigs.k8s.io"\n}\n' ;;
-  *plan*) echo "No changes." ;;
+  *plan*)
+    for a in "$@"; do case "$a" in -out=*) echo "a plan" > "${a#-out=}" ;; esac; done
+    echo "No changes." ;;
   *network_cert_manager_in_place=true*)
     if [ -n "${FAKE_IN_PLACE_TAKEN-}" ]; then echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed."; exit 0; fi
     echo "Error: error updating cluster profile: Code:CODE_IN_CONFLICT Update of cluster profile will cause one or more pack conflicts in the spectroclusters wilma"
@@ -16861,9 +16873,33 @@ fn pack_ready(_: &str) -> serde_json::Value {
     serde_json::json!({"type": "Healthy", "status": "True", "reason": "WorkloadsReady"})
 }
 
+/// The output `images` of a plan of `terraform-platform/`: one image of `registry` for each pack
+/// of [`PLATFORM_BITNAMI`], and one of `quay.io/team` for each other pack.
+fn platform_images(registry: &str) -> serde_json::Map<String, serde_json::Value> {
+    platform_teams()
+        .into_iter()
+        .flat_map(|(_, packs)| packs)
+        .map(|pack| {
+            let image = if PLATFORM_BITNAMI.contains(&pack.as_str()) {
+                format!("{registry}/{pack}:1.0.0")
+            } else {
+                format!("quay.io/team/{pack}:1.0.0")
+            };
+            (pack, serde_json::json!([image]))
+        })
+        .collect()
+}
+
+/// A plan of `terraform-platform/`, as `tofu show -json` prints it, with the output `images`.
+fn platform_plan(images: serde_json::Map<String, serde_json::Value>) -> String {
+    serde_json::json!({"planned_values": {"outputs": {"images": {"sensitive": false, "value": images}}}})
+        .to_string()
+}
+
 /// A stage of `platform.sh` at the baseline of wilma. It has the outputs, the pins, the profile of
-/// each team, and the document of wilma with each pack ready. It also has a kubeconfig and the
-/// stand-ins of `tofu`, `kubectl`, and `observer-up.sh`.
+/// each team, and the document of wilma with each pack ready. Its plan names the images of
+/// `docker.io/bitnamilegacy`. It also has a kubeconfig and the stand-ins of `tofu`, `crane`,
+/// `kubectl`, and `observer-up.sh`.
 fn platform_stage() -> Stage {
     let mut stage = Stage::new(platform_outputs());
     let live = stage.copy_live();
@@ -16888,6 +16924,16 @@ fn platform_stage() -> Stage {
         "#!/usr/bin/env bash\necho \"observer-up $*\" >> \"$FAKE_TOFU_LOG\"\n",
     );
     stage.command("tofu", &platform_tofu());
+    stage.command("crane", FAKE_CRANE);
+    let plan = stage.path("plan.json");
+    std::fs::write(
+        &plan,
+        platform_plan(platform_images("docker.io/bitnamilegacy")),
+    )
+    .unwrap();
+    stage.env("FAKE_PLAN", plan.to_str().unwrap());
+    let crane_log = stage.path("crane.log");
+    stage.env("FAKE_TOOL_LOG", crane_log.to_str().unwrap());
     let bin = stage.path("platform-bin");
     std::fs::create_dir_all(&bin).unwrap();
     executable(&bin.join("kubectl"), PLATFORM_KUBECTL);
@@ -17604,9 +17650,9 @@ fn platform_sh_case_8_names_the_image_of_each_bitnami_chart_and_what_its_pods_ru
     }
 }
 
-/// #700: `platform.sh up` builds wilma and waits until each pack of each add-on profile is ready.
-/// A pack that waits, or that Palette reports no status for, fails the check, and its line says
-/// why. With no file of pins, `up` stops before it applies.
+/// #700: `platform.sh up` resolves the images first, then builds wilma and waits until each pack
+/// of each add-on profile is ready. A pack that waits, or that Palette reports no status for,
+/// fails the check, and its line says why. With no file of pins, `up` stops before it applies.
 #[test]
 fn platform_sh_up_waits_until_each_pack_is_ready_and_names_each_pack_that_is_not() {
     let [cert_manager, _] = PLATFORM_BEHIND;
@@ -17614,7 +17660,7 @@ fn platform_sh_up_waits_until_each_pack_is_ready_and_names_each_pack_that_is_not
     let stage = platform_stage();
     let (o, steps) = stage.run("platform.sh", &["up"]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
-    passed(&steps, &["packs-ready"]);
+    passed(&steps, &["images", "packs-ready"]);
     let ready = std::fs::read_to_string(stage.path("out/packs-ready.out")).unwrap();
     assert!(
         ready.contains(&format!("ready {cert_manager}: WorkloadsReady")),
@@ -17661,6 +17707,75 @@ fn platform_sh_up_waits_until_each_pack_is_ready_and_names_each_pack_that_is_not
     );
     let tofu = std::fs::read_to_string(stage.path("tofu.log")).unwrap_or_default();
     assert!(!tofu.contains(" apply"), "{tofu}");
+}
+
+/// #700: `platform.sh images` asks crane for the digest of each image of the output `images` of a
+/// plan. It passes when each image resolves, applies nothing, and leaves no plan file. With images
+/// of `docker.io/bitnami` that crane does not resolve, `platform.sh up` stops before the apply. Its
+/// standard error names each image with the error of crane.
+#[test]
+fn platform_sh_images_passes_when_each_image_resolves_and_up_stops_when_one_does_not() {
+    let stage = platform_stage();
+    let (o, steps) = stage.run("platform.sh", &["images"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(&steps, &["images"]);
+    let out = std::fs::read_to_string(stage.path("out/images.out")).unwrap();
+    let images = platform_images("docker.io/bitnamilegacy");
+    for (pack, refs) in &images {
+        let image = refs[0].as_str().unwrap();
+        assert!(
+            out.contains(&format!("{pack}: {image} {IMAGE_DIGEST}")),
+            "{out}"
+        );
+    }
+    let crane = std::fs::read_to_string(stage.path("crane.log")).unwrap();
+    assert_eq!(crane.lines().count(), images.len(), "{crane}");
+    let tofu = stage.tofu_calls();
+    assert!(
+        tofu.contains(" plan ") && tofu.contains(" show -json "),
+        "{tofu}"
+    );
+    assert!(!tofu.contains(" apply"), "{tofu}");
+    let left: Vec<_> = std::fs::read_dir(stage.path("tmp")).unwrap().collect();
+    assert!(left.is_empty(), "the plan file stays: {left:?}");
+
+    let mut stage = platform_stage();
+    let gone = platform_images("docker.io/bitnami");
+    let missing: Vec<&str> = PLATFORM_BITNAMI
+        .iter()
+        .map(|pack| gone[*pack][0].as_str().unwrap())
+        .collect();
+    stage.env("FAKE_CRANE_MISSING", &missing.join(" "));
+    std::fs::write(stage.path("plan.json"), platform_plan(gone.clone())).unwrap();
+    let (o, steps) = stage.run("platform.sh", &["up"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["images"]);
+    assert!(!steps.contains("packs-ready"), "{steps}");
+    let stderr = text(&o.stderr);
+    for (pack, image) in PLATFORM_BITNAMI.iter().zip(&missing) {
+        let start = format!("does not resolve: {image}, of {pack}: ");
+        let line = stderr
+            .lines()
+            .find(|line| line.starts_with(&start))
+            .unwrap_or_else(|| panic!("{start}\n{stderr}"));
+        // the last line of the answer of the stand-in is the error, and not the warning before it
+        assert!(
+            line.contains("MANIFEST_UNKNOWN") && !line.contains("falling back"),
+            "{line}"
+        );
+    }
+    assert_eq!(
+        stderr.matches("does not resolve").count(),
+        missing.len(),
+        "{stderr}"
+    );
+    assert!(!stage.tofu_calls().contains(" apply"));
+    let [_, fail, _] = VERDICTS;
+    let summary = std::fs::read_to_string(stage.path("out/summary.md")).unwrap();
+    assert!(
+        summary.contains(&format!("| {fail} | `images` |")),
+        "{summary}"
+    );
 }
 
 /// #700: `platform.sh down` removes the add-on profiles from wilma first. Then it deletes each claim
