@@ -338,6 +338,12 @@ live-profiles: build
     examples/live/tf.sh init -input=false || exit 1
     examples/live/tf.sh apply -var cluster=false
 
+# Test the values of the Kubernetes pack that k8s_identity_provider gives, with mock providers: no request, and no cost (#915)
+[group('live checks')]
+live-values:
+    tofu -chdir=examples/live/terraform init -input=false
+    tofu -chdir=examples/live/terraform test
+
 # The platform cluster wilma (#700) has a state of its own, so live-up and live-down never touch it. It
 # runs the release profile of the lab, so live-profiles or live-up comes first, and live-down after
 # live-platform-down. With STRATA_LIVE_SECOND_PROJECT, the state also holds the workload cluster
@@ -751,7 +757,7 @@ live-tiers-narrow: build
 live-tiers-unknown-key: build
     examples/live/tiers.sh 9
 
-# The second user test (#838): what Palette answers to the keys of two users for a role binding of the system of cluster A. It also runs compare of a record with each key. Needs live-up and STRATA_LIVE_SECOND_KEY; reads only.
+# The second user test (#838): what Palette answers to the keys of two users for a role binding of the system of cluster A. It also runs compare of a record with each key. Needs live-up with k8s_identity_provider = "palette" (#915), and STRATA_LIVE_SECOND_KEY; reads only.
 [group('live checks')]
 live-tiers-second-key: build
     examples/live/tiers.sh 10

@@ -1353,10 +1353,12 @@ API, and removes it. It needs the example at its baseline with cluster A.
 - Stage 9 only reads. It makes a key of 400 characters that no tenant has, so
   it needs no other key. It runs only as `tiers.sh 9`.
 - Stage 10 only reads. It needs the key of a second user in
-  `STRATA_LIVE_SECOND_KEY`. That user is active, and has a role in the project
-  that gives `cluster.get`. Cluster A must have a role binding of the system.
-  The stage runs only as `tiers.sh 10`. With no key set, it says
-  `could not check` and exits `2`.
+  `STRATA_LIVE_SECOND_KEY`: an active user with a role in the project that
+  gives `cluster.get`. Cluster A must have a role binding of the system. For
+  this, cluster A needs a setting of its own, beside a setting of the tenant
+  (#915). Put `k8s_identity_provider = "palette"` in `terraform.tfvars` before
+  `just live-up`. The stage runs only as `tiers.sh 10`, and with no key set, it
+  says `could not check` and exits `2`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|

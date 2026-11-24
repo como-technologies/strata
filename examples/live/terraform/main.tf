@@ -22,9 +22,18 @@ locals {
   profile_name = "${var.name_prefix}-profile"
   tags         = ["purpose:strata-live-example", "managed-by:opentofu"]
 
+  # With k8s_identity_provider, the Kubernetes pack names that identity provider in 1.0.0, 1.0.1,
+  # and each other version that copies the packs of 1.0.0. The parameter identityProvider of the
+  # pack keeps its value at pack.palette.config.dashboard.identityProvider. The values of the pack
+  # do not have that key. So the edit adds four lines under the line "pack:", and changes no other
+  # line (#915).
+  k8s_identity_lines = "  palette:\n    config:\n      dashboard:\n        identityProvider: ${var.k8s_identity_provider}\n"
+  k8s_values = var.k8s_identity_provider == "" ? data.spectrocloud_pack.k8s.values : replace(
+    data.spectrocloud_pack.k8s.values, "/(?m)^pack:\n/", "pack:\n${local.k8s_identity_lines}"
+  )
   release_packs = [
     for p in [data.spectrocloud_pack.os, data.spectrocloud_pack.k8s, data.spectrocloud_pack.cni, data.spectrocloud_pack.csi] :
-    { name = p.name, tag = p.version, uid = p.id, values = p.values }
+    { name = p.name, tag = p.version, uid = p.id, values = p.name == data.spectrocloud_pack.k8s.name ? local.k8s_values : p.values }
   ]
   # The packs of version 1.0.0. With move_os_registry, the OS pack comes from move_registry_name
   # at the same version, with the same values (registry-move-nodes.sh, #135).
@@ -39,9 +48,9 @@ locals {
   # With next_variable_in_values, a kubeadm command of the Kubernetes pack of 1.0.1 reads the
   # profile variable strata_mode in place of its 600 (repave.sh, stage 8). The default of the
   # variable is 600, so the command that it gives is the command of 1.0.0.
-  next_k8s_values = var.next_variable_in_values ? replace(data.spectrocloud_pack.k8s.values,
+  next_k8s_values = var.next_variable_in_values ? replace(local.k8s_values,
     "chmod 600 /var/lib/kubelet/config.yaml", "chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml"
-  ) : data.spectrocloud_pack.k8s.values
+  ) : local.k8s_values
   next_packs = [
     for p in local.release_packs :
     p.name == data.spectrocloud_pack.csi.name ? merge(p, { values = local.next_csi_values }) : (
@@ -134,6 +143,12 @@ resource "spectrocloud_cluster_profile" "release" {
 
   lifecycle {
     create_before_destroy = true
+    # The edit of k8s_values needs the line "pack:" in the values of the pack, and no key palette
+    # under it.
+    precondition {
+      condition     = var.k8s_identity_provider == "" || try(yamldecode(local.k8s_values).pack.palette.config.dashboard.identityProvider, "") == var.k8s_identity_provider
+      error_message = "k8s_identity_provider sets no pack.palette.config.dashboard.identityProvider: the values of the Kubernetes pack have no line \"pack:\", or have a key palette under it."
+    }
   }
 }
 

@@ -120,6 +120,18 @@ variable "csi_version" {
   default     = ""
 }
 
+# The setting of the cluster of stage 10 of tiers.sh (#915). That cluster needs this setting of its
+# own, beside a setting of the tenant. Build it with k8s_identity_provider = "palette".
+variable "k8s_identity_provider" {
+  description = "The identity provider that the Kubernetes pack of 1.0.0 and 1.0.1 names, such as palette; empty keeps the values of the pack"
+  type        = string
+  default     = ""
+  validation {
+    condition     = can(regex("^[a-z]*$", var.k8s_identity_provider))
+    error_message = "k8s_identity_provider is empty, or a name in lowercase letters, such as palette."
+  }
+}
+
 # The registries profile. verify.sh reads each pack's digest from its registry as well as from
 # Palette, so the machine running it needs read access to both registries.
 variable "helm_registry_name" {

@@ -44,7 +44,9 @@
 #      The stage records both answers, a record of cluster A with each key, and compare of the two
 #      records: the policy tier is the same, and each record names the bindings of the system that
 #      its key reads, outside the hash. It writes nothing. `tiers.sh 10` runs it alone, and no
-#      other FROM_STAGE runs it. With no variable set, it says "could not check" and exits 2
+#      other FROM_STAGE runs it. With no variable set, it says "could not check" and exits 2.
+#      Cluster A needs a setting of its own for the binding, beside a setting of the tenant: build
+#      it with k8s_identity_provider = "palette" in terraform.tfvars (#915)
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
 # jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5 to 10
