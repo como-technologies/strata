@@ -1034,6 +1034,23 @@ fn the_facts_that_the_second_live_window_of_wave_18_shows_name_its_checks_under_
     name_under_live(shown);
 }
 
+/// The third live window of Wave 18 ran stage 10 of tiers.sh (#915). The fact that it shows names
+/// its checks under `live`, and gives no `unchecked` reason. No reason of another fact names one of
+/// them.
+#[test]
+fn the_facts_that_the_third_live_window_of_wave_18_shows_name_its_checks_under_live() {
+    let shown: &[(&str, &[&str])] = &[(
+        "cluster-system-rbacs-user",
+        &[
+            "tiers.sh:second-system",
+            "tiers.sh:second-own-subject",
+            "tiers.sh:second-system-differs",
+            "tiers.sh:second-others-same",
+        ],
+    )];
+    name_under_live(shown);
+}
+
 /// Each fact of `shown` names each of its checks under `live`, and gives no `unchecked` reason. No
 /// `unchecked` reason of a fact names one of the checks.
 fn name_under_live(shown: &[(&str, &[&str])]) {

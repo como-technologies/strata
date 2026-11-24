@@ -3156,7 +3156,6 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
                 "The cluster listing answers HTTP 500 with `ResourceAccessDenied`, and the profile listing gives the profiles.",
                 "The stage also shows that an added profile goes to the end when the `PUT` gives it first.",
                 "show that Palette answers the search of each project of the tenant listing.",
-                "The code of Palette shows it; no live run shows it yet. Stage 10 of",
             ],
             &[
                 "a message that names `cluster.get`. The code of Palette shows it; no live run shows it yet.",
@@ -3168,10 +3167,7 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
         ),
         (
             PALETTE_LIMITS_PAGE,
-            &[
-                "A run shows that answer only for the cluster listing:",
-                "reads such a cluster with two keys, and has no result yet.",
-            ],
+            &["A run shows that answer only for the cluster listing:"],
             &[
                 "reads the three routes with such a key, and has no result yet.",
                 "runs `strata list` with such a key, and has no result yet.",
@@ -3464,6 +3460,63 @@ fn the_pages_state_the_results_of_the_second_live_window_of_wave_18() {
             OBSERVER_PAGES[0],
             &["A live run shows that Palette gives no condition and no event for it: see"],
             &["No run shows what Palette does with it: see"],
+        ),
+    ];
+    pages_say(&pages);
+}
+
+/// The third live window of Wave 18 ran stage 10 of `tiers.sh` (#915). The row of each check of
+/// the stage gives its result. `clusters.md` states what the run shows, and `limits.md` no longer
+/// lists it.
+#[test]
+fn the_pages_state_the_results_of_the_third_live_window_of_wave_18() {
+    let passed = [
+        "| `second-first`, ",
+        "| `second-system` |",
+        "| `second-own-subject` |",
+        "| `second-system-differs` |",
+        "| `second-others-same` |",
+        "| `second-record-first`, ",
+        "| `second-policy-same` |",
+        "| `second-system-recorded` |",
+    ];
+    rows_say(&passed, LIVE_RUN_PASSED);
+    // the result of each check with `?`
+    let others = [
+        (
+            "| `second-system-first`, ",
+            "Its role is `cluster-admin` for the key of the example, and `view` for the second key.",
+        ),
+        (
+            "| `second-compare`, ",
+            "In a live run, `second-policy` gave `same`.",
+        ),
+    ];
+    for (start, result) in others {
+        rows_say(&[start], result);
+    }
+    // the rows above are each row of the stage
+    let runs = read(&docs().join(LIVE_RUNS_PAGE));
+    let rows = runs.lines().filter(|l| l.starts_with("| `second-")).count();
+    assert_eq!(rows, passed.len() + others.len());
+    // each page, the words of the result, and the words that are gone
+    let pages: [(&str, &[&str], &[&str]); 2] = [
+        (
+            PALETTE_CLUSTERS_PAGE,
+            &[
+                "So the keys of two users get different bindings for one",
+                "see [Two keys and a role binding of the system](#two-keys-and-a-role-binding-of-the-system).",
+                "that item holds one binding with one subject, the user of the key.",
+                "The role of the binding is `cluster-admin` for the key of the example, and `view` for the second key.",
+                "The other bindings are the same in the two answers.",
+                "So the policy tier of the two records is the same",
+            ],
+            &["Palette shows it; no live run shows it yet. Stage 10 of"],
+        ),
+        (
+            PALETTE_LIMITS_PAGE,
+            &[],
+            &["The answer of `config/rbacs` to the keys of two users"],
         ),
     ];
     pages_say(&pages);

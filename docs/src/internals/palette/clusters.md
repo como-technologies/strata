@@ -61,12 +61,10 @@ itself. A cluster on AWS gives these fields:
 - An item of the bindings route with `spec.isSystem` true is a role binding of
   the system. In such an item, each binding holds only the subject that is the
   user of the key. The answer drops a binding with no such subject, and keeps
-  the item. This is true for each key, also the key of a tenant admin. So the
-  keys of two users can get different bindings for one cluster. The code of
-  Palette shows it; no live run shows it yet. Stage 10 of
-  [tiers.sh](../../development/live-runs.md#tierssh) reads the bindings of one
-  cluster with the keys of two users. Strata keeps each such binding out of
-  the hash of the policy tier: see
+  the item. So the keys of two users get different bindings for one cluster:
+  see [Two keys and a role binding of the system](#two-keys-and-a-role-binding-of-the-system).
+  The code of Palette shows that this is true also for the key of a tenant
+  admin. Strata keeps each such binding out of the hash of the policy tier: see
   [A role binding of the system](../../commands/snapshot/cluster.md#a-role-binding-of-the-system).
 - Palette takes an edit of the subjects of a binding through
   `PUT /v1/spectroclusters/{uid}/config/rbacs`, and the bindings route then
@@ -127,6 +125,27 @@ Strata records these as tiers: see
 [More of the cluster than its release](../../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
 It omits the times and the conditions, which change with no change of the
 cluster. Between two clusters, the `applied` tier compares `spcInfraHash` alone.
+
+## Two keys and a role binding of the system
+
+Stage 10 of [tiers.sh](../../development/live-runs.md#tierssh) reads the role
+bindings of cluster A with the key of the example and with a second key. The
+user of the second key has the role Project Viewer in the project. For a role
+binding of the system, cluster A needs a setting of its own, beside a setting
+of the tenant. The variable `k8s_identity_provider` of the live example gives
+the setting of the cluster: see
+[Prerequisites](../../development/live-example.md#prerequisites).
+
+Both keys get HTTP 200, and each answer has a role binding of the system. In
+each answer, that item holds one binding with one subject, the user of the key.
+The role of the binding is `cluster-admin` for the key of the example, and
+`view` for the second key. So each key reads only its own binding of the
+system. The other bindings are the same in the two answers.
+
+Each record of cluster A keeps the binding of the system out of the hash of the
+policy tier. It names the binding in `systemRbacs`. So the policy tier of the
+two records is the same: see
+[A role binding of the system](../../commands/snapshot/cluster.md#a-role-binding-of-the-system).
 
 ## Cluster copies
 

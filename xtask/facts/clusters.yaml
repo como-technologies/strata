@@ -969,6 +969,30 @@ facts:
       - src/snapshot/cluster.rs
       - src/diff/cluster.rs
 
+  # ---- clusters.md: Two keys and a role binding of the system
+
+  - id: cluster-system-rbacs-user
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.isSystem
+        - items[].spec.bindings[].subjects
+    stand_in:
+      - v1/spectroclusters/{uid}/config/rbacs
+    live:
+      - tiers.sh:second-system
+      - tiers.sh:second-own-subject
+      - tiers.sh:second-system-differs
+      - tiers.sh:second-others-same
+    pages:
+      - internals/palette/clusters.md#two-keys-and-a-role-binding-of-the-system
+      - internals/palette/clusters.md#cluster-tiers
+      - reference/palette-api.md#a-cluster
+      - development/live-runs.md#tierssh
+      - commands/snapshot/cluster.md#a-role-binding-of-the-system
+    code:
+      - src/snapshot/policy.rs
+
   # ---- clusters.md: Cluster copies
 
   - id: cluster-copy-own
