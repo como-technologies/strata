@@ -497,8 +497,8 @@ them in this way:
   value that the fact and the stand-in name. The script updates the issue while the value is there.
   It closes the issue with a comment when the run checked the fact and found no new value.
 - A skipped fact and a fact that the run could not check keep their issues as they are.
-- A new release has one issue, "Prove the facts again on" the repository and the tag. A person
-  closes it.
+- A new release has one issue, "Prove the facts again on" the repository and the tag. Its body
+  links [What to do with a new release](#what-to-do-with-a-new-release). A person closes it.
 
 Each body ends with the criteria of the issue: the line `Done when:` and its items. Each issue of
 strata has such a line: see [The issue](./changes.md#the-issue). The items are these:

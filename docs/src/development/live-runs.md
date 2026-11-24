@@ -2122,9 +2122,11 @@ wait: its object in Palette keeps its finalizer. So step 4 runs only with
 `EKS_POOL_CHANGE=1`, and a cluster after it needs the recovery of
 [An EKS cluster](./live-example.md#an-eks-cluster).
 
-Provider 0.30.1 does not read `cloud_config.azs` of an EKS cluster back, and
-`azs` forces a new resource. So each plan after the create replaces the
-cluster. `cloud-eks.tf` ignores the field.
+A live run of provider 0.30.1 shows that the provider does not read
+`cloud_config.azs` of an EKS cluster back. The field `azs` forces a new
+resource, so each plan after the create replaces the cluster. `cloud-eks.tf`
+ignores the field. The code of 0.30.7 does not read it either. `eks.sh` has no
+result on 0.30.7: see [The release of the provider](#the-release-of-the-provider).
 
 ## gke.sh
 
@@ -2693,45 +2695,30 @@ create itself breaks it. The two new rules find the risk before the create. See
 
 ## The release of the provider
 
-The live example pins the Spectro Cloud provider at 0.30.7. The results on
-this page come from earlier releases. On 0.30.7, the facts below have no
-result yet: no live window ran on it. The code of 0.30.7 shows each fact as an
-earlier run showed it. The item of `provider-timeout-success` adds a new
-behavior of the code.
+The live example pins the Spectro Cloud provider at 0.30.7. A live window ran
+the example and the scripts of the facts below on 0.30.7, on AWS alone. No fact
+of Palette changed on this release. After the window, the inventory found no
+object of the example.
 [What to do with a new release](./facts.md#what-to-do-with-a-new-release)
-says how to add the facts of a release to this list.
+says how to add the facts of a release to this table.
 
 These facts depend on what the provider sends, plans, or keeps in its state:
 
-- The build and the baseline. `just live-up` builds the example through the
-  provider. `baseline.sh` checks that a plan with the default variables
-  changes nothing.
-- `version-bump-flag` and `version-bump-clone`: `in-place.sh on` and
-  `in-place.sh off`. The checks `plan-no-change` and `plan-edit` record what
-  the provider plans.
-- `version-bump-skip-destroy`: each script that applies with the flag on runs
-  `hold_versions` first. No check bumps a version without it.
-- `version-own-state` and `version-string-as-given`: `version-states.sh`, with
-  the module `terraform-version/`.
-- `cluster-variable-change` and `delete-in-progress`: `cluster.sh`. It sets a
-  variable of the add-on profile through the provider. The check
-  `state-has-no-cluster` reads the state after the delete.
-- `tags-are-labels`: `fleet.sh`.
-- `cluster-group-config` and `cluster-group-limit-units`: `cluster-group.sh`.
-  It changes the CPU limit of the group through the provider.
-- `template-lock-cluster-create`, `template-cluster-document`, and
-  `template-cluster-time-zone`: `template.sh`. It makes the template and a
-  cluster in it through the provider.
-- `tag-stored-as-authored`: `tag-only.sh`.
-- The rule `provider-eks-azs`: `eks.sh`. The code of 0.30.7 does not read
-  `cloud_config.azs` back either, so `cloud-eks.tf` still ignores the field.
-- The rule `provider-timeout-success`: `preflight-plan.sh` and `gke.sh`. From
-  provider 0.30.6, a pack in the state `Error` during the create also ends the
-  apply with a warning and success. The code of the provider shows it; no live
-  run shows it yet.
-- The platform cluster: `platform.sh`, with the module `terraform-platform/`.
-  It reads the release profile of the example, so it runs before a step that
-  destroys the example, such as `preflight-plan.sh --down`.
+| Fact or rule | Live script | Result on 0.30.7 |
+|---|---|---|
+| The build and the baseline | `just live-up` builds the example through the provider. `baseline.sh` checks that a plan with the default variables changes nothing. `just live-profiles` builds the profiles again, with no cluster. | A live run passed. `just live-up` built the example and cluster A, with Kubernetes 1.35.8. The plan of `baseline.sh` changed nothing. `just live-profiles` built the profiles again, and each check of its `preflight.sh` passed. |
+| `version-bump-flag`, `version-bump-clone` | `in-place.sh off` and `in-place.sh on`. The checks `plan-no-change` and `plan-edit` record what the provider plans. | A live run passed: each check of `just live-session` passed. The recipe runs `verify.sh`, `in-place.sh off` and `on`, and `registry-move.sh`. `verify.sh` passed 39 of 39. |
+| `version-bump-skip-destroy` | Each script that applies with the flag on runs `hold_versions` first. No check bumps a version without it. | A live run passed: `in-place.sh on` runs `hold_versions`, and then bumps the add-on version with the flag on. The code of 0.30.7 still deletes a replaced version with the `skip_destroy` value of its state. |
+| `version-own-state`, `version-string-as-given` | `version-states.sh`, with the module `terraform-version/` | A live run passed: 32 checks passed, and 0 failed. |
+| `cluster-variable-change`, `delete-in-progress` | `cluster.sh`. It sets a variable of the add-on profile through the provider. The check `state-has-no-cluster` reads the state after the delete. | 28 checks passed, and 2 failed. `audit-records-change` and `audit-says` failed by faults of the test, not of the provider or of Palette (#970). The audit route gives 100 entries at most, and the log of cluster A held more. Also, a newer entry came after the change. The fact holds: after the update, the audit log of cluster A has the entry of the change of the variables. Each check of `delete-in-progress` passed. |
+| `tags-are-labels` | `fleet.sh` | A live run passed: 27 checks passed, and 0 failed. |
+| `cluster-group-config`, `cluster-group-limit-units` | `cluster-group.sh`. It changes the CPU limit of the group through the provider. | No result on 0.30.7: the virtual cluster of the group did not reach `Running` on cluster A. The cause is on the side of Palette, not in the provider or in strata. A live window on an earlier release passed the script. |
+| `template-lock-cluster-create`, `template-cluster-document`, `template-cluster-time-zone` | `template.sh`. It makes the template and a cluster in it through the provider. | A live run passed: 39 checks passed, and 0 failed. |
+| `tag-stored-as-authored` | `tag-only.sh` | A live run passed: 32 checks passed, and 0 failed. |
+| The rule `provider-eks-azs` | `eks.sh`, with `cloud = "eks"`. The code of 0.30.7 does not read `cloud_config.azs` back either, so `cloud-eks.tf` still ignores the field. | No result on 0.30.7: the window ran on AWS alone. |
+| The rule `provider-timeout-success` | `preflight-plan.sh aws --build`, and `gke.sh` | A live run passed: `preflight-plan.sh aws --build --down` passed 31 checks, and failed 0. No pack went into the state `Error`. From provider 0.30.6, such a pack also ends the apply with a warning and success. The code of the provider shows it; no live run shows it yet. `gke.sh` has no result on 0.30.7: the window ran on AWS alone. |
+| The platform cluster | `platform.sh`, with the module `terraform-platform/`. It reads the release profile of the example, so it runs before a step that destroys the example, such as `preflight-plan.sh --down`. | No result on 0.30.7: four packs of the Bitnami registry pull images that Docker Hub no longer serves (#700). |
+| The standing profiles of the contract | `contract-profiles.sh up` plans against the state of the profiles. | A live run gave a plan that adds and destroys nothing. It changes one text of the add-on manifest, because the example changed after the profiles were made. So the provider reads the standing profiles. |
 
 The window does not run the checks of two facts, because their result does not
 depend on the provider. For `cluster-profile-order-append`, `order.sh 4` sends

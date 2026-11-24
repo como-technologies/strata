@@ -140,7 +140,9 @@ else
   [ -n "$repo" ] || note "dry run: the project is unknown, so the links name OWNER/REPO; pass --repo"
 fi
 
-page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/facts.md#the-weekly-contract-run"
+# the page of the facts in the book, and the section of each kind of issue on it
+facts_page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/facts.md"
+page="$facts_page#the-weekly-contract-run"
 
 # issue_for MARKER -> the lowest open issue number whose body starts with MARKER
 issue_for() {
@@ -207,7 +209,7 @@ open_or_update() {
 }
 
 # ---- the unknown values ------------------------------------------------------------------------
-values_page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/facts.md#what-to-do-with-a-new-value"
+values_page="$facts_page#what-to-do-with-a-new-value"
 
 # values_issues ID ENTRY: open or update one issue for each closed set of the fact ID. The set must
 # hold a value that neither the fact nor the stand-in names. For each set that holds no such value
@@ -351,6 +353,7 @@ done 3< <(jq -c '.facts[]' "$document")
 use_label request
 
 # ---- the releases ------------------------------------------------------------------------------
+release_page="$facts_page#what-to-do-with-a-new-release"
 news=0 release_errors=0
 while IFS= read -r release <&3; do
   repository=$(jq -r .repo <<<"$release")
@@ -365,7 +368,7 @@ while IFS= read -r release <&3; do
 $marker
 The latest release of \`$repository\` is \`$tag\`. The last contract run saw \`$seen\`. The contract run of $checked found the new tag.
 
-A new release can change what Palette does. Prove the facts of Palette again on this release. [The weekly contract run]($page) says how. Close this issue when the facts hold on the release.
+A new release can change what Palette does. Prove the facts of Palette again on this release. [What to do with a new release]($release_page) says how. Close this issue when the facts hold on the release.
 
 $done_when
 

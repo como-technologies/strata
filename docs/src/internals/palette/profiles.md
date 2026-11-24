@@ -326,9 +326,9 @@ Palette lists.
 
 With the flag on, set `skip_destroy` on each profile **before** the first bump.
 A flag-on bump replaces the profile resource. The provider deletes the replaced
-version with the `skip_destroy` value already in its state, not the new value
-(provider 0.30.1). Without it, the bump asks Palette to delete the version that
-a cluster runs.
+version with the `skip_destroy` value already in its state, not the new value.
+A live run of provider 0.30.1 shows it, and the code of 0.30.7 does the same.
+Without it, the bump asks Palette to delete the version that a cluster runs.
 
 Each version in a state of its own is the other way to keep a version, with no
 flag. A new version is a new resource with a uid of its own, and the state of
