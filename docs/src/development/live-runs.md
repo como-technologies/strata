@@ -2050,11 +2050,11 @@ the Bitnami packs.
 | `move-compare-cluster`, `move-compare-records` | ? | #700: case 3. What `compare` says of the record of `wilma` before the move, with `cluster:wilma` and with the record after the move. No result yet: no live window ran platform.sh. |
 | `move-back` | 0 | #700: case 3. `wilma` runs the baseline again, and each pack is ready. No result yet: no live window ran platform.sh. |
 | `domain-observer-on`, `domain-observer-off` | 0 | #700: case 4. The observer runs on `wilma` for the case, and then leaves it. No result yet: no live window ran platform.sh. |
-| `domain-set` | 0 | #700: case 4. `wilma` gives the variable `domain` another value in the four profiles that declare it. No result yet: no live window ran platform.sh. |
-| `domain-variables` | 0 | #700: case 4. The variables route of `wilma` gives that value to the variable `domain` of each of the four profiles. No result yet: no live window ran platform.sh. |
+| `domain-set` | 0 | #700: case 4. `wilma` gives the variable `domain` another value in the five profiles that declare it. No result yet: no live window ran platform.sh. |
+| `domain-variables` | 0 | #700: case 4. The variables route of `wilma` gives that value to the variable `domain` of each of the five profiles. No result yet: no live window ran platform.sh. |
 | `domain-record` | 0 | #700: case 4. A record of `wilma` with the new value. No result yet: no live window ran platform.sh. |
-| `domain-compare`, `domain-verify` | ? | #700: case 4. What `compare` says of the records of `wilma` before and after, and what `verify` says of the records of the four profiles. No result yet: no live window ran platform.sh. |
-| `domain-observer` | ? | #700: case 4. What the page of the observer says of the four profiles after two content cycles. No result yet: no live window ran platform.sh. |
+| `domain-compare`, `domain-verify` | ? | #700: case 4. What `compare` says of the records of `wilma` before and after, and what `verify` says of the records of the five profiles. No result yet: no live window ran platform.sh. |
+| `domain-observer` | ? | #700: case 4. What the page of the observer says of the five profiles after two content cycles. No result yet: no live window ran platform.sh. |
 | `domain-back` | 0 | #700: case 4. `wilma` gives the default again. No result yet: no live window ran platform.sh. |
 | `behind-scale` | ? | #700: case 5. `behind` on the records of the seven profiles, behind `count-requests`: the requests, the seconds, the pins, the pins behind, and the routes that took most. No result yet: no live window ran platform.sh. |
 | `behind-rows` | 0 | #700: case 5. `behind` names a newer version for each pin that `just live-platform-pins` wrote one version behind. No result yet: no live window ran platform.sh. |

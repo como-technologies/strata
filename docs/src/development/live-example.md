@@ -56,7 +56,7 @@ show.
 | `eks.sh` | On an EKS cluster: the release and its packs, the shape tier of a managed node group, the repave answer of Palette for each layer and for a Kubernetes bump, and a change of the node group (#89). It needs `cloud = "eks"` and cluster A. |
 | `gke.sh` | On a GKE cluster: the release and its packs, the shape tier of a node pool, the repave answer of Palette for a Kubernetes bump, and, with `GKE_POOL_CHANGE=1`, a change of the node pool (#90). It needs `cloud = "gke"` and cluster A. |
 | `version-states.sh` | One state per version with no feature preview flag, a destroy that a cluster in use refuses, a version that is gone, and the version strings that Palette stores (#81). It builds its own profile in `terraform-version/`, and needs cluster A. |
-| `platform.sh` | The platform cluster `wilma` (#700): seven add-on profiles with 14 community packs, and drift and diff where the profiles cross. Its eight cases: an edit in one profile, one pack in two profiles, a pack that moves to another profile, a variable of four profiles, `behind` at scale, glue that breaks, the observer at scale, and the Bitnami images. It needs `just live-platform-up`: see [The platform cluster](#the-platform-cluster). |
+| `platform.sh` | The platform cluster `wilma` (#700): seven add-on profiles with 14 community packs, and drift and diff where the profiles cross. Its eight cases: an edit in one profile, one pack in two profiles, a pack that moves to another profile, a variable of five profiles, `behind` at scale, glue that breaks, the observer at scale, and the Bitnami images. It needs `just live-platform-up`: see [The platform cluster](#the-platform-cluster). |
 
 The example runs on AWS or GCP instances, or on EKS or GKE: the variable `cloud` in
 `terraform.tfvars` selects one. Strata makes no rule about which cloud runs the
@@ -440,7 +440,7 @@ live-platform-down`.
 
 | Resource | What it is |
 | --- | --- |
-| profile `wilma-security` 1.0.0 | cert-manager, vault, external-secrets-operator, and kyverno. The glue: a CA of cert-manager and its `ClusterIssuer`, a `ClusterSecretStore` that reads Vault, and a Kyverno policy in `Audit` mode. Vault runs in dev mode, so its pod is ready. |
+| profile `wilma-security` 1.0.0 | cert-manager, vault, external-secrets-operator, and kyverno. The glue: a CA of cert-manager and its `ClusterIssuer`, a `ClusterSecretStore` that reads Vault, a Kyverno policy in `Audit` mode, and the route of Vault. Vault runs in dev mode, so its pod is ready. |
 | profile `wilma-network` 1.0.0 | envoy-gateway and external-dns. The glue: a `GatewayClass` whose Service has the type `ClusterIP`, a wildcard certificate, and the `Gateway`. external-dns writes the records of the routes to the private zone. |
 | profile `wilma-data` 1.0.0 | cloudnative-pg. |
 | profile `wilma-identity` 1.0.0 | keycloak. The glue: the certificate of Keycloak, its route, and a `Cluster` of cloudnative-pg, the database of Keycloak. Keycloak installs after the glue. |
@@ -456,9 +456,10 @@ Each profile also has a manifest layer with the glue of its team, and a
 of glue has the install priority `10`, so it installs after the CRDs of each
 pack. Keycloak has the priority `20`, so its database is there first: see [The
 install order of the packs of two add-on
-profiles](../internals/palette/limits.md#what-no-run-covers). Four profiles
-declare the profile variable `domain`: `wilma-network`, `wilma-identity`,
-`wilma-gitops`, and `wilma-observability`.
+profiles](../internals/palette/limits.md#what-no-run-covers). Five profiles
+declare the profile variable `domain`: `wilma-security`, `wilma-network`,
+`wilma-identity`, `wilma-gitops`, and `wilma-observability`. Each profile whose
+glue names `domain` declares it: `just live-platform-values` tests this.
 
 `terraform-platform/terraform.tfvars` holds the pin of each pack: its registry,
 its version, and its type. The file is not tracked. `just live-platform-pins`

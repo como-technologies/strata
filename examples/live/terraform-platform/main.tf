@@ -31,8 +31,9 @@ locals {
     observability = ["prometheus-operator", "grafana", "loki", "fluentbit"]
     control       = ["crossplane"]
   }
-  # The profiles that declare the profile variable domain.
-  domain_teams = ["network", "identity", "gitops", "observability"]
+  # The profiles that declare the profile variable domain: each profile whose glue names it, as
+  # tests/values.tftest.hcl shows.
+  domain_teams = ["security", "network", "identity", "gitops", "observability"]
   # A manifest layer of glue installs after each pack of priority 0, because it needs their CRDs.
   # Keycloak installs after the glue, because the glue makes its database. A pack waits for each
   # pack of a lower priority.

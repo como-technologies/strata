@@ -14,7 +14,7 @@
 #   1  an edit in one profile: verify gives a finding for that record only
 #   2  one pack in two profiles: what Palette answers, and what strata says
 #   3  a pack that moves to another profile: the roots, same-release, and compare
-#   4  a variable of four profiles that the cluster changes: snapshot, compare, and the observer
+#   4  a variable of five profiles that the cluster changes: snapshot, compare, and the observer
 #   5  behind at scale: the requests, the time, and the pins behind
 #   6  the glue breaks: the CRD of a Cluster goes with the profile of its operator
 #   7  the observer at scale: the requests of a cycle, the memory, the text limit, and the images
@@ -188,7 +188,7 @@ move_roots() {
 }
 
 # domain_variables VALUE: the variables route of wilma gives VALUE to the variable domain of each of
-# the four profiles. The output is each variable domain with its value.
+# the five profiles. The output is each variable domain with its value.
 domain_variables() {
   "$live/api.sh" get "/v1/spectroclusters/$W/variables" > domain-variables.json || return 1
   jq -c '[.. | objects | select(.name? == "domain") | {name, value}]' domain-variables.json
@@ -204,7 +204,7 @@ observer_on() {
 observer_off() { "$live/observer-up.sh" down --cluster "$name" && observer= && save observer ""; }
 ns=strata-observer
 port=${PORT:-18080}
-# observer_after_cycles: the page of the four profiles after two content cycles of one minute
+# observer_after_cycles: the page of the five profiles after two content cycles of one minute
 observer_after_cycles() {
   sleep 150
   pf_start || return 1
@@ -557,22 +557,22 @@ if case_stage 3 "a pack that moves to another profile"; then
   check move-back 0 "#700: $name runs the baseline again, and each pack is ready" -- baseline_ready
 fi
 
-if case_stage 4 "a variable of four profiles"; then
+if case_stage 4 "a variable of five profiles"; then
   records_ready
   value=edited.$(out domain)
   check domain-observer-on 0 "#700: the observer runs on $name" -- observer_on
   failed_before=$failures
-  check domain-set 0 "#700: $name gives the variable domain the value $value in the four profiles" -- \
+  check domain-set 0 "#700: $name gives the variable domain the value $value in the five profiles" -- \
     apply_case -var "cluster_domain=$value"
   if [ "$failures" = "$failed_before" ]; then
-    check domain-variables 0 "#700: the variables route of $name gives $value to the variable domain of each of the four profiles" -- \
+    check domain-variables 0 "#700: the variables route of $name gives $value to the variable domain of each of the five profiles" -- \
       domain_variables "$value"
     check domain-record 0 "#700: a record of $name with the new value" -- "$strata" snapshot "cluster:$W" -o records/cluster-domain.json -q
-    check domain-compare ? "#700: compare of the records of $name before and after, for the four profiles" -- \
+    check domain-compare ? "#700: compare of the records of $name before and after, for the five profiles" -- \
       "$strata" compare records/cluster.json records/cluster-domain.json
-    check domain-verify ? '#700: verify of the records of the four profiles: their content did not change' -- \
+    check domain-verify ? '#700: verify of the records of the five profiles: their content did not change' -- \
       verify_teams $(out domain_teams | jq -r '.[]')
-    check domain-observer ? '#700: what the page of the observer says of the four profiles after two content cycles' -- \
+    check domain-observer ? '#700: what the page of the observer says of the five profiles after two content cycles' -- \
       observer_after_cycles
   fi
   check domain-back 0 "#700: $name gives the default again" -- apply_defaults

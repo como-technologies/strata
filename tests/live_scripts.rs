@@ -17354,15 +17354,16 @@ fn platform_sh_case_3_moves_fluentbit_and_gives_the_root_of_each_record() {
 }
 
 /// #700: case 4 gives the variable `domain` another value on wilma, through OpenTofu. The
-/// variables route must give the value to each of the four profiles. A route that gives it to
-/// three fails the check.
+/// variables route must give the value to each profile of `domain_teams` in `main.tf`. A route
+/// that gives it to one profile less fails the check.
 #[test]
-fn platform_sh_case_4_gives_the_variable_domain_a_value_in_the_four_profiles() {
+fn platform_sh_case_4_gives_the_variable_domain_a_value_in_each_profile_that_declares_it() {
     let value = "edited.wilma.strata-live.internal";
-    let variables = |teams: usize| {
+    let teams = platform_domain_teams().len();
+    let variables = |profiles: usize| {
         let entries: Vec<serde_json::Value> = platform_domain_teams()
             .iter()
-            .take(teams)
+            .take(profiles)
             .map(|team| {
                 serde_json::json!({"profileUid": format!("t-{team}"),
                     "variables": [{"name": "domain", "value": value}]})
@@ -17371,7 +17372,7 @@ fn platform_sh_case_4_gives_the_variable_domain_a_value_in_the_four_profiles() {
         serde_json::json!({"variables": entries}).to_string()
     };
     let stage = platform_stage();
-    stage.route(&cluster_variables_route("w-1"), &variables(4));
+    stage.route(&cluster_variables_route("w-1"), &variables(teams));
     stage.route("/v1/profiles", r#"{"profiles":[{"name":"wilma-network@1.0.0","status":"ok","clusterCopy":{"status":"same"}}]}"#);
     stage.route("/v1/findings", r#"{"findings":[]}"#);
     let (o, steps) = stage.run("platform.sh", &["4"]);
@@ -17403,7 +17404,7 @@ fn platform_sh_case_4_gives_the_variable_domain_a_value_in_the_four_profiles() {
     );
 
     let stage = platform_stage();
-    stage.route(&cluster_variables_route("w-1"), &variables(3));
+    stage.route(&cluster_variables_route("w-1"), &variables(teams - 1));
     let (_, steps) = stage.run("platform.sh", &["4"]);
     failed(&steps, &["domain-variables"]);
 }
