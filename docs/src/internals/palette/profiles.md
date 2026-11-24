@@ -703,10 +703,12 @@ For a sensitive variable, the variables route gives `********` in place of a
 default value that is not empty. See [The variables route](#the-variables-route).
 At the update, Palette takes the default value that the profile holds. So strata
 reads `********` as a default value at a move, and does not name the variable.
-The code of Palette shows it; no live run shows it yet.
-[masked-default.sh](../../development/live-runs.md#masked-defaultsh) moves
-cluster A to such a version with no value for the variable, and reads what the
-cluster then holds.
+
+A live run of [masked-default.sh](../../development/live-runs.md#masked-defaultsh)
+shows it. The run moves cluster A to such a version with no value for the
+variable. Palette takes the update with HTTP 204, and does not refuse it with
+`InvalidVariable`. The ConfigMap inside the cluster then holds the default value
+of the profile, and not the mask.
 
 A pack can also declare an upgrade window, such as `kubernetes` of the Public
 Repo. The validate routes check the window, and the update refuses a move above
@@ -795,9 +797,12 @@ The route gives `********` in place of a secret of a sensitive variable:
 | Sensitive, not a dropdown, with no default value | `""` | as it is |
 | Sensitive dropdown | as it is | `********` |
 
-The label and the description of each option stay. The code of Palette shows
-it; no live run shows it yet. The variables route of a cluster gives one more
-mask: see [Cluster copies](./clusters.md#cluster-copies).
+The label and the description of each option stay. A live run shows the first
+row: see the check `masked-route-mask` of
+[masked-default.sh](../../development/live-runs.md#masked-defaultsh). The code
+of Palette shows the other rows; no live run shows them yet. The variables
+route of a cluster gives one more mask: see
+[Cluster copies](./clusters.md#cluster-copies).
 
 ## The body of a swap
 

@@ -1016,6 +1016,24 @@ fn the_facts_that_the_first_live_window_of_wave_18_shows_name_its_checks_under_l
     name_under_live(shown);
 }
 
+/// The second live window of Wave 18 ran the checks of masked-default.sh (#997). The fact that they
+/// show names them under `live`, and gives no `unchecked` reason. No reason of another fact names
+/// one of them.
+#[test]
+fn the_facts_that_the_second_live_window_of_wave_18_shows_name_its_checks_under_live() {
+    let shown: &[(&str, &[&str])] = &[(
+        "update-takes-a-masked-default",
+        &[
+            "masked-default.sh:masked-route-mask",
+            "masked-default.sh:masked-says",
+            "masked-default.sh:masked-taken",
+            "masked-default.sh:masked-cluster-value",
+            "masked-default.sh:masked-inside",
+        ],
+    )];
+    name_under_live(shown);
+}
+
 /// Each fact of `shown` names each of its checks under `live`, and gives no `unchecked` reason. No
 /// `unchecked` reason of a fact names one of the checks.
 fn name_under_live(shown: &[(&str, &[&str])]) {

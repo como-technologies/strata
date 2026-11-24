@@ -167,7 +167,7 @@ facts:
     stand_in:
       - v1/clusterprofiles/{uid}/variables
     live: []
-    unchecked: The code of Palette shows it. No run gives a profile a sensitive variable.
+    unchecked: The code of Palette shows it. A live run shows only the mask of the default value of a sensitive variable that is not a dropdown.
     pages:
       - internals/palette/profiles.md#the-variables-route
       - internals/hashes.md#the-node-hash-and-the-root

@@ -11,10 +11,11 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, MOST_WORDS, block_sentences, cells, code_of,
-    code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in, go_line, marks_of,
-    one_line, recipe, repo_file, schema, script, sentences, table_rows, toml_entries, toml_table,
-    toml_value, version_of, walk, without_code, without_link_targets, word_faults,
+    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, LIVE_RUN_PASSED, MOST_WORDS, block_sentences,
+    cells, code_of, code_spans, comment_blocks, comment_lines, first_cells, gitlab_drop_in,
+    go_line, marks_of, one_line, recipe, repo_file, schema, script, sentences, table_rows,
+    toml_entries, toml_table, toml_value, version_of, walk, without_code, without_link_targets,
+    word_faults,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::{
@@ -1141,7 +1142,7 @@ const WAVE_8_PAGES: [&str; 31] = [
     LIVE_RUNS_PAGE,
     "install.md",
     PALETTE_PACKS_PAGE,
-    "internals/palette/profiles.md",
+    PALETTE_PROFILES_PAGE,
     "reference/candidate-file.md",
     COMPATIBILITY_PAGE,
     "reference/documents.md",
@@ -1988,6 +1989,9 @@ const PALETTE_PACKS_PAGE: &str = "internals/palette/packs.md";
 
 /// The page of what no live run covers.
 const PALETTE_LIMITS_PAGE: &str = "internals/palette/limits.md";
+
+/// The page of what Palette does with a profile, its versions, and its variables.
+const PALETTE_PROFILES_PAGE: &str = "internals/palette/profiles.md";
 
 /// The command page of `strata list`.
 const LIST_PAGE: &str = "commands/list.md";
@@ -3127,27 +3131,20 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
 /// fact whose check has no result keeps its words (#920).
 #[test]
 fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
-    let runs = read(&docs().join(LIVE_RUNS_PAGE));
-    for start in [
-        "| `list-registries` |",
-        "| `validate-accepts-says` |",
-        "| `validate-version-says` |",
-        "| `variables-record`, ",
-        "| `variables-accepts`, ",
-        "| `variables-update`, ",
-        "| `cidr-variable-reports`, ",
-        "| `slash-several`, ",
-        "| `behind-says` | 0 | #79, #634:",
-    ] {
-        let row = runs
-            .lines()
-            .find(|l| l.starts_with(start))
-            .unwrap_or_else(|| panic!("live-runs.md has no row {start:?}"));
-        assert!(
-            !row.to_lowercase().contains("no result yet"),
-            "the row {start:?} says that it has no result: {row}"
-        );
-    }
+    rows_say(
+        &[
+            "| `list-registries` |",
+            "| `validate-accepts-says` |",
+            "| `validate-version-says` |",
+            "| `variables-record`, ",
+            "| `variables-accepts`, ",
+            "| `variables-update`, ",
+            "| `cidr-variable-reports`, ",
+            "| `slash-several`, ",
+            "| `behind-says` | 0 | #79, #634:",
+        ],
+        LIVE_RUN_PASSED,
+    );
     // each page, the words of a result or of a fact with no result, and the words that are gone
     let pages: [(&str, &[&str], &[&str]); 8] = [
         (
@@ -3181,7 +3178,7 @@ fn the_pages_of_palette_state_the_results_of_the_live_window_of_wave_17() {
             ],
         ),
         (
-            "internals/palette/profiles.md",
+            PALETTE_PROFILES_PAGE,
             &[
                 "| 1.0.0 to 1.0.2: the tag `24.04` to `LTS__24.04` | No repave. | No repave. |",
                 "`tenant.sh repave` sends this body. | No repave. |",
@@ -3254,42 +3251,51 @@ fn pages_say(pages: &[(&str, &[&str], &[&str])]) {
     }
 }
 
-/// The first live window of Wave 18 ran the checks of #702, #703, #919, #928, and #940. The row
-/// of each check that passed says so. Each page of their facts gives the result in place of "no
-/// live run shows it yet". A part that no check shows keeps its words (#1005).
-#[test]
-fn the_pages_state_the_results_of_the_first_live_window_of_wave_18() {
+/// Each row of `live-runs.md` that starts with one of `starts` holds `result`, and does not say
+/// "no result yet".
+fn rows_say(starts: &[&str], result: &str) {
     let runs = read(&docs().join(LIVE_RUNS_PAGE));
-    for start in [
-        "| `bitnami-no-status`, ",
-        "| `ref-same-release`, ",
-        "| `ref-compare` |",
-        "| `ref-record`, ",
-        "| `ref-consumers` |",
-        "| `ref-no-project`, ",
-        "| `bump-text-says` |",
-        "| `bump-text-skip` |",
-        "| `slash-several`, ",
-        "| `record`, `label`, `filter-create` |",
-        "| `filters-control`, ",
-        "| `filters-role`, ",
-        "| `filter-role`, ",
-        "| `search-control`, ",
-        "| `search-role-tenant`, ",
-        "| `search-role-project`, ",
-        "| `list-role-project`, ",
-        "| `list-role-tenant` |",
-        "| `list-role-filter` |",
-    ] {
+    for start in starts {
         let row = runs
             .lines()
             .find(|l| l.starts_with(start))
             .unwrap_or_else(|| panic!("live-runs.md has no row {start:?}"));
         assert!(
-            row.contains("A live run passed") && !row.to_lowercase().contains("no result yet"),
-            "the row {start:?} gives no result: {row}"
+            row.contains(result) && !row.to_lowercase().contains("no result yet"),
+            "the row {start:?} does not give the result {result:?}: {row}"
         );
     }
+}
+
+/// The first live window of Wave 18 ran the checks of #702, #703, #919, #928, and #940. The row
+/// of each check that passed says so. Each page of their facts gives the result in place of "no
+/// live run shows it yet". A part that no check shows keeps its words (#1005).
+#[test]
+fn the_pages_state_the_results_of_the_first_live_window_of_wave_18() {
+    rows_say(
+        &[
+            "| `bitnami-no-status`, ",
+            "| `ref-same-release`, ",
+            "| `ref-compare` |",
+            "| `ref-record`, ",
+            "| `ref-consumers` |",
+            "| `ref-no-project`, ",
+            "| `bump-text-says` |",
+            "| `bump-text-skip` |",
+            "| `slash-several`, ",
+            "| `record`, `label`, `filter-create` |",
+            "| `filters-control`, ",
+            "| `filters-role`, ",
+            "| `filter-role`, ",
+            "| `search-control`, ",
+            "| `search-role-tenant`, ",
+            "| `search-role-project`, ",
+            "| `list-role-project`, ",
+            "| `list-role-tenant` |",
+            "| `list-role-filter` |",
+        ],
+        LIVE_RUN_PASSED,
+    );
     // each page, the words of a result or of a part with no result, and the words that are gone
     let pages: [(&str, &[&str], &[&str]); 6] = [
         (
@@ -3348,6 +3354,116 @@ fn the_pages_state_the_results_of_the_first_live_window_of_wave_18() {
                 "cannot search the tenant, as a live run shows:",
             ],
             &["The code of Palette shows it; no live run shows it yet."],
+        ),
+    ];
+    pages_say(&pages);
+}
+
+/// The second live window of Wave 18 ran `hand-edit.sh` (#691) and `masked-default.sh` (#997).
+/// The row of each check gives its result. Each page of their facts gives the result in place of
+/// "no live run shows it yet". A part that no check shows keeps its words.
+#[test]
+fn the_pages_state_the_results_of_the_second_live_window_of_wave_18() {
+    rows_say(
+        &[
+            "| `profile`, `record` |",
+            "| `attach`, `deployed` |",
+            "| `edit` | 0 | #691:",
+            "| `edit-compare` |",
+            "| `delete-uid`, ",
+            "| `detach`, `deployment-gone` |",
+            "| `profile-delete`, ",
+            "| `masked-version` |",
+            "| `masked-route`, ",
+            "| `masked-validate`, ",
+            "| `masked-says` |",
+            "| `masked-update`, ",
+            "| `masked-runs` |",
+            "| `masked-cluster`, ",
+            "| `masked-inside` |",
+            "| `masked-back`, ",
+            "| `masked-delete`, ",
+        ],
+        LIVE_RUN_PASSED,
+    );
+    // the result of each check with `?`
+    for (start, result) in [
+        (
+            "| `edit-reads` |",
+            "A live run gave `0`: the field was 1 again at the read of minute 5.",
+        ),
+        (
+            "| `edit-pack-status`, ",
+            "A live run gave `Ready` after each stage, with the reason `PackServicesReady`",
+        ),
+        (
+            "| `delete-reads` |",
+            "A live run gave `1`: Palette did not make the Deployment again in the 70 minutes",
+        ),
+        (
+            "| `events` |",
+            "A live run gave no event about the change or about the missing Deployment.",
+        ),
+        (
+            "| `masked-validate`, ",
+            "`masked-validate` gave `1`: the two sides differ.",
+        ),
+    ] {
+        rows_say(&[start], result);
+    }
+    // each page, the words of a result or of a part with no result, and the words that are gone
+    let pages: [(&str, &[&str], &[&str]); 5] = [
+        (
+            LIVE_RUNS_PAGE,
+            &["states what Palette does with a change and a delete with `kubectl`."],
+            &[
+                "no live window ran hand-edit.sh",
+                "no live window ran the stage",
+                "The code of Palette shows `0`",
+            ],
+        ),
+        (
+            PALETTE_CLUSTERS_PAGE,
+            &[
+                "| A person changes a field that the content names, with `kubectl` | Palette gives the field the value of the content again. A live run shows it",
+                "| A person deletes an object that the content still names, with `kubectl` | Palette does not make the object again. A live run shows it for a Deployment: it stayed gone for the 70 minutes of the reads. No run shows what Palette does with it at the next update of the layer. |",
+                "the condition of the pack of the layer stays `Ready`, with the reason `PackServicesReady`. The cluster gets no event about it.",
+                "A live run shows it for a value that comes from the default value of the profile: see the check `masked-cluster-value`",
+                "gives it as it is. The code of Palette shows it; no live run shows it yet.",
+            ],
+            &[
+                "The code of Palette makes the object again at the next reconcile.",
+                "At each reconcile, Palette applies the objects",
+            ],
+        ),
+        (
+            PALETTE_LIMITS_PAGE,
+            &[
+                "A live run shows that Palette does not make a deleted Deployment again in 70 minutes. No run shows what Palette does after that time, or at the next update of the layer.",
+                "has no route and no field that compares the objects of the cluster with the profile.",
+            ],
+            &[
+                "makes both, and has no result yet.",
+                "So it creates an object again after a delete",
+                "no run shows that Palette reports it.",
+            ],
+        ),
+        (
+            PALETTE_PROFILES_PAGE,
+            &[
+                "The run moves cluster A to such a version with no value for the variable. Palette takes the update with HTTP 204,",
+                "The ConfigMap inside the cluster then holds the default value of the profile, and not the mask.",
+                "A live run shows the first row: see the check `masked-route-mask`",
+                "The code of Palette shows the other rows; no live run shows them yet.",
+            ],
+            &[
+                "does not name the variable. The code of Palette shows it; no live run shows it yet.",
+            ],
+        ),
+        (
+            OBSERVER_PAGES[0],
+            &["A live run shows that Palette gives no condition and no event for it: see"],
+            &["No run shows what Palette does with it: see"],
         ),
     ];
     pages_say(&pages);
@@ -3419,7 +3535,7 @@ fn the_pages_for_a_reader_name_no_person_and_no_plan_of_the_project() {
 /// condition that removes the alerts: a component of Palette for a published version that changed.
 #[test]
 fn the_book_names_palette_as_the_owner_of_the_event_and_the_condition_that_removes_the_alerts() {
-    let gaps = one_line(&read(&docs().join("internals/palette/profiles.md")));
+    let gaps = one_line(&read(&docs().join(PALETTE_PROFILES_PAGE)));
     for fact in [
         "### An event when a published version changes",
         "Palette has no component for a published version that changed, for a moved image, or for a newer version.",
@@ -5100,7 +5216,7 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
     }
     for (path, needle) in [
         (
-            "internals/palette/profiles.md",
+            PALETTE_PROFILES_PAGE,
             "strata follows the order of the Rust crate `versions` 8.0.1: see",
         ),
         (

@@ -43,11 +43,11 @@ These are open:
   Palette does with an object that an earlier edit dropped from the manifest, or
   with a namespace that the layer owns. A run shows only a Deployment that the
   content names. See [An object that an edit drops from a manifest](clusters.md#an-object-that-an-edit-drops-from-a-manifest).
-- A change that a person makes with `kubectl` to an object that a manifest layer
-  applied, and a delete of such an object. No run shows what Palette does.
-  [hand-edit.sh](../../development/live-runs.md#hand-editsh) makes both, and has
-  no result yet. See
-  [What the source of Palette says](#what-the-source-of-palette-says).
+- An object of a manifest layer more than 70 minutes after a delete with
+  `kubectl`. A live run shows that Palette does not make a deleted Deployment
+  again in 70 minutes. No run shows what Palette does after that time, or at the
+  next update of the layer. See
+  [An object that an edit drops from a manifest](clusters.md#an-object-that-an-edit-drops-from-a-manifest).
 - A key with a custom role. No run has used one, so the permissions of a custom
   role come from the code of Palette. A run used Project Viewer and Cluster Viewer.
   See [The role that a key needs](clusters.md#the-role-that-a-key-needs).
@@ -168,13 +168,12 @@ examples/live/api.sh app-version            # HTTP 500
 The code of Palette gives these rules. No live run checks them, so strata
 makes no claim that depends on them.
 
-- **An object that a person changes in a workload cluster.** Palette applies each
-  object of a manifest layer again at each reconcile. So it creates an object again
-  after a delete, and it gives each field that the manifest names its value again.
-  Its API has no route and no field that compares the objects of the cluster with the
-  profile. The code of the apply reports no difference. The period of the reconcile
-  belongs to the deployment of Palette. So the observer does not see such an edit, and
-  no run shows that Palette reports it.
+- **An object that a person changes in a workload cluster.** The API of Palette
+  has no route and no field that compares the objects of the cluster with the
+  profile. So the observer does not see such an edit. A live run shows what
+  Palette does with a change and a delete with `kubectl`, and that it reports
+  neither: see
+  [An object that an edit drops from a manifest](clusters.md#an-object-that-an-edit-drops-from-a-manifest).
 - **The install order of the packs of two add-on profiles.** Palette sorts
   every add-on pack of a cluster by its install priority, over all its add-on
   profiles. The order of the profiles plays no part. Packs of one priority

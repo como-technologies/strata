@@ -816,23 +816,23 @@ give other times, in minutes.
 The cleanup also runs after a failed check or a signal, so the run leaves no
 profile and no Deployment. The script keeps the kubeconfig in a temporary file.
 A check with `?` records its result without judging it, because the run finds
-the result. The run checks an open item of
-[What no run covers](../internals/palette/limits.md#what-no-run-covers): a
-change and a delete with `kubectl`.
+the result.
+[An object that an edit drops from a manifest](../internals/palette/clusters.md#an-object-that-an-edit-drops-from-a-manifest)
+states what Palette does with a change and a delete with `kubectl`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `profile`, `record` | 0 | #691: Palette makes `barney-config`, and a record of it. No result yet: no live window ran hand-edit.sh. |
-| `attach`, `deployed` | 0 | #691: cluster A runs `barney-config`, and the Deployment runs there with 1 replica within 20 minutes. No result yet: no live window ran hand-edit.sh. |
-| `edit` | 0 | #691: `kubectl scale` gives the Deployment 2 replicas. No result yet: no live window ran hand-edit.sh. |
-| `edit-reads` | ? | #691: `0` when the field is 1 again, and the line of the last read gives the minute. `1` when the field stays 2 for 70 minutes. The code of Palette shows `0`: a reconcile applies each object of the layer again, with the values of the manifest. No result yet: no live window ran hand-edit.sh. |
-| `edit-compare` | 0 | #691: `compare` of the record with `cluster:<uid>/barney-config` finds no change. Strata compares what Palette holds, and not the objects in the cluster. No result yet: no live window ran hand-edit.sh. |
-| `edit-pack-status`, `delete-pack-status` | ? | #691: the condition that Palette reports for the pack of `barney-config` after the reads of each stage. The code of Palette shows no condition that names a change or a delete with `kubectl`. No result yet: no live window ran hand-edit.sh. |
-| `delete-uid`, `delete` | 0 | #691: the uid of the Deployment, and the delete with `kubectl`. No result yet: no live window ran hand-edit.sh. |
-| `delete-reads` | ? | #691: `0` when Palette makes the Deployment again with a new uid, and the line of the last read gives the minute. `1` when it stays gone for 70 minutes. The code of Palette shows `0`. No result yet: no live window ran hand-edit.sh. |
-| `events` | ? | #691: the reason and the message of each event of cluster A after the change with `kubectl`. The code of Palette shows no event for the change or for the delete. No result yet: no live window ran hand-edit.sh. |
-| `detach`, `deployment-gone` | 0 | `barney-config` leaves cluster A, and the Deployment goes within 20 minutes. [observer.sh](#observersh) shows that Palette deletes the Deployment of a layer that leaves the cluster. No result yet: no live window ran hand-edit.sh. |
-| `profile-delete`, `clean`, `baseline` | 0 | Palette deletes `barney-config`. No Deployment and no profile of the run stay, and the example is at its baseline. No result yet: no live window ran hand-edit.sh. |
+| `profile`, `record` | 0 | #691: Palette makes `barney-config`, and a record of it. A live run passed. |
+| `attach`, `deployed` | 0 | #691: cluster A runs `barney-config`, and the Deployment runs there with 1 replica within 20 minutes. A live run passed. |
+| `edit` | 0 | #691: `kubectl scale` gives the Deployment 2 replicas. A live run passed. |
+| `edit-reads` | ? | #691: `0` when the field is 1 again, and the line of the last read gives the minute. `1` when the field stays 2 for 70 minutes. A live run gave `0`: the field was 1 again at the read of minute 5. |
+| `edit-compare` | 0 | #691: `compare` of the record with `cluster:<uid>/barney-config` finds no change. Strata compares what Palette holds, and not the objects in the cluster. A live run passed. |
+| `edit-pack-status`, `delete-pack-status` | ? | #691: the condition that Palette reports for the pack of `barney-config` after the reads of each stage. A live run gave `Ready` after each stage, with the reason `PackServicesReady` and the message `Pack services are ready`. |
+| `delete-uid`, `delete` | 0 | #691: the uid of the Deployment, and the delete with `kubectl`. A live run passed. |
+| `delete-reads` | ? | #691: `0` when Palette makes the Deployment again with a new uid, and the line of the last read gives the minute. `1` when it stays gone for 70 minutes. A live run gave `1`: Palette did not make the Deployment again in the 70 minutes of the reads. |
+| `events` | ? | #691: the reason and the message of each event of cluster A after the change with `kubectl`. A live run gave no event about the change or about the missing Deployment. |
+| `detach`, `deployment-gone` | 0 | `barney-config` leaves cluster A, and the Deployment goes within 20 minutes. [observer.sh](#observersh) shows that Palette deletes the Deployment of a layer that leaves the cluster. A live run passed. |
+| `profile-delete`, `clean`, `baseline` | 0 | Palette deletes `barney-config`. No Deployment and no profile of the run stay, and the example is at its baseline. A live run passed. |
 
 ## masked-default.sh
 
@@ -851,16 +851,16 @@ run left. It moves cluster A back only when the cluster runs the version.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `masked-version` | 0 | #997: Palette makes and publishes the version with the variable. No result yet: no live window ran the stage |
-| `masked-route`, `masked-route-mask` | 0 | #997: `GET /v1/clusterprofiles/<uid>/variables` gives `********` in place of the default value, and the variable is required and sensitive. No result yet: no live window ran the stage |
-| `masked-validate`, `masked-asked` | ?, 0 | #997: `compare cluster:<uid> <ref> --validate` asks the route about the move, and the comparison holds an answer. No result yet: no live window ran the stage |
-| `masked-says` | 0 | #912, #997: the comparison has no `updateChecks.requiredVariables`. Strata reads the mask as a default value, and names no required variable. No result yet: no live window ran the stage |
-| `masked-update`, `masked-taken` | 0 | #997: `api.sh replace-status` sends the update with no value for the variable. Palette takes it with HTTP 204, and does not refuse it with `InvalidVariable`. No result yet: no live window ran the stage |
-| `masked-runs` | 0 | #997: the document of cluster A names the version. No result yet: no live window ran the stage |
-| `masked-cluster`, `masked-cluster-value` | 0 | #997: `GET /v1/spectroclusters/<uid>/variables` gives `********` for the value of the variable. So the cluster gives the variable a value. No result yet: no live window ran the stage |
-| `masked-inside` | 0 | #997: the ConfigMap inside cluster A holds the default value that the profile holds, and not the mask. The check reads it for at most `PROPAGATION_MINUTES` minutes, 20 by default. No result yet: no live window ran the stage |
-| `masked-back`, `masked-back-taken`, `masked-back-runs`, `masked-back-inside` | 0 | cluster A runs the add-on version 1.0.0 again, and the ConfigMap holds its value. No result yet: no live window ran the stage |
-| `masked-delete`, `masked-baseline` | 0 | the version is deleted, and the example is at its baseline. No result yet: no live window ran the stage |
+| `masked-version` | 0 | #997: Palette makes and publishes the version with the variable. A live run passed. |
+| `masked-route`, `masked-route-mask` | 0 | #997: `GET /v1/clusterprofiles/<uid>/variables` gives `********` in place of the default value, and the variable is required and sensitive. A live run passed. |
+| `masked-validate`, `masked-asked` | ?, 0 | #997: `compare cluster:<uid> <ref> --validate` asks the route about the move, and the comparison holds an answer. A live run passed, and `masked-validate` gave `1`: the two sides differ. |
+| `masked-says` | 0 | #912, #997: the comparison has no `updateChecks.requiredVariables`. Strata reads the mask as a default value, and names no required variable. A live run passed. |
+| `masked-update`, `masked-taken` | 0 | #997: `api.sh replace-status` sends the update with no value for the variable. Palette takes it with HTTP 204, and does not refuse it with `InvalidVariable`. A live run passed. |
+| `masked-runs` | 0 | #997: the document of cluster A names the version. A live run passed. |
+| `masked-cluster`, `masked-cluster-value` | 0 | #997: `GET /v1/spectroclusters/<uid>/variables` gives `********` for the value of the variable. So the cluster gives the variable a value. A live run passed. |
+| `masked-inside` | 0 | #997: the ConfigMap inside cluster A holds the default value that the profile holds, and not the mask. The check reads it for at most `PROPAGATION_MINUTES` minutes, 20 by default. A live run passed. |
+| `masked-back`, `masked-back-taken`, `masked-back-runs`, `masked-back-inside` | 0 | cluster A runs the add-on version 1.0.0 again, and the ConfigMap holds its value. A live run passed. |
+| `masked-delete`, `masked-baseline` | 0 | the version is deleted, and the example is at its baseline. A live run passed. |
 
 ## macro-repave.sh
 
