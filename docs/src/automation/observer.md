@@ -657,8 +657,9 @@ and it never shows "No change" for a pack that it did not check.
 2. **A change on the cluster with `kubectl edit`.** The service compares what
    Palette holds. Without `--read-pods`, it reads no object in the cluster. With the
    flag, it reads the pods and names no edit. So it does not see such an edit.
-   No run shows what Palette does with it: see [What no run
-   covers](../internals/palette/limits.md).
+   A live run shows that Palette gives no condition and no event for it: see [An
+   object that an edit drops from a
+   manifest](../internals/palette/clusters.md#an-object-that-an-edit-drops-from-a-manifest).
 3. **What the workload runs.** "This cluster's copy in Palette" is the copy that
    Palette holds for this cluster. It is not the objects that run in the cluster.
    The page does not show the health of a workload: `OK` means that the content

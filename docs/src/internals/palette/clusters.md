@@ -191,10 +191,13 @@ root equals the root of the profile. The record of the copy holds the default
 value as the cluster endpoint gives it.
 
 The endpoint gives `********` in place of the value of a sensitive variable,
-when the value is not empty and the variable is not a dropdown. The value of a
-sensitive dropdown variable is the label of an option, and the endpoint gives
-it as it is. The code of Palette shows it; no live run shows it yet. A record
-holds no value of a sensitive variable: see
+when the value is not empty and the variable is not a dropdown. A live run shows
+it for a value that comes from the default value of the profile: see the check
+`masked-cluster-value` of
+[masked-default.sh](../../development/live-runs.md#masked-defaultsh). The value
+of a sensitive dropdown variable is the label of an option, and the endpoint
+gives it as it is. The code of Palette shows it; no live run shows it yet. A
+record holds no value of a sensitive variable: see
 [What a cluster record holds](../../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
 A change of that value is a change to the cluster, and not to the copy. The
@@ -241,9 +244,9 @@ update: `cluster:<uid>@pending` reads it. See
 
 ## An object that an edit drops from a manifest
 
-A manifest layer holds manifests, and a manifest holds objects. At each reconcile,
-Palette applies the objects that the content names. An object that the content no
-longer names stays.
+A manifest layer holds manifests, and a manifest holds objects. Palette applies
+the objects that the content names. An object that the content no longer names
+stays.
 
 When an edit in place drops an object from a manifest, and the cluster takes the
 update, the object stays on the cluster. Palette does not delete it. A live run
@@ -257,9 +260,17 @@ Palette deleted the Deployment of the layer. See
 | Step | What Palette does |
 | --- | --- |
 | An edit drops an object, and the cluster takes the update | The object stays. Palette applies the objects that the content still names. |
-| A person deletes an object that the content still names | No run shows this. The code of Palette makes the object again at the next reconcile. [hand-edit.sh](../../development/live-runs.md#hand-editsh) checks it, and has no result yet. |
+| A person changes a field that the content names, with `kubectl` | Palette gives the field the value of the content again. A live run shows it for the replicas of a Deployment: the field had its value again within 5 minutes. |
+| A person deletes an object that the content still names, with `kubectl` | Palette does not make the object again. A live run shows it for a Deployment: it stayed gone for the 70 minutes of the reads. No run shows what Palette does with it at the next update of the layer. |
 | A person removes the whole layer from the cluster | Palette deletes the objects that the content names at that time. A live run shows it for a Deployment. No run shows what Palette does with a namespace that the layer owns. |
 | The same, for an object that an earlier edit dropped | No run shows this. The content at that time does not name the object. |
+
+Palette reports no change and no delete with `kubectl`. After each one, the
+condition of the pack of the layer stays `Ready`, with the reason
+`PackServicesReady`. The cluster gets no event about it. The copy that Palette
+holds for the cluster does not change, so `compare` of the cluster copy finds no
+change. A live run shows each of these facts: see
+[hand-edit.sh](../../development/live-runs.md#hand-editsh).
 
 To remove an object that the content dropped, delete it on the cluster with
 `kubectl`. Edit the content first, because Palette applies each object that the

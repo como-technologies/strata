@@ -117,7 +117,7 @@ facts:
     stand_in:
       - v1/spectroclusters/{uid}/variables
     live: []
-    unchecked: The code of Palette shows it. No run gives a cluster a sensitive variable.
+    unchecked: The code of Palette shows it. A live run shows only the mask of the value of a sensitive variable that is not a dropdown.
     pages:
       - internals/palette/clusters.md#cluster-copies
       - internals/hashes.md#the-node-hash-and-the-root

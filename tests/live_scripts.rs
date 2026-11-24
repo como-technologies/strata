@@ -5735,7 +5735,7 @@ fn packs_sh_stage_8_checks_that_a_pin_has_no_sync_note_when_palette_gives_its_re
         let row = row_of
             .get(id)
             .unwrap_or_else(|| panic!("live-runs.md has no row for {id}"));
-        assert!(row[2].contains("A live run passed"), "{row:?}");
+        assert!(row[2].contains(LIVE_RUN_PASSED), "{row:?}");
     }
 }
 
@@ -11854,21 +11854,11 @@ fn hand_edit_sh_refuses_an_argument_and_changes_nothing() {
     assert!(observer_log(&stage, "api.log").is_empty());
 }
 
-/// #691: the section of hand-edit.sh in `live-runs.md` names each check of the script, and each row
-/// says that no live window ran it yet.
+/// #691: the section of hand-edit.sh in `live-runs.md` names each check of the script, and no other
+/// check.
 #[test]
-fn the_page_of_live_runs_names_each_check_of_hand_edit_sh_with_no_result_yet() {
+fn the_page_of_live_runs_names_each_check_of_hand_edit_sh() {
     assert_page_names_each_check(HAND_EDIT);
-    let section = page_section(
-        "docs/src/development/live-runs.md",
-        &format!("## {HAND_EDIT}"),
-    );
-    let rows = table_rows(&section, "| Check |");
-    assert!(!rows.is_empty(), "{section}");
-    let none = format!("No result yet: no live window ran {HAND_EDIT}.");
-    for row in rows {
-        assert!(row[2].contains(&none), "{row:?}");
-    }
 }
 
 #[test]

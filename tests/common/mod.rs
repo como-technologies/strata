@@ -172,6 +172,9 @@ pub const PUBLISHED_RULES: &str =
 pub const DRAFT_RULES: &str =
     "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: error";
 
+/// The words of a row of `live-runs.md` whose check passed in a live run.
+pub const LIVE_RUN_PASSED: &str = "A live run passed";
+
 /// The options of `same-release --allow no-digest`: the exact policy, and a pack with no upstream
 /// digest can pass.
 pub fn no_digest_allowed() -> strata::ops::SameReleaseOptions {
