@@ -83,6 +83,15 @@ data "spectrocloud_pack" "other_cert_manager" {
 # YAML with no comments.
 
 locals {
+  # Docker Hub no longer serves the images of docker.io/bitnami that the charts of the registry
+  # Bitnami name. The repository bitnamilegacy holds each of them with the same tag. So each
+  # repository bitnami/ of such a chart becomes bitnamilegacy/, at each level of its values.
+  bitnami       = [for k, p in var.packs : k if p.registry == "Bitnami"]
+  source_values = { for k, d in data.spectrocloud_pack.pin : k => contains(local.bitnami, k) ? replace(d.values, "/(?m)^( *repository: *)bitnami//", "$${1}bitnamilegacy/") : d.values }
+  # Some of these charts refuse an image that their list of images does not name, unless this
+  # value is true.
+  insecure_images = { global = { security = { allowInsecureImages = true } } }
+
   sso_realm = {
     realm   = local.realm
     enabled = true
@@ -165,15 +174,19 @@ locals {
   }
   # The values of a chart of a Helm registry start with `pack.namespace: ""`. Palette refuses a
   # profile that gives such a pack no namespace: ClusterProfileCreationValidationFailure. So each
-  # such chart gets the pack section below, with no patch.
+  # such chart gets the pack section below, with no patch. Each pack of the registry Bitnami also
+  # gets insecure_images.
   helm_charts = [for k, d in data.spectrocloud_pack.pin : k if try(yamldecode(d.values).pack.namespace, null) == ""]
-  patched     = merge({ for k in local.helm_charts : k => {} }, local.patches)
+  patched = { for k in setunion(local.helm_charts, local.bitnami, keys(local.patches)) : k => merge(
+    try(local.patches[k], {}),
+    [for i in [local.insecure_images] : i if contains(local.bitnami, k)]...
+  ) }
   # The pack section of a patched pack: the namespace when its values name none, and the priority.
   # A pack with no default namespace here gets its name.
   default_namespaces = { cert-manager = "cert-manager", vault = "vault", external-dns = "external-dns", keycloak = "keycloak", grafana = "grafana", argo-cd = "argocd", prometheus-operator = "monitoring" }
   pack_extra         = { keycloak = { "spectrocloud.com/install-priority" = local.keycloak_priority } }
 
-  decoded    = { for k in setunion(keys(local.default_namespaces), local.helm_charts) : k => yamldecode(data.spectrocloud_pack.pin[k].values) }
+  decoded    = { for k in setunion(keys(local.default_namespaces), local.helm_charts, local.bitnami) : k => yamldecode(local.source_values[k]) }
   wrapped    = { for k, d in local.decoded : k => can(keys(d.charts)) }
   chart_key  = { for k, d in local.decoded : k => try(keys(d.charts)[0], "") }
   chart      = { for k, d in local.decoded : k => try(d.charts[local.chart_key[k]], d) }
@@ -190,7 +203,33 @@ locals {
     [for w in [local.wrapped[p]] : c if !w],
     [{ pack = merge(try(local.decoded[p].pack, {}), { namespace = local.namespaces[p] }, try(local.pack_extra[p], {})) }],
   )...)) }
-  pack_values = { for k, d in data.spectrocloud_pack.pin : k => lookup(local.patched_values, k, d.values) }
+  pack_values = { for k, v in local.source_values : k => lookup(local.patched_values, k, v) }
+
+  # The images that the values of each pin name, for `platform.sh images` before the apply. They are
+  # each image of pack.content.images, and each map with a repository and a tag in the first five
+  # levels. No patch names an image. The password of Grafana is not known before the first apply, so
+  # the images come from source_values, and not from pack_values.
+  source_docs = { for k, v in local.source_values : k => yamldecode(v) }
+  maps_1      = { for k, d in local.source_docs : k => [for c in try(values(d), []) : c if can(keys(c))] }
+  maps_2      = { for k, l in local.maps_1 : k => flatten([for m in l : [for c in values(m) : c if can(keys(c))]]) }
+  maps_3      = { for k, l in local.maps_2 : k => flatten([for m in l : [for c in values(m) : c if can(keys(c))]]) }
+  maps_4      = { for k, l in local.maps_3 : k => flatten([for m in l : [for c in values(m) : c if can(keys(c))]]) }
+  maps_5      = { for k, l in local.maps_4 : k => flatten([for m in l : [for c in values(m) : c if can(keys(c))]]) }
+  # A map names its image as a chart of Bitnami does: registry/repository, then @digest, or :tag
+  # when the digest is empty. A map with no registry takes the registry that the values give each
+  # image of a chart, global.image.registry, as the chart of kyverno does. With no registry, the
+  # image has no host, and the container runtime asks Docker Hub.
+  global_registry = { for k, d in local.source_docs : k => try(coalesce(concat(
+    [try(tostring(d.global.image.registry), null)],
+    [for c in try(values(d.charts), []) : try(tostring(c.global.image.registry), null)],
+  )...), "") }
+  images = { for k, d in local.source_docs : k => sort(distinct(concat(
+    [for i in try(d.pack.content.images, []) : i.image if can(tostring(i.image))],
+    [for m in concat(local.maps_1[k], local.maps_2[k], local.maps_3[k], local.maps_4[k], local.maps_5[k]) : format("%s%s",
+      join("/", compact([try(coalesce(try(tostring(m.registry), null), local.global_registry[k]), ""), m.repository])),
+      try(length(tostring(m.digest)) > 0, false) ? "@${m.digest}" : ":${m.tag}",
+    ) if try(length(tostring(m.repository)) > 0 && length(tostring(m.tag)) > 0, false)],
+  ))) }
 }
 
 # The password of Grafana in prometheus-operator. OpenTofu makes it at the first apply, and keeps it

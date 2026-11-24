@@ -47,6 +47,12 @@ output "packs" {
   value = var.packs
 }
 
+# The images that the values of each pin name, by pack name. A plan gives them before the apply,
+# and `platform.sh images` resolves each one.
+output "images" {
+  value = local.images
+}
+
 # The packs of each team, in the order of the profile.
 output "teams" {
   value = local.teams

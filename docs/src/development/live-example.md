@@ -147,7 +147,7 @@ its end.
 | `terraform/registry-kinds.tf`, `terraform/registry-host.sh.tftpl` | The registry host of `registry-kinds.sh`: one EC2 instance that serves a Helm repository, one with credentials, an OCI registry with basic auth, and a Spectro pack registry, behind Caddy with a certificate for each `<service>.<IP>.sslip.io`; and a Palette registry over each. Off unless `registry_kinds` is set. |
 | `terraform-version/` | One version of an add-on profile in a state of its own, with no feature preview flag: `version-states.sh` applies it once for each version, each time in its own workspace. |
 | `terraform-platform/` | The platform cluster `wilma` (#700) in a state of its own: the seven profiles of the teams in `main.tf`, the glue of each team in `glue.tf`, the private zone, and the policy of the nodes. `terraform.tfvars.example` names the registry of each pack. |
-| `platform.sh` | The platform cluster test (#700): `pins`, `up`, the eight cases, `down`, and `inventory`. See [The platform cluster](#the-platform-cluster). |
+| `platform.sh` | The platform cluster test (#700): `pins`, `images`, `up`, the eight cases, `down`, and `inventory`. See [The platform cluster](#the-platform-cluster). |
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, a cluster in the template with the two repave routes (#276), and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. Stage 4 (#844): an add and an upgrade on cluster A, with cluster B as the control. |
@@ -487,9 +487,39 @@ packs moved to other registries (#1004):
 No case needs a chart that Bitnami does not have. The Bitnami charts of
 envoy-gateway and cloudnative-pg hold each CRD that the glue uses, and the
 controller name of the `GatewayClass`. The Bitnami chart of cloudnative-pg gives
-the database of Keycloak a Bitnami image of PostgreSQL. Case 8 reads each pack of
-Bitnami, and Bitnami moved its free images to another repository (#630). So the
-database, and Keycloak after it, can wait for an image.
+the database of Keycloak a Bitnami image of PostgreSQL.
+
+Bitnami moved its free images to `docker.io/bitnamilegacy`, with the same tags
+(#630). Docker Hub serves no tag of the five charts under `docker.io/bitnami`. So
+a pin of another version does not help. The image of the project is a larger
+change: the charts of keycloak and grafana read files under `/opt/bitnami/` of
+a Bitnami image. For each pack of the registry Bitnami, `terraform-platform/`
+keeps the pack, its registry, and its tags. It changes each
+`repository: bitnami/` of its values to `bitnamilegacy/`, at each level.
+
+It also gives `global.security.allowInsecureImages` the value `true`. Without
+it, the charts of external-dns and cloudnative-pg below refuse an image that
+their list of images does not name. The other three charts only show a warning.
+The table gives the chart that `just live-platform-pins` writes for each pack,
+and the images that its values name.
+
+| Pack | Chart | Images of `docker.io/bitnamilegacy` |
+| --- | --- | --- |
+| envoy-gateway | 2.0.4 | `envoy-gateway`, `envoy`, and `envoy-ratelimit` |
+| external-dns | 9.0.2 | `external-dns` |
+| cloudnative-pg | 1.0.10 | `cloudnative-pg`, `plugin-barman-cloud`, `plugin-barman-cloud-sidecar`, and `postgresql` |
+| keycloak | 25.2.0 | `keycloak` and `keycloak-config-cli` |
+| grafana | 12.1.7 | `grafana` and `os-shell` |
+
+`just live-platform-images` asks `crane digest` for each image that the values
+of the pins name. It reads the output `images` of a plan, so it makes no change.
+The output holds each entry of `pack.content.images`, and each map with a
+`repository` and a `tag`, five levels deep at most. A map with no `registry`
+takes the registry that the values give each image of the chart,
+`global.image.registry`, as the chart of kyverno does: most image maps of kyverno
+have a `registry` with no value. `just live-platform-up` runs
+the same check first. It stops before the apply, and names each image that does
+not resolve. Case 8 reads the images that the pods of each Bitnami pack run.
 
 A chart of a Helm registry needs a namespace, and prometheus-operator needs a
 password of Grafana: see [The values that a pack
@@ -504,7 +534,8 @@ and it sends no request to Palette or AWS.
 just live-profiles                  # or just live-up: the release profile of the lab
 just live-platform-pins             # once: terraform-platform/terraform.tfvars
 just live-platform-values           # no request: the values that Palette requires
-just live-platform-up               # billable until live-platform-down
+just live-platform-images           # no change: crane resolves each image of the pins
+just live-platform-up               # the images first; billable until live-platform-down
 just live-platform                  # each case; just live-platform 4 runs case 4 alone
 just live-platform-down             # then the inventory
 just live-down
