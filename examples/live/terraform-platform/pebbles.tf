@@ -140,6 +140,19 @@ resource "spectrocloud_cluster_profile" "workload_team" {
       default_value = var.domain
       required      = false
     }
+    dynamic "variable" {
+      for_each = contains(local.workload_packs, "prometheus-operator") ? [local.grafana_password] : []
+      iterator = v
+      content {
+        name          = v.value.name
+        display_name  = v.value.display_name
+        format        = "string"
+        description   = v.value.description
+        default_value = v.value.default_value
+        required      = false
+        is_sensitive  = v.value.is_sensitive
+      }
+    }
   }
 
   lifecycle {
