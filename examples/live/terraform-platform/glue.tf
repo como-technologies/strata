@@ -3,20 +3,24 @@
 # exist (main.tf). The glue crosses the profiles. The issuer of wilma-security signs the
 # certificates of wilma-network and wilma-identity. wilma-identity holds a Cluster of
 # cloudnative-pg from wilma-data. Each ServiceMonitor needs prometheus-operator of
-# wilma-observability. The domain is the profile variable domain.
+# wilma-observability. The domain is the profile variable domain. The team of pebbles (#701) has a
+# layer too: its store of secrets reads Vault on wilma, through the route of Vault on wilma.
 #
 # Each object is a map here, and yamlencode writes it. A selector or a Service name that matches
 # nothing on wilma is no fault of the apply: strata compares the content, not the health.
 
 locals {
-  # The packs of each layer of glue: a team, and the two profiles of the move of case 3.
+  # The packs of each layer of glue: a team, the two profiles of the move of case 3, and the team of
+  # pebbles.
   glue_teams = merge(local.teams, {
     observability_moved = [for p in local.teams.observability : p if p != "fluentbit"]
     logging             = ["fluentbit"]
+    workload            = local.workload_packs
   })
   glue_namespaces = merge({ for t in keys(local.teams) : t => "${var.cluster_name}-${t}" }, {
     observability_moved = "${var.cluster_name}-observability"
     logging             = "${var.cluster_name}-logging"
+    workload            = "${var.workload_name}-apps"
   })
 
   # The label and the port of the metrics of each pack. Vault in dev mode serves none.
@@ -37,6 +41,8 @@ locals {
 
   # route HOST NAMESPACE SERVICE PORT: an HTTPRoute of the Gateway of wilma-network
   routes = {
+    # The store of secrets of pebbles reads Vault through this route (#701).
+    security      = { host = "vault", namespace = local.namespaces.vault, service = "vault", port = 8200 }
     identity      = { host = "keycloak", namespace = local.namespaces.keycloak, service = "keycloak", port = 80 }
     gitops        = { host = "argocd", namespace = local.namespaces.argo-cd, service = "argo-cd-server", port = 80 }
     observability = { host = "grafana", namespace = local.namespaces.grafana, service = "grafana", port = 3000 }
@@ -52,9 +58,40 @@ locals {
     }
   } }
 
+  # The token of Vault, and the store of secrets that reads Vault with it, for each layer with a
+  # store. wilma reads Vault in the cluster. pebbles reads it at the route of Vault on wilma, and the
+  # name of that route is in the private zone of wilma.
+  vault_servers = {
+    security = "http://vault.${local.namespaces.vault}.svc:8200"
+    workload = "https://vault.${local.domain}"
+  }
+  vault_store = { for t, server in local.vault_servers : t => [
+    {
+      apiVersion = "v1"
+      kind       = "Secret"
+      metadata   = { name = "vault-token", namespace = local.glue_namespaces[t] }
+      stringData = { token = local.vault_token }
+    },
+    {
+      apiVersion = "external-secrets.io/v1"
+      kind       = "ClusterSecretStore"
+      metadata   = { name = "${var.cluster_name}-vault" }
+      spec = {
+        provider = {
+          vault = {
+            server  = server
+            path    = "secret"
+            version = "v2"
+            auth    = { tokenSecretRef = { name = "vault-token", namespace = local.glue_namespaces[t], key = "token" } }
+          }
+        }
+      }
+    },
+  ] }
+
   # The objects of each layer that are not a namespace or a ServiceMonitor.
   glue_objects = {
-    security = [
+    security = concat([
       { apiVersion = "cert-manager.io/v1", kind = "ClusterIssuer", metadata = { name = "${var.cluster_name}-selfsigned" }, spec = { selfSigned = {} } },
       {
         apiVersion = "cert-manager.io/v1"
@@ -69,27 +106,7 @@ locals {
         }
       },
       { apiVersion = "cert-manager.io/v1", kind = "ClusterIssuer", metadata = { name = "${var.cluster_name}-ca" }, spec = { ca = { secretName = "${var.cluster_name}-ca" } } },
-      {
-        apiVersion = "v1"
-        kind       = "Secret"
-        metadata   = { name = "vault-token", namespace = local.glue_namespaces.security }
-        stringData = { token = local.vault_token }
-      },
-      {
-        apiVersion = "external-secrets.io/v1"
-        kind       = "ClusterSecretStore"
-        metadata   = { name = "${var.cluster_name}-vault" }
-        spec = {
-          provider = {
-            vault = {
-              server  = "http://vault.${local.namespaces.vault}.svc:8200"
-              path    = "secret"
-              version = "v2"
-              auth    = { tokenSecretRef = { name = "vault-token", namespace = local.glue_namespaces.security, key = "token" } }
-            }
-          }
-        }
-      },
+      ], local.vault_store.security, [
       {
         apiVersion = "kyverno.io/v1"
         kind       = "ClusterPolicy"
@@ -110,7 +127,8 @@ locals {
           }]
         }
       },
-    ]
+      local.route.security,
+    ])
     network = [
       {
         apiVersion = "gateway.envoyproxy.io/v1alpha1"
@@ -186,6 +204,7 @@ locals {
     observability       = [local.route.observability]
     observability_moved = [local.route.observability]
     logging             = []
+    workload            = local.vault_store.workload
     control = [
       # A platform API that a team offers: a claim of a database, with no composition yet.
       {

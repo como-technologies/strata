@@ -340,7 +340,8 @@ live-profiles: build
 
 # The platform cluster wilma (#700) has a state of its own, so live-up and live-down never touch it. It
 # runs the release profile of the lab, so live-profiles or live-up comes first, and live-down after
-# live-platform-down. See "The platform cluster" in docs/src/development/live-example.md.
+# live-platform-down. With STRATA_LIVE_SECOND_PROJECT, the state also holds the workload cluster
+# pebbles in that project (#701). See "The platform cluster" in docs/src/development/live-example.md.
 
 # Write the pins of wilma from the tenant: the newest version of each pack, or the version before it for some (#700)
 [group('live')]
@@ -358,7 +359,7 @@ live-platform-values:
 live-platform-images:
     examples/live/platform.sh images
 
-# Resolve the images of the pins, then build wilma with seven add-on profiles and 14 community packs, and wait until each pack is ready (#700). Billable until live-platform-down.
+# Resolve the images of the pins, then build wilma, and pebbles with a second project, and wait until each pack is ready (#700, #701). Billable until live-platform-down.
 [group('live')]
 live-platform-up: build
     examples/live/platform.sh up
@@ -368,12 +369,17 @@ live-platform-up: build
 live-platform case="": build
     examples/live/platform.sh {{case}}
 
-# Remove wilma, its profiles, its private zone, and the policy of its nodes, and read the inventory (#700)
+# The cases of the boundary of a project (#701): wilma and pebbles in two projects. CASE runs that case alone. Needs live-platform-up with a second project.
+[group('live checks')]
+live-platform-boundary case="": build
+    examples/live/platform-boundary.sh {{case}}
+
+# Remove wilma, pebbles, their profiles, the private zone, and the policy of the nodes, and read the inventory (#700, #701)
 [group('live')]
 live-platform-down: build
     examples/live/platform.sh down
 
-# What wilma still has in AWS; 0 on every line after live-platform-down (#700)
+# What wilma and pebbles still have in AWS; 0 on every line after live-platform-down (#700, #701)
 [group('live')]
 live-platform-inventory: build
     examples/live/platform.sh inventory

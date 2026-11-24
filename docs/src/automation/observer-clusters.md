@@ -7,7 +7,9 @@ cluster where it runs: see [The observer](./observer.md).
 
 For each cluster of the set, the page answers "Does Palette still have the
 version that I recorded?", "Does this cluster run its release?", and "Does the
-registry have newer versions of what we pin?". The read of the pods answers
+registry have newer versions of what we pin?". Each answer is for its cluster
+alone: strata models no dependency between two clusters of the set. See [The
+rules of the scope](../boundary.md#the-rules-of-the-scope). The read of the pods answers
 "Which digest does each tag run as on this cluster?" for the cluster where the
 observer runs, and for no other cluster.
 

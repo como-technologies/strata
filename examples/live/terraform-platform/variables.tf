@@ -103,6 +103,32 @@ variable "sso" {
   default     = true
 }
 
+# The workload cluster pebbles (#701) is in a second project of the tenant. platform-lib.sh gives the
+# name of that project from STRATA_LIVE_SECOND_PROJECT, so no file of the repository names it.
+
+variable "second_project" {
+  description = "The second project of the tenant, where pebbles runs; empty for no pebbles and no profile of the tenant"
+  type        = string
+  default     = ""
+}
+
+variable "second_cloud_account_name" {
+  description = "The AWS cloud account of pebbles in the second project; empty for cloud_account_name"
+  type        = string
+  default     = ""
+}
+
+variable "workload_name" {
+  description = "The workload cluster in the second project"
+  type        = string
+  default     = "pebbles"
+}
+
+variable "workload_worker_count" {
+  type    = number
+  default = 2
+}
+
 # The variables below are the cases of platform.sh. Their defaults are the baseline of wilma.
 
 variable "addons" {
@@ -139,4 +165,10 @@ variable "move_fluentbit" {
   description = "true runs wilma-observability 1.1.0 with no fluentbit, and fluentbit in wilma-logging (case 3)"
   type        = bool
   default     = false
+}
+
+variable "vault_version" {
+  description = "Another version of vault: wilma runs it in wilma-security 1.1.0; empty for the pin (case 2 of platform-boundary.sh)"
+  type        = string
+  default     = ""
 }

@@ -6,10 +6,10 @@
 #
 #   examples/live/platform.sh pins        write terraform-platform/terraform.tfvars from the tenant
 #   examples/live/platform.sh images      resolve each image that the values of the pins name
-#   examples/live/platform.sh up          images, then build wilma, and wait until each pack is ready
+#   examples/live/platform.sh up          images, then build the clusters, and wait until each pack is ready
 #   examples/live/platform.sh [N]         run case N, or each case from 1 to 8
-#   examples/live/platform.sh down        remove wilma, its profiles, its zone, and its policy
-#   examples/live/platform.sh inventory   what wilma still has in AWS: 0 on each line after down
+#   examples/live/platform.sh down        remove the clusters, their profiles, the zone, and the policy
+#   examples/live/platform.sh inventory   what wilma and pebbles still have in AWS: 0 on each line after down
 #
 #   1  an edit in one profile: verify gives a finding for that record only
 #   2  one pack in two profiles: what Palette answers, and what strata says
@@ -27,6 +27,10 @@
 # up and down show their plans and ask before they change anything. Each case gives wilma its
 # baseline again at its end, also after a failed check: the defaults of terraform-platform/.
 # KEEP=1 skips that undo, for a person who reads the state of wilma after a failed check.
+#
+# With a second project in STRATA_LIVE_SECOND_PROJECT, up and down also build and remove the workload
+# cluster pebbles in that project (#701). platform-boundary.sh runs its cases. platform-lib.sh holds
+# what the two scripts share.
 #
 # Needs `just live-profiles` or `just live-up` first, for the release profile of the lab. Needs
 # tofu, jq, curl, crane, kubectl, go, the AWS CLI, and the key of Palette in PALETTE_API_KEY or
@@ -54,15 +58,7 @@ for tool in jq curl; do
   command -v "$tool" > /dev/null || die "$tool is needed"
 done
 
-platform=$live/terraform-platform
-pins_file=$platform/terraform.tfvars
-# The state of wilma is apart from the live example. Each plan, apply, destroy, and console of it
-# reads the names of the tenant from the file of the lab.
-export TF_DIR=$platform
-for command in plan apply destroy console; do
-  export "TF_CLI_ARGS_$command=-var-file=$live/terraform/terraform.tfvars"
-done
-export STRATA_QUIET=1
+. "$live/platform-lib.sh"
 
 # ---- the pins -------------------------------------------------------------------------------------
 
@@ -104,26 +100,8 @@ pins() {
 # behind_pins: the name of each pack that pins one version behind
 behind_pins() { sed -n 's/^ *\([a-z0-9-]*\) *= *{.*# behind *$/\1/p' "$pins_file"; }
 
-# ---- the outputs and the records ------------------------------------------------------------------
+# ---- the records ----------------------------------------------------------------------------------
 
-# platform_outputs: read the outputs of wilma, and set W, R, name, and the project
-platform_outputs() {
-  load_outputs
-  W=$(out cluster_uid)
-  R=$(out release_profile_uid)
-  name=$(out cluster_name)
-  PALETTE_PROJECT_UID=$(out project_uid)
-  for v in W R name PALETTE_PROJECT_UID; do
-    [ -n "${!v}" ] || die "the tofu output behind $v is empty; run examples/live/platform.sh up"
-  done
-  export PALETTE_PROJECT_UID
-  C=$W
-  export STRATA_BIN=$strata strata C
-}
-# teams: the teams of the seven profiles, one on each line
-teams() { out profile_uids | jq -r 'keys[]'; }
-# team_uid TEAM: the uid of version 1.0.0 of the profile of TEAM
-team_uid() { out profile_uids | jq -r --arg t "$1" '.[$t] // empty'; }
 # records_made: a record of the release profile, of each profile of a team, and of wilma
 records_made() {
   local team
@@ -153,56 +131,10 @@ verify_teams() {
 # other_teams TEAM: each team other than TEAM, and the release
 other_teams() { { teams | grep -vx "$1"; echo release; } | paste -sd ' ' -; }
 
-# ---- the readiness of the packs -------------------------------------------------------------------
-
-# One line for each pack of the profiles in $want, from the cluster document: ready, waiting, or
-# missing, with the reason of Palette. A pack is ready when its condition has the status True.
-ready_jq='(.status.packs // []) as $have | $want[] | . as $w
-  | ([$have[] | select(.name == $w.name and .profileUid == $w.uid)] | first) as $p
-  | if $p == null then "missing \($w.name): Palette reports no status for it"
-    elif ($p.condition.status // "") == "True" then "ready \($w.name): \($p.condition.reason // "")"
-    else "waiting \($w.name): \($p.condition.reason // $p.condition.status // "no condition") \($p.condition.message // "" | .[:160])"
-    end'
-# packs_ready: each pack of each add-on profile that wilma runs is ready. ready.txt keeps the lines.
-packs_ready() {
-  local uid
-  "$live/api.sh" get "/v1/spectroclusters/$W" > ready-cluster.json || return 1
-  for uid in $(out on_cluster | jq -r '.[]'); do
-    "$live/api.sh" get "/v1/clusterprofiles/$uid" | jq -c --arg u "$uid" '.spec.published.packs[] | {uid: $u, name}'
-  done > ready-expected.jsonl || return 1
-  jq -r --slurpfile want ready-expected.jsonl "$ready_jq" ready-cluster.json > ready.txt || return 1
-  [ -s ready.txt ] && ! grep -qv '^ready ' ready.txt
-}
-# wait_ready: wait up to 45 minutes until each pack is ready. The output is the last reading.
-wait_ready() {
-  local _
-  for _ in $(seq 1 "${READY_TRIES:-135}"); do
-    packs_ready && { cat ready.txt; return 0; }
-    sleep 20
-  done
-  cat ready.txt 2> /dev/null
-  return 1
-}
-
 # ---- the applies of the cases ---------------------------------------------------------------------
 
-# dirty: a case changed a variable of wilma. ids.env keeps it, so that a run that resumes knows it.
-dirty= edited_security= edited_prometheus= observer=
-save() { echo "$1=$2" >> ids.env; }
-# applied ARG...: an apply with the variables ARG. The output is the lines of the plan, of the end, and of
-# each error. It returns the exit of tofu. The apply runs in this shell, so that it reads the outputs again.
-applied() {
-  local rc
-  try_apply "$@" > case-apply.txt
-  rc=$?
-  grep -E '^(Plan|Apply complete|Error)|Code|code' case-apply.txt | head -n 20
-  return "$rc"
-}
-# apply_case ARG...: an apply with the variables of one case
-apply_case() {
-  dirty=1 && save dirty 1
-  applied "$@"
-}
+# The edits and the observer that a case leaves. ids.env keeps them, so that a run that resumes knows them.
+edited_security= edited_prometheus= observer=
 # refused_apply CODE ARG...: an apply that Palette must refuse with the error code CODE
 refused_apply() {
   local code=$1 rc
@@ -213,10 +145,6 @@ refused_apply() {
   grep -E 'Error|Code|code' refused-apply.txt | head -n 20
   [ "$rc" != 0 ] && grep -q "$code" refused-apply.txt
 }
-# apply_defaults: the defaults of terraform-platform/, which are the baseline of wilma
-apply_defaults() { applied && dirty= && save dirty ""; }
-# baseline_ready: the defaults, and each pack is ready
-baseline_ready() { apply_defaults && wait_ready; }
 
 # ---- the cases ------------------------------------------------------------------------------------
 
@@ -232,13 +160,6 @@ edit_security() {
 }
 undo_security() { "$live/api.sh" edit "$(team_uid security)" "$edit_to" "$edit_from" && edited_security= && save edited_security ""; }
 
-# other_cert_manager: a version of cert-manager in the registry of its pin, other than the pin. It is
-# the first such version in the order of strata, so the newest one.
-other_cert_manager() {
-  "$strata" packs cert-manager --cloud aws --json -q | jq -r --argjson p "$(out packs)" \
-    '[.registries[] | select(.registry == $p["cert-manager"].registry) | .versions[]
-      | select(.state == null and .version != $p["cert-manager"].version)][0].version // empty'
-}
 # move_refused: Palette refuses the move of wilma from wilma-network 1.0.0 to 1.1.0 with HTTP 500 and
 # DuplicateClusterPacksForbidden. move.txt keeps the status and the answer.
 move_refused() {
@@ -305,7 +226,7 @@ behind_scale() {
   code=$?
   echo "behind exits $code after $((SECONDS - start)) seconds, with $(wc -l < behind-scale.log | tr -d ' ') requests"
   jq -r '"\(.pins | length) pins, \([.pins[] | select(.behind)] | length) behind"' behind-scale.json
-  sed -E 's#/[0-9a-f]{24}#/{uid}#g' behind-scale.log | sort | uniq -c | sort -rn | head -n 12
+  top_routes behind-scale.log
   [ "$code" -le 1 ]
 }
 # behind_rows: behind names a newer version for each pack that pins one version behind
@@ -457,43 +378,58 @@ images() {
 
 # ---- up, down, and the inventory ------------------------------------------------------------------
 
-# up: build wilma when each image resolves, and wait until each pack is ready. The apply asks
-# first, as live-up does.
+# up: build wilma, and pebbles with a second project, when each image resolves. Then wait until each
+# pack is ready. The apply asks first, as live-up does.
 up() {
   images || return 1
   "$live/tf.sh" apply || { "$live/diagnose.sh" "$PWD/diagnostics" >&2; exit 1; }
   platform_outputs
   wait_running "$W"
   check packs-ready 0 '#700: each pack of each add-on profile of wilma is ready' -- wait_ready
+  [ -n "$P" ] || return 0
+  in_second wait_running "$P"
+  check workload-packs-ready 0 "#701: each pack of each add-on profile of $workload is ready" -- \
+    in_second wait_ready "$P" workload_on_cluster
 }
 
-# no_addon_left: the cluster document lists no pack of an add-on profile. The output counts them.
+# no_addon_left CLUSTER RELEASE: the document of the cluster lists no pack of a profile other than its
+# cluster profile RELEASE. The output counts them.
 no_addon_left() {
   local n
-  n=$("$live/api.sh" get "/v1/spectroclusters/$W" | jq --arg r "$R" '[.status.packs[]? | select(.profileUid != $r)] | length') \
+  n=$("$live/api.sh" get "/v1/spectroclusters/$1" | jq --arg r "$2" '[.status.packs[]? | select(.profileUid != $r)] | length') \
     || return 1
   echo "$n packs of an add-on profile"
   [ "$n" = 0 ]
 }
-# no_volume_left: no persistent volume is left in wilma
-no_volume_left() { [ "$(kj get pv -o json | jq '.items | length')" = 0 ]; }
+# no_volume_left CLUSTER: no persistent volume is left in the cluster
+no_volume_left() { [ "$(KUBE_STDERR=1 kube "$1" get pv -o json | jq '.items | length')" = 0 ]; }
+# free_volumes CLUSTER NAME: delete each claim of a volume of the cluster NAME while its CSI driver
+# runs, so that the driver deletes each volume. A volume that stays is a line of the log.
+free_volumes() {
+  KUBE_TIMEOUT=600 kube "$1" delete pvc --all -A --wait=true | tee -a steps.log
+  poll 60 no_volume_left "$1" || echo "persistent volumes are still in $2: the inventory counts their volumes" | tee -a steps.log
+}
 
-# down: remove the add-on profiles from wilma, so that their workloads free the claims of their
-# volumes. Delete each claim while the CSI driver runs, so that it deletes each volume. Then destroy,
-# delete each version of each profile name, and read the inventory. When the state has no wilma, as
-# after an up that stopped before the cluster, the destroy removes what the state holds.
+# down: remove the add-on profiles from wilma and pebbles, so that their workloads free the claims of
+# their volumes. Delete each claim while the CSI driver runs. Then destroy, delete each version of
+# each profile name in each project, and read the inventory. When the state has no wilma, as after an
+# up that stopped before the cluster, the destroy removes what the state holds.
 down() {
-  local names
+  local names workload_names
   load_outputs
   names=$(out profile_names | jq -r '.[]')
+  workload_names=$(out workload_profile_names | jq -r '.[]')
+  P2=$(out second_project_uid)
   if [ -n "$(out cluster_uid)" ]; then
     platform_outputs
-    echo "== the add-on profiles leave $name" | tee -a steps.log
+    echo "== the add-on profiles leave $name${P:+ and $workload}" | tee -a steps.log
     tf_apply false -var addons=false
-    poll 120 no_addon_left || echo "packs of an add-on profile are still on $name; the destroy continues" | tee -a steps.log
+    poll 120 no_addon_left "$W" "$R" || echo "packs of an add-on profile are still on $name; the destroy continues" | tee -a steps.log
+    [ -z "$P" ] || in_second poll 120 no_addon_left "$P" "$(out workload_release_uid)" \
+      || echo "packs of an add-on profile are still on $workload; the destroy continues" | tee -a steps.log
     echo "== each claim of a volume goes, while the CSI driver runs" | tee -a steps.log
-    KUBE_TIMEOUT=600 kc delete pvc --all -A --wait=true | tee -a steps.log
-    poll 60 no_volume_left || echo "persistent volumes are still in $name: the inventory counts their volumes" | tee -a steps.log
+    free_volumes "$W" "$name"
+    [ -z "$P" ] || in_second free_volumes "$P" "$workload"
   else
     PALETTE_PROJECT_UID=$(out project_uid)
     export PALETTE_PROJECT_UID
@@ -503,11 +439,13 @@ down() {
   "$live/tf.sh" destroy || "$live/tf.sh" destroy || { "$live/diagnose.sh" "$PWD/diagnostics" >&2; exit 1; }
   # shellcheck disable=SC2086
   [ -z "$names" ] || "$live/api.sh" delete-named $names
+  # shellcheck disable=SC2086
+  [ -z "$workload_names" ] || in_second "$live/api.sh" delete-named $workload_names
   inventory
 }
 
-# inventory: what wilma still has in AWS. inventory.sh reads the variables and not the outputs, so it
-# works after down.
+# inventory: what wilma and pebbles still have in AWS. inventory.sh reads the variables and not the
+# outputs, so it works after down.
 inventory() { "$live/inventory.sh" --platform; }
 
 case "$mode" in
@@ -530,7 +468,7 @@ case "$mode" in
   up)
     up
     # when up stops at the images, it has no cluster to name
-    write_summary "the platform cluster up" "${W:+, cluster $(md span "$name") $(md span "$W")}."
+    write_summary "the platform cluster up" "${W:+, cluster $(md span "$name") $(md span "$W")}${P:+, cluster $(md span "$workload") $(md span "$P")}."
     [ "$failures" = 0 ]
     exit
     ;;
@@ -559,14 +497,6 @@ finish() {
 }
 trap finish EXIT
 
-# case_stage N TITLE: the heading of case N, when the run holds case N
-case_stage() { [ "$1" -le "$to" ] && stage "$@"; }
-
-# require_platform: stop unless wilma is at its baseline: a plan with the defaults changes nothing
-require_platform() {
-  tf_plan false > baseline-before.txt 2>&1 \
-    || die "wilma is not at its baseline; see $PWD/baseline-before.txt (platform.sh down and up build it again)"
-}
 require_platform
 
 if case_stage 1 "an edit in one profile"; then
@@ -584,7 +514,7 @@ fi
 
 if case_stage 2 "one pack in two profiles"; then
   records_ready
-  other=$(other_cert_manager)
+  other=$(other_version cert-manager)
   [ -n "$other" ] || die "the registry of cert-manager gives no second version"
   failed_before=$failures
   check network-next 0 "#700: $name-network 1.1.0 adds cert-manager $other, and no cluster runs it" -- \

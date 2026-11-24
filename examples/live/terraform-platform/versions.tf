@@ -31,3 +31,13 @@ provider "spectrocloud" {
     "immutable-clusterprofiles" = var.immutable_profiles
   }
 }
+
+# The second project, where pebbles runs (#701). The provider needs a project, so with no second
+# project the alias names the project of wilma, and no resource uses it.
+provider "spectrocloud" {
+  alias        = "second"
+  project_name = var.second_project != "" ? var.second_project : var.palette_project
+  feature_preview = {
+    "immutable-clusterprofiles" = var.immutable_profiles
+  }
+}
