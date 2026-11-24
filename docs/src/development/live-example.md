@@ -40,7 +40,7 @@ show.
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 | `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with synchronization off, the case with no digest (#71). It needs no cluster. |
-| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. Stage 5 edits a role binding of cluster A, and needs no cluster B (#106). Stage 6 reads the role bindings with a second key (#276), and stage 7 sets an override on a machine pool of cluster A (#515). Stage 8 reads three routes of cluster A with a third key (#665), and runs `strata list` with it (#620). Stage 9 reads with a key that no tenant has (#620), and stages 6 to 9 each run only as `tiers.sh <N>`. |
+| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while, and stage 5 edits a role binding of cluster A with no cluster B (#106). Stage 6 reads the role bindings with a second key (#276), and stage 7 sets an override on a machine pool of cluster A (#515). Stage 8 reads three routes of cluster A with a third key (#665), and runs `strata list` with it (#620). Stage 9 reads with a key that no tenant has (#620), and stage 10 reads the role bindings with the key of a second user (#838). Stages 6 to 10 each run only as `tiers.sh <N>`. |
 | `edge-host.sh` | A record of an edge host, `consumers` of a profile bound to one, and what an edit in place does to an edge host (#78). It registers edge hosts with no device. |
 | `cluster-group.sh` | A record of a cluster group, and `compare` of the group with its virtual cluster (#78); a change of the CPU limit of the group (#110). It builds a virtual cluster in cluster A. |
 | `app-profile.sh` | A record of an app profile, and a plain update of it (#78); two app profiles whose tiers differ in the install order (#112). It needs no cluster. |
@@ -89,6 +89,13 @@ shape. EKS and GKE are managed engines. EKS has its own cloud account: see
 
 The pack versions are those of `examples/profiles/aws-stack@1.1.0.json`.
 
+With `k8s_identity_provider`, the Kubernetes pack names that identity provider
+at `pack.palette.config.dashboard.identityProvider`. It does so in 1.0.0, 1.0.1,
+and each other version that copies the packs of 1.0.0. The edit adds four lines
+under the line `pack:` of the values of the pack, and changes no other line.
+Cluster A needs it for `tiers.sh 10`: see [Prerequisites](#prerequisites).
+`just live-values` tests the edit with mock providers, and sends no request.
+
 `cluster-group.sh` sets `cluster_group`, which adds a cluster group
 `strata-live-group` on cluster A that pins the add-on version, and a virtual
 cluster `strata-live-member` in it. The virtual cluster runs in cluster A, so it
@@ -110,7 +117,7 @@ its end.
 
 | File | Function |
 | --- | --- |
-| `terraform/` | The profiles and the clusters, and the variables that the scripts set. `main.tf` holds the profiles; `cloud-aws.tf`, `cloud-gcp.tf`, and `cloud-eks.tf` hold the cloud account, the clusters, and the infrastructure packs of each cloud. `iam/eks-controllers.json` is the EKS policy of Palette, for the role of `cloud-eks.tf`. |
+| `terraform/` | The profiles and the clusters, and the variables that the scripts set. `main.tf` holds the profiles; `cloud-aws.tf`, `cloud-gcp.tf`, and `cloud-eks.tf` hold the cloud account, the clusters, and the infrastructure packs of each cloud. `iam/eks-controllers.json` is the EKS policy of Palette, for the role of `cloud-eks.tf`. `tests/` holds the test of `just live-values`. |
 | `tofu-install.sh` | Installs the pinned OpenTofu. `just tofu-install` runs it, and `just tofu-uninstall` removes it. |
 | `tf.sh` | Runs `tofu` with the key and the Palette address that strata uses. |
 | `contract-profiles.sh` | The standing cluster profiles of the contract run (#531). It applies `terraform/` with the prefix `strata-contract`, no cluster, and `own_registries` off, in the state file `terraform/contract.tfstate`. See [The profiles of the run](./facts.md#the-profiles-of-the-run). |
@@ -308,7 +315,7 @@ back to false with the default variables (`apply_baseline`).
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`.
 - For `tiers.sh 6` only: a second key in `STRATA_LIVE_LIMITED_KEY`, the key of an active user with no role in the project. It cannot read `config/rbacs` of a cluster. The script never prints it.
 - For `tiers.sh 8` only: a third key in `STRATA_LIVE_NARROW_KEY`. Its user has a role in the project that does not give `cluster.get`, such as Cluster Profile Viewer. The script never prints it.
-- For `tiers.sh 10` only: the key of a second user in `STRATA_LIVE_SECOND_KEY`. That user is active, and has a role in the project that gives `cluster.get`, such as Project Viewer. Cluster A must have a role binding of the system. The script never prints the key.
+- For `tiers.sh 10` only: the key of a second user in `STRATA_LIVE_SECOND_KEY`. That user is active, and has a role in the project that gives `cluster.get`, such as Project Viewer. Cluster A must have a role binding of the system. For this, cluster A needs a setting of its own, beside a setting of the tenant (#915). Put `k8s_identity_provider = "palette"` in `terraform.tfvars` before `just live-up`, and change it only after `just live-down`. The script never prints the key.
 - For `projects.sh` only: the name of a second project of the tenant in `STRATA_LIVE_SECOND_PROJECT`. The script makes one profile there, and deletes it at its end.
 - For `observer-role.sh` only: the key of a user with the role under test in `OBSERVER_ROLE_KEY`, and the name of the role in `OBSERVER_ROLE`. The script never prints the key.
 - `tofu` 1.6 or later (`just tofu-install` installs 1.12.6), `jq`, `just`,
@@ -794,7 +801,8 @@ just live-tiers-limited                                                        #
 just live-tiers-pool                                                           # #515, needs just live-up; sets an override on a pool of cluster A, and puts the pool back
 just live-tiers-narrow                                                         # #665, #620, needs just live-up and STRATA_LIVE_NARROW_KEY; reads only
 just live-tiers-unknown-key                                                    # #620, needs just live-up; reads only, with a key that no tenant has
-just live-tiers-second-key                                                     # #838, needs just live-up and STRATA_LIVE_SECOND_KEY; reads only
+just live-values                                                               # #915, no request: the values of the Kubernetes pack that k8s_identity_provider gives
+just live-tiers-second-key                                                     # #838, #915, needs just live-up with k8s_identity_provider, and STRATA_LIVE_SECOND_KEY; reads only
 just live-template                                                             # #66, #276, needs just live-profiles and no cluster; builds two clusters; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows
