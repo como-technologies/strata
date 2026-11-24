@@ -9,10 +9,17 @@
 # `just live-down` runs after `just live-platform-down`.
 #
 # The variables of the cases in variables.tf change one thing each. platform.sh sets them, and
-# the defaults are the baseline of wilma. Billable while it exists.
+# the defaults are the baseline of wilma. Billable while it exists. pebbles.tf adds the workload
+# cluster pebbles in a second project, when the state has one (#701).
 
 locals {
-  tags = ["purpose:strata-live-platform", "managed-by:opentofu"]
+  # The tag of the set of the observer, on wilma and on pebbles (#701). It is the label hub=wilma, and
+  # the selector of the set is tag:hub=wilma.
+  set_tag = "hub:${var.cluster_name}"
+  tags    = ["purpose:strata-live-platform", "managed-by:opentofu", local.set_tag]
+
+  # The pins, with the version of vault of case 2 of platform-boundary.sh when it has one.
+  packs = merge(var.packs, var.vault_version == "" ? {} : { vault = merge(var.packs.vault, { version = var.vault_version }) })
 
   # The packs of each profile, in the order of the profile. The table of #700 gives them.
   teams = {
@@ -54,12 +61,12 @@ data "spectrocloud_cluster_profile" "release" {
 }
 
 data "spectrocloud_registry" "this" {
-  for_each = toset([for p in values(var.packs) : p.registry])
+  for_each = toset([for p in values(local.packs) : p.registry])
   name     = each.value
 }
 
 data "spectrocloud_pack" "pin" {
-  for_each     = var.packs
+  for_each     = local.packs
   name         = each.key
   version      = each.value.version
   registry_uid = data.spectrocloud_registry.this[each.value.registry].id
@@ -70,7 +77,7 @@ data "spectrocloud_pack" "other_cert_manager" {
   count        = var.network_cert_manager == "" ? 0 : 1
   name         = "cert-manager"
   version      = var.network_cert_manager
-  registry_uid = data.spectrocloud_registry.this[var.packs["cert-manager"].registry].id
+  registry_uid = data.spectrocloud_registry.this[local.packs["cert-manager"].registry].id
 }
 
 # ---- the values -----------------------------------------------------------------------------------
@@ -86,7 +93,7 @@ locals {
   # Docker Hub no longer serves the images of docker.io/bitnami that the charts of the registry
   # Bitnami name. The repository bitnamilegacy holds each of them with the same tag. So each
   # repository bitnami/ of such a chart becomes bitnamilegacy/, at each level of its values.
-  bitnami       = [for k, p in var.packs : k if p.registry == "Bitnami"]
+  bitnami       = [for k, p in local.packs : k if p.registry == "Bitnami"]
   source_values = { for k, d in data.spectrocloud_pack.pin : k => contains(local.bitnami, k) ? replace(d.values, "/(?m)^( *repository: *)bitnami//", "$${1}bitnamilegacy/") : d.values }
   # Some of these charts refuse an image that their list of images does not name, unless this
   # value is true.
@@ -243,7 +250,7 @@ resource "random_password" "grafana" {
 
 locals {
   # One pack block for each pin of a team.
-  pins = { for k, p in var.packs : k => {
+  pins = { for k, p in local.packs : k => {
     name         = k
     type         = p.type
     tag          = p.version
@@ -270,9 +277,11 @@ locals {
 }
 
 resource "spectrocloud_cluster_profile" "team" {
-  for_each     = local.team_packs
-  name         = "${var.cluster_name}-${each.key}"
-  version      = "1.0.0"
+  for_each = local.team_packs
+  name     = "${var.cluster_name}-${each.key}"
+  # Case 2 of platform-boundary.sh: wilma-security 1.1.0 holds the other vault. A new version is a
+  # new profile, so wilma moves to it, and the apply then deletes 1.0.0.
+  version      = each.key == "security" && var.vault_version != "" ? "1.1.0" : "1.0.0"
   description  = "strata live platform: the packs of the team ${each.key}, and its glue"
   cloud        = "all"
   type         = "add-on"
@@ -428,11 +437,13 @@ resource "spectrocloud_cluster_profile" "moved" {
 # ---- the cluster ----------------------------------------------------------------------------------
 
 locals {
-  # The add-on profiles that wilma runs, by team, for the variables of the cases.
+  # The add-on profiles that wilma runs, by team, for the variables of the cases. The profile of the
+  # tenant has the key shared.
   on_cluster = { for team, uid in merge(
     { for team, p in spectrocloud_cluster_profile.team : team => p.id
     if !(team == "data" && !var.data_profile) && !(team == "observability" && var.move_fluentbit) },
     { for team, p in spectrocloud_cluster_profile.moved : team => p.id },
+    { for p in spectrocloud_cluster_profile.shared : "shared" => p.id },
   ) : team => uid if var.addons }
 }
 

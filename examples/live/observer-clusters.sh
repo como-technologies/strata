@@ -32,7 +32,6 @@ from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 case "$from" in 1|2|3|4|5) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
-observer_bin=${OBSERVER_BIN:-$(cd "$live/../.." && pwd)/target/observer/strata-observer}
 [ -n "${OBSERVER_ROLE_KEY:-}" ] \
   || die "could not check: set OBSERVER_ROLE_KEY to the key of a user with the role Project Viewer alone"
 
@@ -52,9 +51,6 @@ summary() {
   write_summary "observer of a set of clusters" ", cluster $(md span "$C"), filter $(md span "$FILTER")."
 }
 trap summary EXIT
-
-# with_role COMMAND...: run COMMAND with the key of the role
-with_role() { PALETTE_API_KEY=$OBSERVER_ROLE_KEY "$@"; }
 
 # search_body: the body of the cluster search for the label env=prod, as strata sends it
 search_body() {
@@ -117,33 +113,13 @@ if stage 3 "list clusters with the key of the role"; then
     with_role "$strata" list clusters --filter "$FILTER" --project "$P" --json
 fi
 
-# observer_records: a record of each profile of cluster A, by its uid, gzipped as the Secrets of the records hold it
-observer_records() {
-  mkdir -p records work state
-  "$strata" list clusters --detail --cluster "$C" --json \
-    | jq -r --arg c "$C" '.clusters[] | select(.uid == $c) | .profiles[].uid' > profiles.txt || return 2
-  [ -s profiles.txt ] || return 1
-  while read -r uid; do
-    "$strata" snapshot "$uid" -o "records/$uid.json" || return 2
-    gzip -f "records/$uid.json" || return 2
-  done < profiles.txt
-  echo '{"baseline":"approved","revision":"live"}' > records/meta.json
-}
-
 # observer_once: one content cycle and one versions cycle of the observer for tag:env=prod. The key of
 # the role is the key of the project of cluster A.
-observer_once() {
-  ( umask 077 && mkdir -p keys && printf %s "$OBSERVER_ROLE_KEY" > keys/api-key ) || return 2
-  "$observer_bin" once --strata "$strata" --clusters tag:env=prod --keys keys --cluster-uid "$C" \
-    --records records --work work --state state > once.json 2> once.err
-  local code=$?
-  rm -rf keys
-  [ "$code" -le 1 ]
-}
+observer_once() { set_once once.json tag:env=prod OBSERVER_ROLE_KEY; }
 
 if stage 4 "the observer of the set with the key of the role"; then
   [ -x "$observer_bin" ] || die "no observer binary at $observer_bin; run just observer-build"
-  check observer-records 0 'a record of each profile of cluster A' -- observer_records
+  check observer-records 0 'a record of each profile of cluster A' -- set_records "$C:$P"
   check observer-once 0 '#702: one cycle of the observer with --clusters tag:env=prod and the key of the role' -- observer_once
   check observer-row 0 '#1003: the row of cluster A names its project and has checkedAt. Its status is the status of its content, also with a cause of Not checked' -- \
     jq -e --arg c "$C" --arg p "$P" '[.clusters[] | select(.uid == $c and .project.uid == $p and .checkedAt != null and .status != "not-checked")] | length == 1' once.json

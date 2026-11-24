@@ -16802,17 +16802,19 @@ fn platform_outputs() -> serde_json::Value {
 }
 
 /// A `tofu` for `platform.sh`. It answers the outputs, a plan with no change, and the variables of
-/// `inventory.sh --platform`. A plan with `-out` writes its file, and `show -json` prints
+/// `inventory.sh --platform`. It logs the second project that a command gets, on a line of its own.
+/// A plan with `-out` writes its file, and `show -json` prints
 /// `$FAKE_PLAN`. It refuses the edit in place of case 2 as Palette does, unless
 /// `$FAKE_IN_PLACE_TAKEN` has a value. [`platform_tofu`] puts the code of the refusal in place of
 /// `CODE_IN_CONFLICT`.
 const PLATFORM_TOFU: &str = r#"#!/usr/bin/env bash
 echo "tofu $*" >> "$FAKE_TOFU_LOG"
+[ -z "${TF_VAR_second_project-}" ] || echo "second project $TF_VAR_second_project" >> "$FAKE_TOFU_LOG"
 case "$*" in
   *"output -json"*) cat "$FAKE_OUTPUTS" ;;
   *"show -json"*) cat "$FAKE_PLAN" ;;
   *console*)
-    printf '{\n  "a" = "wilma"\n  "domain" = "wilma.strata-live.internal"\n  "policy" = "strata-live-wilma-external-dns"\n'
+    printf '{\n  "a" = "wilma"\n  "b" = "pebbles"\n  "domain" = "wilma.strata-live.internal"\n  "policy" = "strata-live-wilma-external-dns"\n'
     printf '  "region" = "us-east-2"\n  "role" = "nodes.cluster-api-provider-aws.sigs.k8s.io"\n}\n' ;;
   *plan*)
     for a in "$@"; do case "$a" in -out=*) echo "a plan" > "${a#-out=}" ;; esac; done
@@ -18154,4 +18156,726 @@ fn observer_clusters_sh_says_could_not_check_with_no_key_of_the_role() {
         "{}",
         text(&o.stderr)
     );
+}
+
+// ---- the boundary of a project (#701) ---------------------------------------------------------
+
+/// The made-up names of the projects in the tests of pebbles: the lab project, and the second
+/// project of pebbles, with its uid.
+const LAB_PROJECT_NAME: &str = "bedrock";
+const SECOND_PROJECT: &str = "quarry";
+const SECOND_PROJECT_UID: &str = "p-quarry";
+
+/// The key of the user with the one role Project Viewer in the second project, and its name and uid
+/// in Palette.
+const SECOND_ROLE_KEY: &str = "second-role-k";
+const SECOND_KEY_NAME: &str = "second-viewer";
+const SECOND_KEY_UID: &str = "ak-2";
+
+/// The uids of pebbles, and of the profile of the tenant on both clusters.
+const PEBBLES_UID: &str = "pb-1";
+const SHARED_UID: &str = "sh-1";
+
+/// The packs of the team of pebbles: the local `workload_packs` of `terraform-platform/pebbles.tf`.
+fn pebbles_team() -> Vec<String> {
+    let file = std::fs::read_to_string(live_script("terraform-platform/pebbles.tf")).unwrap();
+    let line = file
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("workload_packs = "))
+        .expect("pebbles.tf has the local workload_packs");
+    serde_json::from_str(line).unwrap()
+}
+
+/// The add-on profiles that pebbles runs, by key, with the packs of each, as in `pebbles.tf`. The
+/// key `shared` is the profile of the tenant.
+fn pebbles_profiles() -> Vec<(&'static str, &'static str, Vec<String>)> {
+    let team = |t: &str| {
+        platform_teams()
+            .into_iter()
+            .find(|(name, _)| name == t)
+            .unwrap()
+            .1
+            .into_iter()
+            .chain([format!("wilma-{t}-glue")])
+            .collect::<Vec<_>>()
+    };
+    vec![
+        (
+            "apps",
+            "pa-1",
+            pebbles_team()
+                .into_iter()
+                .chain(["pebbles-apps-glue".to_string()])
+                .collect(),
+        ),
+        ("data", "cd-1", team("data")),
+        ("control", "cc-1", team("control")),
+        ("shared", SHARED_UID, vec!["wilma-shared".to_string()]),
+    ]
+}
+
+/// The OpenTofu outputs of wilma and pebbles at their baseline. wilma also runs the profile of the
+/// tenant.
+fn boundary_outputs() -> serde_json::Value {
+    let mut outputs = platform_outputs();
+    let on: serde_json::Map<String, serde_json::Value> = pebbles_profiles()
+        .into_iter()
+        .map(|(key, uid, _)| (key.to_string(), serde_json::json!(uid)))
+        .collect();
+    let copies: serde_json::Map<String, serde_json::Value> = pebbles_profiles()
+        .into_iter()
+        .filter(|(key, _, _)| *key == "data" || *key == "control")
+        .map(|(key, uid, _)| {
+            let copy = serde_json::json!({"name": format!("wilma-{key}"), "version": "1.0.0",
+                "uid": uid, "wilma_uid": format!("t-{key}")});
+            (key.to_string(), copy)
+        })
+        .collect();
+    let extra = serde_json::json!({
+        "second_project": SECOND_PROJECT, "second_project_uid": SECOND_PROJECT_UID,
+        "workload_uid": PEBBLES_UID, "workload_name": "pebbles", "workload_release_uid": "pr-1",
+        "workload_on_cluster": on, "copies": copies,
+        "shared_profile_uid": SHARED_UID, "shared_profile_name": "wilma-shared",
+        "set_selector": format!("{TAG_PREFIX}hub=wilma"),
+        "workload_profile_names": ["pebbles-release", "pebbles-apps", "wilma-data", "wilma-control"],
+    });
+    let map = outputs.as_object_mut().unwrap();
+    map.extend(extra.as_object().unwrap().clone());
+    map["on_cluster"]["shared"] = serde_json::json!(SHARED_UID);
+    outputs
+}
+
+/// The document of pebbles: Running, with each pack of each profile of [`pebbles_profiles`].
+/// `condition` gives the condition of each pack.
+fn pebbles_document(condition: impl Fn(&str) -> serde_json::Value) -> String {
+    let mut packs = Vec::new();
+    for (_, uid, names) in pebbles_profiles() {
+        for name in names {
+            packs.push(
+                serde_json::json!({"name": name, "profileUid": uid, "condition": condition(&name)}),
+            );
+        }
+    }
+    serde_json::json!({"metadata": {"name": "pebbles", "uid": PEBBLES_UID},
+        "status": {"state": "Running", "packs": packs}})
+    .to_string()
+}
+
+/// A stage of `platform.sh` and `platform-boundary.sh` with wilma and pebbles at their baseline. Each
+/// pack of each cluster is ready. Both clusters run the profile of the tenant. The lab project is
+/// [`LAB_PROJECT_NAME`], and the second project is [`SECOND_PROJECT`].
+fn boundary_stage() -> Stage {
+    let mut stage = platform_stage();
+    std::fs::write(
+        stage.path("outputs.json"),
+        tofu_output_json(&boundary_outputs()),
+    )
+    .unwrap();
+    let mut wilma: serde_json::Value = serde_json::from_str(&wilma_document(pack_ready)).unwrap();
+    wilma["status"]["packs"].as_array_mut().unwrap().push(serde_json::json!({
+        "name": "wilma-shared", "profileUid": SHARED_UID, "condition": pack_ready("wilma-shared"),
+    }));
+    stage.route(&cluster_route("w-1"), &wilma.to_string());
+    stage.route(&cluster_route(PEBBLES_UID), &pebbles_document(pack_ready));
+    stage.route(
+        &cluster_kubeconfig_route(PEBBLES_UID),
+        "apiVersion: v1 # fake-kubeconfig\n",
+    );
+    for (_, uid, packs) in pebbles_profiles() {
+        let packs: Vec<serde_json::Value> = packs
+            .iter()
+            .map(|name| serde_json::json!({"name": name, "tag": "1.0.0", "type": "spectro", "values": ""}))
+            .collect();
+        stage.route(
+            &profile_route(uid),
+            &serde_json::json!({"metadata": {"uid": uid}, "spec": {"published": {"type": "add-on", "packs": packs}}})
+                .to_string(),
+        );
+    }
+    let tfvars = stage.path("lab.tfvars");
+    std::fs::write(
+        &tfvars,
+        format!("palette_project = \"{LAB_PROJECT_NAME}\"\n"),
+    )
+    .unwrap();
+    stage.env("TFVARS", tfvars.to_str().unwrap());
+    stage.env("STRATA_LIVE_SECOND_PROJECT", SECOND_PROJECT);
+    stage
+}
+
+/// The last request of `METHOD path` that the stand-in of Palette got: its query and its headers.
+fn last_request(stage: &Stage, method: &str, path: &str) -> String {
+    std::fs::read_to_string(stage.path(&format!(
+        "routes/sent/{method}_{}.request",
+        Stage::route_key(path)
+    )))
+    .unwrap()
+}
+
+/// #701: with a second project, `platform.sh up` gives each command of OpenTofu that project. It
+/// waits until each pack of wilma and of pebbles is ready, and it reads pebbles in the second
+/// project. A pack of pebbles that waits fails the check of pebbles alone.
+#[test]
+fn platform_sh_up_builds_pebbles_in_the_second_project_and_waits_until_each_of_its_packs_is_ready()
+{
+    let stage = boundary_stage();
+    let (o, steps) = stage.run("platform.sh", &["up"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(&steps, &["images", "packs-ready", "workload-packs-ready"]);
+    let calls = stage.tofu_calls();
+    let applies = calls.lines().filter(|l| l.contains(" apply")).count();
+    let projects = calls
+        .lines()
+        .filter(|l| *l == format!("second project {SECOND_PROJECT}"))
+        .count();
+    assert!(applies > 0 && projects >= applies, "{calls}");
+    let read = last_request(&stage, Method::Get.as_str(), &cluster_route(PEBBLES_UID));
+    assert!(
+        read.contains(&format!("{PROJECT_UID_HEADER}: {SECOND_PROJECT_UID}")),
+        "{read}"
+    );
+    let ready = std::fs::read_to_string(stage.path("out/workload-packs-ready.out")).unwrap();
+    assert!(ready.contains("ready wilma-shared"), "{ready}");
+
+    let [_, grafana] = PLATFORM_BITNAMI;
+    let stage = boundary_stage();
+    stage.route(
+        &cluster_route(PEBBLES_UID),
+        &pebbles_document(|name| {
+            if name == grafana {
+                serde_json::json!({"status": "False", "reason": "ImagePullBackOff"})
+            } else {
+                pack_ready(name)
+            }
+        }),
+    );
+    let (o, steps) = stage.run("platform.sh", &["up"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    passed(&steps, &["packs-ready"]);
+    failed(&steps, &["workload-packs-ready"]);
+    let ready = std::fs::read_to_string(stage.path("out/workload-packs-ready.out")).unwrap();
+    assert!(
+        ready.contains(&format!("waiting {grafana}: ImagePullBackOff")),
+        "{ready}"
+    );
+}
+
+/// #701: `platform.sh down` with no `STRATA_LIVE_SECOND_PROJECT` takes the second project from the
+/// state. The add-on profiles leave both clusters, and the claims of both go before the destroy. It
+/// deletes each profile name of pebbles in the second project, and each name of wilma in the lab
+/// project. The inventory reads pebbles too. The project stays: no request deletes a project.
+#[test]
+fn platform_sh_down_removes_pebbles_and_each_of_its_profile_names_in_the_second_project() {
+    let mut stage = boundary_stage();
+    stage.env.retain(|(k, _)| k != "STRATA_LIVE_SECOND_PROJECT");
+    stage.route(
+        &cluster_route("w-1"),
+        r#"{"metadata":{"name":"wilma"},"status":{"state":"Running","packs":[{"name":"ubuntu-aws","profileUid":"r-1"}]}}"#,
+    );
+    stage.route(
+        &cluster_route(PEBBLES_UID),
+        r#"{"metadata":{"name":"pebbles"},"status":{"state":"Running","packs":[{"name":"ubuntu-aws","profileUid":"pr-1"}]}}"#,
+    );
+    // the listing of each project names its own profiles
+    let listing = |items: &[(&str, &str)]| {
+        let items: Vec<serde_json::Value> = items
+            .iter()
+            .map(|(name, uid)| serde_json::json!({"metadata": {"name": name, "uid": uid}}))
+            .collect();
+        serde_json::json!({ "items": items }).to_string()
+    };
+    let key = Stage::route_key(PROFILE_LISTING);
+    std::fs::write(
+        stage.path(&format!("routes/{key}.second")),
+        listing(&[("wilma-data", "cd-1"), ("pebbles-apps", "pa-1")]),
+    )
+    .unwrap();
+    std::fs::write(
+        stage.path(&format!("routes/{key}.lab")),
+        listing(&[("wilma-security", "t-security")]),
+    )
+    .unwrap();
+    executable(
+        &stage.path(&format!("routes/{key}.sh")),
+        &format!(
+            "#!/usr/bin/env bash\nif grep -qx '{PROJECT_UID_HEADER}: {SECOND_PROJECT_UID}' \"$FAKE_ROUTES/sent/GET_{key}.request\"; then\n  cat \"$FAKE_ROUTES/{key}.second\"\nelse\n  cat \"$FAKE_ROUTES/{key}.lab\"\nfi\n"
+        ),
+    );
+    stage.command("aws", FAKE_AWS);
+    let log = stage.path("tofu.log");
+    stage.env("FAKE_KUBECTL_LOG", log.to_str().unwrap());
+    let (o, steps) = stage.run("platform.sh", &["down"]);
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "{steps}\n{}\n{}",
+        text(&o.stdout),
+        text(&o.stderr)
+    );
+    let calls = stage.tofu_calls();
+    let at = |needle: &str| {
+        calls
+            .lines()
+            .position(|l| l.contains(needle))
+            .unwrap_or_else(|| panic!("{needle}:\n{calls}"))
+    };
+    assert!(at("-var addons=false") < at("delete pvc --all -A --wait=true"));
+    let claims = calls
+        .lines()
+        .filter(|l| l.contains("delete pvc --all -A --wait=true"))
+        .count();
+    assert_eq!(claims, 2, "the claims of each cluster:\n{calls}");
+    let destroy = at(" destroy");
+    assert_eq!(
+        calls.lines().nth(destroy + 1),
+        Some(format!("second project {SECOND_PROJECT}").as_str()),
+        "the destroy gets the project of the state:\n{calls}"
+    );
+    for (uid, project) in [
+        ("cd-1", SECOND_PROJECT_UID),
+        ("pa-1", SECOND_PROJECT_UID),
+        ("t-security", "p-1"),
+    ] {
+        let delete = last_request(&stage, "DELETE", &profile_route(uid));
+        assert!(
+            delete.contains(&format!("{PROJECT_UID_HEADER}: {project}")),
+            "{uid}: {delete}"
+        );
+    }
+    let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(!curl.lines().any(|l| l.contains("/v1/projects")), "{curl}");
+    let aws = std::fs::read_to_string(stage.path("aws/calls.log")).unwrap();
+    assert!(
+        aws.contains(
+            "resourcegroupstaggingapi get-resources --tag-filters Key=kubernetes.io/cluster/pebbles"
+        ),
+        "{aws}"
+    );
+    assert!(
+        text(&o.stdout).contains("== aws, cluster pebbles"),
+        "{}",
+        text(&o.stdout)
+    );
+}
+
+/// #701: a second project that differs from the project of the state stops `platform.sh` before a
+/// plan, because a plan with another project replaces pebbles.
+#[test]
+fn platform_sh_stops_when_the_second_project_differs_from_the_project_of_the_state() {
+    let mut stage = boundary_stage();
+    stage.env("STRATA_LIVE_SECOND_PROJECT", "another");
+    let (o, _) = stage.run("platform.sh", &["up"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("another project than STRATA_LIVE_SECOND_PROJECT"),
+        "{}",
+        text(&o.stderr)
+    );
+    let calls = stage.tofu_calls();
+    assert!(
+        !calls.contains(" plan") && !calls.contains(" apply"),
+        "{calls}"
+    );
+}
+
+/// A `strata` for `platform-boundary.sh`. It logs the project and the arguments of each call to
+/// `$FAKE_STRATA/projects`. With the key `$FAKE_ROLE_KEY`, the command COMMAND answers from the files
+/// `role-COMMAND.out`, `role-COMMAND.err`, and `role-COMMAND.code` of `$FAKE_STRATA`, when they exist.
+/// Each other call goes to the answers of the stage.
+const BOUNDARY_STRATA: &str = r#"#!/usr/bin/env bash
+echo "${PALETTE_PROJECT_UID-} $*" >> "$FAKE_STRATA/projects"
+if [ "${PALETTE_API_KEY-}" = "$FAKE_ROLE_KEY" ] && [ -f "$FAKE_STRATA/role-$1.code" ]; then
+  [ ! -f "$FAKE_STRATA/role-$1.out" ] || cat "$FAKE_STRATA/role-$1.out"
+  [ ! -f "$FAKE_STRATA/role-$1.err" ] || cat "$FAKE_STRATA/role-$1.err" >&2
+  exit "$(cat "$FAKE_STRATA/role-$1.code")"
+fi
+exec fake-strata-rules "$@"
+"#;
+
+/// A stand-in for the observer of the set. It logs its arguments to `$FAKE_STRATA/observer.log`.
+/// The key `api-key` of `--keys` must be `$FAKE_ROLE_KEY`, and the key of the second project
+/// `$FAKE_SECOND_KEY`. It prints `$FAKE_STRATA/set-ok.json`. After the delete of the key
+/// `$FAKE_KEY_UID`, it prints `$FAKE_STRATA/set-refused.json` and exits 2, as the observer does when
+/// a check fails. With `$FAKE_KEY_STAYS`, Palette takes the deleted key, and the answer stays.
+const FAKE_BOUNDARY_OBSERVER: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_STRATA/observer.log"
+keys=""; prev=""
+for a in "$@"; do [ "$prev" = --keys ] && keys=$a; prev=$a; done
+[ "$(cat "$keys/api-key")" = "$FAKE_ROLE_KEY" ] && [ "$(cat "$keys/$FAKE_SECOND_UID")" = "$FAKE_SECOND_KEY" ] || exit 9
+if [ -f "$FAKE_ROUTES/sent/DELETE_v1_apiKeys_$FAKE_KEY_UID.request" ] && [ -z "${FAKE_KEY_STAYS-}" ]; then
+  cat "$FAKE_STRATA/set-refused.json"
+  exit 2
+fi
+cat "$FAKE_STRATA/set-ok.json"
+"#;
+
+/// The summary of the set that the stand-in of the observer prints. With `refused`, Palette refused
+/// the key of the second project: the row of pebbles is not checked, with the status.
+fn set_summary(refused: bool) -> String {
+    let checked = serde_json::json!("2026-11-24T12:00:00Z");
+    let refusal = serde_json::json!({"kind": "api", "status": 401});
+    let (status, at, error) = if refused {
+        ("not-checked", serde_json::Value::Null, refusal.clone())
+    } else {
+        ("ok", checked.clone(), serde_json::Value::Null)
+    };
+    let mut second = serde_json::json!({"uid": SECOND_PROJECT_UID, "name": SECOND_PROJECT});
+    let mut pebbles = serde_json::json!({"uid": PEBBLES_UID, "name": "pebbles",
+        "project": {"uid": SECOND_PROJECT_UID}, "status": status, "checkedAt": at});
+    if refused {
+        second["lastError"] = error.clone();
+        pebbles["lastError"] = error;
+    }
+    serde_json::json!({
+        "page": "ok",
+        "projects": [{"uid": "p-1", "name": LAB_PROJECT_NAME}, second],
+        "selectors": [{"selector": format!("{TAG_PREFIX}hub=wilma"), "clusters": 2}],
+        "clusters": [{"uid": "w-1", "name": "wilma", "project": {"uid": "p-1"}, "status": "ok",
+            "checkedAt": checked, "here": true}, pebbles],
+        "shared": [{"uid": SHARED_UID, "name": "wilma-shared", "version": "1.0.0", "scope": "tenant",
+            "clusters": 2, "projects": ["p-1", SECOND_PROJECT_UID]}],
+    })
+    .to_string()
+}
+
+/// A stage of `platform-boundary.sh`: wilma and pebbles at their baseline, the keys of the two roles,
+/// and the stand-ins of strata and of the observer. strata answers the key of the role as the code
+/// of Palette says, and the observer answers as [`FAKE_BOUNDARY_OBSERVER`] says.
+fn platform_boundary_stage() -> Stage {
+    let mut stage = boundary_stage();
+    stage.wrap_strata(BOUNDARY_STRATA);
+    stage.command("fake-boundary-observer", FAKE_BOUNDARY_OBSERVER);
+    let observer = stage
+        .path("bin/fake-boundary-observer")
+        .display()
+        .to_string();
+    stage.env("OBSERVER_BIN", &observer);
+    for (key, value) in [
+        ("OBSERVER_ROLE_KEY", SET_ROLE_KEY),
+        ("OBSERVER_SECOND_KEY", SECOND_ROLE_KEY),
+        ("OBSERVER_SECOND_KEY_NAME", SECOND_KEY_NAME),
+        ("FAKE_ROLE_KEY", SET_ROLE_KEY),
+        ("FAKE_SECOND_KEY", SECOND_ROLE_KEY),
+        ("FAKE_SECOND_UID", SECOND_PROJECT_UID),
+        ("FAKE_KEY_UID", SECOND_KEY_UID),
+    ] {
+        stage.env(key, value);
+    }
+    // case 1: the key of the lab reads both projects, and the key of the role one
+    let not_found = serde_json::json!({"error": {"kind": "project-not-found", "name": SECOND_PROJECT,
+        "available": [LAB_PROJECT_NAME]}});
+    let incomplete = serde_json::json!({"consumers": [{"uid": "w-1", "projectUid": "p-1"}],
+        "projectsRead": {"read": 1, "tenantError": {"kind": "api", "status": 403}}});
+    for (file, text) in [
+        ("set-ok.json", set_summary(false)),
+        ("set-refused.json", set_summary(true)),
+        ("role-same-release.err", not_found.to_string()),
+        ("role-same-release.code", "2".to_string()),
+        ("role-consumers.out", incomplete.to_string()),
+        ("role-consumers.code", "1".to_string()),
+    ] {
+        std::fs::write(stage.path(&format!("strata/{file}")), text).unwrap();
+    }
+    let records = serde_json::json!({"same": true, "records": [{"projectUid": "p-1"}, {"projectUid": SECOND_PROJECT_UID}]});
+    stage.strata("same-release *", 0, &records.to_string());
+    let consumers = serde_json::json!({"consumers": [{"uid": "w-1", "projectUid": "p-1"},
+        {"uid": PEBBLES_UID, "projectUid": SECOND_PROJECT_UID}]});
+    stage.strata("consumers *", 1, &consumers.to_string());
+    // cases 3 and 4: the profiles of each cluster, and the key of the second project in Palette
+    for (cluster, profiles) in [
+        ("w-1", vec!["r-1", "t-data", SHARED_UID]),
+        (PEBBLES_UID, vec!["pr-1", "cd-1", SHARED_UID]),
+    ] {
+        let profiles: Vec<serde_json::Value> = profiles
+            .iter()
+            .map(|uid| serde_json::json!({ "uid": uid }))
+            .collect();
+        stage.strata(
+            &format!("list clusters --detail --cluster {cluster} --json"),
+            0,
+            &serde_json::json!({"clusters": [{"uid": cluster, "profiles": profiles}]}).to_string(),
+        );
+    }
+    stage.strata(
+        "snapshot * -o records/*",
+        0,
+        r#"{"schema":"strata-snapshot/1"}"#,
+    );
+    stage.route(
+        "/v1/apiKeys",
+        &serde_json::json!({"items": [{"metadata": {"name": SECOND_KEY_NAME, "uid": SECOND_KEY_UID}},
+            {"metadata": {"name": "another-key", "uid": "ak-9"}}]})
+        .to_string(),
+    );
+    stage.route(&format!("/v1/apiKeys/{SECOND_KEY_UID}"), "{}");
+    stage
+}
+
+/// The calls of the stand-in of strata, each with its project first.
+fn boundary_strata_calls(stage: &Stage) -> String {
+    std::fs::read_to_string(stage.path("strata/projects")).unwrap()
+}
+
+/// #701: case 1 asks same-release of the copy of wilma-data in the two projects, and consumers of
+/// the profile of the tenant. The key of the lab sees both clusters. With the key of the role, the
+/// same-release stops with project-not-found, and consumers says that a project is not checked. A
+/// key of the role that sees the second project fails both checks of the role.
+#[test]
+fn platform_boundary_sh_case_1_asks_each_command_with_the_key_of_the_lab_and_with_a_key_of_one_project()
+ {
+    let stage = platform_boundary_stage();
+    let (o, steps) = stage.run("platform-boundary.sh", &["1"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "same-release-lab-key",
+            "same-release-sides",
+            "same-release-role-key",
+            "same-release-role-error",
+            "consumers-lab-key",
+            "consumers-both",
+            "consumers-role-incomplete",
+        ],
+    );
+    seen(&steps, &["consumers-role-key"]);
+    assert!(!steps.contains("== stage 2"), "case 1 runs alone:\n{steps}");
+    let calls = boundary_strata_calls(&stage);
+    let refs = format!(
+        "{PROJECT_PREFIX}{LAB_PROJECT_NAME}/wilma-data@1.0.0 {PROJECT_PREFIX}{SECOND_PROJECT}/wilma-data@1.0.0"
+    );
+    assert!(
+        calls.contains(&format!("same-release {refs} --json")),
+        "{calls}"
+    );
+    assert!(
+        calls.contains("consumers wilma-shared@1.0.0 --json"),
+        "{calls}"
+    );
+
+    // a key of the role that sees the second project
+    let stage = platform_boundary_stage();
+    for file in ["role-same-release.err", "role-same-release.code"] {
+        std::fs::remove_file(stage.path(&format!("strata/{file}"))).unwrap();
+    }
+    std::fs::write(
+        stage.path("strata/role-consumers.out"),
+        r#"{"consumers":[]}"#,
+    )
+    .unwrap();
+    let (o, steps) = stage.run("platform-boundary.sh", &["1"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(
+        &steps,
+        &[
+            "same-release-role-key",
+            "same-release-role-error",
+            "consumers-role-incomplete",
+        ],
+    );
+}
+
+/// #701: case 2 records wilma, and pebbles in the second project. It moves wilma to the newest vault
+/// of the registry of its pin. It reads the answer of each cluster after the move, each in its
+/// project. Then it gives the platform its baseline again.
+#[test]
+fn platform_boundary_sh_case_2_moves_vault_on_wilma_and_reads_the_answer_of_each_cluster() {
+    let mut stage = platform_boundary_stage();
+    let listing = packs_answer(
+        "vault",
+        &[(
+            "Public Repo",
+            &[("1.21.1", true, None), ("1.0.0", false, None)],
+        )],
+    );
+    stage.strata("packs vault *", 0, &listing);
+    let (o, steps) = stage.run("platform-boundary.sh", &["2"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(&steps, &["move-records", "vault-move", "vault-back"]);
+    seen(
+        &steps,
+        &[
+            "vault-ready",
+            "vault-wilma",
+            "vault-workload",
+            "vault-workload-verify",
+        ],
+    );
+    let applies: Vec<String> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains(" apply "))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        applies[0].ends_with("-var vault_version=1.21.1"),
+        "{applies:?}"
+    );
+    assert!(
+        applies
+            .last()
+            .unwrap()
+            .ends_with("-var immutable_profiles=false"),
+        "the last apply takes the defaults: {applies:?}"
+    );
+    let calls = boundary_strata_calls(&stage);
+    for call in [
+        format!("p-1 snapshot {CLUSTER_PREFIX}w-1 -o records/wilma.json -q"),
+        format!(
+            "{SECOND_PROJECT_UID} snapshot {CLUSTER_PREFIX}{PEBBLES_UID} -o records/pebbles.json -q"
+        ),
+        format!("{SECOND_PROJECT_UID} compare records/pebbles.json {CLUSTER_PREFIX}{PEBBLES_UID}"),
+        format!("{SECOND_PROJECT_UID} verify records/pebbles.json"),
+    ] {
+        assert!(calls.lines().any(|l| l == call), "{call}:\n{calls}");
+    }
+}
+
+/// #701: case 3 runs the observer of the set on wilma with a key for each project. The rows name
+/// each cluster in its project, and #shared shows the profile of the tenant on 2 clusters in 2
+/// projects. Then the key of the second project goes from Palette, at tenant scope, and the next
+/// cycle leaves only pebbles not checked. No file of the run holds a key. A Palette that takes the
+/// deleted key fails the check of the refusal. With no key of the name, no cycle follows.
+#[test]
+fn platform_boundary_sh_case_3_shows_each_cluster_in_its_project_and_a_refused_key_of_one_project()
+{
+    let stage = platform_boundary_stage();
+    let (o, steps) = stage.run("platform-boundary.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "set-records",
+            "set-once",
+            "set-rows",
+            "set-projects",
+            "set-selector",
+            "set-shared",
+            "key-delete",
+            "set-refused-rows",
+            "set-no-key",
+        ],
+    );
+    seen(&steps, &["set-refused"]);
+    let observer = std::fs::read_to_string(stage.path("strata/observer.log")).unwrap();
+    assert!(
+        observer.contains(&format!(
+            "--clusters {TAG_PREFIX}hub=wilma --keys keys --cluster-uid w-1"
+        )),
+        "{observer}"
+    );
+    // the profile of the tenant on both clusters is one record
+    let calls = boundary_strata_calls(&stage);
+    let shared = calls
+        .lines()
+        .filter(|l| l.contains(&format!("snapshot {SHARED_UID} ")))
+        .count();
+    assert_eq!(shared, 1, "{calls}");
+    assert!(
+        calls
+            .lines()
+            .any(|l| l == format!("{SECOND_PROJECT_UID} snapshot cd-1 -o records/cd-1.json")),
+        "{calls}"
+    );
+    let delete = last_request(&stage, "DELETE", &format!("/v1/apiKeys/{SECOND_KEY_UID}"));
+    assert!(!delete.contains(PROJECT_UID_HEADER), "{delete}");
+    let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(!curl.contains("DELETE /v1/apiKeys/ak-9"), "{curl}");
+    for path in walk(&stage.path("out")) {
+        let body = std::fs::read(&path).unwrap();
+        for key in [SET_ROLE_KEY, SECOND_ROLE_KEY] {
+            assert!(
+                !body.windows(key.len()).any(|w| w == key.as_bytes()),
+                "{} holds a key",
+                path.display()
+            );
+        }
+    }
+    assert!(
+        !stage.path("out/keys").exists(),
+        "the file of the keys stays"
+    );
+
+    let mut stage = platform_boundary_stage();
+    stage.env("FAKE_KEY_STAYS", "1");
+    let (o, steps) = stage.run("platform-boundary.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["set-refused-rows"]);
+    passed(&steps, &["key-delete"]);
+    let cycles = std::fs::read_to_string(stage.path("strata/observer.log"))
+        .unwrap()
+        .lines()
+        .count();
+    assert_eq!(cycles, 11, "one cycle, then 10 after the delete");
+
+    // no key of Palette has the name, so no cycle follows the delete
+    let mut stage = platform_boundary_stage();
+    stage.env("OBSERVER_SECOND_KEY_NAME", "no-such-key");
+    let (o, steps) = stage.run("platform-boundary.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["key-delete"]);
+    assert!(!steps.contains("set-refused"), "{steps}");
+}
+
+/// #701: case 4 counts the requests of one cycle of the observer of the set, with the keys of the two
+/// projects, behind the counter. It runs before case 3 in a run of each case, because case 3 deletes
+/// the key of the second project.
+#[test]
+fn platform_boundary_sh_case_4_counts_the_requests_of_a_cycle_of_the_set_before_case_3() {
+    let stage = platform_boundary_stage();
+    std::fs::create_dir_all(stage.path("out")).unwrap();
+    executable(&stage.path("out/count-requests"), FAKE_COUNT_REQUESTS);
+    let (o, steps) = stage.run("platform-boundary.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(&steps, &["set-records"]);
+    seen(&steps, &["set-requests"]);
+    let out = std::fs::read_to_string(stage.path("out/set-requests.out")).unwrap();
+    assert!(out.contains("set: 2 requests"), "{out}");
+    assert!(
+        out.contains(&format!("{} {PROFILE_TEMPLATE}", Method::Get)),
+        "{out}"
+    );
+
+    let source = repo_file("examples/live/platform-boundary.sh");
+    let at = |stage: &str| source.find(&format!("case_stage {stage} ")).unwrap();
+    assert!(at("4") < at("3"), "case 4 runs before case 3");
+}
+
+/// #701: with no key of a role, `platform-boundary.sh` says "could not check" and exits 2. With no
+/// pebbles in the state, it stops before a case.
+#[test]
+fn platform_boundary_sh_needs_the_keys_of_the_roles_and_pebbles() {
+    for key in ["OBSERVER_ROLE_KEY", "OBSERVER_SECOND_KEY"] {
+        let mut stage = platform_boundary_stage();
+        stage.env(key, "");
+        let (o, steps) = stage.run("platform-boundary.sh", &[]);
+        assert_eq!(o.status.code(), Some(2), "{key}");
+        assert!(
+            text(&o.stderr).contains("could not check"),
+            "{key}: {}",
+            text(&o.stderr)
+        );
+        assert!(steps.is_empty(), "{steps}");
+    }
+    let stage = platform_boundary_stage();
+    std::fs::write(
+        stage.path("outputs.json"),
+        tofu_output_json(&platform_outputs()),
+    )
+    .unwrap();
+    let (o, steps) = stage.run("platform-boundary.sh", &[]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("the state holds no pebbles"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!steps.contains("== stage"), "{steps}");
+}
+
+/// #701: the section of `platform-boundary.sh` in `live-runs.md` names each check of the script, and
+/// no other check.
+#[test]
+fn the_page_of_live_runs_names_each_check_of_platform_boundary_sh() {
+    assert_page_names_each_check("platform-boundary.sh");
 }

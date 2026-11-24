@@ -106,6 +106,9 @@
 #       Make a saved tag filter NAME of the tenant that selects the label KEY=VALUE, and print its
 #       uid.
 #   api.sh filter-delete UID
+#   api.sh key-delete NAME
+#       Delete each API key named NAME, at tenant scope. Its user keeps each role. Exit 2 when no key
+#       has the name.
 #   api.sh app-profile-create NAME [ORDER...]
 #       Make an app profile NAME@1.0.0 with one manifest tier, and print its uid. With ORDERs,
 #       make one manifest tier for each ORDER in its place. The tiers are tier1 with the install
@@ -723,6 +726,20 @@ filter_delete() {
   echo "saved tag filter $uid is deleted"
 }
 
+# key_delete NAME: delete each API key named NAME. The listing and the delete have no ProjectUid header.
+# Exit 2 when no key has the name.
+key_delete() {
+  local name=${1:-} uids uid
+  [ -n "$name" ] || die "usage: api.sh key-delete NAME"
+  uids=$(PROJECT="" call GET /v1/apiKeys | jq -r --arg n "$name" '(.items // [])[] | select(.metadata.name == $n) | .metadata.uid') \
+    || return 2
+  [ -n "$uids" ] || { echo "api.sh: no API key is named $name" >&2; return 2; }
+  for uid in $uids; do
+    PROJECT="" call DELETE "/v1/apiKeys/$uid" > /dev/null || return 2
+    echo "API key $name ($uid) is deleted"
+  done
+}
+
 # app_profile_create NAME: an app profile NAME@1.0.0 with one manifest tier, `config`, whose
 # manifest is a ConfigMap with `edited: "no"`. Prints its uid.
 app_profile_create() {
@@ -1028,6 +1045,7 @@ case "${1:-}" in
   app-profile-create) shift; app_profile_create "$@" ;;
   filter-create) shift; filter_create "$@" ;;
   filter-delete) shift; filter_delete "$@" ;;
+  key-delete) shift; key_delete "$@" ;;
   app-profile-edit) shift; app_profile_edit "$@" ;;
   app-profile-order) shift; app_profile_order "$@" ;;
   app-profile-delete) shift; app_profile_delete "$@" ;;

@@ -786,6 +786,9 @@ versions_moves() {
     | "pack:\(.registryUid)/\(.name)@\(.version) pack:\(.registryUid)/\(.name)@\(.newer[0].version)"' behind.json)
 }
 export -f content_cycle versions_behind versions_moves
+# top_routes LOG: the routes of the log of the counter that took most, with the count of each. A uid
+# of a path reads as {uid}.
+top_routes() { sed -E 's#/[0-9a-f]{24}#/{uid}#g' "$1" | sort | uniq -c | sort -rn | head -n 12; }
 # requests_of NAME FUNCTION: run FUNCTION behind the counter. NAME.log holds one line for each request
 # that Palette got, with the method and the path, and no query and no key.
 requests_of() { ./count-requests -target "$target" -log "$1.log" -- bash -c "$2" > "$1.run" 2>&1; }
@@ -803,6 +806,59 @@ count_requests() {
   done
   for name in content behind moves; do
     echo "-- the routes of $name"
-    sed -E 's#/[0-9a-f]{24}#/{uid}#g' "$name.log" | sort | uniq -c | sort -rn | head -n 12
+    top_routes "$name.log"
   done
+}
+
+# ---- the observer of a set of clusters ---------------------------------------------------------------
+#
+# observer-clusters.sh and platform-boundary.sh run one cycle of the observer of a set on the machine
+# of the script, as `strata-observer once`. The folders records/, work/, and state/ of the run are the
+# folders of the observer.
+
+# observer_bin: the binary of the observer, from OBSERVER_BIN or from just observer-build. Each command of
+# the array set_wrap goes before it, such as the counter of the requests.
+observer_bin=${OBSERVER_BIN:-$(cd "$live/../.." && pwd)/target/observer/strata-observer}
+set_wrap=()
+# with_role COMMAND...: run COMMAND with the key of the role, OBSERVER_ROLE_KEY. It is the key of a user
+# whose one role is Project Viewer in the lab project.
+with_role() { PALETTE_API_KEY=$OBSERVER_ROLE_KEY "$@"; }
+
+# set_records CLUSTER:PROJECT...: a record of each profile that each CLUSTER runs, read in its
+# PROJECT, in records/. Each record is gzipped, as the Secrets of the records hold it. A profile that
+# two clusters run is one record, read in the project of the first of the two.
+set_records() {
+  local pair
+  mkdir -p records work state || return 2
+  : > profiles.txt
+  for pair in "$@"; do
+    PALETTE_PROJECT_UID=${pair#*:} "$strata" list clusters --detail --cluster "${pair%%:*}" --json \
+      | jq -r --arg c "${pair%%:*}" --arg p "${pair#*:}" '.clusters[] | select(.uid == $c) | .profiles[] | "\(.uid) \($p)"' \
+      >> profiles.txt || return 2
+  done
+  [ -s profiles.txt ] || return 1
+  sort -s -u -k1,1 profiles.txt | while read -r uid project; do
+    PALETTE_PROJECT_UID=$project "$strata" snapshot "$uid" -o "records/$uid.json" && gzip -f "records/$uid.json" || exit 2
+  done || return 2
+  echo '{"baseline":"approved","revision":"live"}' > records/meta.json
+}
+
+# set_once OUT SELECTOR VAR [PROJECT=VAR...]: one content cycle and one versions cycle of the observer of
+# the set SELECTOR, on the cluster $C. It reads the records of records/. The variable VAR holds the key of
+# the project of PALETTE_PROJECT_UID, and each PROJECT=VAR names the variable of the key of one more
+# project. The keys are in keys/ for the cycle alone, as the Secret strata-observer-key holds them. OUT
+# holds the summary, and OUT with .err in place of .json the log. Exit 0 when the observer exits 0 or 1.
+set_once() {
+  local out=$1 selector=$2 var=$3 pair code
+  shift 3
+  ( umask 077 && mkdir -p keys && printf %s "${!var}" > keys/api-key ) || return 2
+  for pair in "$@"; do
+    var=${pair#*=}
+    ( umask 077 && printf %s "${!var}" > "keys/${pair%%=*}" ) || return 2
+  done
+  ${set_wrap[@]+"${set_wrap[@]}"} "$observer_bin" once --strata "$strata" --clusters "$selector" --keys keys --cluster-uid "$C" \
+    --records records --work work --state state > "$out" 2> "${out%.json}.err"
+  code=$?
+  rm -rf keys
+  [ "$code" -le 1 ]
 }

@@ -146,8 +146,10 @@ its end.
 | `zarf/` | The Zarf package that `registry-kinds.sh` publishes. |
 | `terraform/registry-kinds.tf`, `terraform/registry-host.sh.tftpl` | The registry host of `registry-kinds.sh`: one EC2 instance that serves a Helm repository, one with credentials, an OCI registry with basic auth, and a Spectro pack registry, behind Caddy with a certificate for each `<service>.<IP>.sslip.io`; and a Palette registry over each. Off unless `registry_kinds` is set. |
 | `terraform-version/` | One version of an add-on profile in a state of its own, with no feature preview flag: `version-states.sh` applies it once for each version, each time in its own workspace. |
-| `terraform-platform/` | The platform cluster `wilma` (#700) in a state of its own: the seven profiles of the teams in `main.tf`, the glue of each team in `glue.tf`, the private zone, and the policy of the nodes. `terraform.tfvars.example` names the registry of each pack. |
-| `platform.sh` | The platform cluster test (#700): `pins`, `images`, `up`, the eight cases, `down`, and `inventory`. See [The platform cluster](#the-platform-cluster). |
+| `terraform-platform/` | The platform cluster `wilma` (#700) in a state of its own: the seven profiles of the teams in `main.tf`, the glue of each team in `glue.tf`, the private zone, and the policy of the nodes. `terraform.tfvars.example` names the registry of each pack. `pebbles.tf` holds the workload cluster `pebbles` in a second project (#701). |
+| `platform.sh` | The platform cluster test (#700): `pins`, `images`, `up`, the eight cases, `down`, and `inventory`. With a second project, `up` and `down` also build and remove `pebbles`. See [The platform cluster](#the-platform-cluster). |
+| `platform-boundary.sh` | The boundary of a project test (#701): the four cases of `wilma` and `pebbles` in two projects. See [The boundary of a project](#the-boundary-of-a-project). |
+| `platform-lib.sh` | What `platform.sh` and `platform-boundary.sh` share: the state of `terraform-platform/` and its second project, the outputs, the readiness of the packs, and the applies of a case. |
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, a cluster in the template with the two repave routes (#276), and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. Stage 4 (#844): an add and an upgrade on cluster A, with cluster B as the control. |
@@ -166,7 +168,7 @@ its end.
 | `app-profile.sh` | The app profile test (#78). |
 | `fleet.sh` | The fleet test (#80). |
 | `upstream.sh` | The upstream test (#79). It opens and closes issues of this repository with the label `strata-live-behind`. |
-| `inventory.sh` | What clusters A and B still have in the cloud that `terraform.tfvars` names, to confirm a teardown. `just live-inventory` runs it. It reads the variables and not the outputs, so it works after `live-down`. With `--platform` it reads `wilma` in their place: `platform.sh inventory` runs it so. |
+| `inventory.sh` | What clusters A and B still have in the cloud that `terraform.tfvars` names, to confirm a teardown. `just live-inventory` runs it. It reads the variables and not the outputs, so it works after `live-down`. With `--platform` it reads `wilma` and `pebbles` in their place: `platform.sh inventory` runs it so. |
 | `aws-inventory.sh` | What one cluster still has in AWS. `inventory.sh` runs it on AWS. Its options count what a cluster with workloads leaves: the objects with the tag `kubernetes.io/cluster/<name>`, the volumes of the CSI driver, a hosted zone, and an inline policy of a role. |
 | `gcp-inventory.sh` | What one cluster still has in a GCP project. `inventory.sh` runs it on GCP. |
 
@@ -427,7 +429,8 @@ the release with that version alone.
 Clusters A and B run the release profile and one or two small add-ons. A real
 cluster runs many community packs that work together. `wilma` is such a cluster
 (#700). `platform.sh` runs its cases, and [platform.sh](./live-runs.md#platformsh)
-lists each check.
+lists each check. The workload cluster `pebbles` adds the boundary of a
+project: see [The boundary of a project](#the-boundary-of-a-project).
 
 `terraform-platform/` builds `wilma` in a state of its own. So `just live-up`
 and `just live-down` never touch it, and a normal live window costs the same.
@@ -546,10 +549,10 @@ condition with the status `True`. Each line names a pack with its reason, or the
 reason that it waits.
 
 The teardown of `just live-platform-down` has three steps. First, the add-on
-profiles leave `wilma`, so their workloads free the claims of their volumes.
-Then the recipe deletes each claim while the CSI driver runs, so that the driver
-deletes each volume. Then it destroys the state, and deletes each version of
-each profile name.
+profiles leave `wilma` and `pebbles`, so their workloads free the claims of their
+volumes. Then the recipe deletes each claim while the CSI driver runs, so that
+the driver deletes each volume. Then it destroys the state, and deletes each
+version of each profile name in its project.
 
 When `just live-platform-up` stops before it makes `wilma`, for example at the
 create of the profiles, the state holds no cluster. Then `just
@@ -559,12 +562,63 @@ that the state holds, and the inventory finds nothing of `wilma` in AWS.
 `just live-platform-inventory` reads the inventory again. A volume that the
 driver made has no tag of its cluster, so the inventory counts each such volume
 in the region. It also counts each object with the tag
-`kubernetes.io/cluster/wilma`, the zone, and the policy.
+`kubernetes.io/cluster/wilma` or `kubernetes.io/cluster/pebbles`, the zone, and
+the policy.
 
 The AWS profile of `aws_profile` makes the zone, and adds the policy to the role
 of the nodes. It needs the permissions of Route 53 for a private hosted zone,
 `ec2:DescribeVpcs`, and `iam:PutRolePolicy` and `iam:DeleteRolePolicy` on that
 role.
+
+### The boundary of a project
+
+`pebbles` is a workload cluster in a second project of the tenant (#701). `wilma`
+is in the lab project, so the two clusters cross the boundary of a project.
+`STRATA_LIVE_SECOND_PROJECT` names an existing project of the lab. No file of the
+repository names it, and no recipe makes or deletes a project. With the variable,
+`just live-platform-up` builds `pebbles` beside `wilma`, and `just
+live-platform-down` removes both. Without it, the state holds `wilma` alone.
+
+| Resource | What it is |
+| --- | --- |
+| profile `wilma-shared` 1.0.0 | A profile of the tenant, with one manifest layer that names the platform. Both clusters run it. |
+| profile `pebbles-release` 1.0.0 | The cluster profile of `pebbles`: the packs of the release profile of the lab, with their values. |
+| profile `pebbles-apps` 1.0.0 | prometheus-operator, grafana, and external-secrets-operator. The glue: a `ClusterSecretStore` that reads Vault at its route on `wilma`. Grafana has the SSO through Keycloak on `wilma`. |
+| profiles `wilma-data` and `wilma-control` 1.0.0 | A copy of each profile of `wilma` in the second project: the same name, version, packs, values, and glue. |
+| cluster `pebbles` | One control plane node and two workers, `t3.xlarge`, in the zone of the lab. |
+
+Both clusters have the tag `hub:wilma`, so the selector of the set is
+`tag:hub=wilma`. Each pack of `pebbles` is a pin of `wilma`, so `just
+live-platform-images` resolves its images too. The store of secrets of `pebbles`
+and the SSO of its Grafana name addresses of `wilma`. No case checks these links,
+and a link that does not work is a fact of the run. The private zone is in the
+VPC of `wilma` alone.
+
+[platform-boundary.sh](./live-runs.md#platform-boundarysh) runs four cases:
+
+1. **One profile in two projects.** `same-release` of the copy of `wilma-data`
+   in the two projects, and `consumers` of `wilma-shared`. Each command runs with
+   the key of the lab, and with a key of Project Viewer in the lab project.
+2. **A change on `wilma` that `pebbles` needs.** Vault on `wilma` moves to a new
+   version in `wilma-security` 1.1.0. The case records the answer of each
+   cluster. Strata models no dependency between two clusters: see [The rules of
+   the scope](../boundary.md#the-rules-of-the-scope).
+3. **The observer of the set.** One cycle of the observer on `wilma`, with a key
+   of Project Viewer for each project. Then the case deletes the key of the
+   second project in Palette, and keeps it in the folder of the keys.
+4. **The request counts.** The requests of one cycle of the set, with two
+   clusters and two keys.
+
+Before a run, make two users with the role Project Viewer alone, one in each
+project, and a key for each user. Case 3 deletes the key of the second project,
+so make a new key for each run.
+
+```bash
+export STRATA_LIVE_SECOND_PROJECT=<second project>
+just live-platform-up               # wilma and pebbles; billable until live-platform-down
+OBSERVER_ROLE_KEY=<key> OBSERVER_SECOND_KEY=<key> just live-platform-boundary
+just live-platform-down             # both clusters and their profiles; the project stays
+```
 
 ## The preflight checks
 

@@ -7,15 +7,16 @@
 #   examples/live/inventory.sh
 #   examples/live/inventory.sh --platform
 #
-# --platform reads wilma of platform.sh instead, on AWS. `platform.sh inventory` runs it so, with the
-# state of terraform-platform/. It also counts what its workloads, its zone, and the policy of its nodes
-# leave.
+# --platform reads wilma and pebbles of platform.sh instead, on AWS. `platform.sh inventory` runs it
+# so, with the state of terraform-platform/. It also counts what their workloads, the zone, and the
+# policy of the nodes leave. The count of the volumes of the CSI driver is for the whole region, so
+# only the lines of wilma have it.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 case "${1:-}" in
   "") query='{cloud = var.cloud, region = var.region, project = var.gcp_project, a = var.cluster_name, b = var.second_cluster_name}' ;;
   --platform)
-    query='{region = var.region, a = var.cluster_name, domain = var.domain, role = var.node_role_name, policy = var.node_policy_name}'
+    query='{region = var.region, a = var.cluster_name, b = var.workload_name, domain = var.domain, role = var.node_role_name, policy = var.node_policy_name}'
     ;;
   *) echo "inventory: the one option is --platform" >&2; exit 2 ;;
 esac
@@ -23,8 +24,14 @@ vars=$(echo "$query" | "$here/tf.sh" console 2>&1) || { echo "inventory: cannot 
 get() { sed -n "s/^ *\"*$1\"* *= *\"\(.*\)\"$/\1/p" <<<"$vars"; }
 if [ -n "${1:-}" ]; then
   echo "== aws, cluster $(get a)"
-  exec "$here/aws-inventory.sh" "$(get a)" "$(get region)" --kubernetes-tags --csi-volumes \
+  "$here/aws-inventory.sh" "$(get a)" "$(get region)" --kubernetes-tags --csi-volumes \
     --zone "$(get domain)" --role-policy "$(get role):$(get policy)"
+  code=$?
+  echo "== aws, cluster $(get b)"
+  "$here/aws-inventory.sh" "$(get b)" "$(get region)" --kubernetes-tags
+  c=$?
+  [ "$c" -gt "$code" ] && code=$c
+  exit $code
 fi
 cloud=$(get cloud)
 

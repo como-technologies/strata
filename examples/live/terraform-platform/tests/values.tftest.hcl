@@ -7,10 +7,16 @@
 # pin the values of one form.
 #
 # A chart of the registry Bitnami names its images in docker.io/bitnami, which Docker Hub no longer
-# serves (#700). The third run tests the images of bitnamilegacy, and the output images. The last
+# serves (#700). The third run tests the images of bitnamilegacy, and the output images. The fourth
 # run tests an image map with no registry, as in the values of kyverno.
+#
+# The last three runs test pebbles in a second project (#701), and wilma with no second project.
+# They also test the move of Vault of case 2 of platform-boundary.sh.
 
 mock_provider "spectrocloud" {}
+mock_provider "spectrocloud" {
+  alias = "second"
+}
 mock_provider "aws" {}
 
 variables {
@@ -206,5 +212,127 @@ run "a_map_with_no_registry_takes_the_registry_of_its_chart" {
       "us-docker.pkg.dev/palette-images/packs/kyverno/1.19.2/kyverno:v1.19.2",
     ])
     error_message = "an image of kyverno does not take the registry of its chart: ${jsonencode(output.images["kyverno"])}"
+  }
+}
+
+# The run gives a second project, so the state holds pebbles. pebbles runs the packs of the release
+# profile of the lab, and the profile of its team. It also runs a copy of two profiles of wilma, and
+# the profile of the tenant. Both clusters have the tag of the set.
+run "pebbles_runs_a_copy_of_two_profiles_of_wilma_and_the_profile_of_the_tenant" {
+  command = apply
+
+  variables {
+    second_project = "second"
+  }
+
+  override_data {
+    target = data.spectrocloud_pack.pin
+    values = { values = "pack:\n  namespace: \"monitoring\"\n" }
+  }
+  override_data {
+    target = data.spectrocloud_cluster_profile.release
+    values = { pack = [{ name = "ubuntu-aws", type = "spectro", tag = "22.04", uid = "os-1", values = "os: 1\n", registry_uid = "", manifest = [] }] }
+  }
+
+  assert {
+    condition     = length(spectrocloud_cluster_aws.workload) == 1 && spectrocloud_cluster_aws.workload[0].name == "pebbles"
+    error_message = "the state holds no pebbles"
+  }
+  assert {
+    condition = alltrue([for t in ["data", "control"] : spectrocloud_cluster_profile.copy[t].name == spectrocloud_cluster_profile.team[t].name
+      && spectrocloud_cluster_profile.copy[t].version == spectrocloud_cluster_profile.team[t].version
+    && jsonencode(spectrocloud_cluster_profile.copy[t].pack) == jsonencode(spectrocloud_cluster_profile.team[t].pack)])
+    error_message = "a copy differs from its profile on wilma"
+  }
+  assert {
+    condition     = spectrocloud_cluster_profile.shared[0].context == "tenant" && spectrocloud_cluster_profile.shared[0].name == "wilma-shared"
+    error_message = "the profile wilma-shared is not of the tenant"
+  }
+  assert {
+    condition = alltrue([for c in [spectrocloud_cluster_aws.wilma, spectrocloud_cluster_aws.workload[0]] :
+    contains([for p in c.cluster_profile : p.id], spectrocloud_cluster_profile.shared[0].id) && contains(c.tags, "hub:wilma")])
+    error_message = "a cluster does not run the profile of the tenant, or has no tag hub:wilma"
+  }
+  assert {
+    condition = toset([for p in spectrocloud_cluster_aws.workload[0].cluster_profile : p.id]) == toset(concat(
+      [spectrocloud_cluster_profile.workload_release[0].id, spectrocloud_cluster_profile.workload_team[0].id, spectrocloud_cluster_profile.shared[0].id],
+      [for t in ["data", "control"] : spectrocloud_cluster_profile.copy[t].id],
+    ))
+    error_message = "pebbles does not run its five profiles"
+  }
+  assert {
+    condition     = spectrocloud_cluster_profile.workload_release[0].pack[0].uid == "os-1" && spectrocloud_cluster_profile.workload_release[0].pack[0].values == "os: 1\n"
+    error_message = "the cluster profile of pebbles does not hold the packs of the release profile of the lab"
+  }
+  assert {
+    condition     = alltrue([for p in concat(local.workload_packs, flatten([for t in local.copied_teams : local.teams[t]])) : contains(keys(output.images), p)])
+    error_message = "a pack of pebbles is not a pin, so platform.sh images does not resolve its images"
+  }
+  assert {
+    condition     = [for d in split("---\n", local.glue.workload) : yamldecode(d).spec.provider.vault.server if yamldecode(d).kind == "ClusterSecretStore"] == ["https://vault.{{.spectro.var.domain}}"]
+    error_message = "the store of secrets of pebbles does not read Vault on wilma"
+  }
+  assert {
+    condition     = [for d in split("---\n", local.glue.security) : yamldecode(d).spec.hostnames if yamldecode(d).kind == "HTTPRoute"] == [["vault.{{.spectro.var.domain}}"]]
+    error_message = "wilma has no route to Vault"
+  }
+  assert {
+    condition     = spectrocloud_cluster_profile.workload_team[0].profile_variables[0].variable[0].default_value == "wilma.strata-live.internal"
+    error_message = "the profile of the team of pebbles does not give Grafana the domain of wilma"
+  }
+  assert {
+    condition     = output.set_selector == "tag:hub=wilma" && output.workload_profile_names == tolist(["pebbles-release", "pebbles-apps", "wilma-data", "wilma-control"])
+    error_message = "the outputs of pebbles: ${output.set_selector} ${jsonencode(output.workload_profile_names)}"
+  }
+}
+
+# With no second project, the state holds wilma alone, with its tag of the set.
+run "with_no_second_project_the_state_holds_wilma_alone" {
+  command = apply
+
+  override_data {
+    target = data.spectrocloud_pack.pin
+    values = { values = "pack:\n  namespace: \"monitoring\"\n" }
+  }
+
+  assert {
+    condition     = length(spectrocloud_cluster_aws.workload) == 0 && length(spectrocloud_cluster_profile.shared) == 0 && length(spectrocloud_cluster_profile.copy) == 0
+    error_message = "the state holds a part of pebbles"
+  }
+  assert {
+    condition     = !contains(keys(local.on_cluster), "shared") && contains(spectrocloud_cluster_aws.wilma.tags, "hub:wilma")
+    error_message = "wilma runs a profile of the tenant, or has no tag hub:wilma"
+  }
+  assert {
+    condition     = output.workload_uid == "" && output.second_project_uid == "" && length(output.workload_profile_names) == 0 && length(output.copies) == 0
+    error_message = "an output names a part of pebbles"
+  }
+}
+
+# Case 2 of platform-boundary.sh: wilma-security 1.1.0 holds the other vault, and each other pin and
+# profile stays.
+run "case_2_of_the_boundary_moves_vault_to_wilma_security_1_1_0" {
+  command = apply
+
+  variables {
+    vault_version = "2.0.0"
+  }
+
+  override_data {
+    target = data.spectrocloud_pack.pin
+    values = { values = "pack:\n  namespace: \"monitoring\"\n" }
+  }
+
+  assert {
+    condition     = spectrocloud_cluster_profile.team["security"].version == "1.1.0" && alltrue([for t, p in spectrocloud_cluster_profile.team : p.version == "1.0.0" if t != "security"])
+    error_message = "the move of Vault changes the version of another profile, or not of wilma-security"
+  }
+  assert {
+    condition     = [for p in spectrocloud_cluster_profile.team["security"].pack : p.tag if p.name == "vault"] == ["2.0.0"] && output.packs["cert-manager"].version == "1.0.0"
+    error_message = "wilma-security 1.1.0 does not hold vault 2.0.0, or another pin changes"
+  }
+  assert {
+    condition     = contains([for p in spectrocloud_cluster_aws.wilma.cluster_profile : p.id], spectrocloud_cluster_profile.team["security"].id)
+    error_message = "wilma does not run wilma-security 1.1.0"
   }
 }
