@@ -3522,6 +3522,137 @@ fn the_pages_state_the_results_of_the_third_live_window_of_wave_18() {
     pages_say(&pages);
 }
 
+/// The third live window of Wave 18 ran each case of `platform.sh` on `wilma` (#700). Each row of
+/// the script gives its result, apart from the row of #701. The pages of Palette and the page of
+/// the live example state what the run shows.
+#[test]
+fn the_pages_state_the_results_of_platform_sh_in_the_third_live_window_of_wave_18() {
+    // the result of each check with `?`
+    let others = [
+        (
+            "| `verify-cluster` |",
+            "A live run gave 0: the record of `wilma` verifies while the edit waits",
+        ),
+        (
+            "| `validate-move` |",
+            "A live run gave 1: the two sides differ.",
+        ),
+        (
+            "| `behind-network` |",
+            "A live run gave 1: of the 2 pins of the record, 1 is behind and 1 is current",
+        ),
+        (
+            "| `move-ready` |",
+            "A live run gave 0: after the move, each pack",
+        ),
+        (
+            "| `move-roots` |",
+            "A live run gave 0: the check read the root of each of the five records.",
+        ),
+        (
+            "| `move-same-release` |",
+            "A live run gave 1: `same-release` says `DIFFERENT`",
+        ),
+        (
+            "| `move-compare-cluster`, ",
+            "A live run gave 1 for each: the record before the move has 9 profiles, and the other side has 10.",
+        ),
+        (
+            "| `domain-compare`, ",
+            "`compare` finds no change, with 9 profiles on each side",
+        ),
+        (
+            "| `domain-observer` |",
+            "is `wilma-gitops`, with the status `newer` and the cluster copy `same`.",
+        ),
+        (
+            "| `behind-scale` |",
+            "`behind` exits 1 after 81 seconds, with 112 requests.",
+        ),
+        (
+            "| `data-crd` |",
+            "right after the apply, `kubectl` still reads the CRD.",
+        ),
+        (
+            "| `data-compare` |",
+            "the record before has 9 profiles, and the record after has 8.",
+        ),
+        (
+            "| `data-pack-status` |",
+            "first the layer `wilma-identity-glue`.",
+        ),
+        (
+            "| `observer-requests` |",
+            "a content cycle on `wilma` takes 31 requests.",
+        ),
+        (
+            "| `observer-images` |",
+            "The pods of `wilma` run 14 images of `docker.io`, and 9 of them match no pack.",
+        ),
+        (
+            "| `text-limit` |",
+            "`textTooLarge` is `false`. The unified diff of the values has 322 characters",
+        ),
+        (
+            "| `observer-memory` |",
+            "the working set of the observer is 12050432 bytes",
+        ),
+        (
+            "| `bitnami-images` |",
+            "`packs-ready` shows that each of these packs is ready.",
+        ),
+    ];
+    for (start, result) in others {
+        rows_say(&[start], result);
+    }
+    // each other row of the script passed, apart from the row of #701
+    let workload = "| `workload-packs-ready` |";
+    let runs = read(&docs().join(LIVE_RUNS_PAGE));
+    let rows: Vec<&str> = section(&runs, "\n## platform.sh\n", Some("\n## "))
+        .lines()
+        .filter(|l| l.starts_with("| `"))
+        .collect();
+    let passed: Vec<&str> = rows
+        .iter()
+        .map(|row| &row[..row[1..].find('|').unwrap() + 2])
+        .filter(|cell| {
+            *cell != workload && !others.iter().any(|(start, _)| cell.starts_with(start))
+        })
+        .collect();
+    rows_say(&passed, LIVE_RUN_PASSED);
+    assert_eq!(rows.len(), passed.len() + others.len() + 1);
+    // each page, the words of the result, and the words that are gone
+    let pages: [(&str, &[&str], &[&str]); 3] = [
+        (
+            PALETTE_CLUSTERS_PAGE,
+            &[
+                "shows each error code of the table, and that the version keeps its content. It shows the HTTP status of the move alone.",
+                "The record of `wilma` verifies while the edit in place of `wilma-security` waits.",
+                "The variables endpoint gives each profile the new value, and `compare` of the records exits `0`.",
+            ],
+            &["asks each route."],
+        ),
+        (
+            LIVE_EXAMPLE_PAGE,
+            &[
+                "A live run shows it: a plan right after `just live-platform-up` finds no change.",
+                "So the images of `bitnamilegacy` work for each pack of the registry Bitnami.",
+                "the job of keycloak-config-cli can fail once",
+                "replace-status`: the uid of `wilma`, then the uid of the profile two times.",
+            ],
+            &[
+                "It also tests that a plan after the apply gives the same values and the same variable.",
+            ],
+        ),
+        (
+            LIVE_RUNS_PAGE,
+            &["A live run of case 2 shows the refusals of"],
+            &["The judged checks of case 2 state what the code of Palette shows"],
+        ),
+    ];
+    pages_say(&pages);
+}
+
 /// The second live window of Wave 18 ran the live example and the scripts of its facts on
 /// provider 0.30.7, on AWS alone (#939, #999). The test reads the result of each row of "The
 /// release of the provider" in `live-runs.md`. It also reads the pages that named a result of

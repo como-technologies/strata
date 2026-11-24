@@ -183,6 +183,10 @@ it:
 | The update pushed to the first cluster, with its notification left open | Its copy takes the edit within three minutes. |
 | The update accepted on the first cluster | The two clusters match. The record from before the edit reports `DRIFT`. |
 
+Case 1 of [platform.sh](../../development/live-runs.md#platformsh) shows the
+second row on a cluster with nine profiles. The record of `wilma` verifies
+while the edit in place of `wilma-security` waits.
+
 So `compare` of two cluster records shows a change exactly when the clusters run
 different content, and strata needs no record of the updates that wait for a
 cluster.
@@ -226,6 +230,10 @@ who "updated the cluster variables on the cluster `<name>`". The variables endpo
 gives the new value. A record of the copy from before verifies, and a comparison
 of the records from before and after reports the copy unchanged and one
 variable value changed.
+
+Case 4 of [platform.sh](../../development/live-runs.md#platformsh) shows it for
+the variable `domain` of five profiles of one cluster. The variables endpoint
+gives each profile the new value, and `compare` of the records exits `0`.
 
 Palette says when a copy is behind its profile
 ([Cluster updates](https://docs.spectrocloud.com/clusters/cluster-management/cluster-updates/)).
@@ -480,9 +488,10 @@ keeps it: two orders are two published versions.
 Palette keeps one pack name in one profile of a workload scope of a cluster. The
 two scopes are the system scope and the app scope. Each route below refuses a
 second pin of that name in another profile of the same scope, at the point where
-the second pin reaches the cluster. The code of Palette shows it; no live run
-shows it yet. Case 2 of [platform.sh](../../development/live-runs.md#platformsh)
-asks each route.
+the second pin reaches the cluster. A live run of case 2 of
+[platform.sh](../../development/live-runs.md#platformsh) shows each error code
+of the table, and that the version keeps its content. It shows the HTTP status
+of the move alone. The code of Palette shows the other statuses.
 
 | Request | Answer of Palette |
 | --- | --- |

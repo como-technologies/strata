@@ -225,7 +225,7 @@ locals {
   pack_values     = { for k, v in local.source_values : k => lookup(local.password_values, k, lookup(local.patched_values, k, v)) }
   # The variable of the password of Grafana, in each profile with prometheus-operator. Palette masks
   # the default of a sensitive variable in its answer, and the provider then keeps the default of the
-  # state.
+  # state. A live run shows it: a plan right after just live-platform-up finds no change.
   grafana_password = {
     name          = "grafana_password"
     display_name  = "Grafana password"

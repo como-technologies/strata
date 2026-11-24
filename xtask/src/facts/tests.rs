@@ -1034,20 +1034,31 @@ fn the_facts_that_the_second_live_window_of_wave_18_shows_name_its_checks_under_
     name_under_live(shown);
 }
 
-/// The third live window of Wave 18 ran stage 10 of tiers.sh (#915). The fact that it shows names
-/// its checks under `live`, and gives no `unchecked` reason. No reason of another fact names one of
-/// them.
+/// The third live window of Wave 18 ran stage 10 of tiers.sh (#915) and case 2 of platform.sh
+/// (#700). Each fact that it shows names its checks under `live`, and gives no `unchecked` reason.
+/// No reason of another fact names one of them.
 #[test]
 fn the_facts_that_the_third_live_window_of_wave_18_shows_name_its_checks_under_live() {
-    let shown: &[(&str, &[&str])] = &[(
-        "cluster-system-rbacs-user",
-        &[
-            "tiers.sh:second-system",
-            "tiers.sh:second-own-subject",
-            "tiers.sh:second-system-differs",
-            "tiers.sh:second-others-same",
-        ],
-    )];
+    let shown: &[(&str, &[&str])] = &[
+        (
+            "cluster-system-rbacs-user",
+            &[
+                "tiers.sh:second-system",
+                "tiers.sh:second-own-subject",
+                "tiers.sh:second-system-differs",
+                "tiers.sh:second-others-same",
+            ],
+        ),
+        (
+            "cluster-one-pack-two-profiles",
+            &[
+                "platform.sh:in-place-refused",
+                "platform.sh:in-place-unchanged",
+                "platform.sh:validate-names-duplicate",
+                "platform.sh:move-refused",
+            ],
+        ),
+    ];
     name_under_live(shown);
 }
 
