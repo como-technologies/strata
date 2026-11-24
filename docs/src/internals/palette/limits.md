@@ -67,13 +67,6 @@ These are open:
   alone, because strata prints one refusal when two routes give the same one.
   See
   [The validate routes](validate-routes.md#post-v1clusterprofilesimportvalidate).
-- The answer of `config/rbacs` to the keys of two users, for a cluster with a
-  role binding of the system. The code of Palette shows that each binding of
-  that item holds only the subject that is the user of the key. The stand-in
-  gives that answer. Stage 10 of
-  [tiers.sh](../../development/live-runs.md#tierssh) reads such a cluster with
-  two keys, and has no result yet. See
-  [Cluster tiers](clusters.md#cluster-tiers).
 - The answer of the profile listing to a key whose roles in the project do not
   give `clusterProfile.list`. The code of Palette shows HTTP 500 with the code
   `ResourceAccessDenied`. A run shows that answer only for the cluster listing:

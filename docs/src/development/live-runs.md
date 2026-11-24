@@ -1402,16 +1402,16 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `unknown-key-read` | 0 | #620: `api.sh get-status` reads the project listing with a key that no tenant has, and prints the status and the body of the answer. A live run passed. |
 | `unknown-key-list` | 2 | #620: `strata list projects` with that key, as text and as JSON, exits `2` with the error. A live run passed. |
 | `unknown-key-masked` | 1 | #620: the output and the errors of `unknown-key-list` hold no copy of the key. A live run passed. |
-| `second-first`, `second-read`, `second-status` | 0 | #838: the key of the example and the second key read the role bindings of cluster A. Palette answers HTTP 200 to both. `api.sh get-status` prints the status and the body of each answer. A live run gave HTTP 200 to both keys with `items: []`: cluster A had no role binding of the system. |
-| `second-system` | 0 | #838: the answer to the key of the example has an item with `spec.isSystem` true, a role binding of the system. No result yet: a live run found no role binding of the system on cluster A. |
-| `second-system-first`, `second-system-second` | ? | #838: the role and the names of the subjects of each binding of the system, in the answer to each key. No result yet: a live run found no role binding of the system on cluster A. |
-| `second-own-subject` | 0 | #838: in each answer, each binding of the system holds one subject, and all these subjects have one name. The code of Palette shows that this subject is the user of the key. No result yet: a live run found no role binding of the system on cluster A. |
-| `second-system-differs` | 1 | #838: the bindings of the system in the two answers differ, so `cmp` exits `1`. No result yet: a live run found no role binding of the system on cluster A. |
-| `second-others-same` | 0 | #838: the bindings that are not of the system are the same in the two answers. No result yet: a live run found no role binding of the system on cluster A. |
-| `second-record-first`, `second-record-second` | 0 | #838: a record of cluster A with the key of the example, and one with the second key. No result yet: a live run found no role binding of the system on cluster A. |
-| `second-compare`, `second-policy` | ? | #838: `compare` of the two records as JSON, and the state of its `policy` tier: `same` or `changed`. No result yet: a live run found no role binding of the system on cluster A. |
-| `second-policy-same` | 0 | #838: the state of the `policy` tier is `same`. Strata keeps each binding of the system out of the hash, so the tier does not depend on the user of the key. No result yet: a live run found no role binding of the system on cluster A. |
-| `second-system-recorded` | 0 | #838: the `policy` tier of each record names one binding of the system or more, in `systemRbacs`. No result yet: a live run found no role binding of the system on cluster A. |
+| `second-first`, `second-read`, `second-status` | 0 | #838: the key of the example and the second key read the role bindings of cluster A. Palette answers HTTP 200 to both. `api.sh get-status` prints the status and the body of each answer. A live run passed. |
+| `second-system` | 0 | #838: the answer to the key of the example has an item with `spec.isSystem` true, a role binding of the system. A live run passed. |
+| `second-system-first`, `second-system-second` | ? | #838: the role and the names of the subjects of each binding of the system, in the answer to each key. A live run gave one binding to each key, with one subject, the user of that key. Its role is `cluster-admin` for the key of the example, and `view` for the second key. |
+| `second-own-subject` | 0 | #838: in each answer, each binding of the system holds one subject, and all these subjects have one name. A live run passed, and in each answer this subject is the user of the key. |
+| `second-system-differs` | 1 | #838: the bindings of the system in the two answers differ, so `cmp` exits `1`. A live run passed. |
+| `second-others-same` | 0 | #838: the bindings that are not of the system are the same in the two answers. A live run passed. |
+| `second-record-first`, `second-record-second` | 0 | #838: a record of cluster A with the key of the example, and one with the second key. A live run passed. |
+| `second-compare`, `second-policy` | ? | #838: `compare` of the two records as JSON, and the state of its `policy` tier: `same` or `changed`. In a live run, `second-policy` gave `same`. |
+| `second-policy-same` | 0 | #838: the state of the `policy` tier is `same`. Strata keeps each binding of the system out of the hash, so the tier does not depend on the user of the key. A live run passed. |
+| `second-system-recorded` | 0 | #838: the `policy` tier of each record names one binding of the system or more, in `systemRbacs`. A live run passed. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
