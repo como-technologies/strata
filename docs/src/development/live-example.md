@@ -556,11 +556,11 @@ and it sends no request to Palette or AWS.
 The values of prometheus-operator are the text of the registry, with one
 change. The line `adminPassword: ""` names the profile variable
 `grafana_password`. Each profile with prometheus-operator declares that
-variable. The variable is sensitive, and its default is the password. So the
-text that Palette keeps is the text that the example sends, and a plan after
-the apply finds no change. `just live-platform-values` tests that the values
-keep each other line of the registry. It also tests that a plan after the apply
-gives the same values and the same variable.
+sensitive variable, with the password as its default. So the text that Palette
+keeps is the text that the example sends. A live run shows it: a plan right
+after `just live-platform-up` finds no change. `just live-platform-values` tests
+that the values keep each other line of the registry, and that a plan after the
+apply gives the same values and variable.
 
 ```bash
 just live-profiles                  # or just live-up: the release profile of the lab
@@ -576,6 +576,25 @@ just live-down
 `just live-platform-up` waits until each pack of each add-on profile has a
 condition with the status `True`. Each line names a pack with its reason, or the
 reason that it waits.
+
+A live run shows the build. `just live-platform-up` exits `0`, and `wilma` is
+`Running`. Each of its 14 community packs and each of its seven layers of glue
+is ready. So the images of `bitnamilegacy` work for each pack of the registry
+Bitnami. Each case of `platform.sh` runs, and each judged check passes: see
+[platform.sh](./live-runs.md#platformsh).
+
+The live run also shows two things that no check judges:
+
+- On a new `wilma`, the job of keycloak-config-cli can fail once, while
+  Keycloak starts with a new database. Palette then tries the chart again, and
+  the job passes (#970).
+- When an apply edits a version in place, and `wilma` runs that version, the
+  change does not reach `wilma` by itself. The cluster keeps its copy, and the
+  update waits: see
+  [Cluster copies](../internals/palette/clusters.md#cluster-copies). Apply it
+  with `examples/live/api.sh replace-status`: the uid of `wilma`, then the uid
+  of the profile two times. A new `just live-platform-up` does not need this
+  step.
 
 The teardown of `just live-platform-down` has three steps. First, the add-on
 profiles leave `wilma` and `pebbles`, so their workloads free the claims of their

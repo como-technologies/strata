@@ -1371,7 +1371,11 @@ facts:
         - ClusterProfilePacksInConflict
         - DuplicateClusterPacksForbidden
     stand_in: []
-    unchecked: The code of Palette shows the refusal of the edit in place and of the move. The checks in-place-refused, validate-names-duplicate, and move-refused of platform.sh have no result yet.
+    live:
+      - platform.sh:in-place-refused
+      - platform.sh:in-place-unchanged
+      - platform.sh:validate-names-duplicate
+      - platform.sh:move-refused
     pages:
       - internals/palette/clusters.md#one-pack-in-two-profiles-of-a-cluster
     code:

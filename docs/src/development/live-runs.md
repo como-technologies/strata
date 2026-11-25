@@ -1994,10 +1994,11 @@ CLI. Cases 4 and 7 install the observer with `observer-up.sh`, and remove it.
 Each case changes one thing. It ends with the defaults of `terraform-platform/`,
 the baseline of `wilma`, also after a failed check. A check with `?` records what
 strata says, or what Palette answers, and judges nothing. The questions of the
-issue are the checks with `?`. Their results go to the pages of
-[What Palette does](../internals/palette.md) after the live run.
+issue are the checks with `?`. Each row gives the result of a live run. The
+pages of [What Palette does](../internals/palette.md) state each result that
+shows a behavior of Palette.
 
-The judged checks of case 2 state what the code of Palette shows: see
+A live run of case 2 shows the refusals of
 [One pack in two profiles of a cluster](../internals/palette/clusters.md#one-pack-in-two-profiles-of-a-cluster).
 Case 1 edits the line `releaseNameOverride: "cert-manager"` of the values of
 cert-manager. Case 7 edits the line `retention: 10d` of prometheus-operator.
@@ -2024,55 +2025,55 @@ the Bitnami packs.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `images` | 0 | #700: before the apply, `crane digest` resolves each image of the output `images` of a plan of `terraform-platform/`. The output names each image with its digest. When an image does not resolve, `up` stops, and its standard error names each such image. No result yet: no live window ran platform.sh. |
-| `packs-ready` | 0 | #700: `just live-platform-up` built `wilma`, and each pack of each add-on profile has a condition with the status `True`. Each line of the output names a pack with its reason, or the reason that it waits. No result yet: no live window ran platform.sh. |
+| `images` | 0 | #700: before the apply, `crane digest` resolves each image of the output `images` of a plan of `terraform-platform/`. The output names each image with its digest. When an image does not resolve, `up` stops, and its standard error names each such image. A live run passed. |
+| `packs-ready` | 0 | #700: `just live-platform-up` built `wilma`, and each pack of each add-on profile has a condition with the status `True`. Each line of the output names a pack with its reason, or the reason that it waits. A live run passed. |
 | `workload-packs-ready` | 0 | #701: with a second project, `just live-platform-up` built `pebbles` there. Each pack of each add-on profile of `pebbles` has a condition with the status `True`. The reads of `pebbles` have the `ProjectUid` of the second project. No result yet: no live window ran platform.sh. |
-| `records` | 0 | #700: a record of the release, of each profile of a team, and of `wilma`, at the baseline. No result yet: no live window ran platform.sh. |
-| `verify-before`, `verify-after` | 0 | #700: case 1. `verify` passes on each record before the edit and after its undo. No result yet: no live window ran platform.sh. |
-| `edit-security`, `undo-security` | 0 | #700: case 1. An edit in place of a value of cert-manager in `wilma-security`, through the API, and its undo. No result yet: no live window ran platform.sh. |
-| `verify-security` | 1 | #700: case 1. `verify` gives a finding for the record of `wilma-security`. No result yet: no live window ran platform.sh. |
-| `verify-others` | 0 | #700: case 1. `verify` passes on the record of each of the other six profiles, and of the release. The output names the exit of each. No result yet: no live window ran platform.sh. |
-| `verify-cluster` | ? | #700: case 1. What `verify` says of the record of `wilma` while the edit waits for the cluster. No result yet: no live window ran platform.sh. |
-| `network-next` | 0 | #700: case 2. `wilma-network` 1.1.0 adds cert-manager at another version, and no cluster runs it. The other version is the newest one in the registry of the pin, in the order of strata, that is not the pin. No result yet: no live window ran platform.sh. |
-| `in-place-refused` | 0 | #700: case 2. Palette refuses the edit in place that adds that cert-manager to `wilma-network` 1.0.0, which `wilma` runs: `ClusterProfilePacksInConflict`. No result yet: no live window ran platform.sh. |
-| `in-place-unchanged` | 0 | #700: case 2. `verify` passes on the record of `wilma-network`: the refusal changed nothing. No result yet: no live window ran platform.sh. |
-| `record-network-next` | 0 | #700: case 2. A record of `wilma-network` 1.1.0. No result yet: no live window ran platform.sh. |
-| `validate-move` | ? | #700: case 2. What `compare --validate` prints for the move of `wilma` to `wilma-network` 1.1.0, with the answer of Palette last. No result yet: no live window ran platform.sh. |
-| `validate-names-duplicate` | 0 | #700: case 2. That answer names `DuplicateClusterPacksForbidden` and cert-manager. No result yet: no live window ran platform.sh. |
-| `move-refused` | 0 | #700: case 2. Palette refuses the move of `wilma` to `wilma-network` 1.1.0 with HTTP 500 and `DuplicateClusterPacksForbidden`. No result yet: no live window ran platform.sh. |
-| `behind-network` | ? | #700: case 2. What `behind` says of the record of `wilma-network`: version 1.1.0, and the answer of Palette under `bump to`. No result yet: no live window ran platform.sh. |
-| `network-next-gone` | 0 | #700: case 2. Version 1.1.0 goes. No result yet: no live window ran platform.sh. |
-| `move-fluentbit` | 0 | #700: case 3. `wilma` runs `wilma-observability` 1.1.0 with no fluentbit, and `wilma-logging` 1.0.0 with fluentbit alone. The content of fluentbit does not change. No result yet: no live window ran platform.sh. |
-| `move-ready` | ? | #700: case 3. Each pack after the move, with its condition. No result yet: no live window ran platform.sh. |
-| `record-moved` | 0 | #700: case 3. Records of the two new versions, and of `wilma` after the move. No result yet: no live window ran platform.sh. |
-| `move-roots` | ? | #700: case 3. The root of each record before and after the move, and the node of fluentbit in each. No result yet: no live window ran platform.sh. |
-| `move-same-release` | ? | #700: case 3. What `same-release` says of `wilma-observability` 1.0.0 and 1.1.0. No result yet: no live window ran platform.sh. |
-| `move-compare-cluster`, `move-compare-records` | ? | #700: case 3. What `compare` says of the record of `wilma` before the move, with `cluster:wilma` and with the record after the move. No result yet: no live window ran platform.sh. |
-| `move-back` | 0 | #700: case 3. `wilma` runs the baseline again, and each pack is ready. No result yet: no live window ran platform.sh. |
-| `domain-observer-on`, `domain-observer-off` | 0 | #700: case 4. The observer runs on `wilma` for the case, and then leaves it. No result yet: no live window ran platform.sh. |
-| `domain-set` | 0 | #700: case 4. `wilma` gives the variable `domain` another value in the five profiles that declare it. No result yet: no live window ran platform.sh. |
-| `domain-variables` | 0 | #700: case 4. The variables route of `wilma` gives that value to the variable `domain` of each of the five profiles. No result yet: no live window ran platform.sh. |
-| `domain-record` | 0 | #700: case 4. A record of `wilma` with the new value. No result yet: no live window ran platform.sh. |
-| `domain-compare`, `domain-verify` | ? | #700: case 4. What `compare` says of the records of `wilma` before and after, and what `verify` says of the records of the five profiles. No result yet: no live window ran platform.sh. |
-| `domain-observer` | ? | #700: case 4. What the page of the observer says of the five profiles after two content cycles. No result yet: no live window ran platform.sh. |
-| `domain-back` | 0 | #700: case 4. `wilma` gives the default again. No result yet: no live window ran platform.sh. |
-| `behind-scale` | ? | #700: case 5. `behind` on the records of the seven profiles, behind `count-requests`: the requests, the seconds, the pins, the pins behind, and the routes that took most. No result yet: no live window ran platform.sh. |
-| `behind-rows` | 0 | #700: case 5. `behind` names a newer version for each pin that `just live-platform-pins` wrote one version behind. No result yet: no live window ran platform.sh. |
-| `data-off` | 0 | #700: case 6. `wilma-data` leaves `wilma`, and cloudnative-pg with it. No result yet: no live window ran platform.sh. |
-| `data-crd` | ? | #700: case 6. Whether `kubectl` reads the CRD of a `Cluster` of cloudnative-pg after that. No result yet: no live window ran platform.sh. |
-| `data-identity-content` | 0 | #700: case 6. `verify` passes on the record of `wilma-identity`, because strata compares the content and not the health. No result yet: no live window ran platform.sh. |
-| `data-record` | 0 | #700: case 6. A record of `wilma` with no `wilma-data`. No result yet: no live window ran platform.sh. |
-| `data-compare` | ? | #700: case 6. What `compare` says of the records of `wilma` before and after. No result yet: no live window ran platform.sh. |
-| `data-pack-status` | ? | #700: case 6. What Palette reports for the packs of `wilma-identity` 10 minutes after the change. No result yet: no live window ran platform.sh. |
-| `data-back` | 0 | #700: case 6. `wilma` runs `wilma-data` again, and each pack is ready. No result yet: no live window ran platform.sh. |
-| `observer-pods`, `observer-off` | 0 | #700: case 7. The observer runs on `wilma` with the read of the pods, and then leaves it. No result yet: no live window ran platform.sh. |
-| `observer-requests` | ? | #700: case 7. The requests of a content cycle, of the first command of a versions cycle, and of its moves, on `wilma`. [observer.sh](#observersh) gives the counts for cluster A. These counts and the time of a cycle set the default period of the observer for a set of clusters (#702). No result yet: no live window ran platform.sh. |
-| `observer-images` | ? | #700: case 7. The images that the pods of `wilma` run, by the host of the registry, such as `docker.io`, `quay.io`, `ghcr.io`, and `registry.k8s.io`. The output names each image that matches no pack, such as a sidecar. No result yet: no live window ran platform.sh. |
-| `prometheus-edit`, `prometheus-undo` | 0 | #700: case 7. An edit in place of a value of prometheus-operator, whose values are large, and its undo. No result yet: no live window ran platform.sh. |
-| `text-limit` | ? | #700: case 7. The detail route of the diff of prometheus-operator: `textTooLarge`, and the bytes of the text of each side, against the limit of 256 KiB. No result yet: no live window ran platform.sh. |
-| `observer-memory` | ? | #700: case 7. The working set of the container of the observer, from the summary of the kubelet, beside its limit of 512 Mi. No result yet: no live window ran platform.sh. |
-| `observer-no-oom` | 0 | #700: case 7. No container of the observer restarted, and none ended with `OOMKilled`. No result yet: no live window ran platform.sh. |
-| `bitnami-images` | ? | #700: case 8. For each pack of a Bitnami registry: the lines of its values that name an image. Then the image and the state of each container of its pods. Bitnami moved its free images to another repository, so a pod can wait for its image (#630). No result yet: no live window ran platform.sh. |
+| `records` | 0 | #700: a record of the release, of each profile of a team, and of `wilma`, at the baseline. A live run passed. |
+| `verify-before`, `verify-after` | 0 | #700: case 1. `verify` passes on each record before the edit and after its undo. A live run passed. |
+| `edit-security`, `undo-security` | 0 | #700: case 1. An edit in place of a value of cert-manager in `wilma-security`, through the API, and its undo. A live run passed. |
+| `verify-security` | 1 | #700: case 1. `verify` gives a finding for the record of `wilma-security`. A live run passed. |
+| `verify-others` | 0 | #700: case 1. `verify` passes on the record of each of the other six profiles, and of the release. The output names the exit of each. A live run passed. |
+| `verify-cluster` | ? | #700: case 1. What `verify` says of the record of `wilma` while the edit waits for the cluster. A live run gave 0: the record of `wilma` verifies while the edit waits, with 9 profiles in the record and on the cluster. |
+| `network-next` | 0 | #700: case 2. `wilma-network` 1.1.0 adds cert-manager at another version, and no cluster runs it. The other version is the newest one in the registry of the pin, in the order of strata, that is not the pin. A live run passed. |
+| `in-place-refused` | 0 | #700: case 2. Palette refuses the edit in place that adds that cert-manager to `wilma-network` 1.0.0, which `wilma` runs: `ClusterProfilePacksInConflict`. A live run passed. |
+| `in-place-unchanged` | 0 | #700: case 2. `verify` passes on the record of `wilma-network`: the refusal changed nothing. A live run passed. |
+| `record-network-next` | 0 | #700: case 2. A record of `wilma-network` 1.1.0. A live run passed. |
+| `validate-move` | ? | #700: case 2. What `compare --validate` prints for the move of `wilma` to `wilma-network` 1.1.0, with the answer of Palette last. A live run gave 1: the two sides differ. `validate-names-duplicate` reads the answer of Palette. |
+| `validate-names-duplicate` | 0 | #700: case 2. That answer names `DuplicateClusterPacksForbidden` and cert-manager. A live run passed. |
+| `move-refused` | 0 | #700: case 2. Palette refuses the move of `wilma` to `wilma-network` 1.1.0 with HTTP 500 and `DuplicateClusterPacksForbidden`. A live run passed. |
+| `behind-network` | ? | #700: case 2. What `behind` says of the record of `wilma-network`: version 1.1.0, and the answer of Palette under `bump to`. A live run gave 1: of the 2 pins of the record, 1 is behind and 1 is current, and 1 profile version is behind. |
+| `network-next-gone` | 0 | #700: case 2. Version 1.1.0 goes. A live run passed. |
+| `move-fluentbit` | 0 | #700: case 3. `wilma` runs `wilma-observability` 1.1.0 with no fluentbit, and `wilma-logging` 1.0.0 with fluentbit alone. The content of fluentbit does not change. A live run passed. |
+| `move-ready` | ? | #700: case 3. Each pack after the move, with its condition. A live run gave 0: after the move, each pack of each add-on profile of `wilma` has a condition with the status `True`. |
+| `record-moved` | 0 | #700: case 3. Records of the two new versions, and of `wilma` after the move. A live run passed. |
+| `move-roots` | ? | #700: case 3. The root of each record before and after the move, and the node of fluentbit in each. A live run gave 0: the check read the root of each of the five records. |
+| `move-same-release` | ? | #700: case 3. What `same-release` says of `wilma-observability` 1.0.0 and 1.1.0. A live run gave 1: `same-release` says `DIFFERENT` for `wilma-observability` 1.0.0 and 1.1.0. |
+| `move-compare-cluster`, `move-compare-records` | ? | #700: case 3. What `compare` says of the record of `wilma` before the move, with `cluster:wilma` and with the record after the move. A live run gave 1 for each: the record before the move has 9 profiles, and the other side has 10. |
+| `move-back` | 0 | #700: case 3. `wilma` runs the baseline again, and each pack is ready. A live run passed. |
+| `domain-observer-on`, `domain-observer-off` | 0 | #700: case 4. The observer runs on `wilma` for the case, and then leaves it. A live run passed. |
+| `domain-set` | 0 | #700: case 4. `wilma` gives the variable `domain` another value in the five profiles that declare it. A live run passed. |
+| `domain-variables` | 0 | #700: case 4. The variables route of `wilma` gives that value to the variable `domain` of each of the five profiles. A live run passed. |
+| `domain-record` | 0 | #700: case 4. A record of `wilma` with the new value. A live run passed. |
+| `domain-compare`, `domain-verify` | ? | #700: case 4. What `compare` says of the records of `wilma` before and after, and what `verify` says of the records of the five profiles. A live run gave 0 for each. The roots of the two records are equal (`IDENTICAL`), with 9 profiles on each side. The value of a variable is not in the root: see [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds). `verify` passes on the record of each of the five profiles. |
+| `domain-observer` | ? | #700: case 4. What the page of the observer says of the five profiles after two content cycles. A live run gave 0. The first profile of the output is `wilma-gitops`, with the status `newer` and the cluster copy `same`. |
+| `domain-back` | 0 | #700: case 4. `wilma` gives the default again. A live run passed. |
+| `behind-scale` | ? | #700: case 5. `behind` on the records of the seven profiles, behind `count-requests`: the requests, the seconds, the pins, the pins behind, and the routes that took most. A live run gave 0: `behind` exits 1 after 81 seconds, with 112 requests. |
+| `behind-rows` | 0 | #700: case 5. `behind` names a newer version for each pin that `just live-platform-pins` wrote one version behind. A live run passed. |
+| `data-off` | 0 | #700: case 6. `wilma-data` leaves `wilma`, and cloudnative-pg with it. A live run passed. |
+| `data-crd` | ? | #700: case 6. Whether `kubectl` reads the CRD of a `Cluster` of cloudnative-pg after that. A live run gave 0: right after the apply, `kubectl` still reads the CRD. |
+| `data-identity-content` | 0 | #700: case 6. `verify` passes on the record of `wilma-identity`, because strata compares the content and not the health. A live run passed. |
+| `data-record` | 0 | #700: case 6. A record of `wilma` with no `wilma-data`. A live run passed. |
+| `data-compare` | ? | #700: case 6. What `compare` says of the records of `wilma` before and after. A live run gave 1: the record before has 9 profiles, and the record after has 8. |
+| `data-pack-status` | ? | #700: case 6. What Palette reports for the packs of `wilma-identity` 10 minutes after the change. A live run gave 0. The output gives the condition of each pack of `wilma-identity`, first the layer `wilma-identity-glue`. |
+| `data-back` | 0 | #700: case 6. `wilma` runs `wilma-data` again, and each pack is ready. A live run passed. |
+| `observer-pods`, `observer-off` | 0 | #700: case 7. The observer runs on `wilma` with the read of the pods, and then leaves it. A live run passed. |
+| `observer-requests` | ? | #700: case 7. The requests of a content cycle, of the first command of a versions cycle, and of its moves, on `wilma`. [observer.sh](#observersh) gives the counts for cluster A. These counts and the time of a cycle set the default period of the observer for a set of clusters (#702). A live run gave 0: a content cycle on `wilma` takes 31 requests. |
+| `observer-images` | ? | #700: case 7. The images that the pods of `wilma` run, by the host of the registry, such as `docker.io`, `quay.io`, `ghcr.io`, and `registry.k8s.io`. The output names each image that matches no pack, such as a sidecar. A live run gave 0. The pods of `wilma` run 14 images of `docker.io`, and 9 of them match no pack. |
+| `prometheus-edit`, `prometheus-undo` | 0 | #700: case 7. An edit in place of a value of prometheus-operator, whose values are large, and its undo. A live run passed. |
+| `text-limit` | ? | #700: case 7. The detail route of the diff of prometheus-operator: `textTooLarge`, and the bytes of the text of each side, against the limit of 256 KiB. A live run gave 0: `textTooLarge` is `false`. The unified diff of the values has 322 characters, and the diff has no manifest. |
+| `observer-memory` | ? | #700: case 7. The working set of the container of the observer, from the summary of the kubelet, beside its limit of 512 Mi. A live run gave 0: the working set of the observer is 12050432 bytes, about 11.5 MiB. |
+| `observer-no-oom` | 0 | #700: case 7. No container of the observer restarted, and none ended with `OOMKilled`. A live run passed. |
+| `bitnami-images` | ? | #700: case 8. For each pack of a Bitnami registry: the lines of its values that name an image. Then the image and the state of each container of its pods. Bitnami moved its free images to another repository, so a pod can wait for its image (#630). A live run gave 0: the check read the values and the pods of each Bitnami pack. `packs-ready` shows that each of these packs is ready. |
 
 ## platform-boundary.sh
 
