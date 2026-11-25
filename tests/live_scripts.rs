@@ -18873,11 +18873,7 @@ fn platform_boundary_sh_case_3_shows_each_cluster_in_its_project_and_a_refused_k
     let stage = platform_boundary_stage();
     let mut summary = set_summary(true);
     summary["clusters"][0]["status"] = serde_json::json!("not-checked");
-    std::fs::write(
-        stage.path("strata/set-refused.json"),
-        summary.to_string(),
-    )
-    .unwrap();
+    std::fs::write(stage.path("strata/set-refused.json"), summary.to_string()).unwrap();
     let (o, steps) = stage.run("platform-boundary.sh", &["3"]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
     failed(&steps, &["set-refused-rows"]);

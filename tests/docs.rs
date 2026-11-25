@@ -3529,7 +3529,9 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
     let pages: [(&str, &[&str], &[&str]); 5] = [
         (
             LIVE_RUNS_PAGE,
-            &["So the case moved no Vault on `wilma`, and the answer of each cluster shows no change."],
+            &[
+                "So the case moved no Vault on `wilma`, and the answer of each cluster shows no change.",
+            ],
             &["The code of Palette shows that it refuses a deleted key; no live run shows it yet."],
         ),
         (
@@ -3549,7 +3551,9 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
                 "so after a restart, and in a cycle of `strata-observer once`, those clusters have no row (#1022).",
                 "its project has the status 401, and the other project stays checked.",
             ],
-            &["leaves the clusters of its project `not-checked`, with the status. The checks of the other projects continue."],
+            &[
+                "leaves the clusters of its project `not-checked`, with the status. The checks of the other projects continue.",
+            ],
         ),
         (
             LIVE_EXAMPLE_PAGE,
@@ -3589,7 +3593,10 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
             ][..],
         ),
         ("boundary.md", &["A dependency between two clusters"][..]),
-        (LIVE_RUNS_PAGE, &["In the live run, the apply of case 2"][..]),
+        (
+            LIVE_RUNS_PAGE,
+            &["In the live run, the apply of case 2"][..],
+        ),
     ] {
         let text = read(&docs().join(page));
         for anchor in anchors {
