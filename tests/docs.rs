@@ -3577,7 +3577,7 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
             PALETTE_CLUSTERS_PAGE,
             &[
                 "Palette refuses a deleted key",
-                "shows the second row for an edit in place",
+                "shows that a cluster keeps its old copy",
             ][..],
         ),
         (OBSERVER_CLUSTERS_PAGE, &["**A refused key**"][..]),

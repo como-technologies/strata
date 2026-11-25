@@ -192,10 +192,10 @@ different content, and strata needs no record of the updates that wait for a
 cluster.
 
 Case 2 of [platform-boundary.sh](../../development/live-runs.md#platform-boundarysh)
-shows the second row for an edit in place that also changes the version. With
-the flag off, the apply changes `wilma-security` from 1.0.0 to 1.1.0 and the tag
-of vault, with the same uid. `wilma` keeps its copy. The record of `wilma` from
-before the edit compares `IDENTICAL` with `cluster:wilma` after it.
+shows that a cluster keeps its old copy also when the edit in place changes the
+version. With the flag off, the apply changes `wilma-security` from 1.0.0 to
+1.1.0 and the tag of vault, with the same uid. The record of `wilma` from before
+the edit compares `IDENTICAL` with `cluster:wilma` after it.
 
 A copy has the variables of its profile too. `GET
 /v1/spectroclusters/<uid>/variables` is an array with one entry for each applied

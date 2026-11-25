@@ -2094,9 +2094,12 @@ script says `could not check` and exits `2`. Case 2 ends with the defaults of
 Strata answers each question for each cluster alone. It models no dependency
 between two clusters: see [The rules of the scope](../boundary.md#the-rules-of-the-scope).
 So the checks of case 2 record what the answer of each cluster shows, and judge
-nothing. In the live run, the apply of case 2 changed the version of
+nothing.
+
+In the live run, the apply of case 2 changed the version of
 `wilma-security` from 1.0.0 to 1.1.0 in place, with the same uid. Such a change
-does not reach a cluster that runs the version: see [Cluster
+does not reach a cluster that runs the version by itself: the cluster keeps its
+copy, and the update waits. See [Cluster
 copies](../internals/palette/clusters.md#cluster-copies). So the case moved no
 Vault on `wilma`, and the two sides of each `compare` have the same root (#970).
 
@@ -2108,7 +2111,7 @@ Vault on `wilma`, and the two sides of each `compare` have the same root (#970).
 | `consumers-role-key` | ? | #701: case 1. What `consumers` of the profile of the tenant says with the key of Project Viewer in the lab project. A live run gave 1: a consumer decides the exit, also when a project is not checked. |
 | `consumers-role-incomplete` | 0 | #701: case 1. That answer has `projectsRead.tenantError`: Palette refuses the cluster search at tenant scope to that key, so a project is not checked. A live run passed. |
 | `move-records` | 0 | #701: case 2. A record of `wilma`, and of `pebbles` in the second project, before the move. A live run passed. |
-| `vault-move` | 0 | #701: case 2. `wilma` runs `wilma-security` 1.1.0, with the newest version of vault in the registry of its pin, in the order of strata. In a live run, the check passed and shows only the end of the apply. The apply changed `wilma-security` in place, with the same uid: its version from 1.0.0 to 1.1.0, and the tag of vault. The change did not reach `wilma`. |
+| `vault-move` | 0 | #701: case 2. `wilma` runs `wilma-security` 1.1.0, with the newest version of vault in the registry of its pin, in the order of strata. In a live run, the check passed and shows only the end of the apply. The apply changed `wilma-security` in place, with the same uid: its version from 1.0.0 to 1.1.0, and the tag of vault. The change did not reach `wilma` by itself. |
 | `vault-ready` | ? | #701: case 2. Each pack of `wilma` after the move, with its condition. A live run gave 0: each pack is ready, and vault has the reason `PackServicesReady`. `wilma` still runs the pin of vault. |
 | `vault-wilma`, `vault-workload` | ? | #701: case 2. What `compare` says of the record of each cluster before the move, and of the cluster after the move. A live run gave 0 for each: the roots are equal, with 9 profiles on each side for `wilma` and 5 for `pebbles`. The line of vault on `wilma` says `unchanged`. |
 | `vault-workload-verify` | ? | #701: case 2. What `verify` says of the record of `pebbles` after the move of Vault on `wilma`. A live run gave 0: the record of `pebbles` verifies. |

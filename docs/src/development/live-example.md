@@ -659,7 +659,7 @@ is a fact of the run. The private zone is in the VPC of `wilma` alone.
    cluster. Strata models no dependency between two clusters: see [The rules of
    the scope](../boundary.md#the-rules-of-the-scope). In a live run, the apply
    changed `wilma-security` 1.0.0 in place, and the change did not reach
-   `wilma`: see [Cluster
+   `wilma` by itself: see [Cluster
    copies](../internals/palette/clusters.md#cluster-copies). So the case moved
    no Vault, and the two sides of each `compare` have the same root (#970).
 3. **The observer of the set.** One cycle of the observer on `wilma`, with a key
