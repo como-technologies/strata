@@ -3559,7 +3559,7 @@ fn the_pages_state_the_results_of_platform_sh_in_the_third_live_window_of_wave_1
         ),
         (
             "| `domain-compare`, ",
-            "`compare` finds no change, with 9 profiles on each side",
+            "The roots of the two records are equal (`IDENTICAL`), with 9 profiles on each side.",
         ),
         (
             "| `domain-observer` |",
@@ -3627,10 +3627,11 @@ fn the_pages_state_the_results_of_platform_sh_in_the_third_live_window_of_wave_1
             PALETTE_CLUSTERS_PAGE,
             &[
                 "shows each error code of the table, and that the version keeps its content. It shows the HTTP status of the move alone.",
+                "shows the `verify` of the second row on a cluster with nine profiles.",
                 "The record of `wilma` verifies while the edit in place of `wilma-security` waits.",
                 "The variables endpoint gives each profile the new value, and `compare` of the records exits `0`.",
             ],
-            &["asks each route."],
+            &["asks each route.", "shows the second row on a cluster"],
         ),
         (
             LIVE_EXAMPLE_PAGE,

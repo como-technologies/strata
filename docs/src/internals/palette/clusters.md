@@ -184,8 +184,8 @@ it:
 | The update accepted on the first cluster | The two clusters match. The record from before the edit reports `DRIFT`. |
 
 Case 1 of [platform.sh](../../development/live-runs.md#platformsh) shows the
-second row on a cluster with nine profiles. The record of `wilma` verifies
-while the edit in place of `wilma-security` waits.
+`verify` of the second row on a cluster with nine profiles. The record of
+`wilma` verifies while the edit in place of `wilma-security` waits.
 
 So `compare` of two cluster records shows a change exactly when the clusters run
 different content, and strata needs no record of the updates that wait for a
