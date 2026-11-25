@@ -3530,7 +3530,7 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
         (
             LIVE_RUNS_PAGE,
             &[
-                "So the case moved no Vault on `wilma`, and the answer of each cluster shows no change.",
+                "So the case moved no Vault on `wilma`, and the two sides of each `compare` have the same root (#970).",
             ],
             &["The code of Palette shows that it refuses a deleted key; no live run shows it yet."],
         ),
@@ -3560,7 +3560,7 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
             &[
                 "A live run shows the build of `pebbles` in the second project",
                 "Argo CD on `wilma` does not deploy to `pebbles`.",
-                "So the case moved no Vault, and the answer of each cluster shows no change.",
+                "So the case moved no Vault, and the two sides of each `compare` have the same root (#970).",
                 "In a live run, a content cycle and a versions cycle of the set take 272 requests.",
             ],
             &[],

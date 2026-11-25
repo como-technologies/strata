@@ -2098,7 +2098,7 @@ nothing. In the live run, the apply of case 2 changed the version of
 `wilma-security` from 1.0.0 to 1.1.0 in place, with the same uid. Such a change
 does not reach a cluster that runs the version: see [Cluster
 copies](../internals/palette/clusters.md#cluster-copies). So the case moved no
-Vault on `wilma`, and the answer of each cluster shows no change.
+Vault on `wilma`, and the two sides of each `compare` have the same root (#970).
 
 | Check | Expected exit | What it shows |
 |---|---|---|

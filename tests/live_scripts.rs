@@ -16805,9 +16805,8 @@ fn platform_outputs() -> serde_json::Value {
 /// `inventory.sh --platform`. It logs the second project that a command gets, on a line of its own.
 /// A plan with `-out` writes its file, and `show -json` prints
 /// `$FAKE_PLAN`. It refuses the edit in place of case 2 as Palette does, unless
-/// `$FAKE_IN_PLACE_TAKEN` has a value. It refuses the first `$FAKE_APPLY_REFUSALS` applies, and
-/// `$FAKE_TOFU_LOG.refused` counts them. [`platform_tofu`] puts the code of the refusal in place of
-/// `CODE_IN_CONFLICT`.
+/// `$FAKE_IN_PLACE_TAKEN` has a value, and it refuses the first `$FAKE_APPLY_REFUSALS` applies.
+/// [`platform_tofu`] puts the code of the refusal in place of `CODE_IN_CONFLICT`.
 const PLATFORM_TOFU: &str = r#"#!/usr/bin/env bash
 echo "tofu $*" >> "$FAKE_TOFU_LOG"
 [ -z "${TF_VAR_second_project-}" ] || echo "second project $TF_VAR_second_project" >> "$FAKE_TOFU_LOG"
@@ -18794,9 +18793,9 @@ fn platform_boundary_sh_case_2_gives_the_baseline_again_after_a_refused_move() {
 /// #701: case 3 runs the observer of the set on wilma with a key for each project. The rows name
 /// each cluster in its project, and #shared shows the profile of the tenant on 2 clusters in 2
 /// projects. Then the key of the second project goes from Palette, at tenant scope. The next cycle
-/// gives the second project the error 401 and no row, and wilma stays checked. No file of the run
-/// holds a key. A Palette that takes the deleted key, and a refusal that leaves wilma not checked,
-/// fail the check of the refusal. With no key of the name, no cycle follows.
+/// gives the second project the error 401 and no row, wilma stays checked, and no file holds a key.
+/// A Palette that takes the deleted key, and a refusal that leaves wilma not checked, fail the check
+/// of the refusal. With no key of the name, no cycle follows.
 #[test]
 fn platform_boundary_sh_case_3_shows_each_cluster_in_its_project_and_a_refused_key_of_one_project()
 {
