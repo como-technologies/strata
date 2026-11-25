@@ -3467,8 +3467,8 @@ fn the_pages_state_the_results_of_the_second_live_window_of_wave_18() {
 
 /// The third live window of Wave 18 ran `platform-boundary.sh` (#701). Each row of the script gives
 /// its result, and so does the row of `pebbles` of `platform.sh`. The pages state what the run
-/// shows. The blocks of the results, and the two sentences that the verify of PR #1015 found over
-/// 25 words, keep to the limits.
+/// shows, and the teardown of both clusters. The blocks of the results, and the two sentences that
+/// the verify of PR #1015 found over 25 words, keep to the limits.
 #[test]
 fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_of_wave_18() {
     // the result of each check with `?`, of the apply of case 2, and of the form of the refusal
@@ -3531,6 +3531,10 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
             LIVE_RUNS_PAGE,
             &[
                 "So the case moved no Vault on `wilma`, and the two sides of each `compare` have the same root (#970).",
+                "A live run shows the teardown of `wilma` and `pebbles`.",
+                "and its destroy removes 17 resources. The second project stays.",
+                "EC2 finds no instance, no volume, and no network interface with the tag of either cluster.",
+                "After the cases, one `just live-platform-down` removes both clusters and the profiles of `pebbles`",
             ],
             &["The code of Palette shows that it refuses a deleted key; no live run shows it yet."],
         ),
@@ -3562,6 +3566,7 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
                 "Argo CD on `wilma` does not deploy to `pebbles`.",
                 "So the case moved no Vault, and the two sides of each `compare` have the same root (#970).",
                 "In a live run, a content cycle and a versions cycle of the set take 272 requests.",
+                "A live run shows the teardown of both clusters: the destroy removes 17 resources, and the second project stays.",
             ],
             &[],
         ),
@@ -3590,12 +3595,17 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
                 "**A change on `wilma` that `pebbles` needs.**",
                 "**The observer of the set.**",
                 "**The request counts.**",
+                "A live run shows the teardown of both clusters",
             ][..],
         ),
         ("boundary.md", &["A dependency between two clusters"][..]),
         (
             LIVE_RUNS_PAGE,
-            &["In the live run, the apply of case 2"][..],
+            &[
+                "In the live run, the apply of case 2",
+                "A live run shows the teardown of `wilma`",
+                "After the cases, one",
+            ][..],
         ),
     ] {
         let text = read(&docs().join(page));

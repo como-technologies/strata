@@ -613,6 +613,12 @@ in the region. It also counts each object with the tag
 `kubernetes.io/cluster/wilma` or `kubernetes.io/cluster/pebbles`, the zone, and
 the policy.
 
+A live run shows the teardown of both clusters: the destroy removes 17
+resources, and the second project stays. The inventory then gives 0 on each line
+but `kubernetes tags`. The Resource Groups Tagging API still lists a deleted
+resource for a time, and EC2 finds no such resource (#970). Then `just
+live-down` exits `0`, and `just live-inventory` gives 0 on each line.
+
 The AWS profile of `aws_profile` makes the zone, and adds the policy to the role
 of the nodes. It needs the permissions of Route 53 for a private hosted zone,
 `ec2:DescribeVpcs`, and `iam:PutRolePolicy` and `iam:DeleteRolePolicy` on that

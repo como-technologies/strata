@@ -2075,6 +2075,14 @@ the Bitnami packs.
 | `observer-no-oom` | 0 | #700: case 7. No container of the observer restarted, and none ended with `OOMKilled`. A live run passed. |
 | `bitnami-images` | ? | #700: case 8. For each pack of a Bitnami registry: the lines of its values that name an image. Then the image and the state of each container of its pods. Bitnami moved its free images to another repository, so a pod can wait for its image (#630). A live run gave 0: the check read the values and the pods of each Bitnami pack. `packs-ready` shows that each of these packs is ready. |
 
+A live run shows the teardown of `wilma` and `pebbles`. `just
+live-platform-down` removes the add-on profiles from both clusters, and its
+destroy removes 17 resources. The second project stays. Then `just
+live-platform-inventory` gives 0 on each line but `kubernetes tags`. That line
+reads the Resource Groups Tagging API, which still lists a deleted resource for
+a time (#970). EC2 finds no instance, no volume, and no network interface with
+the tag of either cluster.
+
 ## platform-boundary.sh
 
 Read-write. It runs the four cases of [the boundary of a
@@ -2127,6 +2135,10 @@ Vault on `wilma`, and the two sides of each `compare` have the same root (#970).
 | `set-refused` | ? | #701: case 3. The error of each project, and the row of each cluster, after the delete. The run reads a cycle at most 10 times, 30 seconds apart, until the refusal shows. A live run gave 0: Palette refused the key at the first cycle, and the row of `wilma` is `ok`, with no error. |
 | `set-refused-rows` | 0 | #701: case 3. The second project has a `lastError` with HTTP 401, the row of `wilma` stays checked, and no row is in the second project. A cycle of `strata-observer once` cannot list the clusters of a refused key, so it has no row for them (#1022). The cycle of a live run gives this result. That run had an earlier form of the check, which wanted a row of `pebbles` that is `not-checked`. |
 | `set-no-key` | 0 | #701: case 3. No file of the run holds a key of a role. A live run passed. |
+
+After the cases, one `just live-platform-down` removes both clusters and the
+profiles of `pebbles`, and the second project stays. A live run shows it: see
+the teardown under the table of [platform.sh](#platformsh).
 
 ## version-states.sh
 
