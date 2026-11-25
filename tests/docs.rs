@@ -3537,8 +3537,9 @@ fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_
             &[
                 "Palette refuses a deleted key with HTTP 401 at the next request.",
                 "A live run shows the 401 at the first cycle of the observer after the delete.",
-                "A live run shows it for a key with Project Viewer in one project: the listing holds that project alone.",
-                "The record of `wilma` from before the edit compares `IDENTICAL` with `cluster:wilma` after it.",
+                "A live run shows it for a key with Project Viewer in one project",
+                "the listing holds that project alone.",
+                "The record of `wilma` from before the edit compares `IDENTICAL` with",
             ],
             &[],
         ),
