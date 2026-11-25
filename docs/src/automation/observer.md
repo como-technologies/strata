@@ -93,7 +93,7 @@ tenant role.
    ```bash
    helm install strata-observer \
      oci://ghcr.io/como-technologies/charts/strata-observer \
-     --version 0.35.0 -n strata-observer \
+     --version 0.36.0 -n strata-observer \
      --set cluster.uid=<cluster uid> \
      --set palette.projectUid=<project uid>
    ```

@@ -5,7 +5,7 @@ strata: fetching profile 64e0000000000000000000c3
   "schema": "strata-snapshot/1",
   "tool": {
     "name": "strata",
-    "version": "0.35.0",
+    "version": "0.36.0",
     "impl": "rust"
   },
   "source": {
