@@ -16805,8 +16805,8 @@ fn platform_outputs() -> serde_json::Value {
 /// `inventory.sh --platform`. It logs the second project that a command gets, on a line of its own.
 /// A plan with `-out` writes its file, and `show -json` prints
 /// `$FAKE_PLAN`. It refuses the edit in place of case 2 as Palette does, unless
-/// `$FAKE_IN_PLACE_TAKEN` has a value. [`platform_tofu`] puts the code of the refusal in place of
-/// `CODE_IN_CONFLICT`.
+/// `$FAKE_IN_PLACE_TAKEN` has a value, and it refuses the first `$FAKE_APPLY_REFUSALS` applies.
+/// [`platform_tofu`] puts the code of the refusal in place of `CODE_IN_CONFLICT`.
 const PLATFORM_TOFU: &str = r#"#!/usr/bin/env bash
 echo "tofu $*" >> "$FAKE_TOFU_LOG"
 [ -z "${TF_VAR_second_project-}" ] || echo "second project $TF_VAR_second_project" >> "$FAKE_TOFU_LOG"
@@ -16823,7 +16823,15 @@ case "$*" in
     if [ -n "${FAKE_IN_PLACE_TAKEN-}" ]; then echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed."; exit 0; fi
     echo "Error: error updating cluster profile: Code:CODE_IN_CONFLICT Update of cluster profile will cause one or more pack conflicts in the spectroclusters wilma"
     exit 1 ;;
-  *apply* | *destroy*) echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed." ;;
+  *apply*)
+    refused=$(cat "$FAKE_TOFU_LOG.refused" 2> /dev/null || echo 0)
+    if [ "$refused" -lt "${FAKE_APPLY_REFUSALS:-0}" ]; then
+      echo $((refused + 1)) > "$FAKE_TOFU_LOG.refused"
+      echo "Error: error updating cluster profile: Code:InvalidArgument"
+      exit 1
+    fi
+    echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed." ;;
+  *destroy*) echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed." ;;
 esac
 "#;
 
@@ -18511,32 +18519,33 @@ cat "$FAKE_STRATA/set-ok.json"
 "#;
 
 /// The summary of the set that the stand-in of the observer prints. With `refused`, Palette refused
-/// the key of the second project: the row of pebbles is not checked, with the status.
-fn set_summary(refused: bool) -> String {
+/// the key of the second project with HTTP 401, as in the live run. A cycle of `strata-observer once`
+/// then has the error of that project, and no row of its clusters.
+fn set_summary(refused: bool) -> serde_json::Value {
     let checked = serde_json::json!("2026-11-24T12:00:00Z");
-    let refusal = serde_json::json!({"kind": "api", "status": 401});
-    let (status, at, error) = if refused {
-        ("not-checked", serde_json::Value::Null, refusal.clone())
-    } else {
-        ("ok", checked.clone(), serde_json::Value::Null)
-    };
+    let wilma = serde_json::json!({"uid": "w-1", "name": "wilma", "project": {"uid": "p-1"},
+        "status": "ok", "checkedAt": checked, "here": true});
     let mut second = serde_json::json!({"uid": SECOND_PROJECT_UID, "name": SECOND_PROJECT});
-    let mut pebbles = serde_json::json!({"uid": PEBBLES_UID, "name": "pebbles",
-        "project": {"uid": SECOND_PROJECT_UID}, "status": status, "checkedAt": at});
-    if refused {
-        second["lastError"] = error.clone();
-        pebbles["lastError"] = error;
-    }
+    let (clusters, projects) = if refused {
+        second["lastError"] = serde_json::json!({"kind": "api", "status": 401});
+        (vec![wilma], serde_json::json!(["p-1"]))
+    } else {
+        let pebbles = serde_json::json!({"uid": PEBBLES_UID, "name": "pebbles",
+            "project": {"uid": SECOND_PROJECT_UID}, "status": "ok", "checkedAt": checked});
+        (
+            vec![wilma, pebbles],
+            serde_json::json!(["p-1", SECOND_PROJECT_UID]),
+        )
+    };
+    let selected = clusters.len();
     serde_json::json!({
         "page": "ok",
         "projects": [{"uid": "p-1", "name": LAB_PROJECT_NAME}, second],
-        "selectors": [{"selector": format!("{TAG_PREFIX}hub=wilma"), "clusters": 2}],
-        "clusters": [{"uid": "w-1", "name": "wilma", "project": {"uid": "p-1"}, "status": "ok",
-            "checkedAt": checked, "here": true}, pebbles],
+        "selectors": [{"selector": format!("{TAG_PREFIX}hub=wilma"), "clusters": selected}],
+        "clusters": clusters,
         "shared": [{"uid": SHARED_UID, "name": "wilma-shared", "version": "1.0.0", "scope": "tenant",
-            "clusters": 2, "projects": ["p-1", SECOND_PROJECT_UID]}],
+            "clusters": selected, "projects": projects}],
     })
-    .to_string()
 }
 
 /// A stage of `platform-boundary.sh`: wilma and pebbles at their baseline, the keys of the two roles,
@@ -18568,8 +18577,8 @@ fn platform_boundary_stage() -> Stage {
     let incomplete = serde_json::json!({"consumers": [{"uid": "w-1", "projectUid": "p-1"}],
         "projectsRead": {"read": 1, "tenantError": {"kind": "api", "status": 403}}});
     for (file, text) in [
-        ("set-ok.json", set_summary(false)),
-        ("set-refused.json", set_summary(true)),
+        ("set-ok.json", set_summary(false).to_string()),
+        ("set-refused.json", set_summary(true).to_string()),
         ("role-same-release.err", not_found.to_string()),
         ("role-same-release.code", "2".to_string()),
         ("role-consumers.out", incomplete.to_string()),
@@ -18732,11 +18741,61 @@ fn platform_boundary_sh_case_2_moves_vault_on_wilma_and_reads_the_answer_of_each
     }
 }
 
+/// #701: when Palette refuses the move of vault, case 2 reads no answer of a cluster, and
+/// `vault-back` gives the platform its baseline again. When Palette also refuses that apply, the
+/// end of the script applies the defaults once more.
+#[test]
+fn platform_boundary_sh_case_2_gives_the_baseline_again_after_a_refused_move() {
+    for (refusals, applies) in [("1", 2), ("2", 3)] {
+        let mut stage = platform_boundary_stage();
+        let listing = packs_answer(
+            "vault",
+            &[(
+                "Public Repo",
+                &[("1.21.1", true, None), ("1.0.0", false, None)],
+            )],
+        );
+        stage.strata("packs vault *", 0, &listing);
+        stage.env("FAKE_APPLY_REFUSALS", refusals);
+        let (o, steps) = stage.run("platform-boundary.sh", &["2"]);
+        assert_eq!(o.status.code(), Some(1), "{refusals}: {steps}");
+        failed(&steps, &["vault-move"]);
+        if refusals == "1" {
+            passed(&steps, &["move-records", "vault-back"]);
+        } else {
+            failed(&steps, &["vault-back"]);
+        }
+        for check in [
+            "vault-ready",
+            "vault-wilma",
+            "vault-workload",
+            "vault-workload-verify",
+        ] {
+            assert!(!steps.contains(check), "{refusals}: {check} ran:\n{steps}");
+        }
+        let tofu = stage.tofu_calls();
+        let applied: Vec<&str> = tofu.lines().filter(|l| l.contains(" apply ")).collect();
+        assert_eq!(applied.len(), applies, "{refusals}: {applied:?}");
+        assert!(
+            applied[0].ends_with("-var vault_version=1.21.1"),
+            "{applied:?}"
+        );
+        assert!(
+            applied
+                .last()
+                .unwrap()
+                .ends_with("-var immutable_profiles=false"),
+            "{refusals}: the last apply takes the defaults: {applied:?}"
+        );
+    }
+}
+
 /// #701: case 3 runs the observer of the set on wilma with a key for each project. The rows name
 /// each cluster in its project, and #shared shows the profile of the tenant on 2 clusters in 2
-/// projects. Then the key of the second project goes from Palette, at tenant scope, and the next
-/// cycle leaves only pebbles not checked. No file of the run holds a key. A Palette that takes the
-/// deleted key fails the check of the refusal. With no key of the name, no cycle follows.
+/// projects. Then the key of the second project goes from Palette, at tenant scope. The next cycle
+/// gives the second project the error 401 and no row, wilma stays checked, and no file holds a key.
+/// A Palette that takes the deleted key, and a refusal that leaves wilma not checked, fail the check
+/// of the refusal. With no key of the name, no cycle follows.
 #[test]
 fn platform_boundary_sh_case_3_shows_each_cluster_in_its_project_and_a_refused_key_of_one_project()
 {
@@ -18808,6 +18867,22 @@ fn platform_boundary_sh_case_3_shows_each_cluster_in_its_project_and_a_refused_k
         .lines()
         .count();
     assert_eq!(cycles, 11, "one cycle, then 10 after the delete");
+
+    // the refusal of one key leaves the row of wilma not checked too
+    let stage = platform_boundary_stage();
+    let mut summary = set_summary(true);
+    summary["clusters"][0]["status"] = serde_json::json!("not-checked");
+    std::fs::write(stage.path("strata/set-refused.json"), summary.to_string()).unwrap();
+    let (o, steps) = stage.run("platform-boundary.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["set-refused-rows"]);
+    let out = std::fs::read_to_string(stage.path("out/set-refused.out")).unwrap();
+    assert!(
+        out.contains(&format!(
+            r#"{{"project":"{SECOND_PROJECT_UID}","lastError":{{"kind":"api","status":401}}}}"#
+        )),
+        "the output names the error of the second project: {out}"
+    );
 
     // no key of Palette has the name, so no cycle follows the delete
     let mut stage = platform_boundary_stage();

@@ -1036,6 +1036,7 @@ facts:
     live:
       - in-place.sh:a-kept-old-content
       - in-place.sh:verify-a1
+      - platform-boundary.sh:vault-wilma
     pages:
       - internals/palette/clusters.md#cluster-copies
     code:
@@ -1296,6 +1297,21 @@ facts:
       - src/api/codes.rs
       - src/error/hint.rs
 
+  - id: deleted-key-refused
+    kind: behavior
+    reads:
+      codes: [UnAuthorizedAccess]
+    stand_in: []
+    live:
+      - platform-boundary.sh:key-delete
+      - platform-boundary.sh:set-refused-rows
+    pages:
+      - internals/palette/clusters.md#the-role-that-a-key-needs
+      - automation/observer-clusters.md#when-a-read-fails
+    code:
+      - src/error/hint.rs
+      - observer/internal/check/set_content.go
+
   # ---- clusters.md: The order of the profiles of a cluster
 
   - id: cluster-profile-order
@@ -1468,6 +1484,8 @@ facts:
       - scope.sh:release-consumers-edge-hosts
       - observer-clusters.sh:search-role-tenant-says
       - observer-clusters.sh:search-role-project-says
+      - platform-boundary.sh:same-release-role-error
+      - platform-boundary.sh:consumers-role-incomplete
     pages:
       - internals/palette/clusters.md#the-reach-of-a-search
       - internals/palette/limits.md#what-no-run-covers

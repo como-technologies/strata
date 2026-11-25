@@ -158,7 +158,7 @@ and of each wave, checks them.
    cluster](./internals/palette/clusters.md#the-pods-of-a-cluster).
 
    A dependency between two clusters names no question of the table. Strata
-   answers each question for each cluster alone, and models no dependency
+   answers each question for each cluster alone. It models no dependency
    between two clusters, such as a client on one cluster of a server on another.
    A change on one cluster changes no answer of the other cluster.
    [The boundary of a project](./development/live-example.md#the-boundary-of-a-project)

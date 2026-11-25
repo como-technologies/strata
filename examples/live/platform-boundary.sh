@@ -166,17 +166,18 @@ set_requests() {
   echo "set: $(wc -l < set-requests.log | tr -d ' ') requests"
   top_routes set-requests.log
 }
-# refused_row FILE: in FILE, the row of pebbles is not-checked with the status of the refusal, and the
-# row of wilma is checked
+# refused_row FILE: in FILE, the second project has the error of the refusal, with HTTP 401, and the row
+# of wilma is checked. A cycle of `strata-observer once` cannot list the clusters of a refused key, so
+# no row is in the second project.
 refused_row() {
-  jq -e --arg w "$W" --arg p "$P" --arg b "$P2" '
-    ([.clusters[] | select(.uid == $p and .status == "not-checked" and .lastError.status != null)] | length == 1)
+  jq -e --arg w "$W" --arg b "$P2" '
+    ([.projects[] | select(.uid == $b and .lastError.status == 401)] | length == 1)
     and ([.clusters[] | select(.uid == $w and .status != "not-checked" and .checkedAt != null)] | length == 1)
-    and ([.projects[] | select(.uid == $b and .lastError != null)] | length == 1)' "$1" > /dev/null
+    and ([.clusters[] | select(.project.uid == $b)] | length == 0)' "$1" > /dev/null
 }
 # refused_cycles: a cycle of the observer with the deleted key, at most 10 times, 30 seconds apart,
-# until the row of pebbles is not-checked. The observer exits 2 when a check fails, so the row decides.
-# The output gives the row of each cluster of the last cycle.
+# until the refusal shows. The observer exits 2 when a check fails, so the summary decides. The output
+# gives the error of each project, and the row of each cluster, of the last cycle.
 refused_cycles() {
   local _
   for _ in $(seq 1 10); do
@@ -184,6 +185,7 @@ refused_cycles() {
     refused_row once-refused.json && break
     sleep 30
   done
+  jq -c '.projects[] | {project: .uid, lastError}' once-refused.json
   jq -c '.clusters[] | {name, project: .project.uid, status, lastError, checkedAt}' once-refused.json
 }
 
@@ -216,7 +218,7 @@ if case_stage 3 "the observer of the set"; then
     "$live/api.sh" key-delete "$second_key_name"
   if [ "$failures" = "$failed_before" ]; then
     check set-refused ? "#701: the rows of the cycles of the observer after the delete of the key" -- refused_cycles
-    check set-refused-rows 0 "#701: only $workload is not-checked, with the status, and $name stays checked" -- \
+    check set-refused-rows 0 "#701: the second project has the error 401, $name stays checked, and no row is in the second project" -- \
       refused_row once-refused.json
   fi
   check set-no-key 0 '#701: no file of the run holds a key of a role' -- \

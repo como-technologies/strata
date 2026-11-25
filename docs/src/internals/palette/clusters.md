@@ -191,6 +191,12 @@ So `compare` of two cluster records shows a change exactly when the clusters run
 different content, and strata needs no record of the updates that wait for a
 cluster.
 
+Case 2 of [platform-boundary.sh](../../development/live-runs.md#platform-boundarysh)
+shows that a cluster keeps its old copy also when the edit in place changes the
+version. With the flag off, the apply changes `wilma-security` from 1.0.0 to
+1.1.0 and the tag of vault, with the same uid. The record of `wilma` from before
+the edit compares `IDENTICAL` with `cluster:wilma` after it.
+
 A copy has the variables of its profile too. `GET
 /v1/spectroclusters/<uid>/variables` is an array with one entry for each applied
 profile that declares a variable: the profile uid, and each variable with the
@@ -422,6 +428,12 @@ live run shows the status and the code for a key with Project Viewer alone: see
 [The reach of a search](#the-reach-of-a-search). The code of Palette shows the
 message; no live run shows it yet.
 
+Palette refuses a deleted key with HTTP 401 at the next request. Case 3 of
+[platform-boundary.sh](../../development/live-runs.md#platform-boundarysh)
+deletes the key of a user with `DELETE /v1/apiKeys/{uid}`, at tenant scope. A
+live run shows the 401 at the first cycle of the observer after the delete. The
+code of Palette shows the code `UnAuthorizedAccess`; no live run shows it yet.
+
 Strata sends no denial again, and its message names what Palette denied: see
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
 `strata list` keeps each kind that it read: see
@@ -637,7 +649,8 @@ The code of Palette shows these facts:
   denied`. No live run shows this refusal yet.
 - At tenant scope, the project listing holds each project of the tenant only for
   a key whose role gives `project.list` in the tenant. For another key, it holds
-  the projects of its roles.
+  the projects of its roles. A live run shows it for a key with Project Viewer
+  in one project: the listing holds that project alone.
 - A profile of a project is for the clusters of its project. Each project of
   the tenant can use a profile of the tenant. The profile document names the
   project of a profile of a project in `metadata.annotations.projectUid`.
