@@ -156,7 +156,7 @@ its end.
 | `terraform-platform/` | The platform cluster `wilma` (#700) in a state of its own: the seven profiles of the teams in `main.tf`, the glue of each team in `glue.tf`, the private zone, and the policy of the nodes. `terraform.tfvars.example` names the registry of each pack. `pebbles.tf` holds the workload cluster `pebbles` in a second project (#701). |
 | `platform.sh` | The platform cluster test (#700): `pins`, `images`, `up`, the eight cases, `down`, and `inventory`. With a second project, `up` and `down` also build and remove `pebbles`. See [The platform cluster](#the-platform-cluster). |
 | `platform-boundary.sh` | The boundary of a project test (#701): the four cases of `wilma` and `pebbles` in two projects. See [The boundary of a project](#the-boundary-of-a-project). |
-| `platform-lib.sh` | What `platform.sh` and `platform-boundary.sh` share: the state of `terraform-platform/` and its second project, the outputs, the readiness of the packs, and the applies of a case. |
+| `platform-lib.sh` | What `platform.sh` and `platform-boundary.sh` share: the state of `terraform-platform/`, the second project, the outputs, the readiness of the packs, and the applies of the cases. |
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, a cluster in the template with the two repave routes (#276), and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. Stage 4 (#844): an add and an upgrade on cluster A, with cluster B as the control. |
@@ -625,7 +625,9 @@ is in the lab project, so the two clusters cross the boundary of a project.
 `STRATA_LIVE_SECOND_PROJECT` names an existing project of the lab. No file of the
 repository names it, and no recipe makes or deletes a project. With the variable,
 `just live-platform-up` builds `pebbles` beside `wilma`, and `just
-live-platform-down` removes both. Without it, the state holds `wilma` alone.
+live-platform-down` removes both. Without it, the state holds `wilma` alone. A
+live run shows the build of `pebbles` in the second project: each pack of its
+add-on profiles is ready.
 
 | Resource | What it is |
 | --- | --- |
@@ -637,25 +639,38 @@ live-platform-down` removes both. Without it, the state holds `wilma` alone.
 
 Both clusters have the tag `hub:wilma`, so the selector of the set is
 `tag:hub=wilma`. Each pack of `pebbles` is a pin of `wilma`, so `just
-live-platform-images` resolves its images too. The store of secrets of `pebbles`
-and the SSO of its Grafana name addresses of `wilma`. No case checks these links,
-and a link that does not work is a fact of the run. The private zone is in the
-VPC of `wilma` alone.
+live-platform-images` resolves its images too.
+
+The example builds two links from `pebbles` to `wilma`. The store of secrets of `pebbles` reads Vault on `wilma`,
+and its Grafana logs in through Keycloak on `wilma`. Argo CD on `wilma` does not
+deploy to `pebbles`. No case checks these links, and a link that does not work
+is a fact of the run. The private zone is in the VPC of `wilma` alone.
 
 [platform-boundary.sh](./live-runs.md#platform-boundarysh) runs four cases:
 
 1. **One profile in two projects.** `same-release` of the copy of `wilma-data`
    in the two projects, and `consumers` of `wilma-shared`. Each command runs with
-   the key of the lab, and with a key of Project Viewer in the lab project.
+   the key of the lab, and with a key of Project Viewer in the lab project. In a
+   live run, each command sees both clusters with the key of the lab. With the
+   other key, `same-release` gives `project-not-found`, and `consumers` says
+   that a project is not checked.
 2. **A change on `wilma` that `pebbles` needs.** Vault on `wilma` moves to a new
    version in `wilma-security` 1.1.0. The case records the answer of each
    cluster. Strata models no dependency between two clusters: see [The rules of
-   the scope](../boundary.md#the-rules-of-the-scope).
+   the scope](../boundary.md#the-rules-of-the-scope). In a live run, the apply
+   changed `wilma-security` 1.0.0 in place, and the change did not reach
+   `wilma`: see [Cluster
+   copies](../internals/palette/clusters.md#cluster-copies). So the case moved
+   no Vault, and the answer of each cluster shows no change.
 3. **The observer of the set.** One cycle of the observer on `wilma`, with a key
    of Project Viewer for each project. Then the case deletes the key of the
-   second project in Palette, and keeps it in the folder of the keys.
+   second project in Palette, and keeps it in the folder of the keys. In a live
+   run, the next cycle gives that project the error 401, and `wilma` stays
+   checked. The cycle has no row for `pebbles`: see [When a read
+   fails](../automation/observer-clusters.md#when-a-read-fails).
 4. **The request counts.** The requests of one cycle of the set, with two
-   clusters and two keys.
+   clusters and two keys. In a live run, a content cycle and a versions cycle
+   of the set take 272 requests.
 
 Before a run, make two users with the role Project Viewer alone, one in each
 project, and a key for each user. Case 3 deletes the key of the second project,

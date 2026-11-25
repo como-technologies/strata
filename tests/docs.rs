@@ -3465,6 +3465,139 @@ fn the_pages_state_the_results_of_the_second_live_window_of_wave_18() {
     pages_say(&pages);
 }
 
+/// The third live window of Wave 18 ran `platform-boundary.sh` (#701). Each row of the script gives
+/// its result, and so does the row of `pebbles` of `platform.sh`. The pages state what the run
+/// shows. The blocks of the results, and the two sentences that the verify of PR #1015 found over
+/// 25 words, keep to the limits.
+#[test]
+fn the_pages_state_the_results_of_platform_boundary_sh_in_the_third_live_window_of_wave_18() {
+    // the result of each check with `?`, of the apply of case 2, and of the form of the refusal
+    let others = [
+        (
+            "| `consumers-role-key` |",
+            "A live run gave 1: a consumer decides the exit, also when a project is not checked.",
+        ),
+        (
+            "| `vault-move` |",
+            "the check passed and shows only the end of the apply. The apply changed `wilma-security` in place, with the same uid",
+        ),
+        (
+            "| `vault-ready` |",
+            "A live run gave 0: each pack is ready, and vault has the reason `PackServicesReady`. `wilma` still runs the pin of vault.",
+        ),
+        (
+            "| `vault-wilma`, ",
+            "A live run gave 0 for each: the roots are equal, with 9 profiles on each side for `wilma` and 5 for `pebbles`.",
+        ),
+        (
+            "| `vault-workload-verify` |",
+            "A live run gave 0: the record of `pebbles` verifies.",
+        ),
+        (
+            "| `set-requests` |",
+            "A live run gave 0: the two cycles of the set take 272 requests.",
+        ),
+        (
+            "| `set-refused` |",
+            "A live run gave 0: Palette refused the key at the first cycle, and the row of `wilma` is `ok`, with no error.",
+        ),
+        (
+            "| `set-refused-rows` |",
+            "The second project has a `lastError` with HTTP 401, the row of `wilma` stays checked, and no row is in the second project.",
+        ),
+    ];
+    for (start, result) in others {
+        rows_say(&[start], result);
+    }
+    // each other row of the script passed, and so did the row of pebbles of platform.sh
+    let runs = read(&docs().join(LIVE_RUNS_PAGE));
+    let section = section(&runs, "\n## platform-boundary.sh\n", Some("\n## "));
+    let rows: Vec<&str> = section.lines().filter(|l| l.starts_with("| `")).collect();
+    let passed: Vec<&str> = rows
+        .iter()
+        .map(|row| &row[..row[1..].find('|').unwrap() + 2])
+        .filter(|cell| !others.iter().any(|(start, _)| cell.starts_with(start)))
+        .chain(["| `workload-packs-ready` |"])
+        .collect();
+    rows_say(&passed, LIVE_RUN_PASSED);
+    assert_eq!(rows.len() + 1, passed.len() + others.len());
+    let mut faults = Vec::new();
+    for row in &rows {
+        faults.extend(block_faults(LIVE_RUNS_PAGE, row));
+    }
+    // each page, the words of the result, and the words that are gone
+    let pages: [(&str, &[&str], &[&str]); 5] = [
+        (
+            LIVE_RUNS_PAGE,
+            &["So the case moved no Vault on `wilma`, and the answer of each cluster shows no change."],
+            &["The code of Palette shows that it refuses a deleted key; no live run shows it yet."],
+        ),
+        (
+            PALETTE_CLUSTERS_PAGE,
+            &[
+                "Palette refuses a deleted key with HTTP 401 at the next request.",
+                "A live run shows the 401 at the first cycle of the observer after the delete.",
+                "A live run shows it for a key with Project Viewer in one project: the listing holds that project alone.",
+                "The record of `wilma` from before the edit compares `IDENTICAL` with `cluster:wilma` after it.",
+            ],
+            &[],
+        ),
+        (
+            OBSERVER_CLUSTERS_PAGE,
+            &[
+                "so after a restart, and in a cycle of `strata-observer once`, those clusters have no row (#1022).",
+                "its project has the status 401, and the other project stays checked.",
+            ],
+            &["leaves the clusters of its project `not-checked`, with the status. The checks of the other projects continue."],
+        ),
+        (
+            LIVE_EXAMPLE_PAGE,
+            &[
+                "A live run shows the build of `pebbles` in the second project",
+                "Argo CD on `wilma` does not deploy to `pebbles`.",
+                "So the case moved no Vault, and the answer of each cluster shows no change.",
+                "In a live run, a content cycle and a versions cycle of the set take 272 requests.",
+            ],
+            &[],
+        ),
+        (
+            "boundary.md",
+            &["Strata answers each question for each cluster alone. It models no dependency"],
+            &[],
+        ),
+    ];
+    pages_say(&pages);
+    for (page, anchors) in [
+        (
+            PALETTE_CLUSTERS_PAGE,
+            &[
+                "Palette refuses a deleted key",
+                "shows the second row for an edit in place",
+            ][..],
+        ),
+        (OBSERVER_CLUSTERS_PAGE, &["**A refused key**"][..]),
+        (
+            LIVE_EXAMPLE_PAGE,
+            &[
+                "| `platform-lib.sh` |",
+                "The example builds two links",
+                "**One profile in two projects.**",
+                "**A change on `wilma` that `pebbles` needs.**",
+                "**The observer of the set.**",
+                "**The request counts.**",
+            ][..],
+        ),
+        ("boundary.md", &["A dependency between two clusters"][..]),
+        (LIVE_RUNS_PAGE, &["In the live run, the apply of case 2"][..]),
+    ] {
+        let text = read(&docs().join(page));
+        for anchor in anchors {
+            faults.extend(block_faults(page, &block(&text, anchor)));
+        }
+    }
+    assert_no_faults(&faults);
+}
+
 /// The third live window of Wave 18 ran stage 10 of `tiers.sh` (#915). The row of each check of
 /// the stage gives its result. `clusters.md` states what the run shows, and `limits.md` no longer
 /// lists it.

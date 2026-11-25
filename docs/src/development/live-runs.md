@@ -2027,7 +2027,7 @@ the Bitnami packs.
 |---|---|---|
 | `images` | 0 | #700: before the apply, `crane digest` resolves each image of the output `images` of a plan of `terraform-platform/`. The output names each image with its digest. When an image does not resolve, `up` stops, and its standard error names each such image. A live run passed. |
 | `packs-ready` | 0 | #700: `just live-platform-up` built `wilma`, and each pack of each add-on profile has a condition with the status `True`. Each line of the output names a pack with its reason, or the reason that it waits. A live run passed. |
-| `workload-packs-ready` | 0 | #701: with a second project, `just live-platform-up` built `pebbles` there. Each pack of each add-on profile of `pebbles` has a condition with the status `True`. The reads of `pebbles` have the `ProjectUid` of the second project. No result yet: no live window ran platform.sh. |
+| `workload-packs-ready` | 0 | #701: with a second project, `just live-platform-up` built `pebbles` there. Each pack of each add-on profile of `pebbles` has a condition with the status `True`. The reads of `pebbles` have the `ProjectUid` of the second project. A live run passed. |
 | `records` | 0 | #700: a record of the release, of each profile of a team, and of `wilma`, at the baseline. A live run passed. |
 | `verify-before`, `verify-after` | 0 | #700: case 1. `verify` passes on each record before the edit and after its undo. A live run passed. |
 | `edit-security`, `undo-security` | 0 | #700: case 1. An edit in place of a value of cert-manager in `wilma-security`, through the API, and its undo. A live run passed. |
@@ -2094,32 +2094,36 @@ script says `could not check` and exits `2`. Case 2 ends with the defaults of
 Strata answers each question for each cluster alone. It models no dependency
 between two clusters: see [The rules of the scope](../boundary.md#the-rules-of-the-scope).
 So the checks of case 2 record what the answer of each cluster shows, and judge
-nothing.
+nothing. In the live run, the apply of case 2 changed the version of
+`wilma-security` from 1.0.0 to 1.1.0 in place, with the same uid. Such a change
+does not reach a cluster that runs the version: see [Cluster
+copies](../internals/palette/clusters.md#cluster-copies). So the case moved no
+Vault on `wilma`, and the answer of each cluster shows no change.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `same-release-lab-key`, `same-release-sides` | 0 | #701: case 1. `same-release project:<lab project>/wilma-data@1.0.0 project:<second project>/wilma-data@1.0.0` with the key of the lab passes. `records[0].projectUid` names the lab project, and `records[1].projectUid` names the second project. No result yet: no live window ran platform-boundary.sh. |
-| `same-release-role-key`, `same-release-role-error` | 2, 0 | #701: case 1. With the key of Project Viewer in the lab project, the same `same-release` is the error `project-not-found`. The error names the second project, and `available` holds the lab project alone. The code of Palette shows that such a key lists the projects of its roles alone: see [The reach of a search](../internals/palette/clusters.md#the-reach-of-a-search). No result yet: no live window ran platform-boundary.sh. |
-| `consumers-lab-key`, `consumers-both` | 1, 0 | #701: case 1. `consumers wilma-shared@1.0.0` with the key of the lab names `wilma` in the lab project and `pebbles` in the second project. No result yet: no live window ran platform-boundary.sh. |
-| `consumers-role-key` | ? | #701: case 1. What `consumers` of the profile of the tenant says with the key of Project Viewer in the lab project. No result yet: no live window ran platform-boundary.sh. |
-| `consumers-role-incomplete` | 0 | #701: case 1. That answer has `projectsRead.tenantError`: Palette refuses the cluster search at tenant scope to that key, so a project is not checked. No result yet: no live window ran platform-boundary.sh. |
-| `move-records` | 0 | #701: case 2. A record of `wilma`, and of `pebbles` in the second project, before the move. No result yet: no live window ran platform-boundary.sh. |
-| `vault-move` | 0 | #701: case 2. `wilma` runs `wilma-security` 1.1.0, with the newest version of vault in the registry of its pin, in the order of strata. No result yet: no live window ran platform-boundary.sh. |
-| `vault-ready` | ? | #701: case 2. Each pack of `wilma` after the move, with its condition. No result yet: no live window ran platform-boundary.sh. |
-| `vault-wilma`, `vault-workload` | ? | #701: case 2. What `compare` says of the record of each cluster before the move, and of the cluster after the move. No result yet: no live window ran platform-boundary.sh. |
-| `vault-workload-verify` | ? | #701: case 2. What `verify` says of the record of `pebbles` after the move of Vault on `wilma`. No result yet: no live window ran platform-boundary.sh. |
-| `vault-back` | 0 | #701: case 2. `wilma` runs `wilma-security` 1.0.0 with the pin of vault again, and each pack is ready. No result yet: no live window ran platform-boundary.sh. |
-| `set-records` | 0 | #701: cases 3 and 4. A record of each profile of `wilma` and of `pebbles`, each read in its project. The profile of the tenant is one record. No result yet: no live window ran platform-boundary.sh. |
-| `set-requests` | ? | #701: case 4. The requests of one content cycle and one versions cycle of the set, with two clusters and two keys. The routes that took most follow the count. Case 7 of [platform.sh](#platformsh) gives the counts of `wilma` alone. No result yet: no live window ran platform-boundary.sh. |
-| `set-once` | 0 | #701: case 3. One cycle of the observer on `wilma`, with `--clusters tag:hub=wilma` and a key of Project Viewer for each project. No result yet: no live window ran platform-boundary.sh. |
-| `set-rows` | 0 | #701: case 3. The row of `wilma` names the lab project, the row of `pebbles` names the second project, and each row is checked. No result yet: no live window ran platform-boundary.sh. |
-| `set-projects` | 0 | #701: case 3. `projects` of the summary names the two projects. The project picker of the page lists them, and shows the rows of one project. No result yet: no live window ran platform-boundary.sh. |
-| `set-selector` | 0 | #701: case 3. The selector `tag:hub=wilma` selects the two clusters. No result yet: no live window ran platform-boundary.sh. |
-| `set-shared` | 0 | #701: case 3. `#shared` shows `wilma-shared@1.0.0`, of the tenant, on 2 clusters in 2 projects. No result yet: no live window ran platform-boundary.sh. |
-| `key-delete` | 0 | #701: case 3. The delete of the key of the second project in Palette, at tenant scope. The folder of the keys of each later cycle still holds the key, as the Secret of the observer does. No result yet: no live window ran platform-boundary.sh. |
-| `set-refused` | ? | #701: case 3. The rows of the clusters after the delete. The run reads a cycle at most 10 times, 30 seconds apart, until the row of `pebbles` is `not-checked`. No result yet: no live window ran platform-boundary.sh. |
-| `set-refused-rows` | 0 | #701: case 3. Only `pebbles` is `not-checked`, with the status of the refusal in `lastError`, and `wilma` stays checked. The code of Palette shows that it refuses a deleted key; no live run shows it yet. No result yet: no live window ran platform-boundary.sh. |
-| `set-no-key` | 0 | #701: case 3. No file of the run holds a key of a role. No result yet: no live window ran platform-boundary.sh. |
+| `same-release-lab-key`, `same-release-sides` | 0 | #701: case 1. `same-release project:<lab project>/wilma-data@1.0.0 project:<second project>/wilma-data@1.0.0` with the key of the lab passes. `records[0].projectUid` names the lab project, and `records[1].projectUid` names the second project. A live run passed. |
+| `same-release-role-key`, `same-release-role-error` | 2, 0 | #701: case 1. With the key of Project Viewer in the lab project, the same `same-release` is the error `project-not-found`. The error names the second project, and `available` holds the lab project alone. Such a key lists the projects of its roles alone: see [The reach of a search](../internals/palette/clusters.md#the-reach-of-a-search). A live run passed. |
+| `consumers-lab-key`, `consumers-both` | 1, 0 | #701: case 1. `consumers wilma-shared@1.0.0` with the key of the lab names `wilma` in the lab project and `pebbles` in the second project. A live run passed. |
+| `consumers-role-key` | ? | #701: case 1. What `consumers` of the profile of the tenant says with the key of Project Viewer in the lab project. A live run gave 1: a consumer decides the exit, also when a project is not checked. |
+| `consumers-role-incomplete` | 0 | #701: case 1. That answer has `projectsRead.tenantError`: Palette refuses the cluster search at tenant scope to that key, so a project is not checked. A live run passed. |
+| `move-records` | 0 | #701: case 2. A record of `wilma`, and of `pebbles` in the second project, before the move. A live run passed. |
+| `vault-move` | 0 | #701: case 2. `wilma` runs `wilma-security` 1.1.0, with the newest version of vault in the registry of its pin, in the order of strata. In a live run, the check passed and shows only the end of the apply. The apply changed `wilma-security` in place, with the same uid: its version from 1.0.0 to 1.1.0, and the tag of vault. The change did not reach `wilma`. |
+| `vault-ready` | ? | #701: case 2. Each pack of `wilma` after the move, with its condition. A live run gave 0: each pack is ready, and vault has the reason `PackServicesReady`. `wilma` still runs the pin of vault. |
+| `vault-wilma`, `vault-workload` | ? | #701: case 2. What `compare` says of the record of each cluster before the move, and of the cluster after the move. A live run gave 0 for each: the roots are equal, with 9 profiles on each side for `wilma` and 5 for `pebbles`. The line of vault on `wilma` says `unchanged`. |
+| `vault-workload-verify` | ? | #701: case 2. What `verify` says of the record of `pebbles` after the move of Vault on `wilma`. A live run gave 0: the record of `pebbles` verifies. |
+| `vault-back` | 0 | #701: case 2. `wilma` runs `wilma-security` 1.0.0 with the pin of vault again, and each pack is ready. A live run passed. |
+| `set-records` | 0 | #701: cases 3 and 4. A record of each profile of `wilma` and of `pebbles`, each read in its project. The profile of the tenant is one record. A live run passed. |
+| `set-requests` | ? | #701: case 4. The requests of one content cycle and one versions cycle of the set, with two clusters and two keys. The routes that took most follow the count. Case 7 of [platform.sh](#platformsh) gives the counts of `wilma` alone. A live run gave 0: the two cycles of the set take 272 requests. |
+| `set-once` | 0 | #701: case 3. One cycle of the observer on `wilma`, with `--clusters tag:hub=wilma` and a key of Project Viewer for each project. A live run passed. |
+| `set-rows` | 0 | #701: case 3. The row of `wilma` names the lab project, the row of `pebbles` names the second project, and each row is checked. A live run passed. |
+| `set-projects` | 0 | #701: case 3. `projects` of the summary names the two projects. The project picker of the page lists them, and shows the rows of one project. A live run passed. |
+| `set-selector` | 0 | #701: case 3. The selector `tag:hub=wilma` selects the two clusters. A live run passed. |
+| `set-shared` | 0 | #701: case 3. `#shared` shows `wilma-shared@1.0.0`, of the tenant, on 2 clusters in 2 projects. A live run passed. |
+| `key-delete` | 0 | #701: case 3. The delete of the key of the second project in Palette, at tenant scope. The folder of the keys of each later cycle still holds the key, as the Secret of the observer does. A live run passed. |
+| `set-refused` | ? | #701: case 3. The error of each project, and the row of each cluster, after the delete. The run reads a cycle at most 10 times, 30 seconds apart, until the refusal shows. A live run gave 0: Palette refused the key at the first cycle, and the row of `wilma` is `ok`, with no error. |
+| `set-refused-rows` | 0 | #701: case 3. The second project has a `lastError` with HTTP 401, the row of `wilma` stays checked, and no row is in the second project. A cycle of `strata-observer once` cannot list the clusters of a refused key, so it has no row for them (#1022). The cycle of a live run gives this result. That run had an earlier form of the check, which wanted a row of `pebbles` that is `not-checked`. |
+| `set-no-key` | 0 | #701: case 3. No file of the run holds a key of a role. A live run passed. |
 
 ## version-states.sh
 

@@ -162,8 +162,13 @@ The screen does not say "Nothing changed" while a cluster has such a cause.
 
 ## When a read fails
 
-- **A refused key** leaves the clusters of its project `not-checked`, with the status.
-  The checks of the other projects continue.
+- **A refused key** gives its project the error, with the status, and the checks
+  of the other projects continue. The clusters of the last good search of that
+  project stay `not-checked`. The observer keeps that search in memory, so after
+  a restart, and in a cycle of `strata-observer once`, those clusters have no
+  row (#1022). A live run of `strata-observer once` shows it for a deleted key:
+  its project has the status 401, and the other project stays checked. See
+  [platform-boundary.sh](../development/live-runs.md#platform-boundarysh).
 - **The page is `lost`** when no check of any project ended well.
 - **A selector that selects no cluster** shows "No cluster matches" with the
   selector. That state is not calm.
